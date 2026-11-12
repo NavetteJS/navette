@@ -1,0 +1,111 @@
+---
+title: Delete action
+---
+
+## Introduction
+
+Navette includes an action that is able to delete records. When the trigger button is clicked, a modal asks the user for confirmation. You may use it like so:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+```
+
+```preview
+DeleteAction.make()
+```
+
+The action works in two places:
+
+- In the row actions of a table, it deletes the row's record and stays on the page.
+- In the header of an edit or view page, it deletes the page's record and redirects to the resource's list page. The edit page of a resource already has this action by default.
+
+To add it to a view page, override `getHeaderActions()`:
+
+```ts
+import { DeleteAction, ViewRecord } from '@navette-js/panels';
+
+class ViewPost extends ViewRecord {
+    static resource = PostResource;
+
+    getHeaderActions() {
+        return [this.editAction(), DeleteAction.make()];
+    }
+}
+```
+
+The record is deleted with the data adapter of the host. When the adapter uses soft deletes, the record is moved to the trash, and the action is hidden for records that are already deleted (see the [restore](/actions/restore) and [force-delete](/actions/force-delete) actions). The action is only visible for records the user is allowed to `delete` according to the resource policy, and it has the `mod+d` keybinding.
+
+Or if you want to add it as a table bulk action, so that the user can choose which rows to delete, use `DeleteBulkAction`:
+
+```ts
+import { DeleteBulkAction } from '@navette-js/panels';
+
+table.groupedBulkActions([
+    DeleteBulkAction.make(),
+])
+```
+
+`DeleteBulkAction` deletes the selected records in one call to the adapter's `deleteMany()`, then clears the selection. It is visible to users allowed to `deleteAny` by the resource policy; the policy is not checked for each selected record. A resource list page offers it by default when the table does not declare its own bulk actions.
+
+## Redirecting after deleting
+
+You may redirect the user after the deletion from the `after()` hook, using the `redirect()` method of the host component:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .after(({ livewire }) => livewire.redirect('/blog/posts', true))
+```
+
+## Customizing the deletion process
+
+You can replace the deletion with the `action()` method. This replaces the success notification and the redirect too. The demo uses this to keep its records:
+
+```ts
+import { DeleteAction, DeleteBulkAction, Notification } from '@navette-js/panels';
+
+const refuse = () => {
+    Notification.make().warning().title('Records cannot be deleted in the demo.').send();
+};
+
+DeleteAction.make().action(refuse)
+
+DeleteBulkAction.make().action(refuse)
+```
+
+## Customizing the modal
+
+The modal heading is "Delete" followed by the record title, and the submit button is labeled "Delete". You may change them like in any [modal](/actions/modals):
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .modalHeading(({ record }) => `Delete ${record.name}`)
+    .modalDescription('The customer and their addresses will be removed.')
+```
+
+## Lifecycle hooks
+
+You can use the `before()` and `after()` methods to execute code before and after a record is deleted:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .before(async ({ record }) => {
+        // Runs before the record is deleted.
+    })
+    .after(async ({ record }) => {
+        // Runs after the record is deleted.
+    })
+```
+
+In a table, `record` is the row's record. In a page header, `record` is the page's record.
+
+<Aside variant="warning">
+Customizing the success notification and redirect URL with dedicated methods is not available yet.
+</Aside>

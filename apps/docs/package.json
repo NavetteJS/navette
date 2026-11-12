@@ -1,0 +1,16 @@
+{
+  "name": "@navette-js/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Navette documentation website (static site built from content/).",
+  "scripts": {
+    "build": "node build.ts",
+    "check": "node check.mjs",
+    "serve": "node server.ts",
+    "docs": "node build.ts && node check.mjs && node server.ts"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

@@ -1,0 +1,356 @@
+---
+title: Builder
+---
+
+## Introduction
+
+Similar to a [repeater](/forms/repeater), the builder component allows you to output a list of items. Unlike the repeater, the builder lets the user pick the type of each item, called a *block*, and each block has its own fields. This is useful for page builders, or any ordered content made of different kinds of parts.
+
+The builder is exported by `@navette-js/forms/builder`:
+
+```ts
+import { DatePicker, Select, TagsInput, Textarea, TextInput } from '@navette-js/forms';
+import { Block, Builder } from '@navette-js/forms/builder';
+
+Builder.make('plan')
+    .blocks([
+        Block.make('milestone')
+            .schema(() => [
+                TextInput.make('title').required(),
+                DatePicker.make('target_date').required(),
+                Textarea.make('description').rows(2),
+            ]),
+        Block.make('task_group')
+            .schema(() => [
+                TextInput.make('title').required(),
+                TagsInput.make('tasks').placeholder('Add tasks'),
+            ]),
+        Block.make('checkpoint')
+            .schema(() => [
+                TextInput.make('title').required(),
+                Select.make('status').options({ pending: 'Pending', passed: 'Passed', failed: 'Failed' }),
+            ]),
+    ])
+```
+
+```preview
+// state: {"plan": {"a1": {"type": "milestone", "data": {"title": "Beta", "target_date": "2025-06-01", "description": "First public release, for early adopters."}}, "b2": {"type": "task_group", "data": {"title": "Launch", "tasks": ["Press kit", "Announcement"]}}, "c3": {"type": "checkpoint", "data": {"title": "Security review", "status": "passed"}}}}
+// viewport: 900
+
+return Builder.make('plan')
+    .blocks([
+        Block.make('milestone')
+            .schema(() => [
+                TextInput.make('title').required(),
+                DatePicker.make('target_date').required(),
+                Textarea.make('description').rows(2),
+            ]),
+        Block.make('task_group')
+            .schema(() => [
+                TextInput.make('title').required(),
+                TagsInput.make('tasks').placeholder('Add tasks'),
+            ]),
+        Block.make('checkpoint')
+            .schema(() => [
+                TextInput.make('title').required(),
+                Select.make('status').options({ pending: 'Pending', passed: 'Passed', failed: 'Failed' }),
+            ]),
+    ])
+```
+
+`Block.schema()` takes a function returning the fields of a block. It is called for each item, and receives `{ builder, itemKey, data }`, where `data` is the current data of the item.
+
+The saved value is a list of blocks, like Filament's. Store it in a JSON column:
+
+```json
+[
+    { "type": "milestone", "data": { "title": "Beta", "target_date": "2025-06-01", "description": null } },
+    { "type": "task_group", "data": { "title": "Launch", "tasks": ["Press kit", "Announcement"] } }
+]
+```
+
+When the form is filled, the builder accepts this list, the same list as a JSON string, or an object of items keyed by item key. Items with an unknown block type are dropped. If you prefer to save the object of items keyed by item key, use `storedAsList(false)`.
+
+## Setting a block's label
+
+By default, the label of the block is generated from its name: `task_group` becomes "Task group". You may override it with the `label()` method:
+
+```ts
+import { Block } from '@navette-js/forms/builder';
+
+Block.make('task_group')
+    .label('Group of tasks')
+```
+
+### Numbering builder items
+
+By default, items in the builder have a number next to their label. You may disable this using the `blockNumbers(false)` method:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blockNumbers(false)
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"content": "Our roadmap for 2026", "level": "h2"}}, "b2": {"type": "paragraph", "data": {"content": "We are focusing on performance and accessibility this year."}}}}
+// viewport: 900
+
+return Builder.make('content')
+    .blockNumbers(false)
+    .blocks([
+        Block.make('heading')
+            .icon('m-bookmark')
+            .schema(() => [
+                TextInput.make('content').required(),
+                Select.make('level').options({ h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3' }),
+            ]),
+        Block.make('paragraph')
+            .icon('m-bars-3-bottom-left')
+            .schema(() => [
+                Textarea.make('content').required().rows(2),
+            ]),
+    ])
+```
+
+## Setting a block's icon
+
+Blocks may also have an icon, displayed next to the label in the block picker. Icons are Heroicons names, prefixed with `o-` (outline), `s-` (solid) or `m-` (mini):
+
+```ts
+import { Block } from '@navette-js/forms/builder';
+
+Block.make('milestone')
+    .icon('m-flag')
+```
+
+### Adding icons to the header of blocks
+
+By default, blocks in the builder don't have an icon next to the header label, just in the block picker. You may enable this using the `blockIcons()` method:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blockIcons()
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"content": "Our roadmap for 2026", "level": "h2"}}, "b2": {"type": "paragraph", "data": {"content": "We are focusing on performance and accessibility this year."}}}}
+// viewport: 900
+
+return Builder.make('content')
+    .blockIcons()
+    .blocks([
+        Block.make('heading')
+            .icon('m-bookmark')
+            .schema(() => [
+                TextInput.make('content').required(),
+                Select.make('level').options({ h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3' }),
+            ]),
+        Block.make('paragraph')
+            .icon('m-bars-3-bottom-left')
+            .schema(() => [
+                Textarea.make('content').required().rows(2),
+            ]),
+    ])
+```
+
+## Setting the default data of a block
+
+A new item is filled with the default values of its fields. When the defaults of a block depend on each other, or on the rest of the form, return them from `defaultData()`:
+
+```ts
+import { Block } from '@navette-js/forms/builder';
+
+Block.make('milestone')
+    .defaultData(() => ({ title: 'New milestone', target_date: new Date().toISOString().slice(0, 10), description: null }))
+```
+
+## Adding items
+
+An action button is displayed below the builder to allow the user to add a new item. It opens the block picker.
+
+## Setting the add action button's label
+
+You may set a label to customize the text that should be displayed in the button for adding a builder item, using the `addActionLabel()` method. You may also add an icon with `addActionIcon()`:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .addActionLabel('Add a new block')
+    .addActionIcon('m-plus')
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"content": "Our roadmap for 2026", "level": "h2"}}, "b2": {"type": "paragraph", "data": {"content": "We are focusing on performance and accessibility this year."}}}}
+// viewport: 900
+
+return Builder.make('content')
+    .addActionLabel('Add a new block')
+    .addActionIcon('m-plus')
+    .blocks([
+        Block.make('heading')
+            .icon('m-bookmark')
+            .schema(() => [
+                TextInput.make('content').required(),
+                Select.make('level').options({ h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3' }),
+            ]),
+        Block.make('paragraph')
+            .icon('m-bars-3-bottom-left')
+            .schema(() => [
+                Textarea.make('content').required().rows(2),
+            ]),
+    ])
+```
+
+### Aligning the add action button
+
+You may align the add action using the `addActionAlignment()` method, passing `'start'`, `'center'` or `'end'`:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .addActionAlignment('start')
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"content": "Our roadmap for 2026", "level": "h2"}}, "b2": {"type": "paragraph", "data": {"content": "We are focusing on performance and accessibility this year."}}}}
+// viewport: 900
+
+return Builder.make('content')
+    .addActionAlignment('start')
+    .blocks([
+        Block.make('heading')
+            .icon('m-bookmark')
+            .schema(() => [
+                TextInput.make('content').required(),
+                Select.make('level').options({ h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3' }),
+            ]),
+        Block.make('paragraph')
+            .icon('m-bars-3-bottom-left')
+            .schema(() => [
+                Textarea.make('content').required().rows(2),
+            ]),
+    ])
+```
+
+### Inserting items between other items
+
+A block picker is also displayed between items, so the user can insert a block at a precise position. You may change its label with `addBetweenActionLabel()`, or remove it with `addBetweenAction(false)`. In that case, you may display a label between items instead:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .addBetweenAction(false)
+    .labelBetweenItems('then')
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"content": "Our roadmap for 2026", "level": "h2"}}, "b2": {"type": "paragraph", "data": {"content": "We are focusing on performance and accessibility this year."}}}}
+// viewport: 900
+
+return Builder.make('content')
+    .addBetweenAction(false)
+    .labelBetweenItems('then')
+    .blocks([
+        Block.make('heading')
+            .icon('m-bookmark')
+            .schema(() => [
+                TextInput.make('content').required(),
+                Select.make('level').options({ h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3' }),
+            ]),
+        Block.make('paragraph')
+            .icon('m-bars-3-bottom-left')
+            .schema(() => [
+                Textarea.make('content').required().rows(2),
+            ]),
+    ])
+```
+
+## Deleting items
+
+An action button is displayed on each item header to allow the user to delete it.
+
+## Reordering items
+
+A handle on each item header allows the user to reorder the items by drag and drop. Keyboard users can move an item up or down with buttons revealed to assistive technology. The server only accepts a new order that is a permutation of the existing items.
+
+## Cloning items
+
+You may allow builder items to be duplicated using the `cloneable()` method:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .cloneable()
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"content": "Our roadmap for 2026", "level": "h2"}}, "b2": {"type": "paragraph", "data": {"content": "We are focusing on performance and accessibility this year."}}}}
+// viewport: 900
+
+return Builder.make('content')
+    .cloneable()
+    .blocks([
+        Block.make('heading')
+            .icon('m-bookmark')
+            .schema(() => [
+                TextInput.make('content').required(),
+                Select.make('level').options({ h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3' }),
+            ]),
+        Block.make('paragraph')
+            .icon('m-bars-3-bottom-left')
+            .schema(() => [
+                Textarea.make('content').required().rows(2),
+            ]),
+    ])
+```
+
+## Hiding the block headers
+
+`blockHeaders(false)` displays only the content of each item, without its header. The header holds the reorder, clone and delete buttons, so those actions are then unavailable.
+
+You may also change the tag of the header label with `blockLabelHeadingTag()` (`'h2'` by default, to `'h6'` or `'p'`), to fit the heading levels of your page.
+
+## Customizing the block picker
+
+### Changing the number of columns in the block picker
+
+The block picker has only 1 column. You may customize it by passing a number of columns, which apply from the `lg` breakpoint, to `blockPickerColumns()`:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blockPickerColumns(2)
+```
+
+### Increasing the width of the block picker
+
+When you increase the number of columns, the width of the dropdown should increase incrementally to handle the additional columns. You may set it with `blockPickerWidth()`, passing a width name such as `'md'` or `'2xl'`:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blockPickerColumns(3)
+    .blockPickerWidth('2xl')
+```
+
+## Accessing parent field values
+
+Inside a block, `get()` and `set()` are relative to the item's data: `get('title')` reads the title of the same block. To read a field outside of the item, use the host component's state, as explained for the [repeater](/forms/repeater#accessing-parent-field-values).
+
+## Builder validation
+
+As well as all rules listed on the [validation](/forms/validation) page, each field of each block is validated with its own rules. You may limit the number of items with `maxItems()` (100 by default): the add buttons disappear once the limit is reached, and the server ignores further additions.
+
+<Aside variant="warning">
+Block previews, collapsing items, grouping and searching blocks, limiting how many times a block can be used and confirming item actions with a modal are not available yet.
+</Aside>
