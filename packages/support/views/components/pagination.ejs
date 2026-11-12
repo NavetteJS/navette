@@ -1,5 +1,5 @@
-<%# Pagination — port de la vue Blade filament::components.pagination.
-    Options : simple (précédent / suivant seulement), extremeLinks (premier / dernier), property (propriété liée au nombre par page). Sans curseur. %>
+<%# Pagination. Options: simple (previous / next only), extremeLinks (first / last), property (property bound to the per-page count).
+    Cursor pagination is not supported. %>
 <% const simple = locals.simple === true, extremeLinks = locals.extremeLinks === true, property = locals.property ?? 'tableRecordsPerPage'; %>
 <% const perPageSelect = () => { %>
     <select class="fi-select-input" wire:model.live="<%= property %>">

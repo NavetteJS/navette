@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\Shop\Customers\CustomerResource + Tables\CustomersTable de la démo Filament.
+// Shop customers: list, form, addresses and payments.
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { Action } from '@navette-js/actions';
 import { DatePicker, RichEditor, Select, TextInput, ToggleButtons } from '@navette-js/forms';
@@ -18,9 +18,8 @@ export class Customer extends Model {
     deleted_at!: string | null;
     created_at!: string;
     updated_at!: string;
-    // Horodatage automatique, comme Eloquent.
     $beforeInsert(): void { this.created_at = this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
-    /** Équivalent du cast `date` d'Eloquent : une date sans heure est stockée à minuit. */
+    /** A date without a time is stored at midnight. */
     $formatDatabaseJson(json: Record<string, any>): Record<string, any> {
         const out = super.$formatDatabaseJson(json);
         if (typeof out.birthday === 'string' && out.birthday.length === 10) out.birthday += ' 00:00:00';
@@ -30,7 +29,7 @@ export class Customer extends Model {
 }
 
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
-/** `$record->addresses->first()?->country?->getLabel()` : première adresse du client (relation polymorphe `addressables`). */
+/** Country of the customer's first address (polymorphic `addressables` relation). */
 async function firstCountry(record: Customer): Promise<string | null> {
     const row = await Customer.knex()('addresses')
         .join('addressables', 'addressables.address_id', 'addresses.id')
@@ -50,16 +49,16 @@ class Address extends Model {
     zip!: string | null;
     created_at!: string;
     updated_at!: string;
-    /** Colonne calculée par la base (`street, zip city`) : en lecture seule. */
+    /** Computed by the database (`street, zip city`): read-only. */
     full_address!: string;
     $beforeInsert(): void { this.created_at = this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
     $beforeUpdate(): void { this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
 }
 const CUSTOMER_TYPE = 'App\\Models\\Shop\\Customer';
-/** Enum CountryCode de la démo, dans son ordre de déclaration. */
+/** Country codes, in declaration order. */
 const COUNTRIES: [string, string][] = [['us', 'United States'], ['gb', 'United Kingdom'], ['de', 'Germany'], ['fr', 'France'], ['ca', 'Canada'], ['au', 'Australia'], ['nl', 'Netherlands'], ['br', 'Brazil'], ['jp', 'Japan'], ['in', 'India']];
 const attachedTo = (ownerKey: string, ownerType: string = CUSTOMER_TYPE) => Address.knex()('addressables').select('address_id').where({ addressable_type: ownerType, addressable_id: ownerKey });
-/** Adresses d'un client (relation polymorphe `addressables`) : créer rattache, supprimer retire aussi le rattachement. */
+/** Customer addresses (polymorphic `addressables` relation): creating attaches, deleting also detaches. */
 class CustomerAddresses extends ObjectionAdapter<Address> {
     private owner: string;
     private ownerType: string;
@@ -96,19 +95,18 @@ class Payment extends Model {
     $beforeInsert(): void { this.created_at = this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
     $beforeUpdate(): void { this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
 }
-/** Enums CurrencyCode et PaymentMethod de la démo, dans leur ordre de déclaration. */
+/** Currency codes and payment methods, in declaration order. */
 const CURRENCIES: [string, string][] = [['usd', 'US Dollar'], ['eur', 'Euro'], ['gbp', 'British Pound'], ['cad', 'Canadian Dollar'], ['aud', 'Australian Dollar'], ['jpy', 'Japanese Yen'], ['brl', 'Brazilian Real'], ['inr', 'Indian Rupee']];
 const PAYMENT_METHODS: [string, string][] = [['credit_card', 'Credit Card'], ['bank_transfer', 'Bank Transfer'], ['paypal', 'PayPal'], ['apple_pay', 'Apple Pay'], ['google_pay', 'Google Pay']];
 const ordersOf = (ownerKey: string) => Payment.knex()('orders').where({ customer_id: ownerKey }).whereNull('deleted_at');
 const headline = (text: string) => text.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-/** Équivalent de RelationManagers\AddressesRelationManager. */
 export class AddressesRelationManager extends RelationManager {
     static relationship = 'addresses';
     static modelLabel = 'address';
     static recordTitleAttribute = 'full_address';
-    // Relation polymorphe `addressables` : les adresses rattachées à ce client.
-    /** Type du propriétaire dans la relation polymorphe (client par défaut ; une sous-classe peut viser un autre modèle). */
+    // Polymorphic `addressables` relation: the addresses attached to this customer.
+    /** Owner type in the polymorphic relation (customer by default; a subclass can target another model). */
     static ownerType = CUSTOMER_TYPE;
     static adapterFor(ownerKey: string): DataAdapter { return new CustomerAddresses(ownerKey, this.ownerType); }
     static form(schema: Schema): Schema {
@@ -117,7 +115,7 @@ export class AddressesRelationManager extends RelationManager {
             Select.make('country').options(COUNTRIES).searchable(),
         ]);
     }
-    // --- rattachement : seules les adresses qui ne sont pas déjà à ce client sont proposées
+    // --- attach: only addresses not yet attached to this customer are offered
     private static attachable(ownerKey: string) { return Address.query().whereNotIn('addresses.id', attachedTo(ownerKey, this.ownerType)); }
     static async searchAttachable(ownerKey: string, search: string): Promise<[string, string][]> {
         const query = this.attachable(ownerKey).orderBy('street').limit(50);
@@ -140,7 +138,6 @@ export class AddressesRelationManager extends RelationManager {
                 TextColumn.make<Address>('street').weight('medium'),
                 TextColumn.make<Address>('zip'),
                 TextColumn.make<Address>('city'),
-                // Enum CountryCode : le libellé du pays.
                 TextColumn.make<Address>('country').getStateUsing(({ record }) => (record.country ? (regionNames.of(record.country.toUpperCase()) ?? record.country) : null)),
             ])
             .defaultSort('city')
@@ -151,12 +148,11 @@ export class AddressesRelationManager extends RelationManager {
     }
 }
 
-/** Équivalent de RelationManagers\PaymentsRelationManager. */
 export class PaymentsRelationManager extends RelationManager {
     static relationship = 'payments';
     static modelLabel = 'payment';
     static recordTitleAttribute = 'reference';
-    // `hasManyThrough` : les paiements des commandes de ce client.
+    // Has-many-through: the payments of this customer's orders.
     static adapterFor(ownerKey: string): DataAdapter {
         return new ObjectionAdapter(Payment, {
             modify: (query) => {
@@ -166,7 +162,7 @@ export class PaymentsRelationManager extends RelationManager {
             },
         });
     }
-    /** Formulaire : la commande n'est choisie qu'à la création, parmi celles du client. */
+    /** The order is picked on create only, among the customer's orders. */
     static form(schema: Schema): Schema {
         const owner = String((schema.livewire as any).ownerRecord);
         return schema.components([
@@ -184,7 +180,6 @@ export class PaymentsRelationManager extends RelationManager {
     static table(table: Table<Payment>): Table<Payment> {
         return table
             .columns([
-                // La page d'édition des commandes n'est pas encore portée : le lien reprend l'adresse de Filament.
                 TextColumn.make<Payment>('order.number').getStateUsing(({ record }) => record.order_number ?? null)
                     .url((record) => `/shop/orders/${record.order_id}/edit`).sortable({ column: 'order_number' }).weight('medium'),
                 ColumnGroup.make<Payment>('Details').columns([
@@ -203,7 +198,7 @@ export class PaymentsRelationManager extends RelationManager {
     }
 }
 
-/** Action « Send email » de la démo : un formulaire en modale ; comme dans Filament, rien n'est réellement envoyé. */
+/** Send email action: a modal form; nothing is actually sent. */
 const sendEmail = () => Action.make('send_email').icon('m-envelope').tableIcon('c-envelope').color('info').modalWidth('lg').modalSubmitActionLabel('Send')
     .fillForm(({ record }) => ({ to: record.email }))
     .schema(() => [
@@ -224,10 +219,9 @@ export class CustomerResource extends Resource {
     static recordTitleAttribute = 'name';
     static globalSearchSort = 10;
     static globallySearchableAttributes = ['name', 'email'];
-    // Comme la démo : suppression douce, et l'édition reste accessible pour un client supprimé.
+    // Soft deletes; a deleted customer can still be edited.
     static adapter = new ObjectionAdapter(Customer, { softDeletes: 'deleted_at', findsTrashed: true });
 
-    /** Équivalent de Schemas\CustomerForm. */
     static form(schema: Schema): Schema {
         return schema
             .components([

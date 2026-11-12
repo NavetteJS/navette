@@ -1,7 +1,7 @@
 import { Component } from '@navette-js/wire';
 import { view } from '../view.ts';
 
-/** Champ `live()` : validation à chaque frappe, propriété liée par Alpine ($wire.entangle), erreurs dans memo.errors. */
+/** Live field: validated on every keystroke, a property bound through Alpine ($wire.entangle), errors in memo.errors. */
 export class LiveField extends Component {
     name = '';
     items: string[] = [];

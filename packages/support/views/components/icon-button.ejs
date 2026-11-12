@@ -1,5 +1,5 @@
-<%# Bouton icône — port de la vue Blade filament::components.icon-button (couleur grise par défaut, sans badge).
-    `extra` : attributs placés après les attributs de chargement ; pour la modale, `tabindex` précède `type` et le clic vient en dernier. %>
+<%# Gray icon button without badge.
+    `extra`: attributes placed after the loading attributes; with `after` (modal close button), `extra` goes before `type` and `after` comes last. %>
 <% const lead = locals.after ? (locals.extra ? extra.toHtml() + ' ' : '') : ''; const tail = locals.after ? after.toHtml() : (locals.extra ? extra.toHtml() : ''); %>
 <button class="fi-icon-btn fi-size-<%- locals.size ?? 'md' %> <%- className %>" title="<%= label %>" aria-label="<%= label %>" <%- lead %>type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"<% if (tail) { %> <%- tail %><% } %>>
     <%- icon(iconName, { size: locals.iconSize ?? 'md' }) %>

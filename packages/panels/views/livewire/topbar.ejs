@@ -1,4 +1,4 @@
-<%# Barre du haut — port de filament-panels::livewire.topbar et components.topbar.item %>
+<%# Topbar and its navigation items %>
 <div x-data="filamentSidebarBackground" x-bind:inert="$store.sidebar.isOpenMobile && ! hasOpenModal" class="fi-topbar-ctn" ><nav aria-label="<%= t('filament-panels::layout.topbar.label') %>" class="fi-topbar" >
 <%- renderHook('panels::topbar.start') %>
 <% if (hasNavigation) { %>

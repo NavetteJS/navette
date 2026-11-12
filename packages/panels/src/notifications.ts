@@ -1,4 +1,4 @@
-// Notifications flash — port de filament/notifications : Notification, boîte aux lettres, composant d'affichage.
+// Flash notifications: the Notification builder, a per-browser mailbox, and the component that displays them.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Attributes, e, icon, js } from '@navette-js/support';
@@ -7,18 +7,18 @@ import { Component, WireError } from '@navette-js/wire';
 
 export type NotificationActionData = { label: string; url: string | null; openUrlInNewTab: boolean };
 export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionData[] };
-/** Ce qu'il faut d'un stockage de notifications pour y écrire (voir `DatabaseNotificationStore`). */
+/** The part of a notification store needed to write to it (see `DatabaseNotificationStore`). */
 type NotificationSink = { send(user: string | number, notification: NotificationData): Promise<void> };
 type RequestStore = { mailbox: string; pending: NotificationData[] };
 
 const requestStore = new AsyncLocalStorage<RequestStore>();
-/** Exécute `fn` dans le contexte d'une requête : `Notification.send()` y dépose ses notifications. */
+/** Runs `fn` in a request context, where `Notification.send()` queues its notifications. */
 export function runInRequest<T>(mailbox: string, fn: () => Promise<T>): Promise<{ result: T; pending: NotificationData[] }> {
     const store: RequestStore = { mailbox, pending: [] };
     return requestStore.run(store, async () => ({ result: await fn(), pending: store.pending }));
 }
 
-// Boîte aux lettres en mémoire, par navigateur (identifiant = jeton CSRF) puis par lot. Filament utilise le cache de l'application.
+// In-memory mailbox, keyed by browser (the CSRF token) then by batch.
 const mailboxes = new Map<string, Map<string, { at: number; notifications: NotificationData[] }>>();
 const TTL = 5 * 60 * 1000;
 export function publish(mailbox: string, notifications: NotificationData[]): string {
@@ -29,7 +29,7 @@ export function publish(mailbox: string, notifications: NotificationData[]): str
     mailboxes.set(mailbox, box);
     return batch;
 }
-/** Retire et rend les notifications des lots demandés (tous si `batches` est nul). */
+/** Removes and returns the notifications of the given batches (all of them if `batches` is null). */
 export function pull(mailbox: string, batches: string[] | null): NotificationData[] {
     const box = mailboxes.get(mailbox);
     if (!box) return [];
@@ -57,21 +57,21 @@ export class Notification {
     iconColor(color: string): this { this.data.iconColor = color; return this; }
     duration(ms: number): this { this.data.duration = ms; return this; }
     persistent(): this { this.data.duration = 'persistent'; return this; }
-    /** Liens proposés sous le texte. Ils ne sont affichés que dans le panneau des notifications en base. */
+    /** Links shown under the text. Only displayed in the database notifications panel. */
     actions(actions: { label: string; url?: string | null; openUrlInNewTab?: boolean }[]): this { this.data.actions = actions.slice(0, 10).map((action) => ({ label: String(action.label), url: action.url ?? null, openUrlInNewTab: action.openUrlInNewTab === true })); return this; }
     getData(): NotificationData { return { ...this.data }; }
-    /** Enregistre la notification pour cet utilisateur (cloche du panel) : `await Notification.make()….sendToDatabase(panel.getDatabaseNotifications(), user.id)`. Sans stockage, rien n'est fait. */
+    /** Stores the notification for this user (panel bell): `await Notification.make()….sendToDatabase(panel.getDatabaseNotifications(), user.id)`. Does nothing without a store. */
     async sendToDatabase(store: NotificationSink | null, user: string | number): Promise<this> { if (store) await store.send(user, { ...this.data, id: randomUUID() }); return this; }
-    /** Dépose la notification pour le navigateur de la requête en cours. */
+    /** Queues the notification for the browser of the current request. */
     send(): this {
         const store = requestStore.getStore();
-        if (!store) throw new Error('Notification.send() doit être appelé pendant le traitement d\'une requête.');
+        if (!store) throw new Error('Notification.send() must be called while handling a request.');
         store.pending.push({ ...this.data });
         return this;
     }
 }
 
-/** Port de Notification::toEmbeddedHtml (sans date, actions ni mode « inline »). Le titre et le corps sont échappés. */
+/** Renders a flash notification (no date, actions or inline mode). Title and body are escaped. */
 export function renderNotification(n: NotificationData): string {
     const closeLabel = t('filament-notifications::notification.actions.close.label');
     const attributes = new Attributes()
@@ -83,7 +83,7 @@ export function renderNotification(n: NotificationData): string {
     return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${e(n.body)}</div>` : ''}</div>` : ''}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark')}</button></div>`;
 }
 
-/** Conteneur des notifications (port de Filament\Notifications\Livewire\Notifications). */
+/** Container component for flash notifications. */
 export class Notifications extends Component {
     static callable = ['pullNotifications'];
     isFilamentNotificationsComponent = true;
@@ -94,7 +94,7 @@ export class Notifications extends Component {
 
     private get mailbox(): string { return String((this._ctx as any)?.mailbox ?? ''); }
 
-    /** À l'affichage d'un document (hors navigation SPA et préchargement), les notifications en attente sont tirées tout de suite. */
+    /** On a full document load (not SPA navigation or prefetch), pending notifications are pulled right away. */
     mount(): void {
         const req = (this._ctx as any)?.req;
         if (!req || req.method !== 'GET' || req.headers['sec-fetch-dest'] !== 'document' || req.headers['x-livewire-navigate'] !== undefined || String(req.headers['sec-purpose'] ?? '').toLowerCase().includes('prefetch')) return;
@@ -102,7 +102,7 @@ export class Notifications extends Component {
         this.hasPulledNotificationsOnMount = true;
     }
     pullNotifications(batches: unknown = []): void {
-        if (!Array.isArray(batches) || batches.length > 50 || batches.some((b) => typeof b !== 'string' || !/^[a-f0-9]{40}$/.test(b))) throw new WireError(422, 'Lots de notifications invalides.');
+        if (!Array.isArray(batches) || batches.length > 50 || batches.some((b) => typeof b !== 'string' || !/^[a-f0-9]{40}$/.test(b))) throw new WireError(422, 'Invalid notification batches.');
         for (const n of pull(this.mailbox, batches as string[])) this.notifications[n.id] = n;
     }
     pullNotificationsFromSession(batches: unknown = []): void { this.pullNotifications(batches); }

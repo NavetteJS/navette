@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Color, ColorManager, convertToOklch, generatePalette } from '../src/index.ts';
 
-test('convertToOklch : valeurs de référence', () => {
+test('convertToOklch: reference values', () => {
     assert.equal(convertToOklch('#ffffff'), 'oklch(1 0 89.876)');
     assert.equal(convertToOklch('oklch(0.5 0.1 20)'), 'oklch(0.5 0.1 20)');
     const [, l, c, h] = /oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)/.exec(convertToOklch('#3b82f6'))!.map(Number);
@@ -10,7 +10,7 @@ test('convertToOklch : valeurs de référence', () => {
     assert.equal(convertToOklch('rgb(59, 130, 246)'), convertToOklch('#3b82f6'));
 });
 
-test('generatePalette : onze nuances, teinte conservée, gris sans saturation', () => {
+test('generatePalette: eleven shades, hue kept, gray without chroma', () => {
     const palette = generatePalette('#b45309');
     assert.deepEqual(Object.keys(palette).map(Number), [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]);
     const hue = /oklch\(\S+ \S+ (\S+)\)/.exec(convertToOklch('#b45309'))![1];
@@ -18,7 +18,7 @@ test('generatePalette : onze nuances, teinte conservée, gris sans saturation', 
     assert.match(generatePalette('#808080')[500], /^oklch\(0\.68270588235294 0 /);
 });
 
-test('ColorManager : les couleurs d\'une requête ne débordent pas sur les autres', async () => {
+test('ColorManager: per-request colors do not leak into other requests', async () => {
     const manager = new ColorManager().register({ primary: Color.Blue });
     const base = manager.getComponentClasses('button', 'primary');
     const seen: Record<string, string | undefined> = {};

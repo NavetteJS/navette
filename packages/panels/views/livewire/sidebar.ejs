@@ -1,4 +1,4 @@
-<%# Sidebar — port de filament-panels::livewire.sidebar, components.sidebar.group et components.sidebar.item %>
+<%# Sidebar: navigation groups and items %>
 <% const collapsible = isSidebarCollapsibleOnDesktop || isSidebarFullyCollapsibleOnDesktop; %>
 <div>
     <div x-data="filamentSidebar({
@@ -113,7 +113,7 @@
             <%- userMenu ?? '' %>
         </div>
 <% } %>
-        <%# Comme Filament : après le pied de sidebar, pas dedans. %>
+        <%# Rendered after the sidebar footer, not inside it. %>
         <%- renderHook('panels::sidebar.footer') %>
     </div>
 

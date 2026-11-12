@@ -1,4 +1,4 @@
-<%# Champ texte — port de TextInput::toEmbeddedHtml() + Field::wrapInputHtml() %>
+<%# Text input with its prefix/suffix wrapper. %>
 <div <%- wrapper %>>
     <% if (prefix !== null) { %>
         <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label">

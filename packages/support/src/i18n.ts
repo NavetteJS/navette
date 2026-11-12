@@ -1,4 +1,4 @@
-// Traductions compatibles Laravel : `espace::groupe.clé`, paramètres `:nom`, repli sur l'anglais.
+// Translations: `namespace::group.key` keys, `:name` placeholders, English fallback.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -12,7 +12,7 @@ let currentLocale = 'en';
 export const setLocale = (locale: string) => { currentLocale = locale; };
 export const getLocale = () => currentLocale;
 
-/** `t('filament-panels::auth/pages/login.form.email.label')` */
+/** Translates a key such as `t('filament-panels::auth/pages/login.form.email.label')`; returns the key when it is missing. */
 export function t(key: string, params: Record<string, string | number> = {}, locale = currentLocale): string {
     const [ns, rest] = key.split('::');
     const dot = rest.indexOf('.');
@@ -25,7 +25,7 @@ export function t(key: string, params: Record<string, string | number> = {}, loc
     return value;
 }
 
-/** Durée relative au passé, à la manière de Carbon::diffForHumans() en anglais : « 2 months ago ». Les dates sans fuseau sont lues en UTC. */
+/** Relative past duration in English, e.g. "2 months ago". Dates without a time zone are read as UTC. */
 export function diffForHumans(value: string | Date | null | undefined, now: Date = new Date()): string | null {
     if (value === null || value === undefined || value === '') return null;
     const date = value instanceof Date ? value : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : value.replace(' ', 'T') + 'Z');
@@ -37,7 +37,7 @@ export function diffForHumans(value: string | Date | null | undefined, now: Date
     if (seconds < 86400) return unit(Math.floor(seconds / 3600), 'hour');
     const days = Math.floor(seconds / 86400);
     if (days < 7) return unit(days, 'day');
-    // Mois calendaires entiers écoulés, comme Carbon.
+    // Whole calendar months elapsed, not 30-day blocks.
     let months = (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + now.getUTCMonth() - date.getUTCMonth();
     if (now.getUTCDate() < date.getUTCDate() || (now.getUTCDate() === date.getUTCDate() && now.getTime() % 86400000 < date.getTime() % 86400000)) months--;
     if (months < 1) return unit(Math.floor(days / 7), 'week');
@@ -45,7 +45,7 @@ export function diffForHumans(value: string | Date | null | undefined, now: Date
     return unit(Math.floor(months / 12), 'year');
 }
 
-/** Pluriels Laravel (`trans_choice`) : `{0} …|{1} …|[2,*] …` ou `singulier|pluriel`. `:count` est toujours disponible. */
+/** Pluralized translation: `{0} …|{1} …|[2,*] …` or `singular|plural`. `:count` is always available. */
 export function tc(key: string, count: number, params: Record<string, string | number> = {}, locale = currentLocale): string {
     const segments = t(key, {}, locale).split('|');
     let chosen: string | null = null;

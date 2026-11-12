@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// CLI d'un projet Navette (`npx navette …`) : migrations, comptes, et générateurs de resources, pages et widgets,
-// à la manière des commandes `make:filament-*` de Filament. Se lance à la racine d'un projet créé par `npm create navette`.
+// Project CLI (`npx navette …`): migrations, users, and generators for resources, pages and widgets.
+// Run it at the root of a project created with `npm create navette`.
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join, relative } from 'node:path';
@@ -21,7 +21,7 @@ const flag = (name: string) => (typeof flags[name] === 'string' ? (flags[name] a
 const say = (text = '') => process.stdout.write(text + '\n');
 const fail = (text: string): never => { process.stderr.write(`\n  ✖ ${text}\n\n`); process.exit(1); };
 
-/** Base de données du projet : `src/database.ts` exporte `db` (knex) et `migrate()`. */
+/** The project's `src/database.ts` exports `db` (knex) and `migrate()`. */
 async function project(): Promise<{ db: any; migrate: () => Promise<string[]> }> {
     const file = join(cwd, 'src', 'database.ts');
     if (!existsSync(file)) fail('No src/database.ts here: run this command at the root of a Navette project (created with `npm create navette`).');
@@ -34,7 +34,7 @@ async function ask(question: string, fallback = ''): Promise<string> {
     rl.close();
     return answer || fallback;
 }
-/** N'écrase jamais un fichier existant, sauf `--force`. */
+/** Never overwrites an existing file unless `--force` is given. */
 function write(file: string, content: string): void {
     if (existsSync(file) && !flags.force) fail(`${relative(cwd, file)} already exists (use --force to overwrite).`);
     mkdirSync(join(file, '..'), { recursive: true });

@@ -1,4 +1,4 @@
-// @navette-js/tables — port de filament/tables : Table, TextColumn, filtres, état (recherche, tri, pagination, colonnes) et rendu.
+// @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
 import { Attributes, cls, e, hasRenderHook, icon, js, renderHook, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 views.namespace('filament-tables', fileURLToPath(new URL('../views', import.meta.url)));
 export * from './query-builder.ts';
 
-/** Emplacements de render hook d'une table — mêmes noms que `Filament\Tables\View\TablesRenderHook`. */
+/** Render hook slots of a table. */
 export const TablesRenderHook = {
     CONTENT_AFTER: 'tables::content.after',
     CONTENT_BEFORE: 'tables::content.before',
@@ -30,21 +30,21 @@ export const TablesRenderHook = {
     TOOLBAR_START: 'tables::toolbar.start',
     FILTER_INDICATORS: 'tables::filter.indicators',
     HEADER_CELL: 'tables::header.cell',
-    /** Anciens noms, conservés par Filament. */
+    /** Legacy aliases of the column manager trigger slots. */
     TOOLBAR_TOGGLE_COLUMN_TRIGGER_AFTER: 'tables::toolbar.toggle-column-trigger.after',
     TOOLBAR_TOGGLE_COLUMN_TRIGGER_BEFORE: 'tables::toolbar.toggle-column-trigger.before',
 } as const;
 
-/** Cibles de chargement de la table (`wire:target`), dans l'ordre émis par Filament. */
+/** Methods and properties that trigger the table's loading state (`wire:target`). */
 export const LOADING_TARGETS = 'activeTab,applyTableFilters,gotoPage,nextPage,previousPage,removeTableFilter,removeTableFilters,reorderTable,resetTableColumnSearch,resetTableFiltersForm,resetTableSearch,setPage,sortTable,tableColumnSearches,tableFilters,tableGrouping,tableRecordsPerPage,tableSearch,tableSort,toggleTableReordering';
 
 const headline = (s: string) => s.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
 type StateResolver<R> = (ctx: { record: R }) => unknown | Promise<unknown>;
 
-// ------------------------------------------------------------------ colonnes
-/** Base commune des colonnes (port partiel de Filament\Tables\Columns\Column). */
+// ------------------------------------------------------------------ columns
+/** Base class of table columns. */
 export abstract class Column<R = any> {
-    /** Réglage par défaut de toutes les instances créées ensuite par `make()` : `TextInput.configureUsing((input) => input.maxLength(255))`. */
+    /** Default setup for every instance created afterwards by `make()`, e.g. `TextColumn.configureUsing((column) => column.sortable())`. */
     static configureUsing<T>(this: abstract new (...args: any[]) => T, configure: (instance: T) => void): void { configureUsing(this, configure); }
     readonly name: string;
     protected _label: string | null = null;
@@ -58,21 +58,21 @@ export abstract class Column<R = any> {
     protected _sortColumn: string | null = null;
     protected _searchColumn: string | null = null;
     protected _url: ((record: R) => string | null) | null = null;
-    /** Libellé du groupe de colonnes auquel la colonne appartient (posé par ColumnGroup). */
+    /** Label of the column group this column belongs to (set by ColumnGroup). */
     _group: string | null = null;
 
     constructor(name: string) { this.name = name; }
     label(label: string): this { this._label = label; return this; }
-    /** `column` : colonne (ou alias de la requête) utilisée pour trier quand elle diffère du nom, par exemple pour une relation. */
+    /** `column`: column (or query alias) to sort by when it differs from the name, e.g. for a relationship. */
     sortable(condition: boolean | { column: string; inverted?: boolean } = true): this { this._sortable = condition !== false; this._sortColumn = typeof condition === 'object' ? condition.column : null; this._sortInverted = typeof condition === 'object' && condition.inverted === true; return this; }
     getSortColumn(): string { return this._sortColumn ?? this.name; }
     private _sortInverted = false;
-    /** Vrai quand la colonne de tri évolue en sens inverse de la valeur affichée (`inverted` : un âge trié par sa date). */
+    /** `inverted`: the sort column runs opposite to the displayed value (e.g. an age sorted by birth date). */
     isSortInverted(): boolean { return this._sortInverted; }
-    /** Lien posé sur la cellule ; il prend le pas sur l'action de ligne. */
+    /** Link on the cell; takes precedence over the row action. */
     url(resolver: (record: R) => string | null): this { this._url = resolver; return this; }
     getUrl(record: R): string | null { return this._url ? this._url(record) : null; }
-    /** `isGlobal: false` exclut la colonne de la recherche globale ; `isIndividual` ajoute un champ de recherche propre à la colonne. */
+    /** `isGlobal: false` excludes the column from the global search; `isIndividual` adds a search field for this column. */
     getSearchColumn(): string { return this._searchColumn ?? this.name; }
     searchable(options: boolean | { isIndividual?: boolean; isGlobal?: boolean; column?: string } = true): this {
         this._searchColumn = typeof options === 'object' ? (options.column ?? null) : null;
@@ -80,7 +80,7 @@ export abstract class Column<R = any> {
         this._individuallySearchable = typeof options === 'object' && options.isIndividual === true;
         return this;
     }
-    /** Colonne que l'utilisateur peut masquer depuis le gestionnaire de colonnes. */
+    /** Lets the user hide the column from the column manager. */
     toggleable(condition = true, options: { isToggledHiddenByDefault?: boolean } = {}): this { this._toggleable = condition; this._toggledHiddenByDefault = options.isToggledHiddenByDefault === true; return this; }
     alignment(alignment: 'start' | 'center' | 'end' | null): this { this._alignment = alignment; return this; }
     alignEnd(): this { return this.alignment('end'); }
@@ -95,10 +95,10 @@ export abstract class Column<R = any> {
     isToggleable(): boolean { return this._toggleable; }
     isToggledHiddenByDefault(): boolean { return this._toggledHiddenByDefault; }
     getAlignment(): string | null { return this._alignment; }
-    /** Suffixe des classes `fi-ta-header-cell-…` / `fi-ta-cell-…` : les tirets bas deviennent des tirets, les points sont conservés (comme Filament). */
+    /** Suffix of the `fi-ta-header-cell-…` / `fi-ta-cell-…` classes: underscores become dashes, dots are kept. */
     getCssName(): string { return this.name.replace(/_/g, '-'); }
     async getState(record: R): Promise<unknown> { return this._state ? this._state({ record }) : (record as any)[this.name]; }
-    /** Vrai pour une cellule modifiable : elle n'est enveloppée ni d'un lien ni d'un bouton vers l'enregistrement. */
+    /** True for editable cells: they are not wrapped in a link or button to the record. */
     isClickDisabled(): boolean { return false; }
     abstract toHtml(record: R, recordKey?: string | number): Promise<string>;
 }
@@ -119,40 +119,40 @@ export class TextColumn<R = any> extends Column<R> {
     private _tooltip: ((record: R) => string | null) | string | null = null;
 
     static make<R = any>(name: string): TextColumn<R> { return configured(new TextColumn<R>(name)); }
-    /** Affiche la valeur dans une pastille. */
+    /** Displays the value in a badge. */
     badge(condition = true): this { this._badge = condition; return this; }
     color(color: string | ((record: R) => string)): this { this._color = color; return this; }
     icon(resolver: (record: R) => string | null): this { this._icon = resolver; return this; }
-    /** Texte affiché à la place de la valeur brute (libellé d'une énumération, par exemple). */
+    /** Text displayed instead of the raw value (e.g. an enum label). */
     formatStateUsing(formatter: (ctx: { state: unknown; record: R }) => string): this { this._format = formatter; return this; }
-    /** Date courte, comme `->date()` de Filament (« Nov 9, 2026 »). */
+    /** Short date, e.g. "Nov 9, 2026". */
     date(condition = true): this { this._date = condition; return this; }
     private _dateTime = false;
-    /** Date et heure, « M j, Y H:i:s » (format par défaut de Filament). */
+    /** Date and time, e.g. "Nov 9, 2026 14:30:00". */
     dateTime(condition = true): this { this._dateTime = condition; this._date = condition; return this; }
-    /** Nombre formaté avec séparateurs de milliers (`->numeric()`). */
+    /** Number formatted with thousands separators. */
     private _decimals: number | null = null;
-    /** `numeric(1)` : nombre de décimales fixe. */
+    /** `numeric(1)`: fixed number of decimals. */
     numeric(condition: boolean | number = true): this { this._numeric = condition !== false; this._decimals = typeof condition === 'number' ? condition : null; return this; }
-    /** Ligne de totaux sous la table. */
+    /** Summary row below the table. */
     summarize(summarizer: Summarizer | Summarizer[]): this { this._summarizers = Array.isArray(summarizer) ? summarizer : [summarizer]; return this; }
     getSummarizers(): Summarizer[] { return this._summarizers; }
     weight(weight: string): this { this._weight = weight; return this; }
-    /** Tronque le texte affiché à `length` caractères, suivi de « ... » (port de `limit()`, Str::limit). */
+    /** Truncates the displayed text to `length` characters, followed by "...". */
     limit(length: number | null): this { this._limit = length; return this; }
-    /** Infobulle au survol du texte ; `null` pour ne pas en afficher. */
+    /** Tooltip on hover; `null` for none. */
     tooltip(tooltip: ((record: R) => string | null) | string | null): this { this._tooltip = tooltip; return this; }
     copyable(condition = true): this { this._copyable = condition; return this; }
-    /** Montant formaté dans la devise donnée (`money('usd')`). */
+    /** Amount formatted in the given currency, e.g. `money('usd')`. */
     money(currency: string | ((record: R) => string) = 'usd'): this { this._money = currency; return this; }
-    /** Texte affiché quand la valeur est vide. */
+    /** Text displayed when the value is empty. */
     placeholder(text: string | null): this { this._placeholder = text; return this; }
 
-    /** Contenu de cellule. Filament a deux balisages : un chemin court pour le texte simple, un chemin complet dès qu'une option est posée. */
+    /** Cell content: a short markup for plain text, a full markup as soon as an option (badge, icon, color…) is set. */
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
         if ((state === null || state === undefined || state === '') && this._placeholder !== null) return `<div class="fi-ta-text"><p class="fi-ta-placeholder">${e(this._placeholder)}</p></div>`;
-        // Valeur vide sans texte de remplacement : Filament rend un conteneur nu.
+        // Empty value without placeholder: render a bare container.
         if (state === null || state === undefined || state === '') return `<div class="${cls(['fi-ta-text', this._money || this._numeric ? 'fi-numeric' : null, (this._money || this._numeric) && this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null])}"></div>`;
         const currency = typeof this._money === 'function' ? this._money(record) : this._money;
         if (this._badge || this._format || this._date) {
@@ -163,7 +163,7 @@ export class TextColumn<R = any> extends Column<R> {
                 const color = typeof this._color === 'function' ? this._color(record) : (this._color ?? 'primary');
                 const iconName = this._icon?.(record) ?? null;
                 const classes = ['fi-badge', 'fi-size-sm', ...(color !== 'gray' ? (colorManager?.getComponentClasses('badge', color) ?? []) : [])].join(' ');
-                // Comme Filament : sans icône, la cellule passe par le chemin court, qui écrit les classes dans l'autre ordre.
+                // Without an icon the cell uses the short markup, which writes the classes in the other order.
                 return `<div class="${iconName ? 'fi-ta-text-item fi-ta-text' : 'fi-ta-text fi-ta-text-item'} fi-ta-text-has-badges"><span class="${classes}">${iconName ? icon(iconName, { size: 'sm', attributes: new Attributes({ 'aria-hidden': 'true' }) }) : ''}${e(shown)}</span></div>`;
             }
             if (!this._weight && !this._copyable) return `<div class="${cls(['fi-ta-text', 'fi-ta-text-item', 'fi-size-sm', this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null])}">${e(shown)}</div>`;
@@ -180,7 +180,7 @@ export class TextColumn<R = any> extends Column<R> {
                             }">${e(limited)}</span>` : e(limited);
             return `<div class="${cls(['fi-ta-text-item', 'fi-size-sm', this._weight ? `fi-font-${this._weight}` : null, 'fi-ta-text', this._money || this._numeric ? 'fi-numeric' : null, align])}">${content}</div>`;
         }
-        // Hors pastille : une icône précède le texte (chemin complet), une couleur teinte le texte.
+        // Outside a badge: an icon precedes the text (full markup) and a color tints the text.
         const plainIcon = this._icon?.(record) ?? null;
         const plainColor = typeof this._color === 'function' ? this._color(record) : this._color;
         const colorClasses = plainColor ? (colorManager?.getComponentClasses('text', plainColor) ?? []) : [];
@@ -201,11 +201,11 @@ export class TextColumn<R = any> extends Column<R> {
     }
 }
 
-/** Valeurs dont un summarizer tire son résultat : agrégats de la requête (tous les enregistrements) ou de la page affichée. */
+/** Values a summarizer works from: aggregates over the query (all records) or over the displayed page. */
 export type SummaryValues = { count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> };
 export type SummaryItem = { type: 'text' | 'range'; label: string | null; value: string };
 
-/** Résumé d'une colonne sous la table (port de Summarizers\Summarizer) : somme, moyenne, nombre ou étendue. */
+/** Column summary below the table: sum, average, count or range. */
 export abstract class Summarizer {
     abstract readonly kind: 'sum' | 'avg' | 'count' | 'range';
     protected _label: string | null = null;
@@ -216,33 +216,33 @@ export abstract class Summarizer {
     format(value: number): string { return this._money ? new Intl.NumberFormat('en-US', { style: 'currency', currency: this._money }).format(value) : new Intl.NumberFormat('en-US').format(value); }
     abstract summarize(column: string, values: SummaryValues): SummaryItem | null;
 }
-/** Total d'une colonne (port du summarizer Sum). */
+/** Column total. */
 export class Sum extends Summarizer {
     readonly kind = 'sum';
     static make(): Sum { return configured(new Sum()); }
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.sum.label'); }
     summarize(column: string, values: SummaryValues): SummaryItem { return { type: 'text', label: this.getLabel(), value: this.format(values.sum[column] ?? 0) }; }
 }
-/** Moyenne d'une colonne (port du summarizer Average). */
+/** Column average. */
 export class Average extends Summarizer {
     readonly kind = 'avg';
     static make(): Average { return configured(new Average()); }
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.average.label'); }
     summarize(column: string, values: SummaryValues): SummaryItem { return { type: 'text', label: this.getLabel(), value: this.format(values.avg[column] ?? 0) }; }
 }
-/** Nombre d'enregistrements (port du summarizer Count). */
+/** Record count. */
 export class Count extends Summarizer {
     readonly kind = 'count';
     static make(): Count { return configured(new Count()); }
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.count.label'); }
     summarize(_column: string, values: SummaryValues): SummaryItem { return { type: 'text', label: this.getLabel(), value: this.format(values.count) }; }
 }
-/** Plus petite et plus grande valeur d'une colonne (port du summarizer Range). */
+/** Smallest and largest value of a column. */
 export class Range extends Summarizer {
     readonly kind = 'range';
     private _minimalDateTime = false;
     static make(): Range { return configured(new Range()); }
-    /** Dates : le jour seul quand les deux bornes diffèrent de jour, le jour et l'heure sinon ; une seule valeur si elles sont identiques. */
+    /** Dates: day only when the bounds fall on different days, day and time otherwise; a single value when both are equal. */
     minimalDateTimeDifference(condition = true): this { this._minimalDateTime = condition; return this; }
     summarize(column: string, values: SummaryValues): SummaryItem | null {
         let bounds = [values.min[column], values.max[column]].filter((v) => v !== null && v !== undefined && v !== '').map(String);
@@ -258,7 +258,7 @@ export class Range extends Summarizer {
     }
 }
 
-/** Regroupement des lignes d'une table (port de Grouping\Group) : les lignes sont triées par la colonne, un en-tête précède chaque groupe. */
+/** Row grouping: rows are sorted by the column and each group gets a header row. */
 export class Group<R = any> {
     private id: string;
     private _label: string | null = null;
@@ -271,17 +271,17 @@ export class Group<R = any> {
     constructor(id: string) { this.id = id; }
     static make<R = any>(id: string): Group<R> { return configured(new Group<R>(id)); }
     label(label: string | null): this { this._label = label; return this; }
-    /** Colonne de la requête qui porte la valeur du groupe, quand elle diffère de l'identifiant (relation). */
+    /** Query column holding the group value, when it differs from the id (relationship). */
     column(column: string | null): this { this._column = column; return this; }
-    /** Titre du groupe tiré de l'enregistrement (libellé d'une énumération, par exemple). */
+    /** Group title computed from the record (e.g. an enum label). */
     getTitleUsing(resolver: ((record: R) => string | null) | null): this { this._title = resolver; return this; }
     getDescriptionUsing(resolver: ((record: R) => string | null) | null): this { this._description = resolver; return this; }
-    /** Noms de Filament (`getTitleFromRecordUsing`, `getDescriptionFromRecordUsing`). */
+    /** Aliases using the `get…FromRecordUsing` naming. */
     getTitleFromRecordUsing(resolver: ((record: R) => string | null) | null): this { return this.getTitleUsing(resolver); }
     getDescriptionFromRecordUsing(resolver: ((record: R) => string | null) | null): this { return this.getDescriptionUsing(resolver); }
-    /** Les groupes se replient d'un clic sur leur en-tête. */
+    /** Groups collapse when their header is clicked. */
     collapsible(condition = true): this { this._collapsible = condition; return this; }
-    /** La colonne est une date : les lignes d'un même jour forment un groupe. */
+    /** The column is a date: rows from the same day form one group. */
     date(condition = true): this { this._date = condition; return this; }
     titlePrefixedWithLabel(condition = true): this { this._titlePrefixedWithLabel = condition; return this; }
     getId(): string { return this.id; }
@@ -294,7 +294,7 @@ export class Group<R = any> {
     isCollapsible(): boolean { return this._collapsible; }
     isDate(): boolean { return this._date; }
     isTitlePrefixedWithLabel(): boolean { return this._titlePrefixedWithLabel; }
-    /** Valeur du groupe pour un enregistrement, en texte ; `null` quand elle est vide. */
+    /** Group value of a record, as text; `null` when empty. */
     getStringKey(record: R): string | null {
         let key = (record as any)?.[this.getColumn()];
         if (key === null || key === undefined || key === '') return null;
@@ -308,7 +308,7 @@ export class Group<R = any> {
         return key;
     }
     getDescription(record: R): string | null { return this._description ? this._description(record) : null; }
-    /** Restreint une requête aux enregistrements du groupe de clé donnée. */
+    /** Restricts a query to the records of the group with the given key. */
     scope(query: any, key: string | null): void {
         if (key === null) query.where((sub: any) => sub.whereNull(this.getColumn()).orWhere(this.getColumn(), ''));
         else if (this._date) query.whereRaw('date(??) = ?', [this.getColumn(), key]);
@@ -317,36 +317,36 @@ export class Group<R = any> {
 }
 
 /**
- * Mise en page des colonnes (port de Tables\Columns\Layout) : dès qu'une table en contient une, ses enregistrements sont
- * rendus en cartes (`fi-ta-content`) et non plus en lignes de tableau ; le tri passe par un sélecteur « Sort by ».
+ * Column layout: as soon as a table has one, records are rendered as cards (`fi-ta-content`) instead of table rows,
+ * and sorting goes through a "Sort by" select.
  */
 export abstract class ColumnLayout<R = any> {
     protected _children: (Column<R> | ColumnLayout<R>)[];
     constructor(children: (Column<R> | ColumnLayout<R>)[]) { this._children = children; }
     getChildren(): (Column<R> | ColumnLayout<R>)[] { return this._children; }
-    /** Colonnes feuilles, dans l'ordre : ce sont elles que la table trie, cherche et masque. */
+    /** Leaf columns, in order: the ones the table sorts, searches and toggles. */
     getColumns(): Column<R>[] { return this._children.flatMap((child) => (child instanceof ColumnLayout ? child.getColumns() : [child])); }
     abstract getClasses(): string[];
 }
-/** Colonnes côte à côte, à partir d'un point de rupture (port de Layout\Split). */
+/** Columns side by side, from a given breakpoint. */
 export class Split<R = any> extends ColumnLayout<R> {
     private _from: string | null = null;
     static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Split<R> { return new Split<R>(children); }
     from(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._from = breakpoint; return this; }
     getClasses(): string[] { return ['fi-ta-split', ...(this._from ? [`${this._from}:fi-ta-split`] : [])]; }
 }
-/** Colonnes l'une sous l'autre (port de Layout\Stack). */
+/** Columns stacked vertically. */
 export class Stack<R = any> extends ColumnLayout<R> {
     private _space: number | null = null;
     private _alignment = 'start';
     static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Stack<R> { return new Stack<R>(children); }
-    /** Espace entre les colonnes : 1 (petit), 2 (moyen) ou 3 (grand). */
+    /** Gap between columns: 1 (small), 2 (medium) or 3 (large). */
     space(space: 1 | 2 | 3 | null = 1): this { this._space = space; return this; }
     alignment(alignment: 'start' | 'center' | 'end'): this { this._alignment = alignment; return this; }
     getClasses(): string[] { return ['fi-ta-stack', `fi-align-${this._alignment}`, ...(this._space ? [`fi-gap-${['sm', 'md', 'lg'][this._space - 1]}`] : [])]; }
 }
 const layoutCell = (classes: string[], html: string) => `<div class="${['fi-grid-col', 'fi-growable', ...classes].join(' ')}" style="--col-span-default: span 1 / span 1;">${html}</div>`;
-/** Rendu d'un enregistrement selon la mise en page : les colonnes masquées par l'utilisateur sont sautées. */
+/** Renders a record through the layout, skipping columns the user has hidden. */
 async function renderColumnLayout<R>(node: Column<R> | ColumnLayout<R>, record: R, key: string, visible: Set<Column<R>>): Promise<string> {
     if (node instanceof ColumnLayout) {
         const children = [];
@@ -355,12 +355,12 @@ async function renderColumnLayout<R>(node: Column<R> | ColumnLayout<R>, record: 
     }
     if (!visible.has(node)) return '';
     const alignment = node.getAlignment();
-    // Dans une mise en page, le texte est « en ligne » et porte lui-même l'alignement (comme Filament).
+    // Inside a layout, text is inline and carries its own alignment.
     const html = (await node.toHtml(record, key)).replace(/class="([^"]*\bfi-ta-text\b[^"]*)"/, (_match, classes: string) => `class="${classes.replace(/ fi-align-\w+/g, '')} fi-inline${alignment ? ` fi-align-${alignment}` : ''}"`);
     return layoutCell(['fi-ta-col', ...(alignment ? [`fi-align-${alignment}`] : [])], html);
 }
 
-/** Groupe de colonnes : un intitulé commun au-dessus des en-têtes (port de ColumnGroup). */
+/** Column group: a shared label above the column headers. */
 export class ColumnGroup<R = any> {
     private label: string;
     private _columns: Column<R>[] = [];
@@ -370,25 +370,25 @@ export class ColumnGroup<R = any> {
     getColumns(): Column<R>[] { return this._columns; }
 }
 
-/** Pastille de couleur (port de ColorColumn). */
+/** Color swatch column. */
 export class ColorColumn<R = any> extends Column<R> {
     static make<R = any>(name: string): ColorColumn<R> { return configured(new ColorColumn<R>(name)); }
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
-        // Seules les couleurs hexadécimales ou fonctionnelles simples sont injectées dans le style.
+        // Only hex or simple functional colors are injected into the style attribute (no CSS injection).
         const color = typeof state === 'string' && /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch)a?\([0-9.,%\s/deg-]+\))$/.test(state.trim()) ? state.trim() : null;
         return `<div class="fi-ta-color">${color ? `<div aria-label="${e(color)}" role="img" class="fi-ta-color-item" style="background-color: ${color};"></div>` : ''}</div>`;
     }
 }
 
-/** Image (port partiel de ImageColumn) : l'état est l'adresse de l'image. Seules les adresses locales ou http(s) sont rendues. */
+/** Image column: the state is the image URL. Only local or http(s) URLs are rendered. */
 export class ImageColumn<R = any> extends Column<R> {
     private _alt: ((record: R) => string | null) | null = null;
     private _height = '2.5rem';
     private _circular = false;
     static make<R = any>(name: string): ImageColumn<R> { return configured(new ImageColumn<R>(name)); }
     alt(resolver: (record: R) => string | null): this { this._alt = resolver; return this; }
-    /** Hauteur CSS de l'image (`2.5rem` par défaut, comme Filament). */
+    /** CSS height of the image (`2.5rem` by default). */
     imageHeight(height: string): this { if (/^[0-9.]+(rem|px|em)$/.test(height)) this._height = height; return this; }
     circular(condition = true): this { this._circular = condition; return this; }
     async toHtml(record: R): Promise<string> {
@@ -400,7 +400,7 @@ export class ImageColumn<R = any> extends Column<R> {
     }
 }
 
-/** Icône selon la valeur ; `boolean()` affiche une coche verte ou une croix rouge (port partiel de IconColumn). */
+/** Icon depending on the value; `boolean()` shows a green check or a red cross. */
 export class IconColumn<R = any> extends Column<R> {
     private _boolean = false;
     static make<R = any>(name: string): IconColumn<R> { return configured(new IconColumn<R>(name)); }
@@ -414,13 +414,13 @@ export class IconColumn<R = any> extends Column<R> {
     }
 }
 
-/** Règle de validation d'une colonne modifiable écrite par l'application : test synchrone et message (`:attribute` déjà remplacé). */
+/** Application-defined validation rule of an editable column: synchronous check and message (`:attribute` already replaced). */
 export type ColumnValidationRule = { name: string; passes: (value: unknown) => boolean; message: (attribute: string) => string };
 type StateHook<R> = (ctx: { state: unknown; record: R }) => unknown | Promise<unknown>;
 
 const isBlank = (value: unknown) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0);
 const isNumeric = (value: unknown) => (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
-/** Règles Laravel reconnues par `rules([...])`, avec leurs messages anglais. Une règle inconnue est refusée à la déclaration plutôt qu'ignorée. */
+/** String rules accepted by `rules([...])`, with their messages. An unknown rule throws at declaration time instead of being ignored. */
 const STRING_RULES: Record<string, (parameter: string, numeric: boolean) => ColumnValidationRule> = {
     boolean: () => ({ name: 'boolean', passes: (v) => [true, false, 0, 1, '0', '1'].includes(v as any), message: (a) => `The ${a} field must be true or false.` }),
     string: () => ({ name: 'string', passes: (v) => typeof v === 'string', message: (a) => `The ${a} field must be a string.` }),
@@ -434,10 +434,10 @@ const STRING_RULES: Record<string, (parameter: string, numeric: boolean) => Colu
 };
 
 /**
- * Base des colonnes modifiables dans la cellule (port des traits CanBeValidated et CanUpdateState de Filament). Le navigateur appelle
- * `updateTableColumnState(colonne, clé, valeur)` sur le composant hôte : la colonne doit être déclarée, visible et active pour cet
- * enregistrement, la valeur passer les règles ; ensuite seulement viennent `beforeStateUpdated`, l'écriture et `afterStateUpdated`.
- * Comme dans Filament, l'écriture ne consulte pas les droits du modèle : `disabled()` reste le moyen de restreindre la modification.
+ * Base class of in-cell editable columns. The browser calls `updateTableColumnState(column, key, value)` on the host component:
+ * the column must be declared, visible and enabled for this record, and the value must pass the rules; only then do
+ * `beforeStateUpdated`, the write and `afterStateUpdated` run. The write does not check model permissions: use `disabled()`
+ * to restrict editing.
  */
 export abstract class EditableColumn<R = any> extends Column<R> {
     protected _disabled: ((record: R) => boolean | Promise<boolean>) | boolean = false;
@@ -451,29 +451,29 @@ export abstract class EditableColumn<R = any> extends Column<R> {
 
     disabled(condition: ((record: R) => boolean | Promise<boolean>) | boolean = true): this { this._disabled = condition; return this; }
     async isDisabledFor(record: R): Promise<boolean> { return typeof this._disabled === 'function' ? this._disabled(record) : this._disabled; }
-    /** Une cellule modifiable n'est ni un lien ni un bouton vers l'enregistrement. */
+    /** An editable cell is neither a link nor a button to the record. */
     isClickDisabled(): boolean { return true; }
     isEditable(): boolean { return true; }
-    /** Règles appliquées à la valeur reçue : chaînes Laravel (`required`, `max:255`, `in:a,b`…) ou règles `{ name, passes, message }`. */
+    /** Rules applied to the received value: strings (`required`, `max:255`, `in:a,b`…) or `{ name, passes, message }` objects. */
     rules(rules: (string | ColumnValidationRule)[]): this {
-        for (const rule of rules) if (typeof rule === 'string' && rule !== 'required' && rule !== 'nullable' && !STRING_RULES[rule.split(':')[0]]) throw new Error(`Règle de validation non prise en charge par les colonnes : ${rule}`);
+        for (const rule of rules) if (typeof rule === 'string' && rule !== 'required' && rule !== 'nullable' && !STRING_RULES[rule.split(':')[0]]) throw new Error(`Validation rule not supported by columns: ${rule}`);
         this._rules = [...rules];
         return this;
     }
     getRules(): (string | ColumnValidationRule)[] { return this._rules; }
-    /** Équivalent de l'ajout de `required` aux règles. */
+    /** Same as adding `required` to the rules. */
     required(condition = true): this { this._rules = [...this._rules.filter((rule) => rule !== 'required'), ...(condition ? ['required'] : [])]; return this; }
     isRequired(): boolean { return this._rules.includes('required'); }
-    /** Nom de la colonne dans les messages (par défaut, le libellé avec une minuscule initiale). */
+    /** Column name used in messages (defaults to the label with a lowercase first letter). */
     validationAttribute(label: string | null): this { this._validationAttribute = label; return this; }
-    /** Messages remplaçant ceux de Laravel, par nom de règle : `{ max: 'Trop long.' }`. */
+    /** Custom messages by rule name, e.g. `{ max: 'Too long.' }`. */
     validationMessages(messages: Record<string, string>): this { this._validationMessages = { ...messages }; return this; }
     getValidationAttribute(): string { return this._validationAttribute ?? this.getLabel().replace(/^./, (c) => c.toLowerCase()); }
-    /** Règles propres au type de colonne (options d'une liste, par exemple), vérifiées après celles de l'application. */
+    /** Rules specific to the column type (e.g. select options). */
     protected getImplicitRules(): ColumnValidationRule[] { return []; }
     /**
-     * Message d'erreur, ou `null` si la valeur est acceptable. Comme le validateur de Laravel : une valeur vide ne passe que `required`,
-     * et plusieurs erreurs donnent le premier message suivi de « (and N more errors) ».
+     * Error message, or `null` if the value is valid. An empty value is only checked by `required`, and several errors
+     * produce the first message followed by "(and N more errors)".
      */
     validate(input: unknown): string | null {
         const attribute = this.getValidationAttribute();
@@ -484,10 +484,10 @@ export abstract class EditableColumn<R = any> extends Column<R> {
         if (blank) {
             if (this.isRequired()) fail('required', `The ${attribute} field is required.`);
         } else {
-            // Règles du type de colonne d'abord : une valeur de mauvaise forme (liste, objet forgé) s'arrête là.
+            // Column-type rules first: a malformed value (list, forged object) stops here.
             const implicit = this.getImplicitRules().find((rule) => !rule.passes(input));
             if (implicit) return this._validationMessages[implicit.name] ?? implicit.message(attribute);
-            // Les règles Laravel portées ne valent que pour un scalaire : une liste ou un objet les fait échouer.
+            // String rules only apply to scalars: a list or an object fails them.
             const isScalar = ['string', 'number', 'boolean'].includes(typeof input);
             for (const rule of this._rules) {
                 if (rule === 'required' || rule === 'nullable') continue;
@@ -498,20 +498,20 @@ export abstract class EditableColumn<R = any> extends Column<R> {
         if (!errors.length) return null;
         return errors.length === 1 ? errors[0] : `${errors[0]} (and ${errors.length - 1} more error${errors.length > 2 ? 's' : ''})`;
     }
-    /** Écriture personnalisée, à la place de la mise à jour de la colonne de l'enregistrement. Sa valeur de retour est renvoyée au navigateur. */
+    /** Custom write, replacing the update of the record's column. Its return value is sent back to the browser. */
     updateStateUsing(callback: StateHook<R> | null): this { this._updateStateUsing = callback; return this; }
     beforeStateUpdated(callback: StateHook<R> | null): this { this._beforeStateUpdated = callback; return this; }
     afterStateUpdated(callback: StateHook<R> | null): this { this._afterStateUpdated = callback; return this; }
-    /** Infobulle au survol du contrôle, tant qu'aucune erreur n'est affichée. */
+    /** Tooltip on the control, shown while no error is displayed. */
     tooltip(tooltip: ((record: R) => string | null) | string | null): this { this._tooltip = tooltip; return this; }
     getUpdateStateMessages(): Record<'saving' | 'saved' | 'failure', string> {
         return { saving: t('filament-tables::table.columns.editable.saving'), saved: t('filament-tables::table.columns.editable.saved'), failure: t('filament-tables::table.columns.editable.failure') };
     }
-    /** Valeur écrite à partir d'une valeur validée : une valeur vide devient `null` (comme `blank()` dans Filament). */
+    /** Value written from a validated value: blank values become `null`. */
     castState(input: unknown): unknown { return isBlank(input) ? null : input; }
     /**
-     * Enregistre une valeur déjà validée (port de `updateState`). Seul le nom déclaré de la colonne est écrit : une colonne de relation
-     * (`auteur.nom`) n'est modifiable qu'avec `updateStateUsing()`.
+     * Saves an already validated value. Only the column's declared name is written: a relationship column (`author.name`)
+     * can only be edited with `updateStateUsing()`.
      */
     async updateState(record: R, input: unknown, adapter: Pick<DataAdapter<R>, 'getKey' | 'update'>): Promise<unknown> {
         const state = this.castState(input);
@@ -524,7 +524,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
         await this._afterStateUpdated?.({ state, record });
         return state;
     }
-    /** Expression `x-tooltip` des contrôles modifiables : l'infobulle de la colonne, remplacée par l'erreur de validation quand il y en a une. */
+    /** `x-tooltip` expression of editable controls: the column tooltip, replaced by the validation error when there is one. */
     protected tooltipExpression(record: R): string {
         const tooltip = typeof this._tooltip === 'function' ? this._tooltip(record) : this._tooltip;
         return `error === undefined ? ${tooltip !== null && tooltip !== '' ? `{
@@ -539,7 +539,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
                         aria: { content: null },
                     }`;
     }
-    /** Ouverture commune des cellules modifiables : composant Alpine chargé à la demande, état serveur et clé de l'enregistrement. */
+    /** Shared opening markup of editable cells: lazily loaded Alpine component, server state and record key. */
     protected editableAttributes(component: string, asset: string, recordKey: string | number, state: unknown): Attributes {
         return new Attributes().merge({
             'x-load': 'x-load',
@@ -559,8 +559,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
 }
 
 /**
- * Liste déroulante modifiable dans la cellule (port de SelectColumn, liste native seulement). La valeur reçue doit être l'une des
- * options déclarées.
+ * In-cell editable select (native select only). The received value must be one of the declared options.
  */
 export class SelectColumn<R = any> extends EditableColumn<R> {
     private _options: [string, string][] = [];
@@ -631,12 +630,12 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     }
 }
 
-/** Valeur booléenne reçue du navigateur (déjà passée par la règle `boolean`) : `true`, `false` ou `null`. */
+/** Boolean value received from the browser (already checked by the `boolean` rule): `true`, `false` or `null`. */
 const toBoolean = (value: unknown): boolean | null => (isBlank(value) ? null : value === true || value === 1 || value === '1');
 const ALIGNMENTS = ['start', 'center', 'end', 'left', 'right', 'justify', 'between'];
 const alignmentClass = (alignment: string | null) => (alignment && ALIGNMENTS.includes(alignment) ? `fi-align-${alignment}` : null);
 
-/** Interrupteur modifiable dans la cellule (port de ToggleColumn). La valeur reçue doit être un booléen (règle `boolean` par défaut). */
+/** In-cell editable toggle. The received value must be a boolean (`boolean` rule by default). */
 export class ToggleColumn<R = any> extends EditableColumn<R> {
     private _onColor: string | null = null;
     private _offColor: string | null = null;
@@ -644,17 +643,17 @@ export class ToggleColumn<R = any> extends EditableColumn<R> {
     private _offIcon: string | null = null;
     constructor(name: string) { super(name); this._rules = ['boolean']; }
     static make<R = any>(name: string): ToggleColumn<R> { return configured(new ToggleColumn<R>(name)); }
-    /** Couleur de l'interrupteur allumé (`primary` par défaut) et éteint (`gray`). */
+    /** Toggle color when on (`primary` by default) and off (`gray`). */
     onColor(color: string | null): this { this._onColor = color; return this; }
     offColor(color: string | null): this { this._offColor = color; return this; }
-    /** Icônes affichées dans le bouton de l'interrupteur. */
+    /** Icons shown inside the toggle's thumb. */
     onIcon(icon: string | null): this { this._onIcon = icon; return this; }
     offIcon(icon: string | null): this { this._offIcon = icon; return this; }
     castState(input: unknown): unknown { return toBoolean(input); }
     async toHtml(record: R, recordKey: string | number = ''): Promise<string> {
         const state = Boolean(await this.getState(record));
         const isDisabled = await this.isDisabledFor(record);
-        // Le gris est la couleur par défaut de l'interrupteur : il ne pose aucune classe (HasDefaultGrayColor).
+        // Gray is the toggle's default color and adds no class.
         const colorClasses = (color: string) => (color === 'gray' ? [] : (colorManager?.getComponentClasses('toggle', color) ?? []));
         const onColorClasses = colorClasses(this._onColor ?? 'primary');
         const onClasses = ['fi-toggle-on', ...onColorClasses].join(' ');
@@ -666,12 +665,12 @@ export class ToggleColumn<R = any> extends EditableColumn<R> {
             'x-bind:aria-invalid': "error ? 'true' : null", 'x-bind:aria-busy': "isLoading ? 'true' : null", 'x-bind:aria-describedby': "getAccessibilityAttributes()['aria-describedby']",
             'x-tooltip': this.tooltipExpression(record),
         }).class(['fi-toggle']);
-        // Interrupteur allumé : masqué (x-cloak) jusqu'au démarrage d'Alpine, remplacé en attendant par une copie statique, comme dans Filament.
+        // The live toggle is hidden (x-cloak) until Alpine starts; a static copy is shown meanwhile.
         return `<div wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${state ? 1 : 0}" x-ref="serverState" /><div aria-checked="${state ? 'true' : 'false'}" x-bind:aria-checked="state ? 'true' : 'false'" x-bind:tabindex="$el.hasAttribute('disabled') ? '-1' : '0'" x-bind:aria-disabled="isLoading || $el.hasAttribute('disabled') ? 'true' : null" x-on:click.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-on:keydown.enter.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-on:keydown.space.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-bind:class="state ? ${js(onClasses)} : ${js(offClasses)}"${state ? ' x-cloak' : ''} role="switch" ${button.toHtml()}><div><div aria-hidden="true">${toggleIcon(this._offIcon)}</div><div aria-hidden="true">${toggleIcon(this._onIcon)}</div></div></div>${state ? `<div x-cloak="inline-flex" wire:ignore class="${e(['fi-toggle fi-toggle-on fi-hidden', ...onColorClasses].join(' '))}"><div><div aria-hidden="true"></div><div aria-hidden="true">${toggleIcon(this._onIcon)}</div></div></div>` : ''}${EditableColumn.STATUS_HTML}</div>`;
     }
 }
 
-/** Case à cocher modifiable dans la cellule (port de CheckboxColumn). La valeur reçue doit être un booléen (règle `boolean` par défaut). */
+/** In-cell editable checkbox. The received value must be a boolean (`boolean` rule by default). */
 export class CheckboxColumn<R = any> extends EditableColumn<R> {
     constructor(name: string) { super(name); this._rules = ['boolean']; }
     static make<R = any>(name: string): CheckboxColumn<R> { return configured(new CheckboxColumn<R>(name)); }
@@ -692,7 +691,7 @@ export class CheckboxColumn<R = any> extends EditableColumn<R> {
     }
 }
 
-/** Champ de saisie modifiable dans la cellule (port de TextInputColumn). Seuls un texte ou un nombre sont acceptés du navigateur. */
+/** In-cell editable text input. Only a string or a number is accepted from the browser. */
 export class TextInputColumn<R = any> extends EditableColumn<R> {
     private _type = 'text';
     private _mask: string | null = null;
@@ -708,9 +707,9 @@ export class TextInputColumn<R = any> extends EditableColumn<R> {
     private _prefixInline = false;
     private _suffixInline = false;
     static make<R = any>(name: string): TextInputColumn<R> { return configured(new TextInputColumn<R>(name)); }
-    /** Type HTML du champ (`text` par défaut ; `number`, `email`, `color`…). */
+    /** HTML input type (`text` by default; `number`, `email`, `color`…). */
     type(type: string | null): this { this._type = type && /^[a-z-]+$/.test(type) ? type : 'text'; return this; }
-    /** Masque de saisie Alpine (`x-mask`) ; le champ devient alors un champ texte. */
+    /** Alpine input mask (`x-mask`); the input then becomes a text input. */
     mask(mask: string | null): this { this._mask = mask; return this; }
     inputMode(mode: string | null): this { this._inputMode = mode; return this; }
     step(step: number | string | null): this { this._step = step; return this; }
@@ -731,7 +730,7 @@ export class TextInputColumn<R = any> extends EditableColumn<R> {
         const state = raw === undefined ? null : raw;
         const isDisabled = await this.isDisabledFor(record);
         const type = this._mask ? 'text' : this._type;
-        // Icône d'affixe : la couleur grise est celle par défaut, sans classe (comme InputComponent\WrapperComponent\IconComponent).
+        // Affix icon: gray is the default color and adds no class.
         const affixIcon = (name: string | null, color: string | null) => (name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color.replace(/[^a-zA-Z0-9_-]/g, '')}`] : []) }) : '');
         const outer = this.editableAttributes('textInputTableColumn', 'text-input', recordKey, state).class(['fi-ta-text-input']);
         const input = new Attributes().merge({
@@ -750,8 +749,8 @@ export class TextInputColumn<R = any> extends EditableColumn<R> {
 }
 
 /**
- * Colonne au rendu libre (port de ViewColumn) : `view()` reçoit une fonction qui renvoie le HTML de la cellule, ou le nom d'une vue EJS
- * rendue avec `{ state, record, column }`. Ce HTML est celui de l'application : les données qu'il contient doivent y être échappées (`e()`).
+ * Custom-rendered column: `view()` takes a function returning the cell HTML, or the name of an EJS view rendered with
+ * `{ state, record, column }`. This HTML is the application's own: data inside it must be escaped there (`e()`).
  */
 export class ViewColumn<R = any> extends Column<R> {
     private _view: ((ctx: { state: unknown; record: R; column: ViewColumn<R> }) => string | Promise<string>) | string | null = null;
@@ -760,28 +759,28 @@ export class ViewColumn<R = any> extends Column<R> {
     view(view: ((ctx: { state: unknown; record: R; column: ViewColumn<R> }) => string | Promise<string>) | string, data: Record<string, unknown> = {}): this { this._view = view; this._viewData = data; return this; }
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
-        if (this._view === null) throw new Error(`ViewColumn ${this.name} : aucune vue déclarée (view()).`);
+        if (this._view === null) throw new Error(`ViewColumn ${this.name}: no view declared (view()).`);
         if (typeof this._view === 'function') return this._view({ state, record, column: this });
         return views.render(this._view, { ...this._viewData, state, record, column: this, getState: () => state, getRecord: () => record });
     }
 }
 
-/** @deprecated Port de BadgeColumn : utiliser `TextColumn.make(nom).badge()`. */
+/** @deprecated Use `TextColumn.make(name).badge()`. */
 export class BadgeColumn<R = any> extends TextColumn<R> {
     constructor(name: string) { super(name); this.badge(); }
     static make<R = any>(name: string): BadgeColumn<R> { return configured(new BadgeColumn<R>(name)); }
 }
 
-/** @deprecated Port de BooleanColumn : utiliser `IconColumn.make(nom).boolean()`. */
+/** @deprecated Use `IconColumn.make(name).boolean()`. */
 export class BooleanColumn<R = any> extends IconColumn<R> {
     constructor(name: string) { super(name); this.boolean(); }
     static make<R = any>(name: string): BooleanColumn<R> { return configured(new BooleanColumn<R>(name)); }
 }
 
 /**
- * Écriture d'une cellule modifiable reçue du navigateur (port de `updateTableColumnState`). Tout est revérifié : la colonne doit
- * être déclarée, modifiable et visible, l'enregistrement dans la portée de l'adaptateur et non désactivé pour cette colonne,
- * `authorize` (droit de modification de l'hôte) l'accepter, et la valeur passer les règles de la colonne.
+ * Writes an editable cell value received from the browser. Everything is checked again: the column must be declared, editable
+ * and visible, the record within the adapter's scope and not disabled for this column, `authorize` (the host's edit permission)
+ * must accept it, and the value must pass the column's rules.
  */
 export async function updateTableColumnState<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, columnName: unknown, recordKey: unknown, input: unknown, options: { authorize?: (record: R) => boolean | Promise<boolean> } = {}): Promise<unknown> {
     const unavailable = { error: t('filament-tables::table.columns.editable.unavailable') };
@@ -795,37 +794,37 @@ export async function updateTableColumnState<R>(table: Table<R>, host: TableHost
     return column.updateState(record, input, adapter);
 }
 
-// ------------------------------------------------------------------ filtres
-/** État d'un filtre : les valeurs de son formulaire. */
+// ------------------------------------------------------------------ filters
+/** Filter state: the values of its form. */
 export type FilterState = Record<string, unknown>;
-/** Pastille « filtre actif » : son libellé, et le champ du filtre que son retrait efface. */
+/** Active filter indicator: its label, and the filter field cleared when it is removed. */
 export type FilterIndicator = { label: string; field: string };
-/** Disposition des filtres : menu déroulant de la barre d'outils (défaut), ou panneau repliable au-dessus du contenu. */
+/** Filters layout: toolbar dropdown (default), or collapsible panel above the content. */
 export type FiltersLayout = 'dropdown' | 'above-content-collapsible';
 export interface TableFilter {
     readonly name: string;
     getLabel(): string;
-    /** État initial (formulaire vide). */
+    /** Initial state (empty form). */
     getDefaultState(): FilterState;
-    /** Options du champ `value` : [valeur, libellé], et libellé de l'option vide. */
+    /** Options of the `value` field as [value, label] pairs, and the empty option's label. */
     getFormDefinition(): { placeholder: string; options: [string, string][] };
     isActive(state: FilterState): boolean;
-    /** Applique le filtre à la requête de liste. Ne lit que des valeurs connues. */
+    /** Applies the filter to the list query. Only reads known values. */
     apply(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void;
-    /** Composants de formulaire du filtre, à la place du sélecteur décrit par `getFormDefinition()`. */
+    /** Form components of the filter, replacing the select described by `getFormDefinition()`. */
     getFormComponents?(): unknown[];
     getColumnSpan?(): Record<string, number | string>;
-    /** État appliqué à partir de l'état du formulaire (reçu du navigateur) : ne garde que ce que le filtre connaît. */
+    /** Applied state derived from the form state (received from the browser): keeps only what the filter knows. */
     sanitizeState?(state: unknown): FilterState;
     getIndicators?(state: FilterState): FilterIndicator[];
-    /** Options du sélecteur chargées à la demande (relation), à la place de celles de `getFormDefinition()`. */
+    /** Select options loaded on demand (relationship), replacing those of `getFormDefinition()`. */
     getFormOptions?(): Promise<[string, string][]>;
     removeIndicator?(state: FilterState, field: string): FilterState;
-    /** Données lues en base avant le calcul des indicateurs (libellés d'enregistrements liés, par exemple). */
+    /** Data loaded from the database before indicators are computed (e.g. related record labels). */
     loadIndicatorData?(state: FilterState, host: TableHost): Promise<void>;
 }
 
-/** Filtre « corbeille » des modèles à suppression douce (port de TrashedFilter). */
+/** "Trashed" filter for soft-deletable models. */
 export class TrashedFilter implements TableFilter {
     readonly name = 'trashed';
     static make(): TrashedFilter { return configured(new TrashedFilter()); }
@@ -842,7 +841,7 @@ export class TrashedFilter implements TableFilter {
 
 const filterLabel = (name: string) => name.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-/** Filtre par valeur d'une colonne, choisie dans une liste (port de SelectFilter, sélection simple). */
+/** Filters on a column value picked from a list (single select). */
 export class SelectFilter implements TableFilter {
     readonly name: string;
     private _label: string | null = null;
@@ -851,9 +850,9 @@ export class SelectFilter implements TableFilter {
     constructor(name: string) { this.name = name; }
     static make(name: string): SelectFilter { return configured(new SelectFilter(name)); }
     label(label: string): this { this._label = label; return this; }
-    /** Colonne filtrée quand elle diffère du nom du filtre (clé étrangère d'une relation, par exemple). */
+    /** Filtered column when it differs from the filter name (e.g. a relationship's foreign key). */
     column(column: string): this { this._column = column; return this; }
-    /** Options fixes, ou fonction asynchrone (enregistrements d'une relation). */
+    /** Fixed options, or an async function (e.g. records of a relationship). */
     options(options: [string, string][] | Record<string, string> | (() => Promise<[string, string][]>)): this {
         this._options = typeof options === 'function' ? options : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
         return this;
@@ -862,20 +861,20 @@ export class SelectFilter implements TableFilter {
     getDefaultState(): FilterState { return { value: null }; }
     getFormDefinition() { return { placeholder: t('filament-tables::table.filters.select.placeholder'), options: Array.isArray(this._options) ? this._options : [] }; }
     getFormOptions(): Promise<[string, string][]> { return typeof this._options === 'function' ? this._options() : Promise.resolve(this._options); }
-    /** Comme Filament : les options d'un SelectFilter sont évaluées à chaque rendu, le sélecteur porte donc une clé dérivée d'elles. */
+    /** Options are evaluated on every render, so the select gets a key derived from them (forces a re-render when they change). */
     readonly hasDynamicOptions = true;
     isActive(state: FilterState): boolean { return typeof state.value === 'string' && state.value !== ''; }
     apply(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void {
         if (!this.isActive(state)) return;
         const value = String(state.value).slice(0, 255);
-        // Options fixes : seule une valeur proposée filtre. Options chargées : la valeur est un paramètre lié, une valeur inconnue ne trouve rien.
+        // Fixed options: only an offered value filters. Loaded options: the value is a bound parameter, an unknown value matches nothing.
         if (Array.isArray(this._options) && !this._options.some(([option]) => option === value)) return;
         const column = this._column ?? this.name;
         (query.modifiers ??= []).push((q) => { q.where(column, value); });
     }
 }
 
-/** Filtre à trois états sur une colonne booléenne : tous, oui, non (port de TernaryFilter). */
+/** Three-state filter on a boolean column: all, yes, no. */
 export class TernaryFilter implements TableFilter {
     readonly name: string;
     private _label: string | null = null;
@@ -893,7 +892,7 @@ export class TernaryFilter implements TableFilter {
     }
 }
 
-/** Filtre à formulaire libre (port de Filter avec `schema()`) : la requête et les indicateurs sont écrits par l'application. */
+/** Custom form filter (`schema()`): the query and indicators are written by the application. */
 export class Filter implements TableFilter {
     readonly name: string;
     private _label: string | null = null;
@@ -903,11 +902,11 @@ export class Filter implements TableFilter {
     constructor(name: string) { this.name = name; }
     static make(name: string): Filter { return configured(new Filter(name)); }
     label(label: string): this { this._label = label; return this; }
-    /** Champs du filtre ; leurs noms sont les seules clés d'état acceptées du navigateur. */
+    /** Filter fields; their names are the only state keys accepted from the browser. */
     schema(components: unknown[]): this { this._components = components; return this; }
-    /** Condition posée sur la requête à partir de l'état nettoyé du formulaire. */
+    /** Query condition built from the sanitized form state. */
     query(modifier: (query: any, data: FilterState) => void): this { this._query = modifier; return this; }
-    /** Pastilles des valeurs appliquées : `{ champ: libellé }` ; retirer une pastille efface son champ. */
+    /** Indicators of applied values as `{ field: label }`; removing one clears its field. */
     indicateUsing(resolver: (data: FilterState) => Record<string, string>): this { this._indicate = resolver; return this; }
     private fields(): string[] { return this._components.map((c: any) => (typeof c?.getName === 'function' ? String(c.getName()) : null)).filter((name): name is string => name !== null); }
     getLabel(): string { return this._label ?? filterLabel(this.name); }
@@ -957,13 +956,13 @@ export class Table<R = any> {
     private _groupingDirectionSettingHidden = false;
     private _groupingSettingsInDropdownOnDesktop = false;
     private _collapsedGroupsByDefault = false;
-    /** Regroupements proposés dans la barre d'outils (un identifiant de colonne vaut `Group.make(identifiant)`). */
+    /** Groupings offered in the toolbar (a column id is shorthand for `Group.make(id)`). */
     groups(groups: (Group<R> | string)[]): this { this._groups = groups.map((g) => (typeof g === 'string' ? Group.make<R>(g) : g)); return this; }
     getGroups(): Group<R>[] { return this._groups; }
     getGroup(id: string | null | undefined): Group<R> | null { return this._groups.find((g) => g.getId() === id) ?? null; }
     /**
-     * Regroupement par défaut (port de `defaultGroup()`). S'il fait partie de `groups()`, il est seulement présélectionné à l'ouverture
-     * (`initializeTableGrouping`) et l'utilisateur peut le retirer ; sinon il s'applique toujours, sans sélecteur.
+     * Default grouping. If it is one of `groups()`, it is only preselected when the table opens (`initializeTableGrouping`)
+     * and the user can remove it; otherwise it always applies, without a selector.
      */
     defaultGroup(group: Group<R> | string | null, direction: SortDirection = 'asc'): this { this._defaultGroup = group; this._defaultGroupDirection = direction === 'desc' ? 'desc' : 'asc'; return this; }
     getDefaultGroup(): Group<R> | null {
@@ -973,21 +972,21 @@ export class Table<R = any> {
     }
     getDefaultGroupDirection(): SortDirection { return this._defaultGroupDirection; }
     isDefaultGroupSelectable(): boolean { const group = this.getDefaultGroup(); return group !== null && this.getGroup(group.getId()) !== null; }
-    /** Seuls les en-têtes et résumés des groupes sont affichés, sans les lignes ni la pagination (port de `groupsOnly()`). */
+    /** Shows only group headers and summaries, without rows or pagination. */
     groupsOnly(condition = true): this { this._groupsOnly = condition; return this; }
     isGroupsOnly(): boolean { return this._groupsOnly; }
-    /** Masque le sélecteur de regroupement de la barre d'outils. */
+    /** Hides the toolbar grouping selector. */
     groupingSettingsHidden(condition = true): this { this._groupingSettingsHidden = condition; return this; }
     areGroupingSettingsHidden(): boolean { return this._groupingSettingsHidden; }
-    /** Masque le choix du sens (croissant / décroissant) du regroupement. */
+    /** Hides the grouping direction (ascending / descending) choice. */
     groupingDirectionSettingHidden(condition = true): this { this._groupingDirectionSettingHidden = condition; return this; }
     isGroupingDirectionSettingHidden(): boolean { return this._groupingDirectionSettingHidden; }
-    /** Sur grand écran aussi, le sélecteur de regroupement est dans un menu déroulant. */
+    /** Puts the grouping selector in a dropdown on desktop too. */
     groupingSettingsInDropdownOnDesktop(condition = true): this { this._groupingSettingsInDropdownOnDesktop = condition; return this; }
-    /** @deprecated Ancien nom de `groupingSettingsInDropdownOnDesktop()`. */
+    /** @deprecated Use `groupingSettingsInDropdownOnDesktop()`. */
     groupsInDropdownOnDesktop(condition = true): this { return this.groupingSettingsInDropdownOnDesktop(condition); }
     areGroupingSettingsInDropdownOnDesktop(): boolean { return this._groupingSettingsInDropdownOnDesktop; }
-    /** Les groupes repliables s'affichent repliés. */
+    /** Collapsible groups start collapsed. */
     collapsedGroupsByDefault(condition = true): this { this._collapsedGroupsByDefault = condition; return this; }
     areGroupsCollapsedByDefault(): boolean { return this._collapsedGroupsByDefault; }
 
@@ -997,44 +996,44 @@ export class Table<R = any> {
         this._columnsLayout = columns.some((c) => c instanceof ColumnLayout) ? (columns.filter((c) => !(c instanceof ColumnGroup)) as (Column<R> | ColumnLayout<R>)[]) : null;
         return this;
     }
-    /** Mise en page des colonnes, ou `null` pour un tableau classique. */
+    /** Column layout, or `null` for a regular table. */
     getColumnsLayout(): (Column<R> | ColumnLayout<R>)[] | null { return this._columnsLayout; }
-    /** Action montée au clic sur une ligne (ex. `'edit'`), à la place d'une URL. */
+    /** Action mounted when a row is clicked (e.g. `'edit'`), instead of a URL. */
     recordAction(name: string | null): this { this._recordAction = name; return this; }
     getRecordAction(): string | null { return this._recordAction; }
-    /** Titre affiché dans l'en-tête de la table. */
+    /** Heading shown in the table header. */
     heading(heading: string | null): this { this._heading = heading; return this; }
     getHeading(): string | null { return this._heading; }
-    /** Actions affichées dans l'en-tête de la table. */
+    /** Actions shown in the table header. */
     headerActions(actions: any[]): this { this._headerActions = actions; return this; }
     getHeaderActions(): any[] { return this._headerActions; }
-    /** Actions groupées (menu « Bulk actions ») ; sans appel, l'hôte fournit ses actions par défaut. */
+    /** Bulk actions ("Bulk actions" menu); if never called, the host provides its default ones. */
     groupedBulkActions(actions: any[]): this { this._bulkActions = actions; return this; }
     getBulkActions(): any[] | null { return this._bulkActions; }
-    /** Actions de ligne : des `Action` ou un `ActionGroup` (menu déroulant). */
+    /** Row actions: `Action`s or an `ActionGroup` (dropdown). */
     recordActions(actions: any[]): this { this._recordActions = actions; return this; }
     getRecordActions(): any[] { return this._recordActions; }
-    /** Classes CSS ajoutées à la ligne selon l'enregistrement. */
+    /** CSS classes added to a row depending on its record. */
     recordClasses(resolver: (record: R) => string | null): this { this._recordClasses = resolver; return this; }
     getRecordClasses(record: R): string | null { return this._recordClasses ? this._recordClasses(record) : null; }
     filters(filters: TableFilter[], options: { layout?: FiltersLayout } = {}): this { this._filters = filters; if (options.layout) this._filtersLayout = options.layout; return this; }
     filtersLayout(layout: FiltersLayout): this { this._filtersLayout = layout; return this; }
     getFiltersLayout(): FiltersLayout { return this._filtersLayout; }
-    /** Les filtres ne s'appliquent qu'au bouton « Apply » : c'est déjà le comportement de toutes les tables (méthode gardée pour la compatibilité d'API). */
+    /** No-op kept for API compatibility: filters always wait for the "Apply" button. */
     deferFilters(): this { return this; }
     defaultSort(column: string, direction: SortDirection = 'asc'): this { this._defaultSort = { column, direction }; return this; }
     recordUrl(resolver: (record: R) => string | null): this { this._recordUrl = resolver; return this; }
     private _reorderColumn: string | null = null;
-    /** Lignes réordonnables à la main ; `column` reçoit le rang (port de `reorderable()`). */
+    /** Lets users reorder rows by hand; `column` stores the position. */
     reorderable(column: string | null): this { this._reorderColumn = column; return this; }
     getReorderColumn(): string | null { return this._reorderColumn; }
     paginationPageOptions(options: number[]): this { this._pageOptions = options; return this; }
     private _defaultPageOption: number | null = null;
-    /** Nombre de lignes par page à l'ouverture (port de `defaultPaginationPageOption()`). */
+    /** Rows per page when the table opens. */
     defaultPaginationPageOption(option: number | null): this { this._defaultPageOption = option; return this; }
     getDefaultPageOption(): number { return this._defaultPageOption !== null && this._pageOptions.includes(this._defaultPageOption) ? this._defaultPageOption : (this._pageOptions.includes(10) ? 10 : this._pageOptions[0]); }
     private _paginationMode: 'default' | 'simple' = 'default';
-    /** `'simple'` : boutons précédent / suivant seulement, sans numéros de page ni total (port de `PaginationMode::Simple`). */
+    /** `'simple'`: previous / next buttons only, without page numbers or total. */
     paginationMode(mode: 'default' | 'simple'): this { this._paginationMode = mode; return this; }
     getPaginationMode(): 'default' | 'simple' { return this._paginationMode; }
     stackedOnMobile(condition = true): this { this._stackedOnMobile = condition; return this; }
@@ -1050,14 +1049,14 @@ export class Table<R = any> {
     getPluralModelLabel(): string { return this._label; }
     hasToggleableColumns(): boolean { return this._columns.some((c) => c.isToggleable()); }
 
-    /** État par défaut du gestionnaire de colonnes (port de getDefaultTableColumnState). */
+    /** Default column manager state. */
     getDefaultColumnState(): ColumnState[] {
         return this._columns.map((c) => ({ type: 'column', name: c.name, label: c.getLabel(), isHidden: false, isToggled: !c.isToggleable() || !c.isToggledHiddenByDefault(), isToggleable: c.isToggleable(), isToggledHiddenByDefault: c.isToggleable() ? c.isToggledHiddenByDefault() : null }));
     }
     getDefaultFilterState(): Record<string, FilterState> { return Object.fromEntries(this._filters.map((f) => [f.name, f.getDefaultState()])); }
 }
 
-/** État de table porté par le composant hôte (équivalent du trait InteractsWithTable). */
+/** Table state held by the host component. */
 export interface TableHost {
     readonly id: string;
     tableSearch: string;
@@ -1067,25 +1066,27 @@ export interface TableHost {
     paginators: Record<string, number>;
     tableFilters?: Record<string, FilterState>;
     tableColumns?: ColumnState[];
-    /** Regroupement courant : `identifiant` ou `identifiant:direction`. */
+    /** Current grouping: `id` or `id:direction`. */
     tableGrouping?: string | null;
-    /** Mode « tri manuel » : toutes les lignes, dans l'ordre de la colonne de rang, avec des poignées. */
+    /** Reordering mode: all rows, in position order, with drag handles. */
     isTableReordering?: boolean;
 }
 
-/** Colonnes affichées : celles que l'état du gestionnaire laisse cochées. L'état du navigateur ne peut masquer qu'une colonne déclarée « toggleable ». */
+/** Visible columns: those left checked in the column manager. Browser state can only hide columns declared toggleable. */
 export function getVisibleColumns<R>(table: Table<R>, host: TableHost): Column<R>[] {
     const hidden = new Set((Array.isArray(host.tableColumns) ? host.tableColumns : []).filter((c) => c && c.isToggled === false).map((c) => c.name));
     return table.getColumns().filter((c) => !(c.isToggleable() && hidden.has(c.name)));
 }
-/** Nettoie un état de colonnes reçu du navigateur : seul `isToggled` des colonnes « toggleable » est repris. */
+/** Sanitizes column state from the browser: only `isToggled` of toggleable columns is kept. */
 export function sanitizeColumnState<R>(table: Table<R>, state: unknown): ColumnState[] {
     const received = new Map((Array.isArray(state) ? state : []).filter((c) => c && typeof c === 'object').map((c: any) => [String(c.name), c.isToggled]));
     return table.getDefaultColumnState().map((c) => (c.isToggleable && typeof received.get(c.name) === 'boolean' ? { ...c, isToggled: received.get(c.name) as boolean } : c));
 }
 
-/** Requête de liste (recherche, recherches par colonne, filtres, tri) correspondant à l'état de l'hôte, sans pagination.
- *  Seul ce que la table déclare est accepté, quel que soit l'état envoyé par le navigateur. */
+/**
+ * List query (search, column searches, filters, sort) for the host's state, without pagination.
+ * Only what the table declares is accepted, whatever state the browser sends.
+ */
 export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQuery, 'page' | 'perPage'> {
     const [column, direction] = (host.tableSort ?? '').split(':');
     const sortColumn = table.getColumn(column);
@@ -1097,7 +1098,7 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
     };
     const grouping = getTableGrouping(table, host);
     if (grouping) query.groupSort = { column: grouping.group.getColumn(), direction: grouping.direction };
-    // L'hôte peut restreindre la requête (onglet de liste actif).
+    // The host can restrict the query (active list tab).
     (host as any).modifyTableQuery?.(query);
     for (const filter of table.getFilters()) {
         const state = host.tableFilters?.[filter.name];
@@ -1105,32 +1106,32 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
     }
     return query;
 }
-/** Regroupement courant : seul un groupe déclaré par la table est accepté, quel que soit l'état envoyé par le navigateur. */
+/** Current grouping: only a group declared by the table is accepted, whatever state the browser sends. */
 export function getTableGrouping<R>(table: Table<R>, host: TableHost): { group: Group<R>; direction: SortDirection } | null {
     if (host.isTableReordering === true) return null;
     const [id, direction] = String(host.tableGrouping ?? '').split(':');
     const group = table.getGroup(id);
     if (group) return { group, direction: direction === 'desc' ? 'desc' : 'asc' };
-    // Comme Filament : un regroupement par défaut absent du sélecteur s'applique toujours ; présent, il ne vaut que s'il est choisi.
+    // A default grouping missing from the selector always applies; one listed in the selector only applies when chosen.
     const fallback = table.isDefaultGroupSelectable() ? null : table.getDefaultGroup();
     return fallback ? { group: fallback, direction: table.getDefaultGroupDirection() } : null;
 }
-/** À l'ouverture de la table (montage de l'hôte) : présélectionne le regroupement par défaut quand l'utilisateur peut le changer. */
+/** When the table opens (host mount): preselects the default grouping when the user can change it. */
 export function initializeTableGrouping<R>(table: Table<R>, host: TableHost): void {
     const group = table.getDefaultGroup();
     if ((host.tableGrouping === null || host.tableGrouping === undefined || host.tableGrouping === '') && group && table.isDefaultGroupSelectable()) host.tableGrouping = `${group.getId()}:${table.getDefaultGroupDirection()}`;
 }
 export function countActiveFilters<R>(table: Table<R>, host: TableHost): number {
-    // Comme Filament : le compteur est le nombre d'indicateurs ; un filtre sans indicateurs compte pour un quand il est actif.
+    // The count is the number of indicators; an active filter without indicators counts as one.
     return table.getFilters().reduce((total, f) => { const s = host.tableFilters?.[f.name]; return total + (!s || typeof s !== 'object' ? 0 : f.getIndicators ? f.getIndicators(s).length : f.isActive(s) ? 1 : 0); }, 0);
 }
 
-/** Indicateurs des filtres appliqués (seuls les filtres qui en déclarent en ont). */
+/** Indicators of the applied filters (only filters that declare some have them). */
 export function getFilterIndicators<R>(table: Table<R>, host: TableHost): { filter: string; field: string; label: string }[] {
     return table.getFilters().flatMap((f) => { const s = host.tableFilters?.[f.name]; return s && typeof s === 'object' && f.getIndicators ? f.getIndicators(s).map((indicator) => ({ filter: f.name, ...indicator })) : []; });
 }
 
-/** Port de sortTable() : non trié → asc → desc → non trié. */
+/** Cycles a column's sort: none → asc → desc → none. */
 export function sortTable(host: TableHost, column: string | null = null, direction: string | null = null): void {
     const [current, currentDirection] = (host.tableSort ?? '').split(':');
     if (column === (host.tableSort ? current : null)) direction ??= (currentDirection ?? 'asc') === 'asc' ? 'desc' : currentDirection === 'desc' ? null : 'asc';
@@ -1139,14 +1140,14 @@ export function sortTable(host: TableHost, column: string | null = null, directi
     host.paginators.page = 1;
 }
 
-/** Charge la page d'enregistrements correspondant à l'état de l'hôte. */
+/** Loads the page of records matching the host's state. */
 export async function getTableRecords<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>): Promise<RecordPage<R>> {
     const options = table.getPageOptions();
     const perPage = options.includes(Number(host.tableRecordsPerPage)) ? Number(host.tableRecordsPerPage) : options[0];
     return adapter.paginate({ ...getTableQuery(table, host), page: Number(host.paginators.page) || 1, perPage });
 }
 
-/** Éléments de pagination : port de UrlWindow de Laravel avec onEachSide(0), comme Filament. */
+/** Pagination elements: the first and last pages and a window around the current page, with `...` gaps. */
 export function paginationElements(current: number, last: number, onEachSide = 0): (number | '...')[] {
     const range = (a: number, b: number) => Array.from({ length: Math.max(0, b - a + 1) }, (_, i) => a + i);
     if (last < onEachSide * 2 + 8) return range(1, last);
@@ -1161,28 +1162,28 @@ export const useColorManager = (manager: ColorManager) => { colorManager = manag
 
 export type RenderTableOptions<R> = {
     rowActions?: (record: R) => { label: string; url: string; icon: string; key: string }[] | Promise<{ label: string; url: string; icon: string; key: string }[]>;
-    /** `false` : le tri manuel n'est pas proposé (utilisateur non autorisé). */
+    /** `false`: reordering is not offered (user not authorized). */
     canReorder?: boolean;
-    /** HTML placé dans `.fi-ta`, après le conteneur de la table (modales des actions). */
+    /** HTML placed in `.fi-ta`, after the table container (action modals). */
     after?: string;
-    /** HTML déjà rendu des actions d'en-tête de la table. */
+    /** Already rendered HTML of the table header actions. */
     headerActions?: string[];
-    /** HTML déjà rendu des actions de ligne (ActionGroup…), à la place des liens de `rowActions`. */
+    /** Already rendered HTML of the row actions (ActionGroup…), replacing the `rowActions` links. */
     rowActionsHtml?: (record: R) => Promise<string>;
     bulkActions?: string[];
-    /** HTML du formulaire des filtres (schéma `tableFiltersForm`), s'il y a des filtres. */
+    /** HTML of the filters form (`tableFiltersForm` schema), if there are filters. */
     filtersForm?: string | null;
 };
 
-/** Nombre maximal de lignes affichées (et réordonnées) en mode tri manuel. */
+/** Maximum number of rows shown (and reorderable) in reordering mode. */
 export const REORDER_LIMIT = 1000;
 
 type SummaryCell = { alignment: string; items: SummaryItem[] };
 type SummaryRow = { heading: string; cells: SummaryCell[]; striped: boolean };
-/** Cases réservées des lignes de résumé : cellule de sélection avant, cellule d'actions après (comme les lignes d'enregistrements). */
+/** Placeholder cells of summary rows: selection cell before, actions cell after (like record rows). */
 type SummaryPlaceholders = { selection: boolean; actions: boolean };
 
-/** Ligne de résumé (port de `tables::summary.row`) ; `groupsOnly` : intitulé seul en tête, puis une cellule par colonne. */
+/** Summary row; with `groupsOnly`, a leading label cell, then one cell per column. */
 function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, placeholders: SummaryPlaceholders): string {
     const items = (cell: SummaryCell) => cell.items.map((item) => `<div class="fi-ta-${item.type}-summary">${item.label !== null ? `<span class="fi-ta-${item.type}-summary-label">${e(item.label)}</span>` : ''}<span>${e(item.value)}</span></div>`).join('');
     const heading = groupsOnly
@@ -1192,15 +1193,15 @@ function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, plac
 }
 
 /**
- * Résumés de la table (port de `tables::summary`) : sans pagination, une seule ligne « Summary » ; avec plusieurs pages, un en-tête
- * puis « This page » et « All … ». Renvoie aussi de quoi calculer la ligne de résumé d'un groupe (requête restreinte au groupe).
+ * Table summaries: a single "Summary" row without pagination; with several pages, a header then "This page" and "All …" rows.
+ * Also returns what is needed to compute a group's summary row (query restricted to the group).
  */
 async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, visible: Column<R>[], page: { records: R[]; lastPage: number }, options: { group: Group<R> | null; groupsOnly: boolean; placeholders: SummaryPlaceholders }) {
-    // Groupes seuls : la colonne du groupe n'a pas de cellule de résumé (son intitulé est déjà en tête de ligne).
+    // Groups only: the grouped column has no summary cell (its label already leads the row).
     const columns = options.groupsOnly && options.group ? visible.filter((c) => c.name !== options.group!.getColumn()) : visible;
     const lists = columns.map((c) => (c instanceof TextColumn ? c.getSummarizers() : []));
     if (!lists.some((list) => list.length) || !page.records.length) return null;
-    // Comme Filament : la première cellule porte l'intitulé de la ligne ; elle s'étend jusqu'à la première colonne résumée qui la suit.
+    // The first cell holds the row label and spans up to the first summarized column after it.
     const next = lists.findIndex((list, i) => i > 0 && list.length > 0);
     const span = options.groupsOnly ? 0 : next < 0 ? columns.length : next;
     const columnOf = (c: Column<R>) => c.getSortColumn?.() ?? c.name;
@@ -1234,7 +1235,7 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
         : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: cells(all), striped: true }];
     return {
         html: header + rows.map(rowHtml).join(''),
-        /** Ligne de résumé d'un groupe : agrégats de tous les enregistrements du groupe (pas seulement ceux de la page). */
+        /** Group summary row: aggregates over all the group's records (not only those on the page). */
         group: async (group: Group<R>, key: string | null, title: string | null): Promise<string> => {
             const values = await aggregate({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => group.scope(q, key)] });
             return rowHtml({ heading: options.groupsOnly ? (title ?? '') : t('filament-tables::table.summary.subheadings.group', { group: title ?? '', label }), cells: cells(values), striped: false });
@@ -1242,16 +1243,16 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     };
 }
 
-/** Plafond d'enregistrements lus pour une table `groupsOnly` (non paginée, comme dans Filament). */
+/** Maximum records read for a `groupsOnly` table (which is not paginated). */
 export const GROUPS_ONLY_LIMIT = 1000;
 
 export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, options: RenderTableOptions<R> = {}): Promise<string> {
     const reorderColumn = options.canReorder === false ? null : table.getReorderColumn();
     const reordering = reorderColumn !== null && host.isTableReordering === true;
-    // Tri manuel : toutes les lignes de la requête, dans l'ordre de la colonne de rang, sans pagination ni actions.
+    // Reordering: all rows of the query, in position order, without pagination or actions.
     if (reordering) options = { ...options, bulkActions: [], headerActions: options.headerActions, rowActions: undefined, rowActionsHtml: undefined, filtersForm: null };
     const grouping = reordering ? null : getTableGrouping(table, host);
-    // Groupes seuls : ni pagination ni lignes d'enregistrements, seulement une ligne de résumé par groupe (comme Filament).
+    // Groups only: no pagination and no record rows, just one summary row per group.
     const groupsOnly = grouping !== null && table.isGroupsOnly();
     const page = reordering
         ? await adapter.paginate({ ...getTableQuery(table, host), sort: { column: reorderColumn!, direction: 'asc' }, page: 1, perPage: REORDER_LIMIT })
@@ -1263,7 +1264,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     const hasBulk = (options.bulkActions ?? []).length > 0;
     const selectable = (hasBulk || reordering) && !groupsOnly;
     const filled = (value: string | null) => value !== null && value.trim() !== '';
-    // Comme Filament : un nouveau groupe commence quand le titre change ; le groupe précédent reçoit alors sa ligne de résumé.
+    // A new group starts when the title changes; the previous group then gets its summary row.
     let previousGroup: { key: string | null; title: string | null } = { key: null, title: null };
     const columnsLayout = table.getColumnsLayout();
     const visibleSet = new Set(visible);
@@ -1280,9 +1281,9 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             const description = grouping.group.getDescription(record);
             if (!groupsOnly) groupHeader = {
                 key: groupKey, title: groupTitle, label, description, collapsible: grouping.group.isCollapsible(),
-                // Clés de tout le groupe (pas seulement de la page), pour sa case « tout sélectionner ».
+                // Keys of the whole group (not only the page), for its "select all" checkbox.
                 keys: hasBulk ? await adapter.listKeys({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => grouping.group.scope(q, groupKey)] }) : [],
-                // En-tête sans rien à annoncer : masqué aux technologies d'assistance.
+                // Header with nothing to announce: hidden from assistive technologies.
                 ariaHidden: !(filled(groupTitle) || filled(label) || filled(description) || grouping.group.isCollapsible() || selectable),
             };
         }
@@ -1300,17 +1301,17 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             wasClickable: reordering && (recordAction !== null || table.getRecordUrl(record) !== null),
             key, url: reordering ? null : recordAction ? null : table.getRecordUrl(record), cells, actions: groupsOnly ? [] : ((await options.rowActions?.(record)) ?? []),
             actionsHtml: options.rowActionsHtml && !groupsOnly ? await options.rowActionsHtml(record) : null, classes: table.getRecordClasses(record),
-            // Clic sur la ligne : l'action est montée avec la clé de l'enregistrement (même expression que Filament).
+            // Row click: the action is mounted with the record key.
             mountExpression: reordering ? null : recordAction ? `mountAction(${js(recordAction)}, {}, ${js({ table: true, recordKey: key })})` : null,
         });
     }
     const hasRowActions = rows.some((row) => row.actionsHtml !== null || row.actions.length > 0);
-    // Résumés : jamais en mode « tri manuel » ; ceux des groupes s'intercalent avant l'en-tête du groupe suivant.
+    // Summaries: never while reordering; group summaries go before the next group's header.
     const summary = reordering ? null : await summarize(table, host, adapter, visible, page, { group: grouping?.group ?? null, groupsOnly, placeholders: { selection: selectable, actions: hasRowActions } });
     let trailingGroupSummary = '';
     if (summary && grouping) {
         for (const row of rows) if (row.summaryBefore) row.groupSummaryHtml = await summary.group(grouping.group, row.summaryBefore.key, row.summaryBefore.title);
-        // Dernier groupe de la page : résumé seulement s'il ne continue pas sur la page suivante (port de shouldRenderTrailingGroupedTableSummary).
+        // Last group on the page: summarized only if it does not continue on the next page.
         let trailing = filled(previousGroup.title);
         if (trailing && !groupsOnly && page.page < page.lastPage) {
             const nextRecord = (await adapter.paginate({ ...getTableQuery(table, host), page: page.page * page.perPage + 1, perPage: 1 })).records[0];
@@ -1332,11 +1333,11 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         grouping: { directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
         id: host.id, targets: LOADING_TARGETS, table, rows, page, number,
         reorder: reorderColumn !== null ? { active: reordering } : null,
-        // Comme Filament : pas de cases à cocher sans action groupée (ni en mode « groupes seuls »), pas de colonne d'actions sans action de ligne.
+        // No checkboxes without bulk actions (or in groups-only mode), no actions column without row actions.
         selectable, hasRowActions,
-        // Comme Filament (Str::random) : la clé change à chaque rendu pour forcer le remplacement de la case à cocher.
+        // The key changes on every render to force the checkbox to be replaced.
         randomKey: () => Array.from(randomBytes(16), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join(''),
-        // Total sélectionnable par « tout sélectionner » : tous les enregistrements de la requête courante.
+        // "Select all" covers every record of the current query.
         allCount: table.getPaginationMode() === 'simple' ? '' : page.total, resultsCount: table.getPaginationMode() === 'simple' ? rows.length : page.total,
         columns: visible.map((c) => ({ name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none' })),
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'),
@@ -1344,7 +1345,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         filtersForm: options.filtersForm ?? null, activeFiltersCount: countActiveFilters(table, host), filtersLayout: table.getFiltersLayout(), filterIndicators: getFilterIndicators(table, host),
         hasColumnManager: !reordering && table.hasToggleableColumns(),
         afterContainer: options.after ?? '', heading: table.getHeading(), headerActions: options.headerActions ?? [], summaryHtml: summary?.html ?? '', trailingGroupSummary,
-        // Ligne d'intitulés de groupes : une cellule par colonne isolée, une cellule fusionnée par suite de colonnes du même groupe.
+        // Column group header row: one cell per ungrouped column, one merged cell per run of columns in the same group.
         headerGroups: visible.some((c) => c._group !== null) ? visible.reduce<{ label: string | null; span: number }[]>((runs, c) => {
             const last = runs[runs.length - 1];
             if (c._group !== null && last && last.label === c._group) last.span++;

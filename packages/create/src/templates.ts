@@ -1,20 +1,20 @@
-// Fichiers d'un projet Navette neuf, selon les réponses au questionnaire de `npm create navette`.
-// Le code produit est en anglais et se lit comme un exemple : chaque fichier a un rôle, comme dans un projet Filament.
+// Files of a new Navette project, built from the `npm create navette` answers.
+// The generated code doubles as an example: each file has a single, clear role.
 import { randomBytes } from 'node:crypto';
 
 export type ProjectOptions = {
-    /** Nom du dossier et du paquet. */
+    /** Folder and package name. */
     name: string;
-    /** Nom affiché dans le panel. */
+    /** Name shown in the panel. */
     appName: string;
     template: 'blank' | 'starter';
-    /** Second panel `/app` pour les utilisateurs : inscription, mot de passe oublié, vérification de l'adresse, profil. */
+    /** Second panel (`/app`) for users: sign-up, password reset, email verification, profile. */
     userPanel: boolean;
-    /** Équipes (multi-locataire) dans le panel `/app`. */
+    /** Teams (multi-tenancy) in the `/app` panel. */
     teams: boolean;
     database: 'sqlite' | 'postgres' | 'mysql';
     locale: 'en' | 'fr';
-    /** Version des paquets @navette-js à installer. */
+    /** Version range of the @navette-js packages to install. */
     version: string;
     port: number;
 };
@@ -28,7 +28,7 @@ export function projectFiles(o: ProjectOptions): Record<string, string> {
     const sqlite = o.database === 'sqlite';
     const navette = (name: string) => [`@navette-js/${name}`, o.version];
 
-    // ------------------------------------------------------------------ racine
+    // ------------------------------------------------------------------ root
     files['package.json'] = json({
         name: o.name, private: true, type: 'module',
         scripts: { dev: 'node --env-file=.env --watch src/server.ts', start: 'node --env-file=.env src/server.ts', navette: 'navette' },
@@ -62,7 +62,7 @@ export function projectFiles(o: ProjectOptions): Record<string, string> {
     files['.env.example'] = env('');
     files['.gitignore'] = ['node_modules/', '.env', 'database/*.sqlite*', 'storage/', ''].join('\n');
 
-    // ------------------------------------------------------------------ base de données
+    // ------------------------------------------------------------------ database
     files['src/database.ts'] = `// Database connection and migrations.
 import { mkdirSync, readdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -125,7 +125,7 @@ export async function up(db: Knex): Promise<void> {
 `;
     files['src/migrations/0002_create_notifications_table.ts'] = `import type { Knex } from '@navette-js/database';
 
-// Database notifications (the bell), in the same format as Laravel's \`notifications\` table.
+// Database notifications (the bell).
 export async function up(db: Knex): Promise<void> {
     await db.schema.createTable('notifications', (table) => {
         table.string('id', 36).primary();
@@ -184,7 +184,7 @@ export async function up(db: Knex): Promise<void> {
 }
 `;
 
-    // ------------------------------------------------------------------ modèles
+    // ------------------------------------------------------------------ models
     const timestamps = `    $beforeInsert(): void { (this as any).created_at = (this as any).updated_at = now(); }
     $beforeUpdate(): void { (this as any).updated_at = now(); }`;
     const nowHelper = `const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');`;
@@ -230,7 +230,7 @@ ${timestamps}
 }
 `;
 
-    // ------------------------------------------------------------------ panel d'administration
+    // ------------------------------------------------------------------ admin panel
     files['src/panels/admin.ts'] = `// The admin panel (/admin): only users with the \`admin\` role can sign in.
 import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, knexAuthProvider, ${sqlite ? 'knexNotificationStore, ' : ''}Panel } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
@@ -399,7 +399,7 @@ export class TaskStats extends StatsOverviewWidget {
 `;
     }
 
-    // ------------------------------------------------------------------ panel des utilisateurs
+    // ------------------------------------------------------------------ user panel
     if (o.userPanel) {
         files['src/panels/app.ts'] = `// The user panel (/app): anyone can sign up${teams ? ', then create or join teams' : ''}.
 import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, knexAuthProvider, ${teams ? 'knexTenantProvider, ' : ''}Panel } from '@navette-js/panels';
@@ -487,7 +487,7 @@ export class NoteResource extends Resource {
     }
     if (!starter) files['src/admin/widgets/.gitkeep'] = '';
 
-    // ------------------------------------------------------------------ serveur
+    // ------------------------------------------------------------------ server
     files['src/server.ts'] = `// Entry point: runs the migrations, then serves every panel of src/panels.
 import express from 'express';
 import { mkdirSync } from 'node:fs';
@@ -520,7 +520,7 @@ ${o.userPanel ? "    console.log(`  User panel   http://127.0.0.1:${port}/app`);
     // ------------------------------------------------------------------ README
     files['README.md'] = `# ${o.appName}
 
-Built with [Navette](https://github.com/NavetteJS/navette), admin panels for Node.js (a port of Filament).
+Built with [Navette](https://github.com/NavetteJS/navette), admin panels for Node.js.
 
 ## Running
 

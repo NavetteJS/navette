@@ -1,11 +1,7 @@
-// Filtre « constructeur de requêtes » — port de Filament\Tables\Filters\QueryBuilder et de filament/query-builder.
-// L'utilisateur compose des règles (contrainte + opérateur + réglages), éventuellement regroupées par des blocs « OR ».
-// Tout l'état vient du navigateur : il est nettoyé contre les contraintes déclarées avant de servir (requête, indicateurs, rendu).
-// Portés : TextConstraint, NumberConstraint, BooleanConstraint, DateConstraint (avec ou sans heure), SelectConstraint,
-// RelationshipConstraint (nombre d'enregistrements liés, vide, `selectable(IsRelatedToOperator)`), contraintes sur une relation
-// (`relationship(nom, attribut)`), opérateur « Is filled » (`nullable()`), bloc OR, indicateurs.
-// Non portés : agrégats de relation (somme, moyenne… d'une colonne liée), groupes de contraintes, recherche serveur dans les listes.
-// Le SQL de date et de recherche est écrit pour SQLite, MySQL / MariaDB, PostgreSQL et SQL Server, selon le client knex de la requête.
+// Query builder filter: users compose rules (constraint + operator + settings), optionally grouped in "OR" blocks.
+// All state comes from the browser: it is sanitized against the declared constraints before any use (query, indicators, render).
+// Not supported yet: relationship aggregates (sum, average… of a related column), constraint groups, server-side option search.
+// Date and search SQL is generated for SQLite, MySQL / MariaDB, PostgreSQL and SQL Server, depending on the query's knex client.
 import { Action } from '@navette-js/actions';
 import type { ListQuery } from '@navette-js/database';
 import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette-js/forms';
@@ -20,18 +16,18 @@ const tr = (key: string, replace: Record<string, string | number> = {}) => t(`fi
 const headline = (s: string) => s.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
 const scalar = (value: unknown): string | number | boolean | null =>
     typeof value === 'string' ? value.slice(0, 1000) : typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? value : null;
-/** Réglage reçu du navigateur : un scalaire, ou une liste de scalaires (sélection multiple), bornée. */
+/** Setting received from the browser: a scalar, or a bounded list of scalars (multiple select). */
 const setting = (value: unknown): unknown =>
     Array.isArray(value) ? value.slice(0, MAX_LIST_VALUES).map(scalar).filter((item): item is string | number => typeof item === 'string' || typeof item === 'number') : scalar(value);
 
-/** Plafonds appliqués à l'arbre de règles reçu du navigateur. */
+/** Limits applied to the rule tree received from the browser. */
 export const MAX_RULES = 100;
 export const MAX_NESTING_DEPTH = 3;
-/** Nombre maximal de valeurs d'une sélection multiple. */
+/** Maximum number of values in a multiple select. */
 export const MAX_LIST_VALUES = 100;
 const OR = 'or';
 
-// ------------------------------------------------------------------ conditions (forme neutre, appliquée ensuite à la requête)
+// ------------------------------------------------------------------ conditions (database-neutral, applied to the query later)
 type Comparison = '=' | '!=' | '<' | '<=' | '>' | '>=';
 type Key = string | number;
 export type Condition =
@@ -39,32 +35,32 @@ export type Condition =
     | { kind: 'compare'; column: string; operator: Comparison; value: string | number }
     | { kind: 'boolean'; column: string; value: boolean }
     | { kind: 'date' | 'month' | 'year'; column: string; operator: Comparison; value: string | number }
-    /** Valeur renseignée (ni nulle, ni chaîne vide), ou l'inverse. */
+    /** Value is filled (neither null nor an empty string), or the opposite. */
     | { kind: 'filled'; column: string; negate: boolean }
     | { kind: 'in'; column: string; values: Key[]; negate: boolean }
-    /** Nombre d'enregistrements liés comparé à une valeur. */
+    /** Number of related records compared to a value. */
     | { kind: 'relationCount'; relationship: string; operator: Comparison; value: number; modify?: RelationshipQueryModifier }
-    /** Au moins un enregistrement lié (parmi `keys` si la liste est donnée), ou aucun (`negate`). */
+    /** At least one related record (among `keys` when given), or none (`negate`). */
     | { kind: 'related'; relationship: string; keys: Key[] | null; negate: boolean; modify?: RelationshipQueryModifier };
-/** `whereHas` : les conditions s'appliquent aux enregistrements liés par la relation. */
+/** `{ relationship, nodes }`: the nodes apply to the related records (`whereExists` subquery). */
 export type ConditionNode = Condition | { or: ConditionNode[][] } | { relationship: string; nodes: ConditionNode[]; modify?: RelationshipQueryModifier };
 type Settings = Record<string, unknown>;
 type Resolved = { condition: Condition; summary: string };
 
-/** Opérateur d'une contrainte : son formulaire de réglages et sa traduction en condition. */
+/** Constraint operator: its settings form and how it turns into a condition. */
 type Operator = {
     name: string;
     label: (inverse: boolean) => string;
-    /** Réglages par défaut (null : l'opérateur n'a pas de formulaire). */
+    /** Default settings (null: the operator has no form). */
     defaults: () => Settings | null;
     fields: () => Component[];
-    /** Null quand les réglages ne passent pas la validation du formulaire : la règle est alors sans effet, comme dans Filament. */
+    /** Null when the settings fail the form's validation: the rule then has no effect. */
     resolve: (settings: Settings, inverse: boolean, constraint: Constraint) => Resolved | null;
-    /** Condition posée sur la requête principale, même quand la contrainte vise une relation (opérateurs de RelationshipConstraint). */
+    /** Condition applied to the base query even when the constraint targets a relationship (RelationshipConstraint operators). */
     onBaseQuery?: boolean;
 };
 const label = (group: string, name: string) => (inverse: boolean) => tr(`operators.${group}.${name}.label.${inverse ? 'inverse' : 'direct'}`);
-/** Liste de libellés à la manière de `Arr::join($labels, ', ', ' or ')`. */
+/** Joins labels as "a, b or c" using the translated glue strings. */
 const joinLabels = (labels: string[], glueKey: string) => (labels.length <= 1 ? labels.join('') : `${labels.slice(0, -1).join(tr(`${glueKey}.0`))}${tr(`${glueKey}.final`)}${labels[labels.length - 1]}`);
 const summary = (group: string, name: string, inverse: boolean, replace: Record<string, string | number>) => tr(`operators.${group}.${name}.summary.${inverse ? 'inverse' : 'direct'}`, replace);
 const likeEscape = (text: string) => text.replace(/[\\%_]/g, '\\$&');
@@ -87,7 +83,7 @@ function textOperator(name: string, key: string, pattern: (text: string) => stri
 function numberOperator(name: string, key: string, direct: Comparison, inverted: Comparison): Operator {
     return {
         name, label: label('number', key), defaults: () => ({ number: null, aggregate: null }),
-        // `aggregate` ne sert qu'aux relations : le champ existe, masqué, comme dans Filament.
+        // `aggregate` is only used for relationships; the field exists but stays hidden.
         fields: () => [TextInput.make('number').label(tr('operators.number.form.number.label')).numeric().required(), Select.make('aggregate').label(tr('operators.number.form.aggregate.label')).hidden()],
         resolve: (settings, inverse, constraint) => {
             const raw = settings.number;
@@ -98,18 +94,17 @@ function numberOperator(name: string, key: string, direct: Comparison, inverted:
     };
 }
 
-// --- dates
 const pad = (n: number) => String(n).padStart(2, '0');
 const toDateString = (date: Date) => `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 const toDateTimeString = (date: Date) => `${toDateString(date)} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
-/** Date `AAAA-MM-JJ` réelle, sinon null. */
+/** A valid `YYYY-MM-DD` date, otherwise null. */
 function parseDate(value: unknown): string | null {
     const m = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null;
     if (!m) return null;
     const date = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
     return toDateString(date) === `${m[1]}-${m[2]}-${m[3]}` ? toDateString(date) : null;
 }
-/** Date et heure `AAAA-MM-JJ HH:MM[:SS]` (ou avec `T`) réelles → `AAAA-MM-JJ HH:MM:SS` ; une date seule vaut minuit. */
+/** A valid `YYYY-MM-DD HH:MM[:SS]` (or `T`-separated) date-time → `YYYY-MM-DD HH:MM:SS`; a bare date means midnight. */
 function parseDateTime(value: unknown): string | null {
     const date = parseDate(value);
     if (date === null) return null;
@@ -119,7 +114,7 @@ function parseDateTime(value: unknown): string | null {
     return Number(hours) < 24 && Number(minutes) < 60 && Number(seconds) < 60 ? `${date} ${hours}:${minutes}:${seconds}` : null;
 }
 const formatDate = (date: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date.slice(0, 10)}T00:00:00Z`));
-/** Date et heure comme Carbon `toFormattedDayDateString() . ' ' . format('H:i:s')` : « Mon, Jun 1, 2026 14:30:00 ». */
+/** Formats a date-time as "Mon, Jun 1, 2026 14:30:00". */
 const formatDayDateTime = (dateTime: string) => `${new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${dateTime.slice(0, 10)}T00:00:00Z`))}, ${formatDate(dateTime)} ${dateTime.length > 10 ? dateTime.slice(11, 19) : '00:00:00'}`;
 const MONTHS = Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, i, 1))));
 const UNITS = ['day', 'week', 'month', 'quarter', 'year'] as const;
@@ -136,7 +131,7 @@ const shift = (now: Date, unit: string, amount: number): Date => {
     else if (unit === 'year') date.setUTCFullYear(date.getUTCFullYear() + amount);
     return date;
 };
-/** Préréglages de fenêtre glissante (port de resolveRelativeDate). */
+/** Relative date presets. */
 const PRESETS: Record<string, (now: Date) => Date> = {
     past_decade: (n) => shift(n, 'year', -10), past_5_years: (n) => shift(n, 'year', -5), past_2_years: (n) => shift(n, 'year', -2), past_year: (n) => shift(n, 'year', -1),
     past_6_months: (n) => shift(n, 'month', -6), past_quarter: (n) => shift(n, 'quarter', -1), past_month: (n) => shift(n, 'month', -1), past_2_weeks: (n) => shift(n, 'week', -2), past_week: (n) => shift(n, 'week', -1),
@@ -145,21 +140,21 @@ const PRESETS: Record<string, (now: Date) => Date> = {
     next_week: (n) => shift(n, 'week', 1), next_2_weeks: (n) => shift(n, 'week', 2), next_month: (n) => shift(n, 'month', 1), next_quarter: (n) => shift(n, 'quarter', 1), next_6_months: (n) => shift(n, 'month', 6),
     next_year: (n) => shift(n, 'year', 1), next_2_years: (n) => shift(n, 'year', 2), next_5_years: (n) => shift(n, 'year', 5), next_decade: (n) => shift(n, 'year', 10),
 };
-/** Préréglages à la minute ou à l'heure, proposés seulement pour une contrainte `time()` : ils comparent la date et l'heure. */
+/** Minute and hour presets, only offered for `time()` constraints: they compare date and time. */
 const TIME_PRESETS: Record<string, (now: Date) => Date> = {
     past_hour: (n) => shift(n, 'hour', -1), past_minute: (n) => shift(n, 'minute', -1),
     this_hour: (n) => new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), n.getUTCHours())), this_minute: (n) => new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), n.getUTCHours(), n.getUTCMinutes())),
     next_minute: (n) => shift(n, 'minute', 1), next_hour: (n) => shift(n, 'hour', 1),
 };
-/** Ordre des préréglages dans la liste, comme Filament (les horaires s'intercalent seulement avec `time()`). */
+/** Preset order in the select (time presets are interleaved only with `time()`). */
 const presetNames = (hasTime: boolean) => [
     'past_decade', 'past_5_years', 'past_2_years', 'past_year', 'past_6_months', 'past_quarter', 'past_month', 'past_2_weeks', 'past_week', ...(hasTime ? ['past_hour', 'past_minute'] : []),
     'this_decade', 'this_year', 'this_quarter', 'this_month', 'today', ...(hasTime ? ['this_hour', 'this_minute', 'next_minute', 'next_hour'] : []),
     'next_week', 'next_2_weeks', 'next_month', 'next_quarter', 'next_6_months', 'next_year', 'next_2_years', 'next_5_years', 'next_decade', 'custom',
 ];
 /**
- * Moment visé par les réglages d'un opérateur « après / avant » : date fixe, préréglage, ou décalage personnalisé. `time` est vrai quand la
- * comparaison porte sur la date et l'heure (contrainte `time()` avec une date fixe, un préréglage horaire ou une unité de moins d'un jour).
+ * Moment targeted by an "after / before" operator's settings: fixed date, preset, or custom offset. `time` is true when the comparison
+ * uses date and time (`time()` constraint with a fixed date, a time preset or a sub-day unit).
  */
 function resolveRuleMoment(settings: Settings, now: Date, hasTime: boolean): { value: string; time: boolean } | null {
     if (settings.mode !== 'relative') {
@@ -170,14 +165,14 @@ function resolveRuleMoment(settings: Settings, now: Date, hasTime: boolean): { v
     if (hasTime && Object.hasOwn(TIME_PRESETS, preset)) return { value: toDateTimeString(TIME_PRESETS[preset](now)), time: true };
     if (preset !== 'custom') return { value: toDateString((Object.hasOwn(PRESETS, preset) ? PRESETS[preset] : PRESETS.today)(now)), time: false };
     const value = Math.floor(Number(settings.relative_value));
-    // Comme le formulaire de Filament : un entier d'au moins 1 (borné ici pour rester dans les dates représentables).
+    // An integer of at least 1, capped to stay within representable dates.
     if (!Number.isFinite(value) || value < 1 || value > 10000) return null;
     const units: readonly string[] = hasTime ? [...TIME_UNITS, ...UNITS] : UNITS;
     const unit = units.includes(String(settings.relative_unit)) ? String(settings.relative_unit) : 'day';
     const moment = shift(now, unit, settings.tense === 'future' ? value : -value);
     return (TIME_UNITS as readonly string[]).includes(unit) ? { value: toDateTimeString(moment), time: true } : { value: toDateString(moment), time: false };
 }
-/** Date (ou date et heure, avec `hasTime`) visée par les réglages d'un opérateur « après / avant ». */
+/** Date (or date-time, with `hasTime`) targeted by an "after / before" operator's settings. */
 export function resolveRuleDate(settings: Settings, now: Date = new Date(), hasTime = false): string | null { return resolveRuleMoment(settings, now, hasTime)?.value ?? null; }
 function windowOperator(name: string, key: string, direct: Comparison, inverted: Comparison, hasTime: boolean): Operator {
     const option = (path: string, names: readonly string[]): [string, string][] => names.map((value) => [value, tr(`${path}.${value}`)]);
@@ -189,7 +184,6 @@ function windowOperator(name: string, key: string, direct: Comparison, inverted:
             (hasTime ? DateTimePicker.make('date') : DatePicker.make('date')).label(tr('operators.date.form.date.label')).hidden(({ get }) => get('mode') === 'relative').required(({ get }) => get('mode') !== 'relative'),
             Select.make('preset').label(tr('operators.date.form.preset.label')).live().options(option('operators.date.presets', presetNames(hasTime))).default('past_month')
                 .hidden(({ get }) => get('mode') !== 'relative').required(({ get }) => get('mode') === 'relative'),
-            // Dans Filament ces trois champs sont fusionnés (FusedGroup) ; ici ils sont côte à côte.
             Group.make([
                 Select.make('tense').label(tr('operators.date.form.tense.label')).options(option('operators.date.form.tense.options', ['past', 'future'])).default('past').required(),
                 TextInput.make('relative_value').label(tr('operators.date.form.relative_value.label')).numeric().minValue(1).default(1).required(),
@@ -199,7 +193,7 @@ function windowOperator(name: string, key: string, direct: Comparison, inverted:
         resolve: (settings, inverse, constraint) => {
             const moment = resolveRuleMoment(settings, new Date(), hasTime);
             if (moment === null) return null;
-            // Avec l'heure, la colonne est comparée telle quelle (`where`) ; sinon, sa seule date (`whereDate`), comme Filament.
+            // With time, the column is compared as is; otherwise only its date part is compared.
             const condition: Condition = moment.time
                 ? { kind: 'compare', column: constraint.getColumn(), operator: inverse ? inverted : direct, value: moment.value }
                 : { kind: 'date', column: constraint.getColumn(), operator: inverse ? inverted : direct, value: moment.value };
@@ -208,7 +202,7 @@ function windowOperator(name: string, key: string, direct: Comparison, inverted:
     };
 }
 
-/** Opérateur « Is filled » (port de IsFilledOperator), proposé par les contraintes `nullable()`. */
+/** "Is filled" operator, offered by `nullable()` constraints. */
 const isFilledOperator: Operator = {
     name: 'isFilled', label: (inverse) => tr(`operators.is_filled.label.${inverse ? 'inverse' : 'direct'}`), defaults: () => null, fields: () => [],
     resolve: (_settings, inverse, constraint) => ({ condition: { kind: 'filled', column: constraint.getColumn(), negate: inverse }, summary: tr(`operators.is_filled.summary.${inverse ? 'inverse' : 'direct'}`, { attribute: constraint.getAttributeLabel() }) }),
@@ -252,14 +246,14 @@ const OPERATORS: Record<'text' | 'number' | 'boolean' | 'date', Operator[]> = {
     ],
 };
 
-// ------------------------------------------------------------------ contraintes
+// ------------------------------------------------------------------ constraints
 type ConstraintType = keyof typeof OPERATORS | 'select' | 'relationship';
-/** Modification de la requête des enregistrements liés (knex / objection), posée par l'application. */
+/** Application-defined modifier of the related records query (knex / objection). */
 export type RelationshipQueryModifier = (query: any) => void;
 
 /**
- * Attribut filtrable par le constructeur de requêtes (port de Constraint). La colonne et la relation interrogées sont celles déclarées
- * ici, jamais des valeurs du navigateur : celui-ci ne choisit qu'une contrainte (par son nom) et un opérateur de sa liste.
+ * Attribute the query builder can filter on. The queried column and relationship are the ones declared here, never browser values:
+ * the browser only picks a constraint (by name) and one of its operators.
  */
 export class Constraint {
     readonly name: string;
@@ -271,28 +265,28 @@ export class Constraint {
     protected _relationship: string | null = null;
     protected _modifyRelationshipQuery: RelationshipQueryModifier | null = null;
     protected _nullable = false;
-    /** Modèle Objection interrogé (enregistrements de la table), pour les listes d'enregistrements liés. */
+    /** Objection model of the table's records, used to list related records. */
     protected _model: any = null;
     constructor(name: string, type: ConstraintType, icon: string) {
-        if (!isItemKey(name) || name === OR) throw new Error(`Nom de contrainte invalide : ${name}`);
+        if (!isItemKey(name) || name === OR) throw new Error(`Invalid constraint name: ${name}`);
         this.name = name; this.type = type; this._icon = icon;
     }
     label(label: string): this { this._label = label; return this; }
-    /** Nom de l'attribut dans les résumés des règles (par défaut, le libellé). */
+    /** Attribute name used in rule summaries (defaults to the label). */
     attributeLabel(label: string | null): this { this._attributeLabel = label; return this; }
     icon(name: string): this { this._icon = name; return this; }
-    /** Colonne (ou alias de la requête) interrogée quand elle diffère du nom. */
+    /** Queried column (or query alias) when it differs from the name. */
     attribute(column: string): this { this._column = column; return this; }
     /**
-     * La contrainte porte sur un attribut d'enregistrements liés (`whereHas`) : `relationship('author', 'name')` filtre sur le nom de
-     * l'auteur. La relation doit être déclarée par le modèle Objection (`relationMappings`).
+     * Filters on an attribute of related records: `relationship('author', 'name')` filters on the author's name.
+     * The relationship must be declared by the Objection model (`relationMappings`).
      */
     relationship(name: string, titleAttribute: string, modifyQueryUsing: RelationshipQueryModifier | null = null): this {
         this._relationship = name; this._column = titleAttribute; this._modifyRelationshipQuery = modifyQueryUsing;
         return this;
     }
     modifyRelationshipQueryUsing(callback: RelationshipQueryModifier | null): this { this._modifyRelationshipQuery = callback; return this; }
-    /** Ajoute l'opérateur « Is filled » / « Is blank » (port de `nullable()`). */
+    /** Adds the "Is filled" / "Is blank" operator. */
     nullable(condition = true): this { this._nullable = condition; return this; }
     isNullable(): boolean { return this._nullable; }
     model(model: any): this { this._model = model; return this; }
@@ -301,11 +295,11 @@ export class Constraint {
     getAttributeLabel(): string { return this._attributeLabel ?? this.getLabel(); }
     getIcon(): string { return this._icon; }
     getColumn(): string { return this._column ?? this.name; }
-    /** Relation dont les enregistrements portent l'attribut, ou `null` pour une colonne de la table. */
+    /** Relationship whose records hold the attribute, or `null` for a column of the table. */
     getRelationshipName(): string | null { return this._relationship; }
     getModifyRelationshipQueryUsing(): RelationshipQueryModifier | null { return this._modifyRelationshipQuery; }
     getOperators(): Operator[] { return [...OPERATORS[this.type as keyof typeof OPERATORS], ...(this._nullable ? [isFilledOperator] : [])]; }
-    /** `contains` ou `contains.inverse` → opérateur et sens ; null si la contrainte ne le déclare pas. */
+    /** `contains` or `contains.inverse` → operator and direction; null if the constraint does not declare it. */
     parseOperator(value: unknown): { operator: Operator; inverse: boolean } | null {
         if (typeof value !== 'string') return null;
         const inverse = value.endsWith('.inverse');
@@ -313,16 +307,16 @@ export class Constraint {
         return operator ? { operator, inverse } : null;
     }
     getOperatorOptions(): [string, string][] { return this.getOperators().flatMap((operator): [string, string][] => [[operator.name, operator.label(false)], [`${operator.name}.inverse`, operator.label(true)]]); }
-    /** Noms de réglages connus de la contrainte, tous opérateurs confondus (un changement d'opérateur conserve les anciens, comme Filament). */
+    /** Setting names known to the constraint across all operators (switching operator keeps the previous settings). */
     getSettingNames(): string[] { return [...new Set(this.getOperators().flatMap((operator) => Object.keys(operator.defaults() ?? {})))]; }
-    /** Réglages dont la valeur est une liste (sélection multiple). */
+    /** Settings whose value is a list (multiple select). */
     getListSettingNames(): string[] { return [...new Set(this.getOperators().flatMap((operator) => Object.entries(operator.defaults() ?? {}).filter(([, value]) => Array.isArray(value)).map(([name]) => name)))]; }
     getDefaultData(): Record<string, unknown> { const [first] = this.getOperators(); return { operator: first.name, settings: first.defaults() }; }
 }
 export class TextConstraint extends Constraint { static make(name: string): TextConstraint { return configured(new TextConstraint(name, 'text', 'm-language')); } }
 export class NumberConstraint extends Constraint { static make(name: string): NumberConstraint { return configured(new NumberConstraint(name, 'number', 'm-variable')); } }
 export class BooleanConstraint extends Constraint { static make(name: string): BooleanConstraint { return configured(new BooleanConstraint(name, 'boolean', 'm-check-circle')); } }
-/** Date ; avec `time()`, la date et l'heure (sélecteur date-heure, préréglages et unités à la minute ou à l'heure). */
+/** Date constraint; with `time()`, date and time (date-time picker, minute and hour presets and units). */
 export class DateConstraint extends Constraint {
     private _time = false;
     static make(name: string): DateConstraint { return configured(new DateConstraint(name, 'date', 'm-calendar')); }
@@ -333,13 +327,13 @@ export class DateConstraint extends Constraint {
     }
 }
 
-/** Valeur choisie dans une liste fixe (port de SelectConstraint) ; `multiple()` : l'une des valeurs choisies. */
+/** Value picked from a fixed list; with `multiple()`, any of the picked values. */
 export class SelectConstraint extends Constraint {
     private _options: [string, string][] = [];
     private _multiple = false;
     private _searchable = false;
     static make(name: string): SelectConstraint { return configured(new SelectConstraint(name, 'select', 'm-chevron-up-down')); }
-    /** Options `[valeur, libellé]` ou `{ valeur: libellé }` ; seules ces valeurs filtrent. */
+    /** Options as `[value, label]` pairs or `{ value: label }`; only these values can filter. */
     options(options: [string | number, string][] | Record<string, string>): this {
         this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
         return this;
@@ -356,7 +350,7 @@ export class SelectConstraint extends Constraint {
             fields: () => [Select.make(field).label(tr(`operators.select.is.form.${field}.label`)).options(this._options).multiple(this._multiple).searchable(this._searchable).required().columnSpanFull()],
             resolve: (settings, inverse, constraint) => {
                 const raw = settings[field];
-                // Valeurs forgées ou inconnues écartées : il ne reste que des options déclarées (sinon la règle est sans effet).
+                // Forged or unknown values are dropped: only declared options remain (otherwise the rule has no effect).
                 const values = (Array.isArray(raw) ? raw : this._multiple ? [] : [raw]).filter(known).map(String);
                 if (!values.length) return null;
                 const labels = this._options.filter(([option]) => values.includes(option)).map(([, optionLabel]) => optionLabel);
@@ -370,7 +364,7 @@ export class SelectConstraint extends Constraint {
     }
 }
 
-/** Nombre entier d'enregistrements liés, d'au moins 1 (formulaire `count` des opérateurs de RelationshipConstraint). */
+/** Integer related-record count of at least 1 (the `count` setting of RelationshipConstraint operators). */
 const countSetting = (value: unknown): number | null => (isNumericValue(value) && Number(value) >= 1 && Number(value) <= 1e9 ? Math.floor(Number(value)) : null);
 const isNumericValue = (value: unknown) => typeof value === 'number' ? Number.isFinite(value) : typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value));
 function relationshipCountOperator(name: string, key: string, direct: Comparison, inverted: Comparison): Operator {
@@ -387,8 +381,8 @@ function relationshipCountOperator(name: string, key: string, direct: Comparison
 }
 
 /**
- * Opérateur « Is » / « Contains » d'une RelationshipConstraint (port de IsRelatedToOperator) : les enregistrements liés sont choisis dans
- * une liste tirée du modèle lié, par leur clé ; `titleAttribute` est la colonne affichée.
+ * "Is" / "Contains" operator of a RelationshipConstraint: related records are picked by key from a list loaded from the related model;
+ * `titleAttribute` is the displayed column.
  */
 export class IsRelatedToOperator {
     private _titleAttribute: string | null = null;
@@ -407,7 +401,7 @@ export class IsRelatedToOperator {
     optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
     modifyRelationshipQueryUsing(callback: RelationshipQueryModifier | null): this { this._modifyQuery = callback; return this; }
     getModifyRelationshipQueryUsing(): RelationshipQueryModifier | null { return this._modifyQuery; }
-    /** Opérateur du constructeur pour la contrainte donnée. */
+    /** Builds the query builder operator for the given constraint. */
     toOperator(constraint: RelationshipConstraint): Operator {
         const field = constraint.isMultiple() ? 'values' : 'value';
         const variant = constraint.isMultiple() ? 'multiple' : 'single';
@@ -433,14 +427,14 @@ export class IsRelatedToOperator {
 }
 
 /**
- * Enregistrements liés (port de RelationshipConstraint) : nombre minimal, maximal ou exact (`multiple()`), relation vide (`emptyable()`,
- * par défaut avec `multiple()`), ou liés à des enregistrements choisis (`selectable(IsRelatedToOperator.make()…)`).
+ * Related records: minimum, maximum or exact count (`multiple()`), empty relationship (`emptyable()`, on by default with `multiple()`),
+ * or related to picked records (`selectable(IsRelatedToOperator.make()…)`).
  */
 export class RelationshipConstraint extends Constraint {
     private _multiple = false;
     private _emptyable: boolean | null = null;
     private _selectable: IsRelatedToOperator | null = null;
-    /** Libellés des enregistrements liés cités par les règles, chargés avant le calcul des indicateurs. */
+    /** Labels of the related records cited by rules, loaded before indicators are computed. */
     private _relatedLabels = new Map<string, string>();
     static make(name: string): RelationshipConstraint { return configured(new RelationshipConstraint(name, 'relationship', 'm-arrows-pointing-out')); }
     multiple(condition = true): this { this._multiple = condition; return this; }
@@ -449,7 +443,7 @@ export class RelationshipConstraint extends Constraint {
     canBeEmpty(): boolean { return this._emptyable ?? this._multiple; }
     selectable(operator: IsRelatedToOperator): this { this._selectable = operator; return this; }
     getSelectableOperator(): IsRelatedToOperator | null { return this._selectable; }
-    /** Relation interrogée : celle de `relationship()`, sinon `attribute()`, sinon le nom de la contrainte. */
+    /** Queried relationship: from `relationship()`, else `attribute()`, else the constraint name. */
     getRelationshipName(): string { return this._relationship ?? this.getColumn(); }
     getOperators(): Operator[] {
         return [
@@ -465,10 +459,10 @@ export class RelationshipConstraint extends Constraint {
         ];
     }
     getRelatedLabel(key: Key): string | null { return this._relatedLabels.get(String(key)) ?? null; }
-    /** Modèle lié, retrouvé par la relation du modèle de la table (déclaré, ou celui de l'adaptateur Objection de l'hôte). */
+    /** Related model, found through the table model's relationship (declared, or the host's Objection adapter model). */
     private relatedModel(host: unknown): any {
         const model = this._model ?? modelOfHost(host);
-        if (!model?.getRelation) throw new Error(`RelationshipConstraint ${this.name} : modèle de la table introuvable ; déclarez-le avec model() sur la contrainte ou le QueryBuilder.`);
+        if (!model?.getRelation) throw new Error(`RelationshipConstraint ${this.name}: table model not found; declare it with model() on the constraint or the QueryBuilder.`);
         return model.getRelation(this.getRelationshipName()).relatedModelClass;
     }
     private relatedQuery(operator: IsRelatedToOperator, host: unknown): { query: any; id: string; title: string } {
@@ -478,14 +472,14 @@ export class RelationshipConstraint extends Constraint {
         operator.getModifyRelationshipQueryUsing()?.(query);
         return { query, id: `${related.tableName}.${related.idColumn}`, title: `${related.tableName}.${title}` };
     }
-    /** Options de la liste : enregistrements du modèle lié, triés par leur titre. */
+    /** Select options: records of the related model, sorted by title. */
     async loadRelatedOptions(operator: IsRelatedToOperator, host: unknown): Promise<[string, string][]> {
         const { query, id, title } = this.relatedQuery(operator, host);
-        // Comme une liste non cherchable de Filament : toutes les options, ici plafonnées.
+        // All options are loaded (no server-side search), capped.
         const rows = await query.clearSelect().select({ __key: id, __title: title }).orderBy(title).limit(1000);
         return rows.map((row: any): [string, string] => [String(row.__key), String(row.__title ?? row.__key)]);
     }
-    /** Charge les libellés des clés citées par des règles (indicateurs « Author is Ada or Linus »). */
+    /** Loads labels of the keys cited by rules (for indicators such as "Author is Ada or Linus"). */
     async loadRelatedLabels(keys: Key[], host: unknown): Promise<void> {
         if (!this._selectable || !keys.length) return;
         const { query, id, title } = this.relatedQuery(this._selectable, host);
@@ -494,21 +488,21 @@ export class RelationshipConstraint extends Constraint {
     }
 }
 
-/** Modèle Objection de la table de l'hôte (adaptateur `ObjectionAdapter`), quand l'application ne l'a pas déclaré. */
+/** Objection model of the host's table (`ObjectionAdapter`), when the application did not declare one. */
 function modelOfHost(host: unknown): any {
     const adapter = (host as any)?.getDataAdapterForTable?.() ?? (host as any)?.resource?.adapter ?? null;
     const model = adapter?.model;
     return typeof model === 'function' && typeof model.getRelation === 'function' ? model : null;
 }
 
-// ------------------------------------------------------------------ état : nettoyage et traduction
+// ------------------------------------------------------------------ state: sanitizing and compiling
 type Rule = { type: string; data: Record<string, any> };
 type Rules = Record<string, Rule>;
 const isObject = (value: unknown): value is Record<string, any> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * Arbre de règles reçu du navigateur → arbre ne contenant que ce que le filtre déclare : types de blocs connus, opérateurs de la contrainte,
- * réglages scalaires aux noms connus, profondeur et nombre de règles bornés. Un opérateur inconnu est remis à vide (règle sans effet).
+ * Reduces the browser's rule tree to what the filter declares: known block types, the constraint's operators, scalar settings with
+ * known names, bounded depth and rule count. An unknown operator is reset to null (the rule has no effect).
  */
 export function sanitizeRules(constraints: Constraint[], raw: unknown, depth = 1, budget = { rules: MAX_RULES }): Rules {
     const rules: Rules = {};
@@ -529,7 +523,7 @@ export function sanitizeRules(constraints: Constraint[], raw: unknown, depth = 1
         const constraint = constraints.find((candidate) => candidate.name === rule.type);
         if (!constraint) continue;
         budget.rules--;
-        // Une liste n'est acceptée que pour un réglage qui en est une par défaut (sélection multiple) ; ailleurs, seulement un scalaire.
+        // A list is only accepted for settings whose default is a list (multiple select); elsewhere only a scalar.
         const lists = constraint.getListSettingNames();
         const settings = isObject(data.settings) ? Object.fromEntries(constraint.getSettingNames().filter((name) => Object.hasOwn(data.settings, name)).map((name) => [name, lists.includes(name) ? setting(data.settings[name]) : scalar(data.settings[name])])) : null;
         rules[key] = { type: constraint.name, data: { operator: constraint.parseOperator(data.operator) ? data.operator : null, settings } };
@@ -537,14 +531,14 @@ export function sanitizeRules(constraints: Constraint[], raw: unknown, depth = 1
     return rules;
 }
 
-/** Règles nettoyées → conditions et libellés d'indicateurs (une entrée par règle de premier niveau qui a un effet). */
+/** Sanitized rules → conditions and indicator labels (one entry per effective top-level rule). */
 export function compileRules(constraints: Constraint[], rules: Rules, iteration = 1): { nodes: ConditionNode[]; summaries: Record<string, string> } {
     const nodes: ConditionNode[] = [];
     const summaries: Record<string, string> = {};
     for (const [key, rule] of Object.entries(rules)) {
         if (rule.type === OR) {
             const groups = Object.values((rule.data.groups ?? {}) as Record<string, { rules: Rules }>).map((group) => compileRules(constraints, group.rules, iteration + 1));
-            // Un groupe sans règle effective n'ajoute rien (dans Filament, `orWhere` avec une clôture vide est ignoré).
+            // A group without effective rules adds nothing.
             const effective = groups.filter((group) => group.nodes.length);
             if (!effective.length) continue;
             nodes.push({ or: effective.map((group) => group.nodes) });
@@ -557,7 +551,7 @@ export function compileRules(constraints: Constraint[], rules: Rules, iteration 
         if (!constraint || !parsed) continue;
         const resolved = parsed.operator.resolve(isObject(rule.data.settings) ? rule.data.settings : {}, parsed.inverse, constraint);
         if (!resolved) continue;
-        // Attribut d'une relation : la condition porte sur les enregistrements liés (`whereHas`), comme Operator::applyToBaseQuery.
+        // Relationship attribute: the condition applies to the related records, unless the operator targets the base query.
         const relationship = parsed.operator.onBaseQuery ? null : constraint.getRelationshipName();
         const modify = constraint.getModifyRelationshipQueryUsing();
         nodes.push(relationship === null ? resolved.condition : { relationship, nodes: [resolved.condition], ...(modify ? { modify } : {}) });
@@ -566,9 +560,9 @@ export function compileRules(constraints: Constraint[], rules: Rules, iteration 
     return { nodes, summaries };
 }
 
-/** Famille de SQL de la connexion knex de la requête. */
+/** SQL dialect of the query's knex connection. */
 export type SqlDialect = 'sqlite' | 'mysql' | 'pg' | 'mssql';
-/** Dialecte lu dans le client knex (`query.client.config.client`, ou celui de la connexion du modèle Objection) ; SQLite par défaut. */
+/** Dialect read from the knex client (`query.client.config.client`, or the Objection model's connection); SQLite by default. */
 export function sqlDialectOf(query: any): SqlDialect {
     const client = query?.client ?? query?.knex?.()?.client ?? query?.modelClass?.()?.knex?.()?.client;
     const configured = client?.config?.client;
@@ -578,29 +572,29 @@ export function sqlDialectOf(query: any): SqlDialect {
     if (/mssql|sqlserver/.test(name)) return 'mssql';
     return 'sqlite';
 }
-/** Fragments SQL qui diffèrent d'une base à l'autre. `??` est la colonne (identifiant lié), jamais une valeur du navigateur. */
+/** Dialect-specific SQL fragments. `??` is the column (bound identifier), never a browser value. */
 const SQL: Record<SqlDialect, { date: string; month: string; year: string; text: string; like: string }> = {
     sqlite: { date: 'date(??)', month: "cast(strftime('%m', ??) as integer)", year: "cast(strftime('%Y', ??) as integer)", text: '??', like: "?? like ? escape '\\'" },
-    // MySQL : la barre oblique inverse est déjà le caractère d'échappement de LIKE (et doit être doublée dans un littéral).
+    // MySQL: backslash is already LIKE's escape character (and would need doubling inside a literal).
     mysql: { date: 'date(??)', month: 'month(??)', year: 'year(??)', text: '??', like: '?? like ?' },
-    // PostgreSQL : LIKE sensible à la casse, d'où la comparaison en minuscules (comme Filament) ; `cast` pour les colonnes non textuelles.
+    // PostgreSQL: LIKE is case-sensitive, hence the lowercase comparison; `cast` handles non-text columns.
     pg: { date: 'cast(?? as date)', month: 'extract(month from ??)', year: 'extract(year from ??)', text: 'cast(?? as text)', like: "lower(cast(?? as text)) like ? escape '\\'" },
     mssql: { date: 'cast(?? as date)', month: 'month(??)', year: 'year(??)', text: '??', like: "?? like ? escape '\\'" },
 };
 
-/** Requête des enregistrements liés à ceux de la requête (sous-requête corrélée d'Objection, `relatedQuery`). */
+/** Correlated subquery of the records related to the query's records (Objection `relatedQuery`). */
 function relatedQuery(query: any, relationship: string, modify: RelationshipQueryModifier | undefined): any {
     const model = query?.modelClass?.();
-    if (typeof model?.relatedQuery !== 'function') throw new Error(`Constructeur de requêtes : la relation ${relationship} demande une requête Objection (modèle avec relationMappings).`);
-    // Alias fixé ici (sinon Objection en pose un seulement pour certaines relations) : les colonnes liées sont qualifiées par lui.
+    if (typeof model?.relatedQuery !== 'function') throw new Error(`Query builder: relationship ${relationship} requires an Objection query (model with relationMappings).`);
+    // Fixed alias (Objection only sets one for some relationships): related columns are qualified with it.
     const sub = model.relatedQuery(relationship).alias(`${relationship}_related`);
     modify?.(sub);
     return sub;
 }
 
 /**
- * Applique des conditions à une requête knex / objection. Colonnes passées en identifiants, valeurs en paramètres liés ; les opérateurs
- * de comparaison viennent d'une liste fermée. Le SQL de date et de recherche suit le dialecte de la connexion.
+ * Applies conditions to a knex / objection query. Columns are bound as identifiers and values as parameters; comparison operators
+ * come from a closed list. Date and search SQL follows the connection's dialect.
  */
 export function applyConditions(query: any, nodes: ConditionNode[], dialect: SqlDialect = sqlDialectOf(query)): void {
     const sql = SQL[dialect];
@@ -609,7 +603,7 @@ export function applyConditions(query: any, nodes: ConditionNode[], dialect: Sql
             query.where((builder: any) => { for (const group of node.or) builder.orWhere((inner: any) => applyConditions(inner, group, dialect)); });
         } else if ('nodes' in node) {
             const sub = relatedQuery(query, node.relationship, node.modify);
-            // Colonne qualifiée par la table liée : la sous-requête peut joindre une table pivot.
+            // Qualify columns with the related table: the subquery may join a pivot table.
             const table = sub.tableRefFor(sub.modelClass());
             sub.where((inner: any) => applyConditions(inner, node.nodes.map((child) => qualify(child, table)), dialect));
             query.whereExists(sub);
@@ -620,13 +614,13 @@ export function applyConditions(query: any, nodes: ConditionNode[], dialect: Sql
         else if (node.kind === 'month') query.whereRaw(`${sql.month} ${node.operator} ?`, [node.column, node.value]);
         else if (node.kind === 'year') query.whereRaw(`${sql.year} ${node.operator} ?`, [node.column, node.value]);
         else if (node.kind === 'filled') {
-            // Port de IsFilledOperator : ni NULL ni chaîne vide (la colonne est lue en texte sous PostgreSQL).
+            // Neither NULL nor an empty string (the column is cast to text on PostgreSQL).
             const column = node.column;
             query.where((inner: any) => (node.negate ? inner.whereNull(column).orWhereRaw(`${sql.text} = ?`, [column, '']) : inner.whereNotNull(column).whereRaw(`not (${sql.text} = ?)`, [column, ''])));
         } else if (node.kind === 'in') {
             if (node.negate) query.whereNotIn(node.column, node.values); else query.whereIn(node.column, node.values);
         } else if (node.kind === 'relationCount') {
-            // Sous-requête de comptage en paramètre lié (Objection ne l'accepte pas comme colonne de `where`).
+            // Count subquery passed as a bound parameter (Objection does not accept it as a `where` column).
             query.whereRaw(`(?) ${node.operator} ?`, [relatedQuery(query, node.relationship, node.modify).count(), node.value]);
         } else if (node.kind === 'related') {
             const sub = relatedQuery(query, node.relationship, node.modify);
@@ -635,19 +629,19 @@ export function applyConditions(query: any, nodes: ConditionNode[], dialect: Sql
         }
     }
 }
-/** Colonne d'une condition qualifiée par la table des enregistrements liés (sauf si elle l'est déjà). */
+/** Qualifies a condition's column with the related table (unless already qualified). */
 function qualify(node: ConditionNode, table: string): ConditionNode {
     if ('or' in node) return { or: node.or.map((group) => group.map((child) => qualify(child, table))) };
     if ('nodes' in node || !('column' in node) || node.column.includes('.')) return node;
     return { ...node, column: `${table}.${node.column}` };
 }
 
-// ------------------------------------------------------------------ formulaire
+// ------------------------------------------------------------------ form
 const CONTAINER_GRID = { '@md': 2, '@xl': 3, '!@sm': 2, '!@md': 3 };
 const SETTINGS_GRID = { '@xl': 2, '!@md': 2 };
 const anonymousScope = (path: string) => `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path, containerPath: path }))})"`;
 
-/** Réglages d'un opérateur : groupe à état `settings`, masqué quand l'opérateur n'a pas de formulaire. */
+/** Operator settings: a stateful `settings` group, hidden when the operator has no form. */
 class SettingsGroup extends Component {
     private fields: Component[];
     constructor(fields: Component[]) {
@@ -665,14 +659,14 @@ class SettingsGroup extends Component {
     async toHtml(): Promise<string> { return `<div id="${e(this.getKey()!)}">${await this.getChildSchemas()[0].toHtml()}</div>`; }
 }
 
-/** Boutons « dupliquer » et « supprimer » d'un élément, portés par le Builder parent. */
+/** "Clone" and "delete" buttons of an item; the actions belong to the parent Builder. */
 function itemActions(builder: Builder, itemKey: string, path: string, cloneDisabled: boolean): string {
     const label = (name: string) => t(`filament-forms::components.builder.actions.${name}.label`);
     const danger = colorsOf(builder.livewire)?.getComponentClasses('icon-button', 'danger') ?? [];
     return `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: label('clone'), icon: 'm-square-2-stack', expression: builder.actionExpression('clone', { item: itemKey }), disabled: cloneDisabled })}${iconActionButton({ label: label('delete'), icon: 'm-trash', expression: builder.actionExpression('delete', { item: itemKey }), colorClasses: danger })}</div></div></div>`;
 }
 
-/** Ligne d'une règle : sélecteur d'opérateur, réglages, actions (port du Flex de Constraint::getBuilderBlock). */
+/** Rule row: operator select, settings, actions. */
 class RuleRow extends Component {
     private builder: RuleBuilder;
     private itemKey: string;
@@ -684,7 +678,7 @@ class RuleRow extends Component {
         const constraint = this.constraint;
         const parsed = constraint.parseOperator(this.data.operator);
         const operator = Select.make('operator').label(constraint.getLabel()).placeholder(t('filament-forms::components.select.placeholder')).options(constraint.getOperatorOptions()).live()
-            // Changement d'opérateur : ses réglages par défaut complètent les réglages existants (comme `fill()` dans Filament).
+            // On operator change, its default settings fill in the gaps without overwriting existing settings.
             .afterStateUpdated(({ state, get, set }) => {
                 const next = constraint.parseOperator(state)?.operator.defaults() ?? null;
                 const current = get('settings');
@@ -693,7 +687,7 @@ class RuleRow extends Component {
         return [new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).columns(CONTAINER_GRID).dense()
             .components([operator, new SettingsGroup(parsed ? parsed.operator.fields() : [])])];
     }
-    /** Le conteneur de la ligne est un conteneur de requêtes CSS (`gridContainer()`), dont dépendent les colonnes `@md` / `@xl`. */
+    /** The row is a CSS container (`fi-grid-ctn`), which the `@md` / `@xl` columns depend on. */
     async toSchemaHtml(isVisible: boolean): Promise<string> { return (await super.toSchemaHtml(isVisible)).replace('class="fi-sc-component"', 'class="fi-sc-component fi-grid-ctn"'); }
     async toHtml(): Promise<string> {
         const path = this.container.getStatePath();
@@ -701,7 +695,7 @@ class RuleRow extends Component {
     }
 }
 
-/** Groupes d'un bloc « OR » : chaque groupe contient son propre constructeur de règles (port du Repeater `groups`). */
+/** Groups of an "OR" block: each group holds its own rule builder (rendered as a repeater). */
 class OrGroups extends Field {
     private builder: RuleBuilder;
     private itemKey: string;
@@ -757,7 +751,7 @@ class OrGroups extends Field {
     }
 }
 
-/** Constructeur de règles (port de RuleBuilder) : un Builder dont les blocs sont les contraintes du filtre, plus le bloc « OR ». */
+/** Rule builder: a Builder whose blocks are the filter's constraints, plus the "OR" block. */
 export class RuleBuilder extends Builder {
     readonly filter: QueryBuilder;
     readonly depth: number;
@@ -780,21 +774,21 @@ export class RuleBuilder extends Builder {
             .blockPickerColumns(columns).blockPickerWidth(columns === 2 ? 'md' : columns === 3 ? '2xl' : null)
             .extraClass('fi-fo-builder-not-contained').maxItems(MAX_RULES);
     }
-    /** Le bloc « OR » n'est plus proposé (ni accepté) quand il dépasserait la profondeur autorisée ; rien ne l'est une fois le plafond de règles atteint. */
+    /** The "OR" block is neither offered nor accepted beyond the maximum depth; nothing is offered once the rule limit is reached. */
     getBlockPickerBlocks(): Block[] {
         if (this.isAtRuleLimit()) return [];
         return this.getBlocks().filter((block) => block.name !== OR || this.depth < MAX_NESTING_DEPTH);
     }
     getBlock(name: unknown): Block | undefined { return name === OR && this.depth >= MAX_NESTING_DEPTH ? undefined : super.getBlock(name); }
     protected canAdd(): boolean { return !this.isAtRuleLimit(); }
-    /** Nombre de règles de l'arbre entier (les blocs « OR » ne comptent pas), lu dans l'état différé de l'hôte. */
+    /** Counts rules across the whole tree ("OR" blocks excluded), read from the host's deferred filter state. */
     isAtRuleLimit(): boolean { return this.filter.countRules((this.livewire as any).tableDeferredFilters?.[this.filter.name]) >= MAX_RULES; }
-    /** Action de composant sans modale (utilisée aussi par les groupes « OR »). */
+    /** Component action without modal (also used by "OR" groups). */
     makeAction(name: string, handler: (args: Record<string, unknown>) => void): any { return this.getActions()[0].constructor.make(name).action(({ arguments: args }: { arguments: Record<string, unknown> }) => handler(args)); }
 }
 
-// ------------------------------------------------------------------ filtre
-/** Filtre « constructeur de requêtes » d'une table. */
+// ------------------------------------------------------------------ filter
+/** Query builder table filter. */
 export class QueryBuilder implements TableFilter {
     readonly name = 'queryBuilder';
     private _constraints: Constraint[] = [];
@@ -802,18 +796,18 @@ export class QueryBuilder implements TableFilter {
     private _model: any = null;
     static make(): QueryBuilder { return configured(new QueryBuilder()); }
     constraints(constraints: Constraint[]): this {
-        if (new Set(constraints.map((c) => c.name)).size !== constraints.length) throw new Error('QueryBuilder : deux contraintes portent le même nom.');
+        if (new Set(constraints.map((c) => c.name)).size !== constraints.length) throw new Error('QueryBuilder: two constraints have the same name.');
         this._constraints = constraints;
         if (this._model) for (const constraint of constraints) if (!constraint.getModel()) constraint.model(this._model);
         return this;
     }
-    /** Modèle Objection de la table, transmis aux contraintes de relation (listes d'enregistrements liés). */
+    /** Objection model of the table, passed to relationship constraints (related record lists). */
     model(model: any): this {
         this._model = model;
         for (const constraint of this._constraints) if (!constraint.getModel()) constraint.model(model);
         return this;
     }
-    /** Avant les indicateurs : charge les libellés des enregistrements liés que citent les règles (`RelationshipConstraint.selectable`). */
+    /** Before indicators: loads labels of the related records cited by rules (`RelationshipConstraint.selectable`). */
     async loadIndicatorData(state: FilterState, host: TableHost): Promise<void> {
         const keys = new Map<RelationshipConstraint, Key[]>();
         const walk = (rules: Rules) => {
@@ -835,7 +829,7 @@ export class QueryBuilder implements TableFilter {
     getLabel(): string { return tr('label'); }
     getDefaultState(): FilterState { return { rules: {} }; }
     getFormDefinition() { return { placeholder: '', options: [] as [string, string][] }; }
-    /** Le filtre occupe toute la largeur du formulaire des filtres. */
+    /** The filter spans the full width of the filters form. */
     getColumnSpan(): Record<string, number | string> { return { default: 'full' }; }
     getFormComponents(): Component[] { return [new RuleBuilder('rules', this).label(this.getLabel()).hiddenLabel()]; }
     sanitizeState(state: unknown): FilterState { return { rules: sanitizeRules(this._constraints, isObject(state) ? state.rules : null) }; }
@@ -846,7 +840,7 @@ export class QueryBuilder implements TableFilter {
     private compile(state: FilterState) { return compileRules(this._constraints, this.sanitizeState(state).rules as Rules); }
     isActive(state: FilterState): boolean { return this.compile(state).nodes.length > 0; }
     getIndicators(state: FilterState): FilterIndicator[] { return Object.entries(this.compile(state).summaries).map(([field, label]) => ({ label, field })); }
-    /** Retrait d'un indicateur : la règle de premier niveau correspondante disparaît. */
+    /** Removing an indicator removes the matching top-level rule. */
     removeIndicator(state: FilterState, field: string): FilterState {
         const rules = { ...(this.sanitizeState(state).rules as Rules) };
         if (Object.hasOwn(rules, field)) delete rules[field];

@@ -1,4 +1,4 @@
-/* Thème de la démo — équivalent de resources/css/filament/admin/theme.css de la démo Filament. */
+/* Demo theme: the panel stylesheet plus the Tailwind classes used by the demo's own code. */
 @import '@navette-js/panels/theme.css';
 
 @source '../**/*.ts';

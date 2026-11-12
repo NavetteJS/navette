@@ -1,11 +1,11 @@
 <div class="card">
-    <h2>Compteur</h2>
-    <p>Valeur : <strong data-test="count"><%= count %></strong></p>
+    <h2>Counter</h2>
+    <p>Value: <strong data-test="count"><%= count %></strong></p>
     <button type="button" wire:click="decrement" data-test="dec">−</button>
     <button type="button" wire:click="increment" data-test="inc">+</button>
-    <button type="button" wire:click="reset" data-test="reset">Remettre à zéro</button>
+    <button type="button" wire:click="reset" data-test="reset">Reset</button>
     <span wire:loading>…</span>
-    <p x-data="{ last: 'aucune' }" x-on:counter-reset.window="last = new Date().toLocaleTimeString()">
-        Dernière remise à zéro (événement serveur → Alpine) : <span data-test="last-reset" x-text="last"></span>
+    <p x-data="{ last: 'never' }" x-on:counter-reset.window="last = new Date().toLocaleTimeString()">
+        Last reset (server event → Alpine): <span data-test="last-reset" x-text="last"></span>
     </p>
 </div>

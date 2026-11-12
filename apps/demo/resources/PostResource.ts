@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\Blog\Posts (resource, formulaire, infolist, table, pages List / Create / Edit / View) de la démo Filament.
+// Blog posts: form, infolist, table, comments, and List / Create / Edit / View pages.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { DatePicker, FileUpload, RichEditor, Select, TagsInput, TextInput, Toggle, type FileUploadEntry } from '@navette-js/forms';
@@ -29,19 +29,19 @@ export class Post extends Model {
     published_at!: string | null;
     created_at!: string;
     updated_at!: string;
-    // Colonnes calculées par la requête de liste.
+    // Computed by the list query.
     author_name?: string | null;
     category_name?: string | null;
     image_id?: number | null;
     image_name?: string | null;
     image_file?: string | null;
-    // Relations chargées par find().
+    // Relations loaded by find().
     tags?: string[];
     image?: string[];
     $beforeInsert(): void { this.created_at = this.updated_at = now(); }
     $beforeUpdate(): void { this.updated_at = now(); }
 }
-/** Équivalent de `$record->published_at?->isPast()`. */
+/** Whether `published_at` is set and in the past. */
 export const isPublished = (post: Pick<Post, 'published_at'>) => Boolean(post.published_at) && new Date(`${String(post.published_at).replace(' ', 'T').slice(0, 19)}Z`).getTime() <= Date.now();
 
 const knex = () => Post.knex();
@@ -54,7 +54,7 @@ const options = (model: typeof Author | typeof PostCategory) => ({
     label: async (value: string): Promise<string | null> => (/^\d+$/.test(value) ? ((await knex()(model.tableName).where({ id: Number(value) }).first('name')) as any)?.name ?? null : null),
 });
 
-/** Articles : étiquettes (spatie/laravel-tags) et image (bibliothèque de médias de Spatie) lues et enregistrées avec l'article. */
+/** Posts: tags and image are read and saved with the post. */
 class Posts extends ObjectionAdapter<Post> {
     constructor() {
         super(Post, {
@@ -77,7 +77,7 @@ class Posts extends ObjectionAdapter<Post> {
             .map((row: any) => { try { return String(JSON.parse(row.name).en ?? ''); } catch { return ''; } }).filter(Boolean);
         return post;
     }
-    /** Remplace les étiquettes de l'article ; une étiquette inconnue est créée (comme `syncTags()`). */
+    /** Replaces the post's tags; unknown tags are created. */
     private async syncTags(key: string | number, tags: unknown): Promise<void> {
         if (!Array.isArray(tags)) return;
         const names = [...new Set(tags.filter((tag): tag is string => typeof tag === 'string').map((tag) => tag.trim().slice(0, 100)).filter(Boolean))].slice(0, 50);
@@ -93,7 +93,7 @@ class Posts extends ObjectionAdapter<Post> {
         await PostResource.loadTagNames();
         if (ids.length) await knex()('taggables').insert(ids.map((id) => ({ tag_id: id, taggable_type: POST_TYPE, taggable_id: key })));
     }
-    /** Image de l'article : un seul média. Écart : la miniature est une copie de l'image, sans redimensionnement. */
+    /** Post image: a single media item. Limitation: the thumbnail is a copy of the image, not resized. */
     private async syncImage(key: string | number, entries: unknown): Promise<void> {
         if (!Array.isArray(entries)) return;
         const existing: any[] = await this.mediaOf(key);
@@ -102,7 +102,7 @@ class Posts extends ObjectionAdapter<Post> {
         for (const media of existing) {
             if (media.uuid === keep) continue;
             await knex()('media').where({ id: media.id }).delete();
-            // Seuls les fichiers du dossier de l'application sont effacés ; ceux fournis avec la base de démonstration restent en place.
+            // Only files in the app's upload folder are deleted; those shipped with the demo database stay.
             if (PostResource.mediaRoot) rmSync(path.join(PostResource.mediaRoot, String(Number(media.id))), { recursive: true, force: true });
         }
         const root = PostResource.mediaRoot;
@@ -153,7 +153,7 @@ class ViewPost extends ViewRecord {
     }
 }
 
-// ------------------------------------------------------------------ commentaires d'un article
+// ------------------------------------------------------------------ post comments
 export class Comment extends Model {
     static tableName = 'comments';
     id!: number;
@@ -175,7 +175,7 @@ export class Comment extends Model {
         return out;
     }
 }
-/** Commentaires d'un article : lecture limitée à l'article, et tout commentaire créé ici lui est rattaché, quelles que soient les données reçues. */
+/** Comments of a post: reads are limited to the post, and any comment created here is attached to it, whatever data is received. */
 class PostComments extends ObjectionAdapter<Comment> {
     private post: number;
     constructor(post: string) {
@@ -195,7 +195,6 @@ const customers = {
     label: async (value: string): Promise<string | null> => (/^\d+$/.test(value) ? ((await knex()('customers').where({ id: Number(value) }).first('name')) as any)?.name ?? null : null),
 };
 
-/** Équivalent de Pages\ManagePostComments. */
 export class ManagePostComments extends ManageRelatedRecords {
     static relationship = 'comments';
     static modelLabel = 'comment';
@@ -247,13 +246,12 @@ export class PostResource extends Resource {
     static pages = { edit: EditPost, view: ViewPost };
     static relatedPages = { comments: ManagePostComments };
     static recordSubNavigation = ['view', 'edit', 'comments'];
-    // Comme la démo Filament : onglets au-dessus du contenu.
     static subNavigationPosition = 'top' as const;
     static adapter = new Posts();
-    /** Dossier public des médias (servi sous /storage), fixé par le serveur. */
+    /** Public media folder (served under /storage), set by the server. */
     static mediaRoot: string | null = null;
 
-    /** Étiquettes existantes, proposées à la saisie (rafraîchies par le serveur au démarrage et après chaque enregistrement). */
+    /** Existing tags offered as suggestions (refreshed by the server at startup and after each save). */
     static async loadTagNames(): Promise<void> {
         tagNames.splice(0, tagNames.length, ...(await knex()('tags').whereNull('type').orderBy('order_column').select('name')).map((row: any) => { try { return String(JSON.parse(row.name).en ?? ''); } catch { return ''; } }).filter(Boolean));
     }

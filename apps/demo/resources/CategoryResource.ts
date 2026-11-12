@@ -1,5 +1,4 @@
-// Équivalent de App\Filament\Resources\Shop\Categories\CategoryResource + Tables\CategoriesTable + Schemas\CategoryForm de la démo Filament.
-// Écart : l'action d'en-tête « Import » (imports en file d'attente) n'est pas portée.
+// Shop categories: list, form, and the products of each category.
 import { Action } from '@navette-js/actions';
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { RichEditor, Select, TextInput, Toggle } from '@navette-js/forms';
@@ -34,10 +33,10 @@ export class ProductCategory extends Model {
 const slugify = (text: string) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const cheeky = () => { Notification.make().warning().title("Now, now, don't be cheeky, leave some records for others to play with!").send(); };
 const like = (search: string) => `%${search.toLowerCase().replace(/[%_]/g, '')}%`;
-/** Catégories de premier niveau : `relationship('parent', 'name', fn ($query) => $query->where('parent_id', null))`. */
+/** Top-level categories only (no parent). */
 const parents = () => ProductCategory.knex()('product_categories').whereNull('parent_id');
 
-/** Le nom de la catégorie parente (`parent.name`) est lu par une sous-requête, pour être triable et cherchable. */
+/** The parent name (`parent.name`) comes from a subquery so it is sortable and searchable. */
 class Categories extends ObjectionAdapter<ProductCategory> {
     constructor() {
         super(ProductCategory, {
@@ -48,7 +47,7 @@ class Categories extends ObjectionAdapter<ProductCategory> {
     }
 }
 
-/** Équivalent de RelationManagers\ProductsRelationManager : la table et le formulaire des produits, restreints à la catégorie. */
+/** The product table and form, scoped to the category. */
 export class CategoryProductsRelationManager extends RelationManager {
     static relationship = 'products';
     static modelLabel = 'product';

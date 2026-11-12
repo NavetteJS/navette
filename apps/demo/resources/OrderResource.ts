@@ -1,6 +1,4 @@
-// Équivalent de App\Filament\Resources\Shop\Orders\OrderResource + Tables\OrdersTable + Pages\ListOrders de la démo Filament.
-// Porté : la liste (colonnes, totaux, onglets, actions de ligne). À porter : widget de statistiques, regroupement, filtre par date,
-// panneau latéral de l'action « Ship », formulaire réel (assistant, lignes de commande).
+// Shop orders: list, stats widget, form and create wizard.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Repeater, RichEditor, Select, Step, TableColumn, Textarea, TextInput, ToggleButtons } from '@navette-js/forms';
@@ -24,15 +22,15 @@ export class Order extends Model {
     updated_at!: string;
     deleted_at!: string | null;
     customer_name?: string | null;
-    /** Adresse de la commande (table `order_addresses`), jointe par l'adaptateur. */
+    /** Order address (`order_addresses` table), loaded by the adapter. */
     address?: Record<string, string | null> | null;
-    /** Lignes de la commande (`order_items`), jointes par l'adaptateur. */
+    /** Order items (`order_items`), loaded by the adapter. */
     items?: Record<string, unknown>[];
     $beforeInsert(): void { this.created_at = this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
     $beforeUpdate(): void { this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
 }
 
-/** Enum OrderStatus de la démo : libellé, couleur et icône. */
+/** Order statuses: label, color and icon. */
 export const STATUSES: Record<string, { label: string; color: string; icon: string }> = {
     new: { label: 'New', color: 'info', icon: 'c-sparkles' },
     processing: { label: 'Processing', color: 'warning', icon: 'c-arrow-path' },
@@ -50,16 +48,16 @@ const ORDER_TYPE = 'App\\Models\\Shop\\Order';
 const ADDRESS_FIELDS = ['country', 'street', 'city', 'state', 'zip'] as const;
 const COUNTRIES: [string, string][] = [['us', 'United States'], ['gb', 'United Kingdom'], ['de', 'Germany'], ['fr', 'France'], ['ca', 'Canada'], ['au', 'Australia'], ['nl', 'Netherlands'], ['br', 'Brazil'], ['jp', 'Japan'], ['in', 'India']];
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
-/** Commandes : l'adresse (`AddressForm` de la démo) est enregistrée dans `order_addresses`. */
+/** Orders: the address is saved in `order_addresses`. */
 class Orders extends ObjectionAdapter<Order> {
     constructor() {
         super(Order, {
             softDeletes: 'deleted_at', findsTrashed: true,
-            // `customer.name` : sous-requête, utilisable pour le tri et la recherche.
+            // `customer.name`: a subquery, usable for sorting and searching.
             modify: (query) => { query.select('orders.*', Order.knex()('customers').select('customers.name').whereRaw('customers.id = orders.customer_id').as('customer_name')); },
         });
     }
-    /** Relation `morphOne` : une ligne de `order_addresses` par commande. */
+    /** Polymorphic one-to-one: one `order_addresses` row per order. */
     private addressOf(orderKey: string | number) {
         return Order.knex()('order_addresses').where({ addressable_type: ORDER_TYPE, addressable_id: orderKey }).orderBy('id').first();
     }
@@ -73,8 +71,8 @@ class Orders extends ObjectionAdapter<Order> {
         return order;
     }
     /**
-     * Lignes de commande : celles qui portent la clé `record-<id>` d'une ligne de CETTE commande sont mises à jour,
-     * les autres sont créées, et les lignes absentes du formulaire sont supprimées.
+     * Order items keyed `record-<id>` that belong to THIS order are updated,
+     * others are created, and items missing from the form are deleted.
      */
     private async saveItems(orderKey: string | number, items: unknown): Promise<void> {
         if (!items || typeof items !== 'object' || Array.isArray(items)) return;
@@ -106,7 +104,7 @@ class Orders extends ObjectionAdapter<Order> {
     }
     async update(key: string | number, data: Record<string, unknown>): Promise<Order | null> {
         const { address, items, ...attributes } = data;
-        // La commande doit appartenir à la portée de l'adaptateur avant toute écriture.
+        // The order must be within the adapter's scope before any write.
         if (!(await super.find(key))) return null;
         await super.update(key, attributes);
         await this.saveAddress(key, address);
@@ -115,13 +113,13 @@ class Orders extends ObjectionAdapter<Order> {
     }
 }
 
-/** Équivalent de Widgets\OrderStats : agrégats et tendances mensuelles (un an) sur les commandes affichées par la table. */
+/** Aggregates and monthly trends (one year) over the orders shown by the table. */
 export class OrderStats extends PageTableStatsWidget {
     static pollingInterval = null;
     static tablePage = () => OrderResource.getPages().index as any;
     async getStats(): Promise<Stat[]> {
         const end = new Date();
-        // `subYear()` de Carbon : même jour, un an plus tôt (le 29 février déborde sur le 1er mars).
+        // Same day one year earlier (February 29 overflows to March 1).
         const start = new Date(Date.UTC(end.getUTCFullYear() - 1, end.getUTCMonth(), end.getUTCDate(), end.getUTCHours(), end.getUTCMinutes(), end.getUTCSeconds()));
         const open = ['new', 'processing'];
         const [all, opened, orders, openOrders, averages] = await Promise.all([
@@ -139,9 +137,9 @@ export class OrderStats extends PageTableStatsWidget {
     }
 }
 
-/** Équivalent de PagesCreateOrder : la création se fait en deux étapes (détails, puis lignes de commande). */
+/** Created in two steps: details, then order items. */
 class CreateOrder extends CreateRecord {
-    /** Comme la démo Filament : une notification « New order » est enregistrée pour l'utilisateur qui vient de créer la commande. */
+    /** Stores a "New order" database notification for the user who created the order. */
     protected async afterCreate(record: Order): Promise<void> {
         const { panel, user } = this._ctx as any;
         if (!user) return;
@@ -168,7 +166,7 @@ export class OrderResource extends Resource {
     static navigationIcon = 'o-shopping-bag';
     static navigationGroup = 'Shop';
     static navigationSort = 1;
-    /** Commandes « New » (équivalent de getNavigationBadge()). */
+    /** "New" orders (navigation badge). */
     static async getNavigationBadge(): Promise<string> { return String(await countWhere('new')()); }
     static recordTitleAttribute = 'number';
     static globalSearchSort = 11;
@@ -177,7 +175,7 @@ export class OrderResource extends Resource {
     static adapter = new Orders();
 
     /**
-     * Équivalent de Schemas\OrderForm. Écart : le client ne peut pas être créé depuis le sélecteur.
+     * Limitation: a customer cannot be created from the select.
      */
     static form(schema: Schema): Schema {
         return schema
@@ -207,7 +205,7 @@ export class OrderResource extends Resource {
             .columns(3);
     }
 
-    /** Équivalent de OrderForm::getDetailsComponents() : repris tel quel par la première étape de l'assistant de création. */
+    /** Also used as the first step of the create wizard. */
     static detailsComponents(): Component[] {
         const statuses = Object.entries(STATUSES);
         return [
@@ -219,7 +217,7 @@ export class OrderResource extends Resource {
                 .options(statuses.map(([value, status]): [string, string] => [value, status.label]))
                 .colors(Object.fromEntries(statuses.map(([value, status]) => [value, status.color])))
                 .icons(Object.fromEntries(statuses.map(([value, status]) => [value, status.icon.replace(/^c-/, 'm-')]))),
-            // AddressForm de la démo : pays, rue, puis ville / État / code postal.
+            // Address: country, street, then city / state / zip.
             StatefulGroup.make('address', [
                 Grid.make().schema([Select.make('country').options(COUNTRIES).searchable()]),
                 TextInput.make('street').label('Street address').maxLength(255),
@@ -233,7 +231,7 @@ export class OrderResource extends Resource {
         ];
     }
 
-    /** Équivalent de OrderForm::getItemsRepeater() : produit (une seule fois par commande), quantité, prix unitaire repris du produit. */
+    /** Items repeater: product (once per order), quantity, unit price copied from the product. */
     static itemsRepeater(): Repeater {
         const productsOf = (livewire: any): string[] => Object.values((livewire.data?.items ?? {}) as Record<string, any>).map((item) => String(item?.product_id ?? '')).filter(Boolean);
         return Repeater.make('items').label('Order items').hiddenLabel().required().defaultItems(1)
@@ -242,13 +240,12 @@ export class OrderResource extends Resource {
                 Select.make('product_id').label('Product').required().live().searchable()
                     .options(async () => (await Order.knex()('products').orderBy('id').select('id', 'name')).map((p: any): [string, string] => [String(p.id), p.name]), { searchOnServer: false })
                     .afterStateUpdated(async ({ state, set }) => { set('unit_price', (state ? (await Order.knex()('products').where({ id: state }).first('price'))?.price : null) ?? 0); })
-                    // Un produit déjà choisi dans une autre ligne est grisé, et refusé à l'enregistrement.
+                    // A product already picked in another row is disabled, and rejected on save.
                     .disableOptionWhen((value, ctx) => value !== String(ctx.state ?? '') && productsOf(ctx.livewire).includes(value))
                     .rule({ name: 'distinct', passes: (value, ctx) => productsOf(ctx.livewire).filter((id) => id === String(value)).length <= 1, message: (attribute) => `The ${attribute} field has a duplicate value.` }),
                 TextInput.make('qty').label('Quantity').integer().minValue(1).maxValue(2147483647).default(1).required(),
                 TextInput.make('unit_price').disabled().dehydrated().numeric().minValue(0).maxValue(99999999.99).required(),
             ])
-            // La page des produits n'est pas encore portée : le lien reprend l'adresse de Filament.
             .extraItemLink(({ item }) => (item.product_id ? { label: 'Open product', icon: 'm-arrow-top-right-on-square', url: `/shop/products/${Number(item.product_id)}/edit` } : null));
     }
 
@@ -286,7 +283,7 @@ export class OrderResource extends Resource {
                         .visible(({ record }) => (record as Order).status === 'shipped')
                         .requiresConfirmation()
                         .action(setStatus('delivered', 'Order marked as delivered')),
-                    // La resource a une page d'édition : « Edit » est un lien, pas une modale.
+                    // The resource has an edit page, so Edit is a link, not a modal.
                     Action.make('edit').label('Edit').icon('m-pencil-square').url(({ record }) => OrderResource.getUrl('edit', (record as Order).id)),
                     Action.make('cancel').icon('m-x-circle').color('danger')
                         .visible(({ record }) => !['delivered', 'cancelled'].includes((record as Order).status))
@@ -296,7 +293,7 @@ export class OrderResource extends Resource {
                     Action.make('delete').label('Delete').icon('m-trash').color('danger').keyBindings(['mod+d'])
                         .requiresConfirmation().modalIcon('o-trash')
                         .modalHeading(({ record }) => `Delete ${record.number}`).modalSubmitActionLabel('Delete')
-                        // Comme la démo Filament : la suppression est remplacée par une notification.
+                        // Deleting only shows a notification, so the demo data stays intact.
                         .action(() => { Notification.make().warning().title("Now, now, don't be cheeky, leave some records for others to play with!").send(); }),
                 ]),
             ]);

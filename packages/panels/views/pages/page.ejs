@@ -1,11 +1,11 @@
-<%# Page d'un panel — port de filament-panels::components.page.index, components.header.index et filament::components.breadcrumbs %>
+<%# Panel page: header, breadcrumbs, sub-navigation and content %>
 <% const beforeHeaderActions = renderHook('panels::page.header.actions.before', renderHookScopes), afterHeaderActions = renderHook('panels::page.header.actions.after', renderHookScopes); %>
 <% const subNavigation = locals.subNavigation ?? []; const activeSubItem = subNavigation.find((item) => item.active) ?? subNavigation[0]; const subNavigationPosition = locals.subNavigationPosition ?? 'top'; %>
 <div class="<%- cls(['fi-page', subNavigation.length ? `fi-page-has-sub-navigation fi-page-has-sub-navigation-${subNavigationPosition}` : null, ...(locals.pageClasses ?? [])]) %>">
     <%- renderHook('panels::page.start', renderHookScopes) %>
     <div class="fi-page-header-main-ctn">
         <% if (subNavigation.length) { %>
-            <%# Sous-navigation : menu déroulant sur mobile ; sur grand écran, onglets (top) ou colonne (start, end) %>
+            <%# Sub-navigation: a dropdown on mobile; on desktop, tabs (top) or a column (start, end) %>
             <div class="fi-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.before', renderHookScopes) %></div>
             <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-page-sub-navigation-dropdown">
                 <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
@@ -54,7 +54,7 @@
                 <%- renderHook('panels::page.header.heading.after', renderHookScopes) %>
             </div>
 
-            <%# Comme Filament : le conteneur existe dès qu'il y a une action ou qu'un des deux emplacements rend quelque chose. %>
+            <%# The container exists as soon as there is an action or either render hook outputs something. %>
             <% if (headerActions.length || (beforeHeaderActions + afterHeaderActions).trim() !== '') { %>
                 <div class="fi-header-actions-ctn">
                     <%- beforeHeaderActions %>

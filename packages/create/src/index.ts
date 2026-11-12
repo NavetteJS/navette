@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// `npm create navette` : questionnaire, puis création d'un projet Navette prêt à lancer (panels, migrations, compte admin).
-// Sans terminal interactif (ou avec --yes), les réponses viennent des options et des valeurs par défaut.
+// `npm create navette`: asks a few questions, then creates a ready-to-run Navette project (panels, migrations, admin user).
+// Without an interactive terminal (or with --yes), answers come from the flags and defaults.
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -63,7 +63,7 @@ const options: ProjectOptions = {
     template, userPanel, teams, database, locale, version: flag('version') ?? `^${own.version}`, port: Number(flag('port') ?? 3000),
 };
 const files = projectFiles(options);
-// Tests : paquets pris dans des archives locales au lieu du registre npm (--packages=<dossier des .tgz>).
+// For tests: install packages from local tarballs instead of the npm registry (--packages=<folder of .tgz files>).
 const local = flag('packages');
 if (local) {
     const pkg = JSON.parse(files['package.json']);

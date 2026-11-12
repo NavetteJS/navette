@@ -1,21 +1,21 @@
-// Calendrier — composant propre à Navette (Filament n'en fournit pas) : dates, grille et rendu, sans dépendance au runtime.
-// Le widget `CalendarWidget` (index.ts) s'appuie sur ce module ; chaque morceau du rendu peut être remplacé.
+// Calendar: date helpers, grid and rendering, with no runtime dependency.
+// `CalendarWidget` (index.ts) builds on this module; every part of the rendering can be replaced.
 import { Attributes, e, icon } from '@navette-js/support';
 
-/** Un événement. `start` et `end` sont des dates `YYYY-MM-DD` ou des dates-heures ISO (`2026-11-12T09:30`) ; `end` est inclus. */
+/** A calendar event. `start` and `end` are `YYYY-MM-DD` dates or ISO date-times (`2026-11-12T09:30`); `end` is inclusive. */
 export type CalendarEvent = {
     id: string | number;
     title: string;
     start: string;
     end?: string | null;
-    /** Couleur du panel (`primary`, `success`, `warning`, `danger`, `info`, `gray`, ou une couleur déclarée). */
+    /** Panel color (`primary`, `success`, `warning`, `danger`, `info`, `gray`, or a registered color). */
     color?: string | null;
-    /** Adresse ouverte au clic. Sans adresse, le clic appelle `onEventClick()` du widget s'il est redéfini. */
+    /** URL opened on click. Without one, a click calls the widget's `onEventClick()` if it is overridden. */
     url?: string | null;
     openUrlInNewTab?: boolean;
-    /** Texte de l'infobulle ; par défaut, le titre. */
+    /** Tooltip text; defaults to the title. */
     description?: string | null;
-    /** Données libres, à disposition de `renderEvent()` et de `onEventClick()`. Elles ne sont pas envoyées au navigateur. */
+    /** Free-form data for `renderEvent()` and `onEventClick()`. It is never sent to the browser. */
     extra?: Record<string, unknown>;
 };
 export type CalendarView = 'month' | 'week' | 'list';
@@ -33,16 +33,16 @@ export function addMonths(day: string, count: number): string {
     target.setUTCDate(Math.min(date.getUTCDate(), last));
     return iso(target);
 }
-/** Premier jour de la semaine contenant `day` ; `firstDay` : 0 = dimanche, 1 = lundi… */
+/** First day of the week containing `day`; `firstDay`: 0 = Sunday, 1 = Monday… */
 export const startOfWeek = (day: string, firstDay = 1): string => addDays(day, -((toDate(day).getUTCDay() - firstDay + 7) % 7));
 export const startOfMonth = (day: string): string => `${day.slice(0, 8)}01`;
 export const endOfMonth = (day: string): string => { const date = toDate(day); return iso(new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0))); };
-/** Jour (`YYYY-MM-DD`) d'une date ou d'une date-heure d'événement ; nul si la valeur est illisible. */
+/** Day (`YYYY-MM-DD`) of an event date or date-time; `null` if the value is unreadable. */
 export const dayOf = (value: unknown): string | null => (typeof value === 'string' && isDate(value.slice(0, 10)) ? value.slice(0, 10) : null);
-/** Heure `HH:MM` d'une date-heure d'événement, nulle pour une date seule. */
+/** `HH:MM` time of an event date-time; `null` for a plain date. */
 export const timeOf = (value: unknown): string | null => (typeof value === 'string' ? (/^\d{4}-\d{2}-\d{2}[T ](\d{2}:\d{2})/.exec(value)?.[1] ?? null) : null);
 
-/** Jours affichés par une vue autour de la date d'ancrage : le mois complété en semaines entières, la semaine, ou le mois (liste). */
+/** Days shown by a view around the anchor date: the month padded to whole weeks, the week, or the month (list). */
 export function visibleRange(view: CalendarView, anchor: string, firstDay = 1): { start: string; end: string } {
     if (view === 'week') { const start = startOfWeek(anchor, firstDay); return { start, end: addDays(start, 6) }; }
     if (view === 'list') return { start: startOfMonth(anchor), end: endOfMonth(anchor) };
@@ -55,7 +55,7 @@ export function daysBetween(start: string, end: string): string[] {
     for (let day = start; day <= end && days.length < 400; day = addDays(day, 1)) days.push(day);
     return days;
 }
-/** Événements d'un jour, ceux qui ont commencé plus tôt d'abord, puis par heure et par titre. */
+/** Events on a day: those that started earlier first, then by time and title. */
 export function eventsOn(day: string, events: CalendarEvent[]): CalendarEvent[] {
     return events
         .filter((event) => { const start = dayOf(event.start); const end = dayOf(event.end ?? event.start) ?? start; return start !== null && start <= day && day <= (end! < start ? start : end!); })
@@ -69,32 +69,32 @@ export type CalendarModel = {
     heading: string | null;
     view: CalendarView;
     views: CalendarView[];
-    /** Date d'ancrage et date du jour, `YYYY-MM-DD`. */
+    /** Anchor date and today's date, `YYYY-MM-DD`. */
     anchor: string;
     today: string;
     firstDay: number;
     locale: string;
     events: CalendarEvent[];
     maxEventsPerDay: number;
-    /** Les numéros de jour sont des boutons (`selectDate`). */
+    /** Day numbers are buttons (`selectDate`). */
     datesClickable: boolean;
-    /** Les événements sans adresse sont des boutons (`selectEvent`). */
+    /** Events without a URL are buttons (`selectEvent`). */
     eventsClickable: boolean;
     labels: CalendarLabels;
-    /** Remplace le rendu d'un événement : rendre du HTML déjà échappé, ou `null` pour garder le rendu par défaut. */
+    /** Overrides an event's rendering: return already-escaped HTML, or `null` to keep the default. */
     renderEvent?: (event: CalendarEvent, context: { day: string; view: CalendarView }) => string | null;
-    /** HTML ajouté au bas de la case d'un jour (total, pastille…), déjà échappé. */
+    /** Already-escaped HTML appended to the bottom of a day cell (total, badge…). */
     renderDayFooter?: (day: string, events: CalendarEvent[]) => string;
-    /** HTML placé à droite de la barre d'outils (boutons d'action…), déjà échappé. */
+    /** Already-escaped HTML placed at the end of the toolbar (action buttons…). */
     toolbarEnd?: string;
 };
 
 const COLOR = /^[a-z][a-z0-9-]*$/;
-/** Seules une adresse du site (`/…`) ou une adresse http(s) deviennent un lien. */
+/** Only a same-site path (`/…`) or an http(s) URL becomes a link (no `javascript:` or protocol-relative URLs). */
 const safeUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
 const call = (method: string, argument: string | number) => `${method}(${JSON.stringify(String(argument)).replace(/"/g, "'")})`;
 
-/** Rendu par défaut d'un événement : un lien, un bouton ou un simple bloc, selon ce qu'un clic peut faire. */
+/** Default event rendering: a link, a button or a plain block, depending on what a click can do. */
 export function renderCalendarEvent(event: CalendarEvent, context: { day: string; view: CalendarView; clickable: boolean }): string {
     const start = dayOf(event.start)!;
     const end = dayOf(event.end ?? event.start) ?? start;
@@ -109,7 +109,7 @@ export function renderCalendarEvent(event: CalendarEvent, context: { day: string
     return `<${tag} ${attributes.toHtml()}>${time ? `<time class="nv-cal-event-time">${e(time)}</time>` : ''}<span class="nv-cal-event-title">${e(event.title)}</span></${tag}>`;
 }
 
-/** Rend le calendrier complet : barre d'outils, puis la vue demandée. */
+/** Renders the whole calendar: toolbar, then the requested view. */
 export function renderCalendar(model: CalendarModel): string {
     const { view, anchor, today, firstDay, locale, labels } = model;
     const range = visibleRange(view, anchor, firstDay);

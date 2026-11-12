@@ -1,2 +1,2 @@
-<%# Enveloppe de colonne d'un composant de schéma — port de Filament\Schemas\Components\Component::toSchemaHtml() %>
+<%# Grid column wrapper of a schema component. %>
 <div<% if (key !== null) { %> wire:partial="schema-component::<%- key %>"<% } %><% if (isVisible) { %> x-data="<%- alpine %>"<% } %> <%- attributes %>><% if (isVisible) { %><div class="fi-sc-component"><%- html %></div><% } %></div>

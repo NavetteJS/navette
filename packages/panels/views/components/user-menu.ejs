@@ -1,4 +1,4 @@
-<%# Menu utilisateur (sidebar ou barre du haut) — port de filament-panels::components.user-menu, theme-switcher et dropdown %>
+<%# User menu (sidebar or topbar), with the theme switcher %>
 <% const topbar = locals.position === 'topbar'; const collapsible = locals.isSidebarCollapsibleOnDesktop === true; const before = locals.itemsBefore ?? []; const after = locals.itemsAfter ?? []; %>
 <%- renderHook('panels::user-menu.before') %>
 <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-user-menu">
@@ -51,7 +51,7 @@
         </div>
 
         <% if (locals.themes && themes.length > 1) { %>
-            <%# Écart assumé avec Filament : choix d'un thème prédéfini du panel (Panel.themes()). %>
+            <%# Choice of one of the panel's predefined themes (Panel.themes()). %>
             <div role="group" aria-label="Theme" class="fi-dropdown-list nv-theme-list">
                 <% for (const theme of themes) { %>
                     <button role="menuitemradio" aria-checked="<%= theme.id === activeTheme ? 'true' : 'false' %>" tabindex="-1" type="button" wire:click="setTheme(<%= js(theme.id) %>)" data-theme="<%= theme.id %>" class="<%- cls(['fi-dropdown-list-item', theme.id === activeTheme && 'fi-active']) %>">

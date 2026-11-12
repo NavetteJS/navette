@@ -1,4 +1,4 @@
-<%# Menu du locataire — port de filament-panels::components.tenant-menu (sans recherche au-delà de dix locataires : voir README) %>
+<%# Tenant menu (no search, even beyond ten tenants) %>
 <%- renderHook('panels::tenant-menu.before') %>
 <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-tenant-menu" ><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger" ><button<% if (isSidebarCollapsibleOnDesktop) { %> x-data="{ tooltip: false }" x-effect="
                     tooltip = $store.sidebar.isOpen

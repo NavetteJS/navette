@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\HR\Departments\DepartmentResource de la démo Filament (resource « simple » : ManageDepartments).
+// HR departments: a simple resource, managed from one page with modals.
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Action, ActionGroup } from '@navette-js/actions';
 import { ColorPicker, Select, Textarea, TextInput, Toggle } from '@navette-js/forms';
@@ -21,12 +21,12 @@ export class Department extends Model {
     is_active!: number | boolean;
     created_at!: string;
     updated_at!: string;
-    // Colonnes calculées par la requête de liste.
+    // Computed by the list query.
     parent_name?: string | null;
     employees_count?: number;
     $beforeInsert(): void { this.created_at = this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
     $beforeUpdate(): void { this.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); }
-    /** Équivalent du cast `boolean` d'Eloquent : SQLite stocke 0 ou 1. */
+    /** SQLite stores booleans as 0 or 1. */
     $formatDatabaseJson(json: Record<string, any>): Record<string, any> {
         const out = super.$formatDatabaseJson(json);
         if (typeof out.is_active === 'boolean') out.is_active = out.is_active ? 1 : 0;
@@ -45,7 +45,7 @@ export class DepartmentResource extends Resource {
     static recordTitleAttribute = 'name';
     static globalSearchSort = 4;
     static isSimple = true;
-    // `parent.name` et `employees_count` (équivalent de `->counts('employees')`) : sous-requêtes, sans jointure.
+    // `parent.name` and `employees_count` come from subqueries, without joins.
     static adapter = new ObjectionAdapter(Department, {
         modify: (query) => {
             const knex = Department.knex();
@@ -57,17 +57,16 @@ export class DepartmentResource extends Resource {
         },
     });
 
-    /** Équivalent de Schemas\DepartmentForm. */
     static form(schema: Schema): Schema {
         return schema
             .columns(2)
             .components([
                 TextInput.make('name').required().maxLength(255).live({ onBlur: true })
-                    // À la création seulement : le slug suit le nom.
+                    // On create only: the slug follows the name.
                     .afterStateUpdated(({ operation, state, set }) => { if (operation === 'create') set('slug', slugify(String(state ?? ''))); }),
                 TextInput.make('slug').disabled().dehydrated().required().maxLength(255).unique({ ignoreRecord: true }),
                 Select.make('parent_id').label('Parent department')
-                    // `relationship('parent', 'name', …whereNull('parent_id'))` : seuls les services de premier niveau.
+                    // Top-level departments only.
                     .options(async () => (await Department.query().whereNull('parent_id').orderBy('name')).map((d): [string, string] => [String(d.id), d.name]))
                     .searchable().preload().columnSpanFull(),
                 Textarea.make('description').rows(3).maxLength(65535).columnSpanFull(),
@@ -107,7 +106,7 @@ export class DepartmentResource extends Resource {
                         .modalHeading(({ record }) => t('filament-actions::replicate.single.modal.heading', { label: record.name }))
                         .modalSubmitActionLabel(t('filament-actions::replicate.single.modal.actions.replicate.label'))
                         .action(async ({ record }) => {
-                            // Comme la démo : copie sans `id` ni compteur, avec un slug rendu unique.
+                            // Copy without `id` or counters, with a unique slug.
                             const { id, employees_count, parent_name, created_at, updated_at, ...copy } = record as Department;
                             await DepartmentResource.adapter.create({ ...copy, slug: `${slugify(record.name)}-${randomBytes(4).toString('hex').slice(0, 5)}` });
                             Notification.make().success().title(t('filament-actions::replicate.single.notifications.replicated.title')).send();
@@ -116,7 +115,7 @@ export class DepartmentResource extends Resource {
                         .requiresConfirmation().modalIcon('o-trash')
                         .modalHeading(({ record }) => t('filament-actions::delete.single.modal.heading', { label: record.name }))
                         .modalSubmitActionLabel(t('filament-actions::delete.single.modal.actions.delete.label'))
-                        // Comme la démo Filament : la suppression est remplacée par une notification.
+                        // Deleting only shows a notification, so the demo data stays intact.
                         .action(() => { Notification.make().warning().title("Now, now, don't be cheeky, leave some records for others to play with!").send(); }),
                 ]),
             ])

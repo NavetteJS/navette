@@ -1,6 +1,5 @@
-// Téléversements temporaires (équivalent de WithFileUploads / TemporaryUploadedFile de Livewire).
-// Le navigateur demande une adresse signée (`_startUpload`), y envoie les fichiers, puis annonce leurs noms temporaires (`_finishUpload`) :
-// la propriété visée reçoit alors `livewire-file:<identifiant>`. Le fichier ne quitte le dossier temporaire que si l'application l'enregistre.
+// Temporary uploads. The browser asks for a signed URL (`_startUpload`), posts the files to it, then reports their temporary ids
+// (`_finishUpload`): the target property then holds `livewire-file:<id>`. A file only leaves the temporary directory if the app stores it.
 import busboy from 'busboy';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -13,7 +12,7 @@ export type UploadOptions = { maxFileSize?: number; maxFiles?: number; ttl?: num
 
 const PREFIX = 'livewire-file:';
 const ID = /^[a-f0-9]{32}$/;
-/** Types reconnus à leur signature binaire : le type annoncé par le navigateur n'est jamais cru. */
+/** Types detected from their magic bytes: the type announced by the browser is never trusted. */
 const SIGNATURES: { type: string; extension: string; test: (b: Buffer) => boolean }[] = [
     { type: 'image/jpeg', extension: 'jpg', test: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
     { type: 'image/png', extension: 'png', test: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
@@ -22,7 +21,7 @@ const SIGNATURES: { type: string; extension: string; test: (b: Buffer) => boolea
     { type: 'application/pdf', extension: 'pdf', test: (b) => b.subarray(0, 5).toString('latin1') === '%PDF-' },
     { type: 'application/zip', extension: 'zip', test: (b) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04 },
 ];
-/** Texte brut : uniquement pour ces extensions, et seulement si le début du fichier ne contient pas d'octet nul. */
+/** Plain text: only for these extensions, and only if the start of the file contains no null byte. */
 const TEXT: Record<string, string> = { txt: 'text/plain', csv: 'text/csv', json: 'application/json', md: 'text/markdown' };
 
 export class UploadStore {
@@ -35,7 +34,7 @@ export class UploadStore {
     constructor(dir: string, key: string, options: UploadOptions = {}) {
         this.dir = dir;
         this.key = key;
-        this.maxFileSize = options.maxFileSize ?? 12 * 1024 * 1024; // 12 Mo, comme la règle par défaut de Livewire
+        this.maxFileSize = options.maxFileSize ?? 12 * 1024 * 1024; // 12 MB
         this.maxFiles = options.maxFiles ?? 20;
         this.ttl = options.ttl ?? 24 * 60 * 60 * 1000;
         this.urlTtl = options.urlTtl ?? 5 * 60 * 1000;
@@ -43,7 +42,7 @@ export class UploadStore {
     }
 
     private sign(expires: number): string { return createHmac('sha256', this.key).update(`upload:${expires}`).digest('hex'); }
-    /** Adresse d'envoi signée, valable quelques minutes. */
+    /** Signed upload URL, valid for a few minutes (`urlTtl`). */
     signedUrl(prefix = '/livewire'): string {
         const expires = Date.now() + this.urlTtl;
         return `${prefix}/upload-file?expires=${expires}&signature=${this.sign(expires)}`;
@@ -55,7 +54,7 @@ export class UploadStore {
         return expected.length === given.length && timingSafeEqual(expected, given);
     }
 
-    /** Reçoit un envoi `multipart/form-data` (champ `files[]`) et rend les identifiants temporaires, dans l'ordre. */
+    /** Receives a `multipart/form-data` upload (`files[]` field) and returns the temporary ids, in order. */
     receive(req: IncomingMessage): Promise<string[]> {
         this.sweep();
         return new Promise((resolve, reject) => {
@@ -64,32 +63,32 @@ export class UploadStore {
             let failure: Error | null = null;
             const fail = (message: string) => { failure ??= Object.assign(new Error(message), { status: 422 }); };
             let parser: busboy.Busboy;
-            try { parser = busboy({ headers: req.headers, limits: { fileSize: this.maxFileSize, files: this.maxFiles, fields: 5 } }); } catch { reject(Object.assign(new Error('Envoi invalide.'), { status: 422 })); return; }
+            try { parser = busboy({ headers: req.headers, limits: { fileSize: this.maxFileSize, files: this.maxFiles, fields: 5 } }); } catch { reject(Object.assign(new Error('Invalid upload.'), { status: 422 })); return; }
             parser.on('file', (_field, stream, info) => {
                 const id = randomBytes(16).toString('hex');
                 const target = path.join(this.dir, id);
                 ids.push(id);
                 const out = createWriteStream(target, { flags: 'wx' });
-                stream.on('limit', () => fail('Fichier trop volumineux.'));
-                pending.push(new Promise<void>((done) => { out.on('close', done); out.on('error', () => { fail('Écriture impossible.'); done(); }); }).then(async () => {
+                stream.on('limit', () => fail('File too large.'));
+                pending.push(new Promise<void>((done) => { out.on('close', done); out.on('error', () => { fail('Could not write the file.'); done(); }); }).then(async () => {
                     if (failure) return;
                     const detected = await detect(target, info.filename);
                     writeFileSync(`${target}.json`, JSON.stringify({ name: path.basename(String(info.filename ?? 'file')).slice(0, 255), type: detected.type, extension: detected.extension }));
                 }));
                 stream.pipe(out);
             });
-            parser.on('filesLimit', () => fail('Trop de fichiers.'));
-            parser.on('error', () => fail('Envoi invalide.'));
+            parser.on('filesLimit', () => fail('Too many files.'));
+            parser.on('error', () => fail('Invalid upload.'));
             parser.on('close', async () => {
                 await Promise.all(pending);
-                if (failure || !ids.length) { for (const id of ids) this.remove(id); reject(failure ?? Object.assign(new Error('Aucun fichier.'), { status: 422 })); return; }
+                if (failure || !ids.length) { for (const id of ids) this.remove(id); reject(failure ?? Object.assign(new Error('No file.'), { status: 422 })); return; }
                 resolve(ids);
             });
             req.pipe(parser);
         });
     }
 
-    /** Fichier temporaire désigné par une valeur d'état (`livewire-file:<id>`) ou un identifiant, s'il existe encore. */
+    /** Temporary file referenced by a state value (`livewire-file:<id>`) or a bare id, if it still exists. */
     resolve(value: unknown): TemporaryFile | null {
         const id = typeof value === 'string' ? (value.startsWith(PREFIX) ? value.slice(PREFIX.length) : value) : '';
         if (!ID.test(id)) return null;
@@ -106,10 +105,10 @@ export class UploadStore {
         if (!ID.test(id)) return;
         for (const suffix of ['', '.json']) rmSync(path.join(this.dir, id + suffix), { force: true });
     }
-    /** Supprime les fichiers temporaires plus vieux que la durée de conservation. */
+    /** Deletes temporary files older than the retention time (`ttl`). */
     private sweep(): void {
         const limit = Date.now() - this.ttl;
-        try { for (const name of readdirSync(this.dir)) { const file = path.join(this.dir, name); if (statSync(file).mtimeMs < limit) rmSync(file, { force: true }); } } catch { /* dossier inaccessible : rien à nettoyer */ }
+        try { for (const name of readdirSync(this.dir)) { const file = path.join(this.dir, name); if (statSync(file).mtimeMs < limit) rmSync(file, { force: true }); } } catch { /* directory unreadable: nothing to sweep */ }
     }
 }
 

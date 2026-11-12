@@ -6,7 +6,7 @@ const constraints = [TextConstraint.make('name'), NumberConstraint.make('qty').l
 const rule = (type: string, operator: unknown, settings: unknown = null) => ({ type, data: { operator, settings } });
 const compile = (raw: unknown) => compileRules(constraints, sanitizeRules(constraints, raw));
 
-test('règles → conditions : texte, nombre, booléen, date, et leurs inverses', () => {
+test('rules → conditions: text, number, boolean, date, and their inverses', () => {
     const { nodes, summaries } = compile({
         a: rule('name', 'contains', { text: '50%_off' }), b: rule('name', 'equals.inverse', { text: 'Kit' }), c: rule('qty', 'isMin', { number: '50', aggregate: null }),
         d: rule('qty', 'isMax.inverse', { number: 1200.5 }), e: rule('is_visible', 'isTrue.inverse'), f: rule('published_at', 'isAfter', { mode: 'absolute', date: '2026-06-01' }),
@@ -31,7 +31,7 @@ test('règles → conditions : texte, nombre, booléen, date, et leurs inverses'
     assert.equal(summaries.g, 'Publishing date is March');
 });
 
-test('une règle dont le formulaire est incomplet ou invalide est sans effet', () => {
+test('a rule with an incomplete or invalid form has no effect', () => {
     const { nodes, summaries } = compile({
         a: rule('name', 'contains', { text: null }), b: rule('name', 'contains', { text: '' }), c: rule('qty', 'isMin', { number: 'abc' }), d: rule('qty', 'isMin', { number: null }),
         e: rule('published_at', 'isAfter', { mode: 'absolute', date: '2026-02-31' }), f: rule('published_at', 'isMonth', { month: 13 }), g: rule('published_at', 'isYear', { year: '20x6' }),
@@ -41,7 +41,7 @@ test('une règle dont le formulaire est incomplet ou invalide est sans effet', (
     assert.deepEqual(summaries, {});
 });
 
-test('bloc OR : groupes vides ignorés, libellé entre parenthèses pour un groupe à plusieurs règles', () => {
+test('OR block: empty groups ignored, parenthesized label for multi-rule groups', () => {
     const { nodes, summaries } = compile({
         o: { type: 'or', data: { groups: {
             g1: { rules: { a: rule('name', 'contains', { text: 'Alpine' }), b: rule('is_visible', 'isTrue') } },
@@ -57,7 +57,7 @@ test('bloc OR : groupes vides ignorés, libellé entre parenthèses pour un grou
     assert.deepEqual(summaries, { o: '(Name contains Alpine AND Visibility is true) OR Quantity equals 3' });
 });
 
-test('état forgé : types, opérateurs, colonnes et réglages inconnus sont écartés', () => {
+test('forged state: unknown types, operators, columns and settings are dropped', () => {
     const clean = sanitizeRules(constraints, {
         a: rule('password', 'contains', { text: 'x' }), b: rule('name', "contains'; drop table products; --", { text: 'Alpine' }),
         c: rule('qty', 'isMin', { number: { $gt: 0 }, 'qty) or (1=1': 1, aggregate: ['sum'] }), d: rule('name', 'toString', { text: 'x' }),
@@ -68,12 +68,12 @@ test('état forgé : types, opérateurs, colonnes et réglages inconnus sont éc
     assert.deepEqual(clean.c, { type: 'qty', data: { operator: 'isMin', settings: { number: null, aggregate: null } } });
     assert.equal(clean.d.data.operator, null);
     assert.deepEqual(compileRules(constraints, clean).nodes, []);
-    // La colonne interrogée vient de la contrainte, jamais de l'état.
+    // The queried column comes from the constraint, never from the state.
     const [node] = compile({ x: { type: 'published_at', column: 'users.password', data: { operator: 'isDate', column: 'users.password', settings: { date: '2026-01-02', column: 'users.password' } } } }).nodes;
     assert.deepEqual(node, { kind: 'date', column: 'products.published_at', operator: '=', value: '2026-01-02' });
 });
 
-test('profondeur des blocs OR et nombre de règles bornés', () => {
+test('OR block depth and rule count are bounded', () => {
     let deep: unknown = rule('name', 'contains', { text: 'fond' });
     for (let level = 0; level < 10; level++) deep = { type: 'or', data: { groups: { g: { rules: { r: deep } } } } };
     const depthOf = (rules: Record<string, any>): number => 1 + Math.max(0, ...Object.values(rules).filter((r) => r.type === 'or').flatMap((r) => Object.values(r.data.groups as Record<string, any>).map((g) => depthOf(g.rules))));
@@ -87,7 +87,7 @@ test('profondeur des blocs OR et nombre de règles bornés', () => {
     for (const garbage of [null, 'rules', 42, [], [rule('name', 'contains', { text: 'x' })]]) assert.deepEqual(sanitizeRules(constraints, garbage), {});
 });
 
-test('fenêtres glissantes : préréglages et décalage personnalisé', () => {
+test('relative dates: presets and custom offset', () => {
     const now = new Date('2026-11-12T10:00:00Z');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'past_month' }, now), '2026-10-12');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'this_quarter' }, now), '2026-10-01');
@@ -95,13 +95,13 @@ test('fenêtres glissantes : préréglages et décalage personnalisé', () => {
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'next_2_weeks' }, now), '2026-11-26');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'custom', tense: 'future', relative_value: '3', relative_unit: 'quarter' }, now), '2027-08-12');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'custom', tense: 'past', relative_value: 2, relative_unit: 'week' }, now), '2026-10-29');
-    // Préréglage inconnu : aujourd'hui, comme Filament ; unité inconnue : jours.
+    // Unknown preset: today; unknown unit: days.
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'nope' }, now), '2026-11-12');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'custom', relative_value: 1, relative_unit: 'eon' }, now), '2026-11-11');
     assert.equal(resolveRuleDate({ mode: 'absolute', date: 'yesterday' }, now), null);
 });
 
-test('filtre : état appliqué nettoyé, indicateurs, retrait, requête', () => {
+test('filter: sanitized applied state, indicators, removal, query', () => {
     const filter = QueryBuilder.make().constraints(constraints).constraintPickerColumns(2);
     const state = filter.sanitizeState({ rules: { a: rule('name', 'contains', { text: 'Alpine' }), b: rule('qty', 'isMin', { number: null }), z: rule('nope', 'x') }, extra: 1 });
     assert.deepEqual(Object.keys(state), ['rules']);

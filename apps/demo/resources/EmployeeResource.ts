@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\HR\Employees\EmployeeResource + Tables\EmployeesTable + Pages\ListEmployees de la démo Filament.
+// HR employees: list, form, stats, timesheets and leave requests.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { LEAVE_STATUSES, LEAVE_TYPES, type EnumCase } from './enums.ts';
@@ -10,7 +10,7 @@ import { ColorColumn, IconColumn, SelectFilter, TernaryFilter, TextColumn, Trash
 
 export class Employee extends Model {
     static tableName = 'employees';
-    // Colonnes JSON : lues et écrites comme des valeurs JavaScript (équivalent des casts `array` d'Eloquent).
+    // JSON columns, read and written as JavaScript values.
     static jsonAttributes = ['skills', 'metadata'];
     id!: number;
     department_id!: number | null;
@@ -40,7 +40,7 @@ export class Employee extends Model {
     }
 }
 
-/** Enum EmploymentType de la démo : libellé, couleur et icône. */
+/** Employment types: label, color and icon. */
 export const EMPLOYMENT_TYPES: Record<string, { label: string; color: string; icon: string }> = {
     full_time: { label: 'Full Time', color: 'success', icon: 'user-group' },
     part_time: { label: 'Part Time', color: 'info', icon: 'clock' },
@@ -55,13 +55,13 @@ const departmentSelect = () => Select.make('department_id').label('Department').
 
 class Timesheet extends Model { static tableName = 'timesheets'; id!: number; project_name?: string | null; }
 class LeaveRequest extends Model { static tableName = 'leave_requests'; id!: number; type!: string; status!: string; }
-/** Colonne à pastille pour une énumération : libellé, couleur et icône de la valeur. */
+/** Badge column for an enum: the value's label, color and icon. */
 const enumBadge = (name: string, cases: Record<string, EnumCase>) => TextColumn.make<any>(name).badge()
     .formatStateUsing(({ state }) => cases[String(state)]?.label ?? String(state))
     .color((record) => cases[record[name]]?.color ?? 'gray')
     .icon((record) => (cases[record[name]] ? `c-${cases[record[name]].icon}` : null));
 
-/** Équivalent de RelationManagers\TimesheetsRelationManager (lecture seule). */
+/** The employee's timesheets (read-only). */
 export class TimesheetsRelationManager extends RelationManager {
     static relationship = 'timesheets';
     static modelLabel = 'timesheet';
@@ -80,7 +80,7 @@ export class TimesheetsRelationManager extends RelationManager {
             .defaultSort('date', 'desc').groupedBulkActions([]);
     }
 }
-/** Équivalent de RelationManagers\LeaveRequestsRelationManager (lecture seule). */
+/** The employee's leave requests (read-only). */
 export class LeaveRequestsRelationManager extends RelationManager {
     static relationship = 'leaveRequests';
     static modelLabel = 'leave request';
@@ -100,7 +100,7 @@ export class LeaveRequestsRelationManager extends RelationManager {
     }
 }
 
-/** Équivalent de Widgets\EmployeeStats : agrégats sur les employés affichés par la table. */
+/** Aggregates over the employees shown by the table. */
 export class EmployeeStats extends PageTableStatsWidget {
     static pollingInterval = null;
     static tablePage = () => EmployeeResource.getPages().index as any;
@@ -108,7 +108,7 @@ export class EmployeeStats extends PageTableStatsWidget {
         const total = await this.aggregatePageTable();
         const active = await this.aggregatePageTable({}, (q) => { q.where('is_active', 1); });
         const salary = await this.aggregatePageTable({ avg: ['salary'] }, (q) => { q.whereNotNull('salary'); });
-        // Ancienneté moyenne, en années, des employés affichés (SQLite : jours juliens).
+        // Average tenure in years of the employees shown (SQLite: Julian days).
         const tenure = await this.aggregatePageTable({ avg: ['tenure_days'] });
         return [
             Stat.make('Total Employees', total.count),
@@ -142,7 +142,7 @@ export class EmployeeResource extends Resource {
             );
         },
     });
-    /** Action d'en-tête de la liste : lien vers les demandes de congé, avec le nombre de demandes en attente. */
+    /** List header action: link to leave requests, with the number of pending ones. */
     static listHeaderActions = () => [
         Action.make('leave_requests').label('Leave requests').color('gray').icon('m-calendar')
             .badge(async () => String(((await knex()('leave_requests').where({ status: 'pending' }).count({ n: '*' }).first()) as any)?.n ?? 0)).badgeColor('warning')
@@ -157,7 +157,7 @@ export class EmployeeResource extends Resource {
         };
     }
 
-    /** Équivalent de Schemas\EmployeeForm : trois onglets (identité, contrat, métadonnées). */
+    /** Three tabs: identity, contract, metadata. */
     static form(schema: Schema): Schema {
         const types = Object.entries(EMPLOYMENT_TYPES);
         const SKILLS = ['PHP', 'Laravel', 'JavaScript', 'TypeScript', 'React', 'Vue.js', 'Python', 'SQL', 'Docker', 'AWS'];
@@ -185,7 +185,7 @@ export class EmployeeResource extends Resource {
                                 .icons(Object.fromEntries(types.map(([value, type]) => [value, `m-${type.icon}`])))
                                 .columnSpanFull(),
                             DatePicker.make('hire_date').required().default(today),
-                            // Salaire annuel pour les salariés, taux horaire pour les prestataires et stagiaires.
+                            // Annual salary for employees, hourly rate for contractors and interns.
                             TextInput.make('salary').numeric().prefix('$').minValue(0).maxValue(99999999.99).visible(({ get }) => ['full_time', 'part_time'].includes(String(get('employment_type')))),
                             TextInput.make('hourly_rate').numeric().prefix('$').minValue(0).maxValue(999999.99).visible(({ get }) => ['contractor', 'intern'].includes(String(get('employment_type')))),
                             Toggle.make('is_active').label('Active').default(true).columnStart(1),

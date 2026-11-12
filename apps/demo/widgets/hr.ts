@@ -1,15 +1,15 @@
-// Widgets du tableau de bord HR — port de App\Filament\Widgets\{WorkforceInsightsStats, DepartmentLeaveLoadChart, ProjectHealthChart, UtilizationRateChart, BudgetBurnRateChart}.
+// HR dashboard widgets, plus the leave calendar widget.
 import { CalendarWidget, ChartWidget, Notification, Stat, StatsOverviewWidget, type CalendarEvent, type ChartData } from '@navette-js/panels';
 import { dayLabel, diffInDays, diffInMonths, endOfWeek, knex, lastMonths, monthKey, monthLabel, now, parse, round, sql, startOfDay, startOfWeek, subDays, truncate } from './dates.ts';
 
 export class WorkforceInsightsStats extends StatsOverviewWidget {
     static pollingInterval = null;
     async getStats(): Promise<Stat[]> {
-        // `Employee::where('is_active', true)` écarte les employés supprimés ; `withTrashed()` les garde.
+        // Active employees exclude soft-deleted ones; the turnover rate counts them all.
         const all: any[] = await knex()('employees').select('hire_date', 'is_active', 'employment_type', 'deleted_at');
         const active = all.filter((employee) => employee.is_active && employee.deleted_at === null);
         const totalActive = active.length;
-        // `hire_date` est une date (minuit) ; l'ancienneté est en mois décimaux, comme `diffInMonths()`.
+        // `hire_date` is a date (midnight); tenure is in fractional months.
         const avgTenure = totalActive ? round(active.reduce((sum, employee) => sum + diffInMonths(startOfDay(parse(employee.hire_date)), now()) / 12, 0) / totalActive, 1) : 0;
         const inactiveCount = all.filter((employee) => !employee.is_active).length;
         const totalCount = all.length;
@@ -32,7 +32,7 @@ export class DepartmentLeaveLoadChart extends ChartWidget {
     static heading = 'Department Leave Load';
     getType(): string { return 'bar'; }
     async getData(): Promise<ChartData> {
-        // Congés approuvés ou pris cette année, par service de l'employé (les employés supprimés sont écartés, comme la relation Eloquent).
+        // Approved or taken leave this year, by the employee's department (soft-deleted employees excluded).
         const rows: any[] = await knex()('leave_requests')
             .join('employees', 'employees.id', 'leave_requests.employee_id').join('departments', 'departments.id', 'employees.department_id')
             .whereNull('employees.deleted_at').whereIn('leave_requests.status', ['approved', 'taken'])
@@ -40,7 +40,7 @@ export class DepartmentLeaveLoadChart extends ChartWidget {
             .orderBy('leave_requests.id').select('departments.name', 'leave_requests.days_requested');
         const byDepartment = new Map<string, number>();
         for (const row of rows) byDepartment.set(row.name, (byDepartment.get(row.name) ?? 0) + Number(row.days_requested));
-        // `sortDesc()` est un tri stable : à égalité, l'ordre de première apparition est gardé.
+        // Stable sort: ties keep their first-seen order.
         const sorted = [...byDepartment].map(([name, days]) => [name, round(days, 1)] as const).sort((a, b) => b[1] - a[1]);
         return { datasets: [{ label: 'Leave Days', data: sorted.map(([, days]) => days), backgroundColor: '#8b5cf6', borderColor: '#8b5cf6' }], labels: sorted.map(([name]) => name) };
     }
@@ -122,8 +122,8 @@ export class BudgetBurnRateChart extends ChartWidget {
 
 const LEAVE_COLORS: Record<string, string> = { approved: 'success', pending: 'warning', rejected: 'danger', cancelled: 'gray' };
 /**
- * Calendrier des congés (composant propre à Navette, absent de la démo Filament) : exemple de CalendarWidget personnalisé —
- * couleur selon le statut, lien vers la demande, clic sur un jour, pied de case et bouton dans la barre d'outils.
+ * Leave calendar: a custom CalendarWidget with status colors, links to each request, a day click handler,
+ * a day footer and a toolbar button.
  */
 export class LeaveCalendar extends CalendarWidget {
     static heading = 'Leave';
@@ -145,5 +145,5 @@ export class LeaveCalendar extends CalendarWidget {
 }
 
 export const hrWidgets = [WorkforceInsightsStats, DepartmentLeaveLoadChart, ProjectHealthChart, UtilizationRateChart, BudgetBurnRateChart];
-/** Hors du tableau de bord HR, qui reste celui de la démo Filament : le calendrier a ses propres pages (`pages/calendar.ts`). */
+/** Not on the HR dashboard: the calendar has its own pages (`pages/calendar.ts`). */
 export const calendarWidgets = [LeaveCalendar];

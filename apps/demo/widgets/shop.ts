@@ -1,6 +1,4 @@
-// Widgets du tableau de bord Shop — port de App\Filament\Widgets\{ShopKpisStats, OrdersYearOverYearChart, CustomerGrowthChart,
-// TopProductsByRevenueChart, CustomerSegmentsChart, OrderValueDistributionChart, ProductMarginAnalysisChart}.
-// Tous reçoivent les filtres de la page (`pageFilters`) : période, statuts de commande, catégorie de produit.
+// Shop dashboard widgets. They all receive the page filters (`pageFilters`): date range, order statuses, product category.
 import { ChartWidget, PAGE_FILTERS, Stat, StatsOverviewWidget, TableWidget, type ChartData } from '@navette-js/panels';
 import { ObjectionAdapter } from '@navette-js/database';
 import { TextColumn, type Table } from '@navette-js/tables';
@@ -9,7 +7,7 @@ import { addMonths, diffInDays, endOfMonth, knex, lastMonths, monthKey, monthLab
 
 type Filters = Record<string, unknown> | null;
 const filled = (value: unknown) => value !== null && value !== undefined && value !== '' && !(Array.isArray(value) && value.length === 0);
-/** Filtres de la page, mis en forme : dates en `Y-m-d H:i:s` (minuit), statuts en liste, catégorie en identifiant. */
+/** Normalized page filters: dates as UTC midnight, statuses as a list, category as an id. */
 function read(filters: Filters) {
     const date = (value: unknown) => (filled(value) ? parse(String(value)) : null);
     const statuses = filters?.orderStatuses;
@@ -19,7 +17,7 @@ function read(filters: Filters) {
         productCategory: filled(filters?.productCategory) ? String(filters!.productCategory) : null,
     };
 }
-/** Commandes non supprimées, restreintes à une période et à des statuts (colonnes éventuellement préfixées). */
+/** Non-deleted orders within a date range and statuses (columns prefixed with `table`). */
 function ordersBetween(start: Date | null, end: Date | null, statuses: string[] | null, table = 'orders') {
     const query = knex()(table).whereNull(`${table}.deleted_at`);
     if (start) query.where(`${table}.created_at`, '>=', sql(start));
@@ -43,7 +41,7 @@ export class ShopKpisStats extends StatsOverviewWidget {
         const cancelledOrders = orders.filter((order) => order.status === 'cancelled').length;
         const itemsOf = async (ids: number[]): Promise<number> => {
             let total = 0;
-            // Par tranches : SQLite limite le nombre de paramètres d'une requête.
+            // In chunks: SQLite limits the number of query parameters.
             for (let i = 0; i < ids.length; i += 500) total += await count(knex()('order_items').whereIn('order_id', ids.slice(i, i + 500)));
             return total;
         };
@@ -54,7 +52,7 @@ export class ShopKpisStats extends StatsOverviewWidget {
             query.where('customers.created_at', '<=', sql(endDate));
             return query;
         };
-        // `has('orders', '>=', 2)` : au moins deux commandes non supprimées, sans condition de période.
+        // Repeat customer: at least two non-deleted orders, whatever the date range.
         const ordersOfCustomer = '(select count(*) from orders where orders.customer_id = customers.id and orders.deleted_at is null)';
         const totalCustomers = await count(customersBetween());
         const repeatCustomers = await count(customersBetween().whereRaw(`${ordersOfCustomer} >= 2`));
@@ -63,7 +61,7 @@ export class ShopKpisStats extends StatsOverviewWidget {
         const cancellationRate = totalOrders > 0 ? round((cancelledOrders / totalOrders) * 100, 1) : 0;
         const revenuePerCustomer = totalCustomers > 0 ? round(totalRevenue / totalCustomers, 2) : 0;
 
-        // Courbes : les sept derniers mois, sans tenir compte de la période choisie (comme la démo).
+        // Sparklines: the last seven months, ignoring the selected date range.
         const months = lastMonths(7);
         const monthlyOrders: any[] = await ordersBetween(months[0], null, orderStatuses).select('id', 'total_price', 'status', 'created_at');
         const monthlyCustomers: any[] = await knex()('customers').whereNull('deleted_at').where('created_at', '>=', sql(months[0])).select('created_at', knex().raw(`${ordersOfCustomer} as orders_count`));
@@ -90,7 +88,7 @@ export class ShopKpisStats extends StatsOverviewWidget {
     }
 }
 
-/** Graphique du tableau de bord Shop : pas de rafraîchissement périodique, filtres de la page. */
+/** Shop dashboard chart: no polling, reacts to the page filters. */
 abstract class ShopChart extends ChartWidget {
     static pollingInterval = null;
     static reactive = PAGE_FILTERS;
@@ -141,7 +139,7 @@ export class TopProductsByRevenueChart extends ShopChart {
     getOptions(): Record<string, unknown> { return { indexAxis: 'y' }; }
     async getData(): Promise<ChartData> {
         const { startDate, endDate, orderStatuses, productCategory } = read(this.pageFilters);
-        // Jointure directe, comme la démo : les commandes supprimées ne sont pas écartées ici.
+        // Plain join: soft-deleted orders are deliberately not excluded here.
         const query = knex()('order_items').join('products', 'order_items.product_id', 'products.id').join('orders', 'order_items.order_id', 'orders.id');
         if (startDate) query.where('orders.created_at', '>=', sql(startDate));
         if (endDate) query.where('orders.created_at', '<=', sql(endDate));
@@ -205,7 +203,7 @@ export class ProductMarginAnalysisChart extends ShopChart {
     }
 }
 
-/** Port de App\Filament\Widgets\FlaggedOrders : commandes « New » de plus de 3 jours ou « Processing » de plus de 7 jours. */
+/** "New" orders older than 3 days, or "Processing" orders older than 7 days. */
 export class FlaggedOrders extends TableWidget {
     getDataAdapterForTable() {
         return new ObjectionAdapter(Order, {
@@ -230,7 +228,7 @@ export class FlaggedOrders extends TableWidget {
                     .formatStateUsing(({ record }) => STATUSES[record.status]?.label ?? record.status)
                     .color((record) => STATUSES[record.status]?.color ?? 'gray').icon((record) => STATUSES[record.status]?.icon ?? null),
                 TextColumn.make<Order>('total_price').money().alignEnd().sortable(),
-                // Trié par la date de création, en sens inverse de l'âge affiché.
+                // Sorted by creation date, inverted relative to the displayed age.
                 TextColumn.make<Order>('days_old').label('Days old').alignEnd().getStateUsing(({ record }) => Math.trunc(diffInDays(parse(record.created_at), now()))).sortable({ column: 'created_at', inverted: true }).weight('bold'),
                 TextColumn.make<Order>('issue').label('Issue').getStateUsing(({ record }) => (record.status === 'new' ? 'Awaiting processing' : 'Stuck in processing')).badge().color((record) => (record.status === 'new' ? 'warning' : 'danger')),
             ]);

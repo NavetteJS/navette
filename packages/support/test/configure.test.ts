@@ -5,7 +5,7 @@ import { configured, configureUsing, resetConfigurators } from '../src/index.ts'
 class Base { label = ''; size = 'md'; }
 class Derived extends Base { extra = false; }
 
-test('configureUsing : applique aux instances creees ensuite, classes parentes d\'abord, sans toucher aux autres classes', () => {
+test('configureUsing: applies to instances created afterwards, parent classes first, without affecting other classes', () => {
     resetConfigurators();
     assert.equal(configured(new Derived()).size, 'md');
     configureUsing(Base, (instance) => { instance.size = 'sm'; instance.label = 'base'; });

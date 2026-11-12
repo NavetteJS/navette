@@ -9,7 +9,7 @@ import { ui, useColorManager } from '@navette-js/support/ui';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// Scènes de composants (jalon 1) : mêmes pages et mêmes identifiants que docs-assets/app de Filament, couleurs par défaut.
+// Runtime playground (`/`) and UI component scenes (`/components/:name`), rendered with the default colors.
 useColorManager(new ColorManager());
 views.namespace('scenes', fileURLToPath(new URL('./views/scenes', import.meta.url)));
 views.share({ ui });
@@ -31,11 +31,11 @@ app.get('/', async (req, res) => {
 });
 const scene = (name: string) => (req: express.Request, res: express.Response) => {
     const file = fileURLToPath(new URL(`./views/scenes/${name}.ejs`, import.meta.url));
-    if (!/^[a-z-]+$/.test(name) || !existsSync(file)) { res.status(404).send('Scène inconnue.'); return; }
+    if (!/^[a-z-]+$/.test(name) || !existsSync(file)) { res.status(404).send('Unknown scene.'); return; }
     res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${name}</title></head><body><div class="min-h-screen">${views.render(`scenes::${name}`)}</div></body></html>`);
 };
 app.get('/components/:name', (req, res) => scene(String(req.params.name))(req, res));
 app.get('/pagination', scene('pagination'));
 
 const port = Number(process.env.PORT ?? 3100);
-app.listen(port, '127.0.0.1', () => console.log(`Navette playground : http://127.0.0.1:${port}`));
+app.listen(port, '127.0.0.1', () => console.log(`Navette playground: http://127.0.0.1:${port}`));

@@ -1,19 +1,17 @@
-// @navette-js/support/ui — les composants d'interface de base de Filament, utilisables seuls (équivalent des composants Blade
-// `<x-filament::button>`, `<x-filament::badge>`…). Chaque fonction rend le même balisage que la vue Blade d'origine
-// (sources/filament/packages/support/resources/views/components) ; elles sont vérifiées scène par scène contre l'application
-// de documentation de Filament (`node tools/parity/run-scenes.mjs`).
+// @navette-js/support/ui — base UI components (button, badge, modal…) usable on their own, outside a panel.
+// Each function returns an HTML string.
 import { Attributes, cls, e, icon, js, loadingIndicator, views, type ColorManager } from './index.ts';
 import { t, tc } from './i18n.ts';
 import { fileURLToPath } from 'node:url';
 
-// Les vues de base (`filament::components.*`) vivent dans ce paquet : elles sont utilisables sans panel.
+// The base views (`filament::components.*`) live in this package so they work without a panel.
 views.namespace('filament', fileURLToPath(new URL('../views', import.meta.url)));
 
 let manager: ColorManager | null = null;
-/** Gestionnaire de couleurs utilisé par les composants (celui du panel, ou un gestionnaire par défaut). */
+/** Sets the color manager used by the components (usually the panel's). */
 export const useColorManager = (colors: ColorManager) => { manager = colors; };
 const colorsOf = (component: Parameters<ColorManager['getComponentClasses']>[0], color: string | null | undefined): string[] => {
-    if (!manager) throw new Error('Aucun gestionnaire de couleurs : appelez useColorManager().');
+    if (!manager) throw new Error('No color manager: call useColorManager() first.');
     return color && color !== 'gray' ? manager.getComponentClasses(component, color) : [];
 };
 
@@ -22,24 +20,23 @@ type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 // ------------------------------------------------------------------ badge
 export type BadgeProps = { color?: string; size?: Size; icon?: string | null; iconPosition?: 'before' | 'after'; tag?: string; attributes?: Attrs };
-/** Pastille (`<x-filament::badge>`). */
+/** Badge. */
 export function badge(props: BadgeProps = {}, slot = ''): string {
     const { color = 'primary', size = 'md', tag = 'span' } = props;
     const attributes = new Attributes(props.attributes ?? {}).class([...colorsOf('badge', color), 'fi-badge', `fi-size-${size}`]);
     const iconHtml = props.icon ? icon(props.icon, { size: 'sm' }) : '';
     return `<${tag} ${attributes.toHtml()}>${props.iconPosition === 'after' ? '' : iconHtml}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${slot}</span></span>${props.iconPosition === 'after' ? iconHtml : ''}</${tag}>`;
 }
-/** Petit compteur posé sur un bouton ou un lien (rendu sans enveloppe de libellé, comme dans Filament). */
+/** Small counter on a button or link (rendered without the badge label wrapper). */
 const counter = (value: string | number, color = 'primary'): string => `<span class="${cls([...colorsOf('badge', color), 'fi-badge', 'fi-size-xs'])}">${e(String(value))}</span>`;
 
 // ------------------------------------------------------------------ icon-button
 export type IconButtonProps = { icon: string; label: string; color?: string; size?: Size; disabled?: boolean; tag?: 'button' | 'a'; href?: string | null; badge?: string | number | null; badgeColor?: string; attributes?: Attrs };
-/** Taille de l'icône selon celle du bouton (comme la vue Blade). */
 const ICON_BUTTON_ICON_SIZE: Record<Size, string> = { xs: 'sm', sm: 'md', md: 'md', lg: 'lg', xl: 'lg' };
-/** Bouton réduit à une icône (`<x-filament::icon-button>`) ; le libellé sert d'info-bulle et de nom accessible. */
+/** Icon-only button; the label is used as tooltip and accessible name. */
 export function iconButton(props: IconButtonProps): string {
     const { color = 'primary', size = 'md', disabled = false, tag = 'button' } = props;
-    // Les classes de l'appelant viennent après celles du composant (comme `$attributes->class()` de Laravel).
+    // The caller's classes go after the component's own classes.
     const { class: extraClass = null, ...rest } = (props.attributes ?? {}) as Attrs & { class?: string };
     const attributes = new Attributes(rest)
         .merge({
@@ -56,7 +53,7 @@ export type ButtonProps = {
     color?: string; size?: Size; outlined?: boolean; disabled?: boolean; tag?: 'button' | 'a'; type?: string; href?: string | null;
     icon?: string | null; iconPosition?: 'before' | 'after'; badge?: string | number | null; badgeColor?: string; attributes?: Attrs;
 };
-/** Bouton (`<x-filament::button>`). */
+/** Button. */
 export function button(props: ButtonProps = {}, slot = ''): string {
     const { color = 'primary', size = 'md', outlined = false, disabled = false, tag = 'button', type = 'button', iconPosition = 'before' } = props;
     const attributes = new Attributes(props.attributes ?? {})
@@ -75,7 +72,7 @@ export type LinkProps = {
     href?: string | null; color?: string; size?: Size; weight?: string | null; tag?: 'a' | 'button'; icon?: string | null; iconPosition?: 'before' | 'after';
     badge?: string | number | null; badgeColor?: string; attributes?: Attrs;
 };
-/** Lien (`<x-filament::link>`). */
+/** Link. */
 export function link(props: LinkProps = {}, slot = ''): string {
     const { color = 'primary', size = 'md', tag = 'a', iconPosition = 'before' } = props;
     const attributes = new Attributes(props.attributes ?? {})
@@ -87,7 +84,7 @@ export function link(props: LinkProps = {}, slot = ''): string {
 }
 
 // ------------------------------------------------------------------ avatar
-/** Avatar (`<x-filament::avatar>`) : rond par défaut. */
+/** Avatar image, circular by default. */
 export function avatar(props: { src: string; alt?: string; size?: Size; circular?: boolean; attributes?: Attrs }): string {
     const attributes = new Attributes(props.attributes ?? {}).merge({ alt: props.alt ?? null, src: props.src }).class(['fi-avatar', { 'fi-circular': props.circular !== false }, `fi-size-${props.size ?? 'md'}`]);
     return `<img ${attributes.toHtml()} />`;
@@ -95,8 +92,8 @@ export function avatar(props: { src: string; alt?: string; size?: Size; circular
 
 // ------------------------------------------------------------------ breadcrumbs
 /**
- * Fil d'Ariane (`<x-filament::breadcrumbs>`). Comme dans Filament : un élément sans `url` est un simple texte ;
- * un élément dont l'`url` est vide reste un lien, mais sans adresse. Le dernier élément est la page courante.
+ * Breadcrumbs. An item without `url` is plain text; an item with an empty `url` is still a link, without `href`.
+ * The last item is the current page.
  */
 export function breadcrumbs(items: { label: string; url?: string | null }[], label = 'Breadcrumb'): string {
     const separators = icon('m-chevron-right', { attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) + icon('m-chevron-left', { attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) });
@@ -104,28 +101,28 @@ export function breadcrumbs(items: { label: string; url?: string | null }[], lab
     return `<nav class="fi-breadcrumbs" aria-label="${e(label)}"><ol class="fi-breadcrumbs-list">${list.join('')}</ol></nav>`;
 }
 
-// ------------------------------------------------------------------ champs de base
-/** Case à cocher nue (`<x-filament::input.checkbox>`). */
+// ------------------------------------------------------------------ basic inputs
+/** Bare checkbox. */
 export function checkbox(props: { checked?: boolean; valid?: boolean; attributes?: Attrs } = {}): string {
     const attributes = new Attributes(props.attributes ?? {}).merge({ type: 'checkbox', checked: props.checked === true }).class(['fi-checkbox-input', props.valid === false ? 'fi-invalid' : 'fi-valid']);
     return `<input ${attributes.toHtml()} />`;
 }
-/** Roue d'attente (`<x-filament::loading-indicator>`). */
+/** Loading spinner. */
 export function spinner(attributes: Attrs = {}): string {
-    // Les classes de l'appelant viennent après celles du composant.
+    // The caller's classes go after the component's own classes.
     const { class: extra, ...rest } = attributes;
     const html = loadingIndicator(new Attributes(rest));
     return extra ? html.replace(/class="([^"]*)"/, (_, own) => `class="${own} ${e(String(extra))}"`) : html;
 }
 
-// ------------------------------------------------------------------ champ de saisie et son habillage
+// ------------------------------------------------------------------ text input and wrapper
 export type InputWrapperProps = {
     prefix?: string | null; suffix?: string | null; prefixIcon?: string | null; suffixIcon?: string | null; prefixIconColor?: string; suffixIconColor?: string;
     disabled?: boolean; valid?: boolean; inlinePrefix?: boolean; inlineSuffix?: boolean; attributes?: Attrs;
 };
 const FOCUS_INPUT = "if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')";
 const affixIcon = (name: string, color: string | undefined) => icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) });
-/** Habillage d'un champ (`<x-filament::input.wrapper>`) : bordure, préfixe et suffixe (texte ou icône). */
+/** Input wrapper: border, prefix and suffix (text or icon). */
 export function inputWrapper(props: InputWrapperProps = {}, slot = ''): string {
     const hasPrefix = !!(props.prefix || props.prefixIcon), hasSuffix = !!(props.suffix || props.suffixIcon);
     const attributes = new Attributes(props.attributes ?? {}).class(['fi-input-wrp', { 'fi-disabled': props.disabled === true, 'fi-invalid': props.valid === false }]);
@@ -133,11 +130,11 @@ export function inputWrapper(props: InputWrapperProps = {}, slot = ''): string {
     const suffix = hasSuffix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['fi-input-wrp-suffix', { 'fi-inline': props.inlineSuffix === true, 'fi-input-wrp-suffix-has-label': !!props.suffix }])}">${props.suffix ? `<span class="fi-input-wrp-label">${e(props.suffix)}</span>` : ''}${props.suffixIcon ? affixIcon(props.suffixIcon, props.suffixIconColor) : ''}</div>` : '';
     return `<div ${attributes.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn">${slot}</div>${suffix}</div>`;
 }
-/** Champ texte nu (`<x-filament::input>`), à placer dans `inputWrapper`. */
+/** Bare text input, meant to be placed in `inputWrapper`. */
 export function input(attributes: Attrs = {}): string { return `<input ${new Attributes(attributes).class(['fi-input']).toHtml()} />`; }
-/** Liste déroulante native nue (`<x-filament::input.select>`) ; `slot` contient les `<option>`. */
+/** Bare native select; `slot` holds the `<option>` elements. */
 export function select(attributes: Attrs = {}, slot = ''): string { return `<select ${new Attributes(attributes).class(['fi-select-input']).toHtml()}>${slot}</select>`; }
-/** Groupe de champs encadré (`<x-filament::fieldset>`). */
+/** Fieldset with an optional legend. */
 export function fieldset(props: { label?: string | null; labelHidden?: boolean; attributes?: Attrs } = {}, slot = ''): string {
     const attributes = new Attributes(props.attributes ?? {}).class(['fi-fieldset', { 'fi-fieldset-label-hidden': props.labelHidden === true }]);
     return `<fieldset ${attributes.toHtml()}>${props.label ? `<legend>${e(props.label)}</legend>` : ''}${slot}</fieldset>`;
@@ -149,7 +146,7 @@ export type CalloutProps = {
     footer?: string | null; controls?: string | null; attributes?: Attrs;
 };
 const colorMark = (color: string | null | undefined) => (color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []);
-/** Encart d'information (`<x-filament::callout>`). `footer` et `controls` reçoivent du HTML déjà rendu (boutons…). */
+/** Callout box. `footer` and `controls` take already rendered HTML (buttons…). */
 export function callout(props: CalloutProps = {}): string {
     const attributes = new Attributes(props.attributes ?? {}).class(['fi-callout', ...colorMark(props.color)]);
     const iconHtml = props.icon ? icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class([...colorMark(props.iconColor ?? props.color), 'fi-callout-icon']) }) : '';
@@ -159,7 +156,7 @@ export function callout(props: CalloutProps = {}): string {
 
 // ------------------------------------------------------------------ empty-state
 export type EmptyStateProps = { heading: string; description?: string | null; icon?: string | null; iconColor?: string; iconSize?: 'sm' | 'md' | 'lg'; footer?: string | null; contained?: boolean; attributes?: Attrs };
-/** État vide (`<x-filament::empty-state>`) : icône, titre, description, pied (actions déjà rendues). */
+/** Empty state: icon, heading, description and footer (already rendered actions). */
 export function emptyState(props: EmptyStateProps): string {
     const color = props.iconColor ?? 'primary';
     const attributes = new Attributes(props.attributes ?? {}).class(['fi-empty-state', { 'fi-empty-state-not-contained': props.contained === false }]);
@@ -169,12 +166,12 @@ export function emptyState(props: EmptyStateProps): string {
 
 // ------------------------------------------------------------------ pagination
 export type PaginationProps = {
-    /** Identifiant du composant hôte (préfixe des clés `wire:key`). */
+    /** Host component id (prefix of the `wire:key` values). */
     id: string; page: number; perPage: number;
-    /** Nombre total d'enregistrements ; absent pour une pagination simple (précédent / suivant). */
+    /** Total record count; omit it for simple (previous / next) pagination. */
     total?: number; hasMore?: boolean; pageOptions?: (number | 'all')[]; extremeLinks?: boolean; property?: string;
 };
-/** Numéros de page affichés : tous jusqu'à onze pages, sinon une fenêtre autour de la page courante. */
+/** Page numbers to show: all of them up to eleven pages, otherwise a window around the current page. */
 function pageElements(current: number, last: number): (number | '...')[] {
     if (last <= 11) return Array.from({ length: last }, (_, i) => i + 1);
     const pages = new Set([1, 2, last - 1, last, current - 1, current, current + 1].filter((p) => p >= 1 && p <= last));
@@ -182,7 +179,7 @@ function pageElements(current: number, last: number): (number | '...')[] {
     for (const p of [...pages].sort((a, b) => a - b)) { if (out.length && p - (out[out.length - 1] as number) > 1) out.push('...'); out.push(p); }
     return out;
 }
-/** Pagination (`<x-filament::pagination>`), liée aux méthodes `previousPage`, `nextPage` et `gotoPage` du composant hôte. */
+/** Pagination bound to the host component's `previousPage`, `nextPage` and `gotoPage` methods. */
 export function pagination(props: PaginationProps): string {
     const simple = props.total === undefined;
     const lastPage = simple ? props.page + (props.hasMore ? 1 : 0) : Math.max(1, Math.ceil(props.total! / props.perPage));
@@ -203,7 +200,7 @@ export type SectionProps = {
     afterHeader?: string | null; footer?: string | null; collapsible?: boolean; collapsed?: boolean; aside?: boolean; contentBefore?: boolean;
     compact?: boolean; contained?: boolean; divided?: boolean; secondary?: boolean; attributes?: Attrs;
 };
-/** Section (`<x-filament::section>`) : carte avec en-tête facultatif (icône, titre, description, zone d'actions), repliable. */
+/** Collapsible card with an optional header (icon, heading, description, after-header area). */
 export function section(props: SectionProps = {}, slot = ''): string {
     const collapsible = props.collapsible === true, collapsed = collapsible && props.collapsed === true;
     const hasText = !!props.heading || !!props.description;
@@ -240,7 +237,7 @@ export function section(props: SectionProps = {}, slot = ''): string {
 
 // ------------------------------------------------------------------ tabs
 export type TabItem = { label: string; active?: boolean; icon?: string | null; iconPosition?: 'before' | 'after'; badge?: string | number | null; badgeColor?: string; tag?: 'button' | 'a'; href?: string | null; attributes?: Attrs };
-/** Onglets (`<x-filament::tabs>` et `<x-filament::tabs.item>`). */
+/** Tabs. */
 export function tabs(props: { label?: string | null; vertical?: boolean; contained?: boolean; attributes?: Attrs }, items: TabItem[]): string {
     const attributes = new Attributes(props.attributes ?? {}).merge({ 'aria-label': props.label ?? null }).class(['fi-tabs', { 'fi-contained': props.contained === true, 'fi-vertical': props.vertical === true }]);
     const html = items.map((item) => {
@@ -260,7 +257,7 @@ export type DropdownItem = {
     label: string; icon?: string | null; color?: string; iconColor?: string | null; image?: string | null; badge?: string | number | null; badgeColor?: string;
     tag?: 'button' | 'a'; href?: string | null; disabled?: boolean; attributes?: Attrs;
 };
-/** Élément de menu (`<x-filament::dropdown.list.item>`). */
+/** Dropdown menu item. */
 export function dropdownItem(item: DropdownItem): string {
     const tag = item.tag ?? 'button';
     const color = item.color ?? 'gray';
@@ -275,9 +272,9 @@ export function dropdownItem(item: DropdownItem): string {
     const badgeHtml = item.badge !== null && item.badge !== undefined ? `<span class="${cls([...colorsOf('badge', item.badgeColor ?? 'primary'), 'fi-badge'])}">${e(String(item.badge))}</span>` : '';
     return `<${tag} ${attributes.toHtml()}>${lead}<span class="fi-dropdown-list-item-label">${e(item.label)}</span>${badgeHtml}</${tag}>`;
 }
-/** Liste d'éléments de menu (`<x-filament::dropdown.list>`). */
+/** List of dropdown menu items. */
 export function dropdownList(items: DropdownItem[]): string { return `<div class="fi-dropdown-list">${items.map(dropdownItem).join('')}</div>`; }
-/** Menu déroulant (`<x-filament::dropdown>`) : `trigger` est le HTML du déclencheur, `slot` le contenu du panneau. */
+/** Dropdown: `trigger` is the trigger's HTML, `slot` the panel content. */
 export function dropdown(props: { trigger: string; width?: string | null; maxHeight?: string | null; placement?: string | null; offset?: number; attributes?: Attrs }, slot = ''): string {
     const attributes = new Attributes(props.attributes ?? {}).merge({ 'x-data': 'filamentDropdown({ isMenu: true })' }).class(['fi-dropdown']);
     const float = `x-float${props.placement ? `.placement.${props.placement}` : ''}.flip.offset`;
@@ -287,14 +284,14 @@ export function dropdown(props: { trigger: string; width?: string | null; maxHei
 // ------------------------------------------------------------------ modal
 export type ModalProps = {
     id: string; heading?: string | null; description?: string | null; eyebrow?: string | null; icon?: string | null; iconColor?: string;
-    /** Boutons du pied (HTML déjà rendu), ou `footer` pour un pied entièrement libre. */
+    /** Footer buttons (already rendered HTML), or `footer` for a fully custom footer. */
     footerActions?: string[]; footer?: string | null; footerActionsAlignment?: 'start' | 'center' | 'end';
     alignment?: 'start' | 'center'; width?: string; slideOver?: boolean; stickyHeader?: boolean; stickyFooter?: boolean; alert?: boolean;
     closeButton?: boolean; closeByClickingAway?: boolean; closeByEscaping?: boolean;
-    /** Identifiant du composant hôte, préfixe des clés `wire:key` quand la modale vit dans un composant à état. */
+    /** Host component id, used to prefix `wire:key` values when the modal lives in a stateful component. */
     livewireId?: string | null;
 };
-/** Fenêtre modale (`<x-filament::modal>`), ouverte par l'événement `open-modal` portant son identifiant. */
+/** Modal, opened by an `open-modal` event carrying its id. */
 export function modal(props: ModalProps, slot = ''): string {
     const { id, alignment = 'start', width = 'sm', closeButton = true, closeByClickingAway = true, closeByEscaping = true } = props;
     const hasHeading = !!props.heading, hasDescription = !!props.description && hasHeading;
@@ -303,7 +300,7 @@ export function modal(props: ModalProps, slot = ''): string {
     const key = (part: string) => `${props.livewireId ? `${props.livewireId}.` : ''}modal.${id}.${part}`;
     const close = `$dispatch('close-modal', { id: ${js(id)} })`;
     const iconColor = props.iconColor ?? 'primary';
-    // Fenêtre défilante (panneau latéral, en-tête ou pied fixes) : le piège de focus est posé sur la fenêtre elle-même, pas sur son conteneur.
+    // Scrolling window (slide-over, sticky header or footer): the focus trap goes on the window itself, not its container.
     const trapOnWindow = props.slideOver === true || props.stickyHeader === true || props.stickyFooter === true;
     const closeHtml = closeButton ? iconButton({ color: 'gray', icon: 'o-x-mark', label: t('filament::components/modal.actions.close.label'), attributes: { tabindex: closeByEscaping ? '-1' : null, 'x-on:click': close, class: 'fi-modal-close-btn' } }).replace('fi-icon fi-size-md', 'fi-icon fi-size-lg') : '';
     const iconHtml = props.icon ? `<div class="fi-modal-icon-ctn"><div class="${cls([...colorMark(iconColor), 'fi-modal-icon-bg'])}">${icon(props.icon, { size: 'lg' })}</div></div>` : '';

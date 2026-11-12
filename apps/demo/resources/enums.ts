@@ -1,6 +1,5 @@
-// Énumérations de la démo Filament (libellé, couleur, icône), partagées entre resources.
+// Enums (label, color, icon) shared between resources.
 export type EnumCase = { label: string; color: string; icon: string };
-/** App\Enums\LeaveType. */
 export const LEAVE_TYPES: Record<string, EnumCase> = {
     annual: { label: 'Annual Leave', color: 'success', icon: 'sun' },
     sick: { label: 'Sick Leave', color: 'danger', icon: 'heart' },
@@ -8,7 +7,6 @@ export const LEAVE_TYPES: Record<string, EnumCase> = {
     unpaid: { label: 'Unpaid Leave', color: 'warning', icon: 'banknotes' },
     parental: { label: 'Parental Leave', color: 'primary', icon: 'gift' },
 };
-/** App\Enums\LeaveStatus. */
 export const LEAVE_STATUSES: Record<string, EnumCase> = {
     pending: { label: 'Pending', color: 'warning', icon: 'clock' },
     approved: { label: 'Approved', color: 'success', icon: 'check' },
@@ -16,7 +14,6 @@ export const LEAVE_STATUSES: Record<string, EnumCase> = {
     taken: { label: 'Taken', color: 'info', icon: 'check-badge' },
     cancelled: { label: 'Cancelled', color: 'gray', icon: 'x-circle' },
 };
-/** App\Enums\ExpenseStatus. */
 export const EXPENSE_STATUSES: Record<string, EnumCase> = {
     draft: { label: 'Draft', color: 'gray', icon: 'pencil' },
     submitted: { label: 'Submitted', color: 'info', icon: 'paper-airplane' },
@@ -24,7 +21,6 @@ export const EXPENSE_STATUSES: Record<string, EnumCase> = {
     rejected: { label: 'Rejected', color: 'danger', icon: 'x-mark' },
     reimbursed: { label: 'Reimbursed', color: 'primary', icon: 'banknotes' },
 };
-/** App\Enums\ExpenseCategory. */
 export const PROJECT_STATUSES: Record<string, EnumCase> = {
     planning: { label: 'Planning', color: 'gray', icon: 'pencil-square' },
     active: { label: 'Active', color: 'success', icon: 'play' },

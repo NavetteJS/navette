@@ -1,4 +1,4 @@
-// @navette-js/forms — port de filament/forms : Field, TextInput, Checkbox, validation côté serveur.
+// @navette-js/forms — form fields (Field, TextInput, Select, Checkbox…) and server-side validation.
 import { Attributes, HtmlString, e, evaluate, icon, js, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
@@ -23,7 +23,7 @@ let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 const asset = (name: string) => views.render('filament-forms::asset', { path: name }).trim();
 
-/** Nombre tel que PHP l'écrit : au-delà des entiers exacts, un flottant à 14 chiffres significatifs (« 1.844674407371E+19 »). */
+/** Number for an HTML attribute: beyond exact integers, a float with 14 significant digits (`1.844674407371E+19`). */
 const phpNumber = (n: number | null): string | number | null => {
     if (n === null || Number.isSafeInteger(n) || Math.abs(n) < 1e15) return n;
     const [mantissa, exponent] = n.toPrecision(14).split('e');
@@ -56,40 +56,39 @@ export abstract class Field extends Component {
     disabled(condition: Lazy<boolean, ComponentContext> = true): this { this._disabled = condition; return this; }
     autofocus(condition = true): this { this._autofocus = condition; return this; }
     default(value: unknown): this { this._default = value; return this; }
-    /** Texte d'aide affiché sous le champ. */
+    /** Helper text shown under the field. */
     helperText(text: string | null): this { this._helperText = text; return this; }
-    /** Identifiant du texte d'aide, à lier au contrôle par `aria-describedby`. */
+    /** Helper text id, linked to the control through `aria-describedby`. */
     protected getHelperTextId(): string | null { return this._helperText !== null ? `${this.getId()}-helper-text` : null; }
-    /** Libellé réservé aux lecteurs d'écran. */
+    /** Keeps the label for screen readers only. */
     hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
 
-    // --- indication à droite du libellé (port de Concerns\HasHint)
     protected _hint: Lazy<string | HtmlString | null, ComponentContext> = null;
     protected _hintColor: Lazy<string | null, ComponentContext> = null;
     protected _hintIcon: Lazy<string | null, ComponentContext> = null;
     protected _hintIconTooltip: Lazy<string | null, ComponentContext> = null;
     protected _hintActions: Action[] = [];
     /**
-     * Indication affichée à droite du libellé (un composant `Text`). Le texte est échappé ; une `HtmlString` de `@navette-js/support`
-     * (`raw('<a href="…">…</a>')`) est insérée telle quelle : n'y placez que des valeurs échappées avec `e()`.
+     * Hint shown to the right of the label (a `Text` component). The text is escaped; an `HtmlString` from `@navette-js/support`
+     * (`raw('<a href="…">…</a>')`) is inserted as is, so only put values escaped with `e()` in it.
      */
     hint(hint: Lazy<string | HtmlString | null, ComponentContext>): this { this._hint = hint; return this; }
-    /** Couleur de l'indication et de son icône (`gray` pour le texte, `primary` pour l'icône par défaut). */
+    /** Color of the hint and its icon (by default `gray` for the text, `primary` for the icon). */
     hintColor(color: Lazy<string | null, ComponentContext>): this { this._hintColor = color; return this; }
-    /** Icône d'indication, avec une infobulle facultative (qui sert aussi de nom accessible). */
+    /** Hint icon, with an optional tooltip (also used as its accessible name). */
     hintIcon(name: Lazy<string | null, ComponentContext>, tooltip?: Lazy<string | null, ComponentContext>): this {
         this._hintIcon = name;
         if (arguments.length >= 2) this._hintIconTooltip = tooltip ?? null;
         return this;
     }
     hintIconTooltip(tooltip: Lazy<string | null, ComponentContext>): this { this._hintIconTooltip = tooltip; return this; }
-    /** Action affichée après l'indication (en lien, petite taille), montée sur le champ. */
+    /** Action shown after the hint (small link), mounted on the field. */
     hintAction(action: Action): this { return this.hintActions([action]); }
     hintActions(actions: Action[]): this { this._hintActions = [...this._hintActions, ...actions]; return this; }
     getHintActions(): Action[] { return this._hintActions; }
-    /** Actions que le champ expose au montage (`schemaComponent` = clé du champ) : ici, ses actions d'indication. */
+    /** Actions the field exposes for mounting (`schemaComponent` = field key): its hint actions. */
     getActions(): Action[] { return this.getHintActions(); }
-    /** Rangée « après le libellé » : indication, icône d'indication et actions d'indication. */
+    /** Row after the label: hint, hint icon and hint actions. */
     protected async renderAfterLabel(): Promise<string> {
         const ctx = this.context();
         const hint = await evaluate(this._hint, ctx);
@@ -100,29 +99,29 @@ export abstract class Field extends Component {
         if (iconName) items.push(SchemaIcon.make(iconName).tooltip(await evaluate(this._hintIconTooltip, ctx)).color(color));
         items.push(...this._hintActions);
         if (!items.length) return '';
-        // Comme Filament : les composants de la rangée ont le chemin du champ et, pour conteneur, celui du schéma du champ.
+        // Row components take the field's path, and the field's schema path as their container path.
         return renderInlineItems(this, items, { alignment: 'end', scope: { path: this.getStatePath(), containerPath: this.container.getStatePath() }, mountKey: this.getKey(), actionView: 'link' });
     }
-    /** Exécuté côté serveur quand l'état du champ change (champ `live()`). `set(nom, valeur)` modifie un autre champ du même formulaire. */
+    /** Runs on the server when the field state changes (`live()` field). `set(name, value)` changes another field of the same form. */
     afterStateUpdated(callback: (ctx: ComponentContext & { set: (name: string, value: unknown) => void }) => unknown): this { this._afterStateUpdated = callback; return this; }
     hasAfterStateUpdated(): boolean { return this._afterStateUpdated !== null; }
     async callAfterStateUpdated(set: (name: string, value: unknown) => void): Promise<void> { await this._afterStateUpdated?.({ ...this.context(), set }); }
-    /** Force l'inclusion du champ dans les données envoyées, même désactivé (`->disabled()->dehydrated()`). */
+    /** Forces the field into the submitted data, even when disabled (`.disabled().dehydrated()`). */
     dehydrated(condition = true): this { this._dehydrated = condition; return this; }
-    /** Par défaut, un champ désactivé n'est ni validé ni enregistré. */
+    /** By default, a disabled field is neither validated nor saved. */
     async isDehydrated(): Promise<boolean> { return this._dehydrated ?? !(await this.isDisabled()); }
     getDefaultState(): unknown { return typeof this._default === 'function' ? this._default() : this._default; }
-    /** Mise en forme de la valeur d'un enregistrement quand elle entre dans le formulaire (hydratation). */
+    /** Shapes a record value as it enters the form (hydration). */
     hydrateState(value: unknown): unknown { return value; }
     rule(rule: Rule): this { this._rules.push(rule); return this; }
-    /** Règle `unique` : la valeur ne doit pas exister dans la colonne du même nom ; `ignoreRecord` exclut l'enregistrement en cours d'édition. */
+    /** `unique` rule: the value must not exist in the column of the same name; `ignoreRecord` excludes the record being edited. */
     unique(options: { ignoreRecord?: boolean; column?: string } = {}): this {
         return this.rule({
             name: 'unique',
             passes: async (value, ctx) => {
                 const host = ctx.livewire as any;
                 const adapter = host.getDataAdapter?.();
-                if (!adapter) throw new Error('unique() : le composant hôte ne fournit pas d\'adaptateur de données (getDataAdapter).');
+                if (!adapter) throw new Error('unique(): the host component provides no data adapter (getDataAdapter).');
                 const ignored = options.ignoreRecord ? (ctx.record ? adapter.getKey(ctx.record) : (host.getRecordKey?.() ?? null)) : null;
                 return !(await adapter.exists(options.column ?? this._name!, value, ignored));
             },
@@ -136,17 +135,17 @@ export abstract class Field extends Component {
     getErrors(): string[] { return this.livewire._errors[this.getStatePath()] ?? []; }
     hasError(): boolean { return this.getErrors().length > 0; }
 
-    /** Règles de validation : `required` d'abord, puis celles du champ. Les messages sont ceux de Laravel (en). */
+    /** Validation rules: `required` first, then the field's own. */
     async getValidationRules(): Promise<Rule[]> {
         const rules: Rule[] = [];
         if (await this.isRequired()) rules.push({ name: 'required', passes: (v) => !blank(v) && v !== false, message: (a) => `The ${a} field is required.` });
         return [...rules, ...this._rules];
     }
     async validate(): Promise<string[]> {
-        // Comme Filament : un champ non enregistré (`dehydrated(false)` : confirmation, mot de passe actuel) est quand même validé ;
-        // seul un champ désactivé (et non forcé par `dehydrated()`) y échappe.
+        // A field that is not saved (`dehydrated(false)`: confirmation, current password) is still validated;
+        // only a disabled field (not forced by `dehydrated()`) is skipped.
         if ((await this.isDisabled()) && this._dehydrated !== true) return [];
-        // Comme Laravel (ConvertEmptyStringsToNull) : une chaîne vide est traitée comme absente.
+        // An empty string is treated as missing.
         const value = this.context().state === '' ? null : this.context().state;
         const attribute = (await this.getLabel()).toLowerCase();
         for (const rule of await this.getValidationRules()) {
@@ -156,20 +155,19 @@ export abstract class Field extends Component {
         return [];
     }
 
-    /** Port de Field::wrapEmbeddedHtml (enveloppe par défaut). */
-    /** Valeur écrite dans les données à enregistrer (les champs composés n'y laissent qu'une ossature, remplie par leurs enfants). */
+    /** Value written to the data to save (composite fields only leave a skeleton, filled by their children). */
     dehydrateState(state: unknown): unknown { return state; }
-    /** Dernière mise en forme de la valeur enregistrée, une fois les champs enfants dé-hydratés (liste d'éléments d'un Builder). */
+    /** Final shaping of the saved value, once child fields are dehydrated (e.g. a Builder's item list). */
     finalizeDehydratedState(state: unknown): unknown { return state; }
     protected async wrap(html: string, options: { labelPrefix?: string; wrapperClass?: string; after?: string; labelAsDiv?: boolean; focusable?: boolean } = {}): Promise<string> {
         const errors = this.getErrors();
-        // Champ d'un FusedGroup : enveloppe réduite à un libellé pour lecteurs d'écran (port de plain-field-wrapper).
+        // FusedGroup field: the wrapper is reduced to a screen-reader label.
         if (this.container.getFieldWrapperView?.() === 'filament-forms::plain-field-wrapper') {
             const label = await this.getLabel();
             const labelHtml = label === '' ? '' : options.labelAsDiv ? `<div id="${e(this.getId())}-label" class="fi-fo-field-label fi-sr-only">${e(label)}</div>` : `<label for="${e(this.getId())}" class="fi-fo-field-label fi-sr-only">${e(label)}</label>`;
             return `<div data-field-wrapper class="fi-fo-field">${labelHtml}${options.labelPrefix ?? ''}${html}${options.after ?? ''}</div>`;
         }
-        // Texte d'aide : un petit schéma « en ligne » sous le contrôle (port de belowContent).
+        // Helper text: a small inline schema under the control.
         if (this._helperText !== null) html += `<div id="${e(this.getHelperTextId()!)}" class="fi-sc fi-inline fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="fi-sc-component"><span class="fi-sc-text">${e(this._helperText)}</span></div></div></div>`;
         return views.render('filament-forms::components.field-wrapper', {
             id: this.getId(), label: await this.getLabel(), required: (await this.isRequired()) && !(await this.isDisabled()),
@@ -193,21 +191,21 @@ export class TextInput extends Field {
     private _live: 'live' | 'blur' | null = null;
 
     static make(name: string): TextInput { return configured(new TextInput(name)); }
-    /** Nombre décimal : `type="number"`, `step="any"`. */
+    /** Decimal number: `type="number"`, `step="any"`. */
     numeric(): this { this._numeric = 'decimal'; return this.rule({ name: 'numeric', passes: (v) => String(v).trim() !== '' && Number.isFinite(Number(v)), message: (a) => `The ${a} field must be a number.` }); }
-    /** Nombre entier : `type="number"`, `step="1"`. */
+    /** Integer: `type="number"`, `step="1"`. */
     integer(): this { this._numeric = 'integer'; return this.rule({ name: 'integer', passes: (v) => /^-?\d+$/.test(String(v).trim()), message: (a) => `The ${a} field must be an integer.` }); }
     private _step: number | 'any' | null = null;
-    /** Pas de saisie d'un champ numérique (`step`), à la place de celui déduit de `numeric()` ou `integer()`. */
+    /** Input `step` of a numeric field, overriding the one implied by `numeric()` or `integer()`. */
     step(step: number | 'any' | null): this { this._step = step; return this; }
     minValue(value: number): this { this._minValue = value; return this.rule({ name: 'min', passes: (v) => Number(v) >= value, message: (a) => `The ${a} field must be at least ${value}.` }); }
     maxValue(value: number): this { this._maxValue = value; return this.rule({ name: 'max', passes: (v) => Number(v) <= value, message: (a) => `The ${a} field must not be greater than ${value}.` }); }
-    /** Libellé affiché avant la zone de saisie (ex. `$`). */
+    /** Label shown before the input (e.g. `$`). */
     prefix(label: string | null): this { this._prefix = label; return this; }
     private _suffix: string | null = null;
-    /** Libellé affiché après la saisie (« hours », « kg »…). */
+    /** Label shown after the input ("hours", "kg"…). */
     suffix(label: string | null): this { this._suffix = label; return this; }
-    /** L'état est envoyé au serveur à chaque frappe, ou à la perte de focus avec `onBlur`. */
+    /** Sends the state to the server on every keystroke, or on blur with `onBlur`. */
     live(options: { onBlur?: boolean } = {}): this { this._live = options.onBlur ? 'blur' : 'live'; return this; }
     type(type: string): this { this._type = type; return this; }
     email(condition = true): this {
@@ -216,21 +214,20 @@ export class TextInput extends Field {
     }
     password(condition = true): this { this._isPassword = condition; return this; }
     revealable(condition = true): this { this._isRevealable = condition; return this; }
-    /** `true` → "on", `false` → "off", chaîne → telle quelle (comme CanBeAutocompleted). */
+    /** `true` → "on", `false` → "off", a string as is. */
     autocomplete(value: string | boolean = true): this { this._autocomplete = value === true ? 'on' : value === false ? 'off' : value; return this; }
     placeholder(text: string | null): this { this._placeholder = text; return this; }
-    /** Adresse web : champ de type `url`, valeur http(s) valide exigée. */
     private _mask: string | null = null;
-    /** Masque de saisie Alpine (`(999) 999-9999`) : guide la frappe dans le navigateur, sans valeur de validation. */
+    /** Alpine input mask (`(999) 999-9999`): guides typing in the browser, with no validation value. */
     mask(pattern: string | null): this { this._mask = pattern; return this; }
-    /** Numéro de téléphone : chiffres, espaces et ponctuation usuelle. */
+    /** Phone number: digits, spaces and common punctuation. */
     tel(): this { this._type = 'tel'; return this.rule({ name: 'tel', passes: (v) => /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/.test(String(v)), message: (a) => `The ${a} field format is invalid.` }); }
     email(): this { this._type = 'email'; return this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
+    /** Web address: `url` input type, a valid http(s) value is required. */
     url(): this { this._type = 'url'; return this.rule({ name: 'url', passes: (v) => { try { return ['http:', 'https:'].includes(new URL(String(v)).protocol); } catch { return false; } }, message: (a) => `The ${a} field must be a valid URL.` }); }
     maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
     minLength(length: number): this { this._minLength = length; return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
 
-    /** Port de TextInput::toEmbeddedHtml (sans affixes libres, masque ni datalist pour l'instant). */
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         const revealable = this._isPassword && this._isRevealable;
@@ -245,7 +242,7 @@ export class TextInput extends Field {
                 max: phpNumber(this._maxValue), min: phpNumber(this._minValue),
                 maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder,
                 required: (await this.isRequired()) && !isDisabled, step: this._step ?? (this._numeric === 'decimal' ? 'any' : this._numeric === 'integer' ? 1 : null), type,
-                // Comme Filament : les modificateurs (`.live`, `.blur`) s'ajoutent aussi à `wire:model.fill`.
+                // Modifiers (`.live`, `.blur`) also apply to `wire:model.fill`.
                 [revealable ? model.replace('wire:model', 'wire:model.fill') : model]: this.getStatePath(),
                 'x-bind:type': revealable ? "isPasswordRevealed ? 'text' : 'password'" : null,
                 'x-mask': this._mask,
@@ -267,22 +264,22 @@ export class TextInput extends Field {
     }
 }
 
-/** Sélecteur de date natif (`<input type="date">`). Le sélecteur JavaScript de Filament n'est pas encore porté. */
+/** Native date picker (`<input type="date">`). */
 export class DatePicker extends Field {
     private _maxDate: Lazy<string | null, ComponentContext> = null;
     private _minDate: Lazy<string | null, ComponentContext> = null;
     private _live = false;
     static make(name: string): DatePicker { return configured(new DatePicker(name)); }
     private _datePlaceholder: string | null = null;
-    /** Texte indicatif (les navigateurs ne l'affichent pas sur un champ `date` natif ; l'attribut est posé comme dans Filament). */
+    /** Placeholder attribute (browsers do not display it on a native `date` input). */
     placeholder(text: string | null): this { this._datePlaceholder = text; return this; }
-    /** Envoie l'état au serveur dès qu'il change (`wire:model.live`). */
+    /** Sends the state to the server as soon as it changes (`wire:model.live`). */
     live(condition = true): this { this._live = condition; return this; }
-    /** Comme Filament : l'état d'un DatePicker est une date `AAAA-MM-JJ`, quelle que soit la précision stockée. */
+    /** The state is a `YYYY-MM-DD` date, whatever the stored precision. */
     hydrateState(value: unknown): unknown { return typeof value === 'string' && value.length > 10 ? value.slice(0, 10) : value; }
     private static resolve(date: string): string { return date === 'today' ? new Date().toISOString().slice(0, 10) : date; }
     private async bound(date: Lazy<string | null, ComponentContext>): Promise<string | null> { const value = await evaluate(date, this.context()); return value ? DatePicker.resolve(value) : null; }
-    /** Date la plus tardive acceptée : `'today'`, une date `AAAA-MM-JJ`, ou une fonction du contexte (`({ get }) => get('endDate') || 'today'`). */
+    /** Latest accepted date: `'today'`, a `YYYY-MM-DD` date, or a context function (`({ get }) => get('endDate') || 'today'`). */
     maxDate(date: Lazy<string | null, ComponentContext>): this {
         this._maxDate = date;
         return this.rule({ name: 'before_or_equal', passes: async (v) => { const max = await this.bound(date); return max === null || String(v).slice(0, 10) <= max; }, message: (a) => `The ${a} field must be a date before or equal to ${typeof date === 'string' ? date : 'the maximum date'}.` });
@@ -309,8 +306,8 @@ export class DatePicker extends Field {
 
 type Options = [string, string][] | Record<string, string>;
 /**
- * Liste déroulante. Native (`<select>`) par défaut ; `searchable()` active le sélecteur JavaScript de Filament,
- * qui interroge le serveur par les méthodes exposées (`getSearchResultsForJs`…).
+ * Dropdown. Native (`<select>`) by default; `searchable()` switches to the JavaScript select,
+ * which queries the server through the exposed methods (`getSearchResultsForJs`…).
  */
 export class Select extends Field {
     private _options: Options | ((ctx: ComponentContext) => Options | Promise<Options>) = [];
@@ -326,33 +323,32 @@ export class Select extends Field {
     private _searchResultsUsing: ((search: string, ctx: ComponentContext) => Options | Promise<Options>) | null = null;
     private _optionLabelUsing: ((value: string, ctx: ComponentContext) => string | null | Promise<string | null>) | null = null;
     static make(name: string): Select { return configured(new Select(name)); }
-    /** Résultats de recherche calculés par le serveur à chaque frappe (sans liste d'options préchargée). */
+    /** Search results computed by the server on every keystroke (no preloaded option list). */
     getSearchResultsUsing(resolver: (search: string, ctx: ComponentContext) => Options | Promise<Options>): this { this._searchResultsUsing = resolver; this._searchable = true; return this; }
-    /** Libellé d'une valeur ; sert aussi à valider qu'une valeur choisie par recherche existe bien. */
+    /** Label of a value; also used to validate that a searched value exists. */
     getOptionLabelUsing(resolver: (value: string, ctx: ComponentContext) => string | null | Promise<string | null>): this { this._optionLabelUsing = resolver; return this; }
-    /** Options fixes, ou fonction (éventuellement asynchrone) évaluée à chaque requête. */
-    /** `dynamic: false` : options fournies par une fonction mais fixes pour la durée de la page (annoncées comme statiques au navigateur). */
     /**
-     * `dynamic: false` : options fournies par une fonction mais fixes pour la durée de la page.
-     * `searchOnServer: false` : la recherche se fait dans le navigateur, parmi les options déjà envoyées (cas d'une liste complète).
+     * Fixed options, or a (possibly async) function evaluated on every request.
+     * `dynamic: false`: options come from a function but stay fixed for the page's lifetime (announced as static to the browser).
+     * `searchOnServer: false`: search runs in the browser, among the options already sent (for a complete list).
      */
     options(options: Options | ((ctx: ComponentContext) => Options | Promise<Options>), config: { dynamic?: boolean; searchOnServer?: boolean } = {}): this { this._options = options; this._dynamic = config.dynamic ?? null; this._searchOnServer = config.searchOnServer ?? null; return this; }
-    /** Option non sélectionnable selon le contexte (par exemple déjà choisie dans une autre ligne). */
+    /** Disables an option depending on the context (e.g. already picked in another row). */
     disableOptionWhen(condition: (value: string, ctx: ComponentContext) => boolean): this { this._disableOptionWhen = condition; return this; }
-    /** L'état est envoyé au serveur dès qu'il change. */
+    /** Sends the state to the server as soon as it changes. */
     live(condition = true): this { this._live = condition; return this; }
     placeholder(label: string | null): this { this._placeholder = label; return this; }
     private _selectablePlaceholder = true;
-    /** `false` : le sélecteur natif n'a pas d'option vide (port de `selectablePlaceholder()`). */
+    /** `false`: the native select has no empty option. */
     selectablePlaceholder(condition = true): this { this._selectablePlaceholder = condition; return this; }
     searchable(condition = true): this { this._searchable = condition; return this; }
-    /** Sélection multiple : l'état est une liste de valeurs ; le sélecteur JavaScript est toujours utilisé. */
+    /** Multiple selection: the state is a list of values; always uses the JavaScript select. */
     multiple(condition = true): this { this._multiple = condition; if (condition) this._searchable = true; return this; }
     isMultiple(): boolean { return this._multiple; }
-    /** Libellés de plusieurs valeurs d'un coup (sélection multiple avec recherche serveur) ; sert aussi à valider les valeurs. */
+    /** Labels of several values at once (multiple selection with server search); also used to validate the values. */
     getOptionLabelsUsing(resolver: (values: string[], ctx: ComponentContext) => Options | Promise<Options>): this { this._optionLabelsUsing = resolver; return this; }
     getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
-    /** Valeurs sélectionnées, nettoyées : des chaînes, sans doublon. */
+    /** Sanitized selected values: unique strings. */
     private selectedValues(): string[] { const state = this.context().state; return [...new Set((Array.isArray(state) ? state : []).filter((v) => typeof v === 'string' || typeof v === 'number').map(String))]; }
     private async labelsOf(values: string[]): Promise<[string, string][]> {
         if (!values.length) return [];
@@ -360,7 +356,7 @@ export class Select extends Field {
         const map = new Map((Array.isArray(known) ? known : Object.entries(known)).map(([value, label]): [string, string] => [String(value), String(label)]));
         return values.filter((value) => map.has(value)).map((value): [string, string] => [value, map.get(value)!]);
     }
-    /** Sans effet ici : les options sont toujours chargées avec le formulaire. */
+    /** No-op: options are always loaded with the form. */
     preload(): this { return this; }
     hydrateState(value: unknown): unknown {
         if (this._multiple) return (Array.isArray(value) ? value : []).map(String);
@@ -372,13 +368,13 @@ export class Select extends Field {
         return (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]);
     }
     async getValidationRules(): Promise<Rule[]> {
-        // Avec une recherche serveur, la valeur est valide si le serveur sait lui donner un libellé ; sinon elle doit figurer dans les options.
+        // With server search, a value is valid if the server can label it; otherwise it must be among the options.
         if (this._multiple) return [...(await super.getValidationRules()), { name: 'in', passes: async (v) => { const values = Array.isArray(v) ? v.map(String) : []; return (await this.labelsOf([...new Set(values)])).length === new Set(values).size; }, message: (a) => `The selected ${a} is invalid.` }];
         const passes = async (v: unknown) => (this._searchResultsUsing ? (await this._optionLabelUsing?.(String(v), this.context())) != null : (await this.resolveOptions()).some(([value]) => value === String(v)));
         return [...(await super.getValidationRules()), { name: 'in', passes, message: (a) => `The selected ${a} is invalid.` }];
     }
 
-    // --- méthodes exposées au JavaScript du sélecteur (appelées par callSchemaComponentMethod)
+    // Methods exposed to the select's JavaScript (called through callSchemaComponentMethod).
     getExposedMethods(): string[] { return ['getOptionLabel', 'getSearchResultsForJs', 'getOptionsForJs', 'getOptionLabelsForJs']; }
     private static forJs(options: [string, string][]) { return options.map(([value, label]) => ({ label, value, isDisabled: false })); }
     async getOptionsForJs() { return this.withDisabled(Select.forJs(await this.resolveOptions())); }
@@ -403,7 +399,6 @@ export class Select extends Field {
     }
     async getOptionLabelsForJs(): Promise<unknown[]> { return this._multiple ? (await this.labelsOf(this.selectedValues())).map(([value, label]) => ({ label, value })) : []; }
 
-    // --- création et modification d'une option dans une modale (port de createOptionForm / editOptionForm)
     private _createOptionForm: Component[] | ((schema: Schema) => Component[] | Schema) | null = null;
     private _createOptionUsing: ((data: Record<string, unknown>, ctx: ComponentContext) => string | number | null | Promise<string | number | null>) | null = null;
     private _createOptionModalHeading: string | null = null;
@@ -414,27 +409,27 @@ export class Select extends Field {
     private _editOptionModalHeading: string | null = null;
     private _modifyEditOptionAction: ((action: Action) => Action | void) | null = null;
     /**
-     * Formulaire de la modale « Create » ouverte par le bouton « + » du champ. Sa validation est faite côté serveur ;
-     * `createOptionUsing()` enregistre l'option et rend sa valeur, qui devient l'état du champ (ajoutée à la liste pour un `multiple()`).
-     * Les options doivent être fournies par une fonction (`options(() => …)`, ou une recherche serveur) pour que la nouvelle valeur y figure.
+     * Form of the "Create" modal opened by the field's "+" button, validated on the server.
+     * `createOptionUsing()` saves the option and returns its value, which becomes the field state (appended for `multiple()`).
+     * Options must come from a function (`options(() => …)`, or server search) for the new value to appear.
      */
     createOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._createOptionForm = schema; return this; }
-    /** Enregistre l'option à partir des données validées de la modale ; rend la valeur (clé) de l'option créée. */
+    /** Saves the option from the validated modal data; returns the value (key) of the created option. */
     createOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => string | number | null | Promise<string | number | null>) | null): this { this._createOptionUsing = callback; return this; }
     createOptionModalHeading(heading: string | null): this { this._createOptionModalHeading = heading; return this; }
-    /** Personnalise l'action de création (libellé, icône, largeur de modale…). */
+    /** Customizes the create action (label, icon, modal width…). */
     createOptionAction(modify: ((action: Action) => Action | void) | null): this { this._modifyCreateOptionAction = modify; return this; }
     /**
-     * Formulaire de la modale « Edit » de l'option sélectionnée (sélection simple seulement). Le champ devient `live()` pour que le bouton
-     * apparaisse dès qu'une option est choisie. Préremplissage par `fillEditOptionActionFormUsing()`, enregistrement par `updateOptionUsing()`.
+     * Form of the "Edit" modal for the selected option (single selection only). The field becomes `live()` so the button
+     * appears as soon as an option is picked. Filled by `fillEditOptionActionFormUsing()`, saved by `updateOptionUsing()`.
      */
     editOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._editOptionForm = schema; this._live = true; return this; }
     updateOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => unknown) | null): this { this._updateOptionUsing = callback; return this; }
-    /** Données initiales de la modale « Edit » (le contexte donne l'état courant du champ dans `state`). */
+    /** Initial data of the "Edit" modal (the context carries the current field state in `state`). */
     fillEditOptionActionFormUsing(callback: ((ctx: ComponentContext) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null): this { this._fillEditOptionForm = callback; return this; }
     editOptionModalHeading(heading: string | null): this { this._editOptionModalHeading = heading; return this; }
     editOptionAction(modify: ((action: Action) => Action | void) | null): this { this._modifyEditOptionAction = modify; return this; }
-    /** Même formulaire pour la création et la modification. */
+    /** Same form for creating and editing. */
     manageOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { return this.createOptionForm(schema).editOptionForm(schema); }
 
     private setState(value: unknown): void { writePath(this.livewire as any, this.getStatePath().split('.'), value); }
@@ -447,13 +442,13 @@ export class Select extends Field {
             .modalSubmitActionLabel(tr('modal.actions.create.label'))
             .schema(this._createOptionForm as any)
             .action(async ({ data }) => {
-                if (!this._createOptionUsing) throw new Error(`Select [${this.getStatePath()}] : createOptionUsing() est requis avec createOptionForm().`);
+                if (!this._createOptionUsing) throw new Error(`Select [${this.getStatePath()}]: createOptionUsing() is required with createOptionForm().`);
                 const created = await this._createOptionUsing(data, this.context());
                 if (created === null || created === undefined || created === '') return;
                 this.setState(this._multiple ? [...new Set([...this.selectedValues(), String(created)])] : String(created));
                 await this.callAfterStateUpdated((name, value) => writePath(this.livewire as any, [...this.container.getStatePath().split('.').filter(Boolean), ...name.split('.')], value));
             });
-        // Sélection multiple : « Create & create another » garde la modale ouverte sur un formulaire vide.
+        // Multiple selection: "Create & create another" keeps the modal open on an empty form.
         if (this._multiple) action.extraModalFooterActions([Action.make('createAnother').label(tr('modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)]);
         return this._modifyCreateOptionAction?.(action) ?? action;
     }
@@ -468,14 +463,14 @@ export class Select extends Field {
             .schema(this._editOptionForm as any)
             .fillForm(async () => (await this._fillEditOptionForm?.(this.context())) ?? {})
             .action(async ({ data }) => {
-                if (!this._updateOptionUsing) throw new Error(`Select [${this.getStatePath()}] : updateOptionUsing() est requis avec editOptionForm().`);
+                if (!this._updateOptionUsing) throw new Error(`Select [${this.getStatePath()}]: updateOptionUsing() is required with editOptionForm().`);
                 await this._updateOptionUsing(data, this.context());
             });
         return this._modifyEditOptionAction?.(action) ?? action;
     }
-    /** Actions montées sur le champ : indication, création et modification d'option. */
+    /** Actions mounted on the field: hint, create option and edit option. */
     getActions(): Action[] { return [...this.getHintActions(), ...[this.getCreateOptionAction(), this.getEditOptionAction()].filter((action): action is Action => action !== null)]; }
-    /** Boutons « + » et « modifier » à droite du champ (port des suffixActions de Select). */
+    /** "+" and "edit" buttons on the right of the field. */
     private async suffixHtml(): Promise<string> {
         const ctx = this.context();
         const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: this.getKey() };
@@ -503,17 +498,17 @@ export class Select extends Field {
         return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><select ${select.toHtml()}>${options}</select></div>${suffix}</div>`, { wrapperClass: 'fi-fo-select-wrp' });
     }
 
-    /** Port du rendu JavaScript de Select::toEmbeddedHtml (sélection simple). */
+    /** JavaScript select rendering. */
     private async toJsHtml(options: [string, string][], isDisabled: boolean, suffix = ''): Promise<string> {
         const state = this.context().state;
         const hasState = !this._multiple && state !== null && state !== undefined && state !== '';
         const selected = this._multiple ? await this.labelsOf(this.selectedValues()) : [];
         const isRequired = (await this.isRequired()) && !isDisabled;
-        // Champ obligatoire : une consigne pour lecteurs d'écran (« Select an option. ») est liée au sélecteur.
+        // Required field: a screen-reader instruction ("Select an option.") is linked to the select.
         const describedBy = [isRequired ? `${this.getId()}-required` : null, this.hasError() ? `${this.getId()}-error` : null].filter(Boolean).join(' ') || null;
         const accessibility = JSON.stringify({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-required': isRequired ? 'true' : null });
         const forJs = this.withDisabled(Select.forJs(options));
-        // Options « dynamiques » : fournies par une fonction, donc susceptibles de changer d'une requête à l'autre.
+        // Dynamic options come from a function, so they may change between requests.
         const hasDynamicOptions = this._dynamic ?? typeof this._options === 'function';
         const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.select.${key}`, replace);
         const config = `selectFormComponent({
@@ -570,7 +565,7 @@ export class Select extends Field {
     }
 }
 
-/** Colonne d'un Repeater en table : intitulé et largeur. */
+/** Column of a table Repeater: label and width. */
 export class TableColumn {
     label: string;
     private _width: string | null = null;
@@ -585,9 +580,9 @@ const isItemKey = (key: string) => ITEM_KEY.test(key) && key !== '__proto__' && 
 type ItemLink = { label: string; icon: string; url: string };
 
 /**
- * Liste d'éléments répétés, chacun avec les mêmes champs (port de Repeater, affichage en table).
- * L'état est une table `clé d'élément → champs` ; l'ordre des clés est l'ordre d'affichage.
- * Ajout, suppression et déplacement sont des actions du composant, montées avec `schemaComponent`.
+ * List of repeated items sharing the same fields, displayed as a table.
+ * The state is a map `item key → fields`; key order is display order.
+ * Add, delete and move are component actions, mounted with `schemaComponent`.
  */
 export class Repeater extends Field {
     private _schema: () => Field[] = () => [];
@@ -596,20 +591,19 @@ export class Repeater extends Field {
     private _maxItems = 500;
     private _itemLinks: ((ctx: { item: Record<string, unknown>; key: string }) => ItemLink | null)[] = [];
     static make(name: string): Repeater { return configured(new Repeater(name)); }
-    /** Champs d'un élément : une fonction, appelée pour chaque élément. */
+    /** Item fields: a function called for each item. */
     schema(factory: () => Field[]): this { this._schema = factory; return this; }
-    /** Affichage en table, une colonne par champ. */
+    /** Table display, one column per field. */
     table(columns: TableColumn[]): this { this._columns = columns; return this; }
     defaultItems(count: number): this { this._defaultItems = count; return this; }
     maxItems(count: number): this { this._maxItems = count; return this; }
     private _reorderable = true;
-    /** Faux : les éléments gardent leur ordre (cas d'une relation sans colonne d'ordre dans Filament). */
+    /** `false`: items keep their order (e.g. a relationship without an order column). */
     reorderable(condition = true): this { this._reorderable = condition; return this; }
-    /** Lien affiché sur chaque ligne (équivalent d'une action d'élément à URL). */
+    /** Link shown on each row (an item action pointing to a URL). */
     extraItemLink(resolver: (ctx: { item: Record<string, unknown>; key: string }) => ItemLink | null): this { this._itemLinks.push(resolver); return this; }
 
-    // --- état
-    /** Éléments bien formés : les clés viennent du navigateur, seules les clés simples sont retenues. */
+    /** Well-formed items only: keys come from the browser, so only simple keys are kept. */
     getItems(): Record<string, Record<string, unknown>> {
         const state = this.context().state;
         if (!state || typeof state !== 'object' || Array.isArray(state)) return {};
@@ -618,7 +612,7 @@ export class Repeater extends Field {
     private setItems(items: Record<string, Record<string, unknown>>): void { writePath(this.livewire as any, this.getStatePath().split('.'), items); }
     private itemDefaults(): Record<string, unknown> { return Object.fromEntries(this._schema().map((field) => [field.getName(), field.getDefaultState()])); }
     getDefaultState(): unknown { return Object.fromEntries(Array.from({ length: this._defaultItems }, () => [randomUUID(), this.itemDefaults()])); }
-    /** Enregistrements d'une relation → éléments `record-<id>`, réduits aux champs déclarés. */
+    /** Relationship records → `record-<id>` items, limited to the declared fields. */
     hydrateState(value: unknown): unknown {
         if (!Array.isArray(value)) return value && typeof value === 'object' ? value : {};
         const fields = this._schema();
@@ -635,7 +629,6 @@ export class Repeater extends Field {
         return [...rules, ...this._rules];
     }
 
-    // --- actions du composant
     getActions(): Action[] {
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
             const items = this.getItems();
@@ -652,7 +645,7 @@ export class Repeater extends Field {
             Action.make('delete').action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }),
             Action.make('moveUp').action(move(-1)),
             Action.make('moveDown').action(move(1)),
-            // Glisser-déposer : le navigateur envoie le nouvel ordre, accepté seulement si c'est une permutation des clés existantes.
+            // Drag and drop: the browser sends the new order, only accepted if it is a permutation of the existing keys.
             Action.make('reorder').action(({ arguments: args }) => {
                 const items = this.getItems();
                 const keys = Object.keys(items);
@@ -664,7 +657,7 @@ export class Repeater extends Field {
     }
 
     async toHtml(): Promise<string> {
-        if (!colorManager) throw new Error('Aucun gestionnaire de couleurs : appelez useColorManager().');
+        if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const id = this.getId();
         const key = this.getKey()!;
         const livewireKey = this.getLivewireKey() ?? '';
@@ -680,7 +673,7 @@ export class Repeater extends Field {
         const itemLabel = tr('reordering.item');
         const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
         const rows: string[] = [];
-        // Comme Filament : pas de colonne de réordonnancement tant qu'il n'y a qu'une ligne.
+        // No reorder column while there is only one row.
         const hasReorderColumn = this._reorderable && keys.length > 1;
         for (const [index, itemKey] of keys.entries()) {
             const moveButton = (action: 'moveUp' | 'moveDown', label: string, iconName: string, direction: string, disabled: boolean) => {
@@ -708,8 +701,7 @@ export class Repeater extends Field {
     }
 }
 
-/** Zone de texte multiligne (port de Textarea, sans redimensionnement automatique). */
-/** Heure (port de TimePicker, saisie native) : l'état est `HH:MM` avec `seconds(false)`, `HH:MM:SS` sinon. */
+/** Native time input: the state is `HH:MM` with `seconds(false)`, `HH:MM:SS` otherwise. */
 export class TimePicker extends Field {
     private _seconds = true;
     static make(name: string): TimePicker { return configured(new TimePicker(name)); }
@@ -730,7 +722,7 @@ export class TimePicker extends Field {
     }
 }
 
-/** Date et heure (port de DateTimePicker, saisie native `datetime-local`) : l'état enregistré est `AAAA-MM-JJ HH:MM:SS`. */
+/** Native `datetime-local` input: the saved state is `YYYY-MM-DD HH:MM:SS`. */
 export class DateTimePicker extends Field {
     private _seconds = true;
     static make(name: string): DateTimePicker { return configured(new DateTimePicker(name)); }
@@ -755,7 +747,7 @@ export class DateTimePicker extends Field {
     }
 }
 
-/** Choix unique en boutons radio (port de Radio). */
+/** Single choice as radio buttons. */
 export class Radio extends Field {
     private _options: [string, string][] = [];
     private _descriptions: Record<string, string> = {};
@@ -763,9 +755,9 @@ export class Radio extends Field {
     private _live = false;
     static make(name: string): Radio { return configured(new Radio(name)); }
     options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
-    /** Texte d'aide par valeur, sous le libellé de l'option. */
+    /** Helper text per value, under the option label. */
     descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
-    /** Options côte à côte. */
+    /** Options side by side. */
     inline(condition = true): this { this._inline = condition; return this; }
     live(condition = true): this { this._live = condition; return this; }
     async getValidationRules(): Promise<Rule[]> {
@@ -797,7 +789,7 @@ export class Textarea extends Field {
     maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
-        // Hauteur initiale : 1,5rem par ligne plus la marge intérieure (comme Filament).
+        // Initial height: 1.5rem per row plus padding.
         const height = (this._rows ?? 2) * 1.5 + 0.75;
         const textarea = new Attributes().merge({
             'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), maxlength: this._maxLength,
@@ -812,26 +804,26 @@ export class Textarea extends Field {
     }
 }
 
-/** Saisie d'une liste de mots-clés (port de TagsInput) : l'état est un tableau de chaînes. */
+/** Tag list input: the state is an array of strings. */
 export class TagsInput extends Field {
     private _placeholder: string | null = null;
     private _suggestions: string[] = [];
     private _splitKeys: string[] = [];
     static make(name: string): TagsInput { return configured(new TagsInput(name)); }
     placeholder(text: string | null): this { this._placeholder = text; return this; }
-    /** Valeurs proposées à la saisie. */
+    /** Values suggested while typing. */
     suggestions(suggestions: string[]): this { this._suggestions = suggestions.map(String).slice(0, 1000); return this; }
-    /** Touches qui valident le mot en cours, en plus d'Entrée (`['Tab', ',']`). */
+    /** Keys that confirm the current tag, besides Enter (`['Tab', ',']`). */
     splitKeys(keys: string[]): this { this._splitKeys = keys; return this; }
     getDefaultState(): unknown { return this._default ?? []; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
         return Array.isArray(value) ? value.filter((tag) => typeof tag === 'string' || typeof tag === 'number').map(String) : [];
     }
-    /** Seules des chaînes non vides sont enregistrées, quelle que soit la forme reçue du navigateur. */
+    /** Only non-empty strings are saved, whatever shape the browser sends. */
     dehydrateState(state: unknown): unknown { return (Array.isArray(state) ? state : []).filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()).filter((tag) => tag !== '').slice(0, 1000); }
     async toHtml(): Promise<string> {
-        if (!colorManager) throw new Error('Aucun gestionnaire de couleurs : appelez useColorManager().');
+        if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const id = this.getId();
         const isDisabled = await this.isDisabled();
         const label = await this.getLabel();
@@ -852,13 +844,13 @@ export class TagsInput extends Field {
     }
 }
 
-/** Interrupteur (port de Toggle). */
+/** On/off switch. */
 export class Toggle extends Field {
     static make(name: string): Toggle { return configured(new Toggle(name)); }
     getDefaultState(): unknown { return this._default ?? false; }
     hydrateState(value: unknown): unknown { return value === true || value === 1 || value === '1'; }
     async toHtml(): Promise<string> {
-        if (!colorManager) throw new Error('Aucun gestionnaire de couleurs : appelez useColorManager().');
+        if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const on = this.context().state === true;
         const colors = colorManager.getComponentClasses('toggle', 'primary').join(' ');
         const button = new Attributes().merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
@@ -867,7 +859,7 @@ export class Toggle extends Field {
     }
 }
 
-/** Choix unique présenté en boutons (port de ToggleButtons, sélection simple). */
+/** Single choice shown as buttons. */
 export class ToggleButtons extends Field {
     private _options: [string, string][] = [];
     private _inline = false;
@@ -876,22 +868,22 @@ export class ToggleButtons extends Field {
     private _icons: Record<string, string> = {};
     static make(name: string): ToggleButtons { return configured(new ToggleButtons(name)); }
     private _live = false;
-    /** L'état est envoyé au serveur dès qu'il change. */
+    /** Sends the state to the server as soon as it changes. */
     live(condition = true): this { this._live = condition; return this; }
-    /** Couleur par valeur (ex. celle d'une énumération). */
+    /** Color per value (e.g. from an enum). */
     colors(colors: Record<string, string>): this { this._colors = colors; return this; }
-    /** Icône par valeur. */
+    /** Icon per value. */
     icons(icons: Record<string, string>): this { this._icons = icons; return this; }
     options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
-    /** Boutons côte à côte. */
+    /** Buttons side by side. */
     inline(condition = true): this { this._inline = condition; return this; }
-    /** Boutons accolés en un seul groupe. */
+    /** Buttons joined into a single group. */
     grouped(condition = true): this { this._grouped = condition; return this; }
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'in', passes: (v) => this._options.some(([value]) => value === String(v)), message: (a) => `The selected ${a} is invalid.` }];
     }
     async toHtml(): Promise<string> {
-        if (!colorManager) throw new Error('Aucun gestionnaire de couleurs : appelez useColorManager().');
+        if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const id = this.getId();
         const isDisabled = await this.isDisabled();
         const isRequired = (await this.isRequired()) && !isDisabled;
@@ -911,18 +903,18 @@ export class ToggleButtons extends Field {
     }
 }
 
-// Schéma TipTap du serveur : les nœuds et marques que l'éditeur de Filament sait produire avec sa barre d'outils par défaut.
-// Hors périmètre pour l'instant : grilles, blocs personnalisés, mentions, balises de fusion, couleur de texte, « lead » et « small ».
+// Server-side TipTap schema: the nodes and marks the rich editor's default toolbar can produce.
+// Not supported yet: grids, custom blocks, mentions, merge tags, text color, "lead" and "small".
 const RICH_EXTENSIONS = [StarterKit, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'start' }), Subscript, Superscript, Highlight, Image, TableKit];
 type RichDocument = { type: 'doc'; content?: unknown[] };
 const isRichDocument = (value: unknown): value is RichDocument => !!value && typeof value === 'object' && (value as any).type === 'doc';
 const richText = (node: any): string => (typeof node?.text === 'string' ? node.text : '') + (Array.isArray(node?.content) ? node.content.map(richText).join('') : '');
 const hasRichContent = (node: any): boolean => node?.type === 'image' || node?.type === 'horizontalRule' || (Array.isArray(node?.content) && node.content.some(hasRichContent));
-/** HTML enregistré → document TipTap. L'analyse écarte ce que le schéma ne connaît pas (scripts, attributs d'événement, liens `javascript:`). */
+/** Stored HTML → TipTap document. Parsing drops anything the schema does not know (scripts, event attributes, `javascript:` links). */
 export function richHtmlToDocument(html: string | null | undefined): RichDocument { return generateJSON(html ?? '', RICH_EXTENSIONS) as RichDocument; }
 /**
- * Document TipTap → HTML à enregistrer, ou null s'il est vide ou invalide. Le document vient du navigateur :
- * il est rendu puis ré-analysé, pour que seul ce que le schéma accepte soit conservé.
+ * TipTap document → HTML to save, or null if empty or invalid. The document comes from the browser,
+ * so it is rendered then re-parsed to keep only what the schema accepts.
  */
 export function richDocumentToHtml(document: unknown): string | null {
     if (!isRichDocument(document)) return null;
@@ -933,8 +925,8 @@ export function richDocumentToHtml(document: unknown): string | null {
 }
 
 /**
- * Éditeur de texte riche (port de RichEditor) : le navigateur travaille sur un document TipTap, la base reçoit du HTML.
- * Le balisage est celui de Filament, repris de l'oracle (vue générée). Non portés : pièces jointes, blocs personnalisés, mentions.
+ * Rich text editor: the browser works on a TipTap document, the database receives HTML.
+ * Not supported yet: attachments, custom blocks, mentions.
  */
 export class RichEditor extends Field {
     static make(name: string): RichEditor { return configured(new RichEditor(name)); }
@@ -953,7 +945,7 @@ export class RichEditor extends Field {
     getUploadedFileAttachmentTemporaryUrl(): null { return null; }
     saveUploadedFileAttachmentAndGetUrl(): null { return null; }
 
-    /** Action « lien » de la barre d'outils : une modale (URL, nouvel onglet), puis des commandes renvoyées à l'éditeur du navigateur. */
+    /** Toolbar "link" action: a modal (URL, new tab), then commands sent back to the browser editor. */
     getActions(): Action[] {
         const tr = (name: string) => t(`filament-forms::components.rich_editor.actions.link.${name}`);
         const key = this.getKey()!;
@@ -963,7 +955,7 @@ export class RichEditor extends Field {
                 .fillForm(({ arguments: args }) => ({ url: typeof args.url === 'string' ? args.url : null, shouldOpenInNewTab: args.shouldOpenInNewTab === true }))
                 .schema(() => [
                     TextInput.make('url').label(tr('modal.form.url.label'))
-                        // Seules des adresses sans code exécutable sont acceptées.
+                        // Only URLs that cannot execute code are accepted.
                         .rule({ name: 'url', passes: (value) => /^(https?:\/\/|mailto:|tel:|\/|#)/i.test(String(value)), message: (a) => `The ${a} field must be a valid URL.` }),
                     Checkbox.make('shouldOpenInNewTab').label(tr('modal.form.should_open_in_new_tab.label')),
                 ])
@@ -985,10 +977,10 @@ export class RichEditor extends Field {
     }
 }
 
-/** Sélecteur de couleur (port de ColorPicker, format hexadécimal). */
+/** Color picker (hex format). */
 export class ColorPicker extends Field {
     static make(name: string): ColorPicker { return configured(new ColorPicker(name)); }
-    /** Format hexadécimal (le seul pris en charge ; présent pour la compatibilité d'API). */
+    /** Hex format: the only one supported, kept for API compatibility. */
     hex(): this { return this; }
     constructor(name: string) {
         super(name);
@@ -999,7 +991,7 @@ export class ColorPicker extends Field {
         const state = this.context().state;
         const id = this.getId();
         const key = this.getLivewireKey() ?? '';
-        // Même empreinte que Filament : md5(serialize([$isDisabled])).
+        // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
         const input = new Attributes().merge({
             'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', 'aria-invalid': this.hasError() ? 'true' : null, autocomplete: 'off',
@@ -1031,13 +1023,13 @@ export class Checkbox extends Field {
     }
 }
 
-/** Plusieurs cases à cocher pour une liste de valeurs (port de CheckboxList, sans recherche ni « tout cocher »). */
+/** Checkboxes for a list of values (no search or "select all" yet). */
 export class CheckboxList extends Field {
     private _options: [string, string][] = [];
     private _optionColumns: number | null = null;
     static make(name: string): CheckboxList { return configured(new CheckboxList(name)); }
     options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
-    /** Nombre de colonnes sur lesquelles les options se répartissent (à partir de `lg`). */
+    /** Number of columns the options are spread over (from `lg`). */
     columns(columns: number | null): this { this._optionColumns = columns; return this; }
     getDefaultState(): unknown { return this._default ?? []; }
     hydrateState(value: unknown): unknown {
@@ -1045,7 +1037,7 @@ export class CheckboxList extends Field {
         if (typeof value === 'string') { try { list = JSON.parse(value); } catch { list = []; } }
         return (Array.isArray(list) ? list : []).map(String);
     }
-    /** Seules les valeurs proposées sont retenues, sans doublon, dans l'ordre des options. */
+    /** Only offered values are kept, without duplicates, in option order. */
     dehydrateState(state: unknown): unknown {
         const chosen = new Set((Array.isArray(state) ? state : []).map(String));
         return this._options.map(([value]) => value).filter((value) => chosen.has(value));
@@ -1069,7 +1061,7 @@ export class CheckboxList extends Field {
     }
 }
 
-/** Paires clé / valeur libres, enregistrées comme un objet (port de KeyValue). */
+/** Free-form key/value pairs, saved as an object. */
 export class KeyValue extends Field {
     private _keyLabel: string | null = null;
     private _valueLabel: string | null = null;
@@ -1078,8 +1070,8 @@ export class KeyValue extends Field {
     keyLabel(label: string): this { this._keyLabel = label; return this; }
     valueLabel(label: string): this { this._valueLabel = label; return this; }
     reorderable(condition = true): this { this._reorderable = condition; return this; }
-    // Dans le formulaire, l'état est une liste de paires `{ key, value }` (ce qu'attend le composant du navigateur, et qui garde l'ordre) ;
-    // à l'enregistrement il redevient un objet.
+    // In the form, the state is a list of `{ key, value }` pairs (what the browser component expects, and it keeps order);
+    // it becomes an object again when saved.
     getDefaultState(): unknown { return KeyValue.toPairs(this._default); }
     private static toPairs(value: unknown): { key: string; value: unknown }[] {
         let object = value;
@@ -1087,7 +1079,7 @@ export class KeyValue extends Field {
         return object && typeof object === 'object' && !Array.isArray(object) ? Object.entries(object).map(([key, v]) => ({ key, value: v })) : [];
     }
     hydrateState(value: unknown): unknown { return KeyValue.toPairs(value); }
-    /** Objet plat de chaînes : clés vides, objets imbriqués et clés dangereuses sont écartés ; 200 paires au plus. */
+    /** Flat object of strings: empty keys, nested objects and dangerous keys are dropped; 200 pairs at most. */
     dehydrateState(state: unknown): unknown {
         const out: Record<string, string | null> = {};
         if (!Array.isArray(state)) return out;
@@ -1116,29 +1108,29 @@ export class KeyValue extends Field {
     }
 }
 
-/** Expression JavaScript écrite par le développeur (formateur d'infobulle d'un Slider…), insérée telle quelle : jamais de donnée utilisateur. */
+/** Developer-written JavaScript expression (e.g. a Slider tooltip formatter), inserted as is: never put user data in it. */
 export class RawJs {
     readonly js: string;
     constructor(js: string) { this.js = js; }
     static make(js: string): RawJs { return new RawJs(js); }
     toString(): string { return this.js; }
 }
-/** Longueur CSS simple (`10rem`, `300px`, `50%`) ; toute autre valeur est refusée (elle finirait dans un attribut `style`). */
+/** Simple CSS length (`10rem`, `300px`, `50%`); anything else is rejected, since it ends up in a `style` attribute. */
 const cssLength = (value: string | null): string | null => (value !== null && /^\d+(\.\d+)?(px|rem|em|%|vh|vw)$/.test(value.trim()) ? value.trim() : null);
-/** Attributs d'accessibilité d'un champ (port de Field::getAccessibilityAttributes) : texte d'aide et message d'erreur. */
+/** Field accessibility attributes: helper text and error message. */
 function accessibilityOf(field: Field, options: { withInvalid?: boolean } = {}): Record<string, string | null> {
     const ids = [(field as any).getHelperTextId() as string | null, field.hasError() ? `${field.getId()}-error` : null].filter(Boolean);
     return { 'aria-describedby': ids.length ? ids.join(' ') : null, 'aria-invalid': options.withInvalid !== false && field.hasError() ? 'true' : null };
 }
 type LiveMode = { onBlur: boolean; debounce: number | null } | null;
-/** Second argument de `$entangle()` : vrai seulement pour un champ `live()` simple (ni `onBlur`, ni `debounce`), comme Filament. */
+/** Second `$entangle()` argument: true only for a plain `live()` field (no `onBlur`, no `debounce`). */
 const entangleLive = (live: LiveMode) => (live !== null && !live.onBlur && live.debounce === null ? 'true' : 'false');
 
 const MARKDOWN_TOOLBAR: string[][] = [['bold', 'italic', 'strike', 'link'], ['heading'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table'], ['undo', 'redo']];
 /**
- * Éditeur Markdown (port de MarkdownEditor, éditeur EasyMDE de Filament). L'état est le texte Markdown brut, à nettoyer avant tout
- * affichage en HTML. Non portés : pièces jointes (le bouton `attachFiles` est absent par défaut) ; en lecture seule (`disabled()`),
- * le texte est affiché échappé, sans conversion Markdown.
+ * Markdown editor (EasyMDE). The state is raw Markdown text, to sanitize before any HTML display.
+ * Attachments are not supported (no `attachFiles` button by default); when read-only (`disabled()`),
+ * the text is shown escaped, without Markdown conversion.
  */
 export class MarkdownEditor extends Field {
     private _toolbarButtons: (string | string[])[] = MARKDOWN_TOOLBAR;
@@ -1147,23 +1139,23 @@ export class MarkdownEditor extends Field {
     private _placeholder: string | null = null;
     private _live: LiveMode = null;
     static make(name: string): MarkdownEditor { return configured(new MarkdownEditor(name)); }
-    /** Boutons de la barre d'outils, en groupes (`[['bold', 'italic'], ['undo', 'redo']]`) ou à plat. */
+    /** Toolbar buttons, grouped (`[['bold', 'italic'], ['undo', 'redo']]`) or flat. */
     toolbarButtons(buttons: (string | string[])[]): this { this._toolbarButtons = buttons; return this; }
-    /** Retire des boutons ; sans argument, les retire tous. */
+    /** Removes buttons; with no argument, removes them all. */
     disableToolbarButtons(names: string[] = []): this {
         this._toolbarButtons = names.length ? this._toolbarButtons.map((group) => (Array.isArray(group) ? group.filter((name) => !names.includes(name)) : group)).filter((group) => (Array.isArray(group) ? group.length > 0 : !names.includes(group))) : [];
         return this;
     }
     disableAllToolbarButtons(condition = true): this { if (condition) this._toolbarButtons = []; return this; }
-    /** Ajoute des boutons (dans un groupe à part). */
+    /** Adds buttons (in a separate group). */
     enableToolbarButtons(names: string[]): this { this._toolbarButtons = [...this._toolbarButtons, names]; return this; }
     getToolbarButtons(): (string | string[])[] { return this._toolbarButtons; }
     hasToolbarButton(name: string): boolean { return this._toolbarButtons.some((group) => (Array.isArray(group) ? group.includes(name) : group === name)); }
-    /** Hauteur minimale de la zone d'édition (`10rem` par défaut). */
+    /** Minimum height of the editing area (`10rem` by default). */
     minHeight(height: string | null): this { this._minHeight = cssLength(height); return this; }
     maxHeight(height: string | null): this { this._maxHeight = cssLength(height); return this; }
     placeholder(text: string | null): this { this._placeholder = text; return this; }
-    /** L'état est envoyé au serveur au fil de la frappe (`debounce` en millisecondes), ou à la perte de focus avec `onBlur`. */
+    /** Sends the state to the server while typing (`debounce` in milliseconds), or on blur with `onBlur`. */
     live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     maxLength(length: number): this { return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
     minLength(length: number): this { return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
@@ -1215,22 +1207,22 @@ export class MarkdownEditor extends Field {
 }
 
 const CODE_LANGUAGES = ['cpp', 'css', 'go', 'html', 'java', 'javascript', 'json', 'markdown', 'php', 'python', 'sql', 'xml', 'yaml'];
-/** Éditeur de code (port de CodeEditor, CodeMirror de Filament) : coloration selon `language()`, retour à la ligne avec `wrap()`. */
+/** Code editor (CodeMirror): highlighting from `language()`, line wrapping with `wrap()`. */
 export class CodeEditor extends Field {
     private _language: string | null = null;
     private _canWrap = false;
     private _live: LiveMode = null;
     static make(name: string): CodeEditor { return configured(new CodeEditor(name)); }
-    /** Langage : `cpp`, `css`, `go`, `html`, `java`, `javascript`, `json`, `markdown`, `php`, `python`, `sql`, `xml`, `yaml`. */
+    /** Language: `cpp`, `css`, `go`, `html`, `java`, `javascript`, `json`, `markdown`, `php`, `python`, `sql`, `xml`, `yaml`. */
     language(language: string | null): this {
-        if (language !== null && !CODE_LANGUAGES.includes(language)) throw new Error(`CodeEditor : langage inconnu « ${language} ».`);
+        if (language !== null && !CODE_LANGUAGES.includes(language)) throw new Error(`CodeEditor: unknown language "${language}".`);
         this._language = language;
         return this;
     }
     getLanguage(): string | null { return this._language; }
     /**
-     * Retour à la ligne des lignes longues (port de `wrap()`). Appelée avec du HTML, c'est l'enveloppe de champ héritée,
-     * que le rendu du composant utilise.
+     * Wraps long lines. Called with an HTML string, it is the inherited field wrapper,
+     * which the component's rendering uses.
      */
     wrap(condition?: any, options?: any): any {
         if (typeof condition === 'string') return super.wrap(condition, options);
@@ -1257,7 +1249,7 @@ export class CodeEditor extends Field {
  language: ${js(this._language)},
  state: $wire.$entangle(${js(this.getStatePath())}, ${entangleLive(this._live)}),
  })`;
-        // Même empreinte que Filament : md5(serialize([$isDisabled, $language])).
+        // Key hash over the serialized `[isDisabled, language]` options.
         const hash = createHash('md5').update(`a:2:{i:0;b:${isDisabled ? 1 : 0};i:1;${this._language === null ? 'N;' : `s:${this._language.length}:"${this._language}";`}}`).digest('hex');
         const wrapper = new Attributes().class(['fi-fo-code-editor', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         return super.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
@@ -1265,8 +1257,8 @@ export class CodeEditor extends Field {
 }
 
 /**
- * Curseur (port de Slider, noUiSlider de Filament) : une valeur, ou plusieurs poignées quand l'état est une liste (`default([20, 70])`).
- * Obligatoire par défaut, comme dans Filament ; les bornes, le pas et le type numérique sont vérifiés côté serveur.
+ * Slider (noUiSlider): one value, or several handles when the state is a list (`default([20, 70])`).
+ * Required by default; bounds, step and numeric type are checked on the server.
  */
 export class Slider extends Field {
     private _minValue = 0;
@@ -1294,35 +1286,35 @@ export class Slider extends Field {
     range(minValue: number, maxValue: number): this { this._minValue = minValue; this._maxValue = maxValue; return this; }
     minValue(value: number): this { this._minValue = value; return this; }
     maxValue(value: number): this { this._maxValue = value; return this; }
-    /** Pas entre deux valeurs ; `1` impose un entier, sinon la valeur doit être un multiple du pas. */
+    /** Step between values; `1` requires an integer, otherwise the value must be a multiple of the step. */
     step(step: number | null): this { this._step = step; return this; }
-    /** Écart minimal / maximal entre deux poignées. */
+    /** Minimum / maximum gap between two handles. */
     minDifference(difference: number | null): this { this._minDifference = difference; return this; }
     maxDifference(difference: number | null): this { this._maxDifference = difference; return this; }
-    /** Marge interdite aux extrémités : un nombre, ou `[début, fin]`. */
+    /** Forbidden margin at the ends: a number, or `[start, end]`. */
     rangePadding(padding: number | [number, number] | null): this { this._rangePadding = padding; return this; }
-    /** Segments colorés de la piste, un booléen par segment (`[true, false]` par défaut). */
+    /** Colored track segments, one boolean per segment (`[true, false]` by default). */
     fillTrack(fill: boolean[] | null = [true, false]): this { this._fillTrack = fill; return this; }
     vertical(condition = true): this { this._vertical = condition; return this; }
-    /** De droite à gauche (de haut en bas pour un curseur vertical, ce qui est le réglage par défaut en vertical). */
+    /** Right to left (top to bottom for a vertical slider, the default when vertical). */
     rtl(condition: boolean | null = true): this { this._rtl = condition; return this; }
-    /** Comportement de la poignée (`tap`, `drag`, `fixed`, `snap`, `unconstrained`…) ; `null` : aucun. */
+    /** Handle behavior (`tap`, `drag`, `fixed`, `snap`, `unconstrained`…); `null`: none. */
     behavior(behavior: string | string[] | null = null): this { this._behavior = behavior; return this; }
-    /** Infobulles sur les poignées : booléen, un booléen par poignée, ou `RawJs` qui formate `$value`. */
+    /** Handle tooltips: a boolean, one boolean per handle, or a `RawJs` formatting `$value`. */
     tooltips(tooltips: boolean | RawJs | (boolean | RawJs)[] = true): this { this._tooltips = tooltips; return this; }
-    /** Graduations : `range` (par défaut), `steps`, `positions`, `count`, `values`. */
+    /** Pips: `range` (default), `steps`, `positions`, `count`, `values`. */
     pips(mode: string | null = 'range', density: number | null = null): this { this._pipsMode = mode; this._pipsDensity = density; return this; }
     pipsMode(mode: string | null): this { this._pipsMode = mode; return this; }
     pipsDensity(density: number | null): this { this._pipsDensity = density; return this; }
-    /** Formatage des graduations (`RawJs` qui reçoit `$value`). */
+    /** Pip formatter (a `RawJs` receiving `$value`). */
     pipsFormatter(formatter: RawJs | null): this { this._pipsFormatter = formatter; return this; }
     pipsValues(values: number | number[] | null): this { this._pipsValues = values; return this; }
     steppedPips(condition = true): this { this._steppedPips = condition; return this; }
-    /** Filtre des graduations (`RawJs` qui reçoit `$value`). */
+    /** Pip filter (a `RawJs` receiving `$value`). */
     pipsFilter(filter: RawJs | null): this { this._pipsFilter = filter; return this; }
-    /** Échelle non linéaire (`{ '10%': 500, '50%': 4000 }`). */
+    /** Non-linear scale (`{ '10%': 500, '50%': 4000 }`). */
     nonLinearPoints(points: Record<string, number | number[]> | null): this { this._nonLinearPoints = points; return this; }
-    /** Nombre de décimales de la valeur enregistrée. */
+    /** Decimal places of the saved value. */
     decimalPlaces(places: number | null): this { this._decimalPlaces = places; return this; }
     live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     getMinValueWithPadding(): number { const padding = this._rangePadding; return this._minValue + (typeof padding === 'number' ? padding : Array.isArray(padding) ? (padding[0] ?? 0) : 0); }
@@ -1349,7 +1341,7 @@ export class Slider extends Field {
             { name: step === 1 ? 'integer' : 'multiple_of', passes: each(onStep), message: (a) => (step === 1 ? `The ${a} field must be an integer.` : `The ${a} field must be a multiple of ${step}.`) },
         ];
     }
-    /** Port de convertRawJsExpressionsToFormatterObjects : un `RawJs` devient `{ to: ($value) => … }`. */
+    /** A `RawJs` becomes a `{ to: ($value) => … }` formatter object. */
     private static formatters(value: boolean | RawJs | (boolean | RawJs)[] | null): string {
         if (value instanceof RawJs) return `{ to: ($value) => ${value.js} }`;
         if (Array.isArray(value)) return `[${value.map((item) => Slider.formatters(item)).join(', ')}]`;
@@ -1386,13 +1378,13 @@ export class Slider extends Field {
         const accessibility = accessibilityOf(this, { withInvalid: !this.isMultiple() });
         const attributes = new Attributes().merge({ 'aria-labelledby': `${id}-label`, id, role: 'group', ...this._extraAttributes })
             .class(['fi-fo-slider', { 'fi-fo-slider-has-pips': this._pipsMode !== null, 'fi-fo-slider-has-tooltips': hasTooltips, 'fi-fo-slider-vertical': this._vertical }]);
-        // Même empreinte que Filament : md5(serialize([$isDisabled])).
+        // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
         return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
     }
 }
 
-/** Champ caché (port de Hidden) : un `<input type="hidden">` lié à l'état, sans libellé ni place dans la grille. */
+/** Hidden field: an `<input type="hidden">` bound to the state, with no label or grid slot. */
 export class Hidden extends Field {
     constructor(name: string) { super(name); this._columnSpan = { default: 'hidden' }; }
     static make(name: string): Hidden { return configured(new Hidden(name)); }
@@ -1402,22 +1394,22 @@ export class Hidden extends Field {
     }
 }
 
-/** Code à usage unique (port de OneTimeCodeInput) : une case par chiffre ; l'état est la chaîne de chiffres, de longueur `length()` exactement. */
+/** One-time code: one box per digit; the state is a digit string of exactly `length()` characters. */
 export class OneTimeCodeInput extends Field {
     private _length = 6;
     private _submitOnCompletion = false;
     private _readOnly = false;
     constructor(name: string) {
         super(name);
-        // Comme Filament : `numeric` (et non `integer`, qui refuserait les zéros de tête), puis `digits:<longueur>`.
+        // `numeric` rather than `integer`, which would reject leading zeros; then `digits:<length>`.
         this.rule({ name: 'numeric', passes: (v) => /^\d+$/.test(String(v)), message: (a) => `The ${a} field must be a number.` });
         this.rule({ name: 'digits', passes: (v) => new RegExp(`^\\d{${this._length}}$`).test(String(v)), message: (a) => `The ${a} field must be ${this._length} digits.` });
     }
     static make(name: string): OneTimeCodeInput { return configured(new OneTimeCodeInput(name)); }
-    /** Nombre de chiffres (6 par défaut). */
+    /** Number of digits (6 by default). */
     length(length: number): this { this._length = Math.max(1, Math.min(32, Math.floor(length))); return this; }
     getLength(): number { return this._length; }
-    /** Soumet le formulaire dès que le dernier chiffre est saisi. */
+    /** Submits the form as soon as the last digit is typed. */
     submitOnCompletion(condition = true): this { this._submitOnCompletion = condition; return this; }
     readOnly(condition = true): this { this._readOnly = condition; return this; }
     hydrateState(value: unknown): unknown { return value === null || value === undefined ? null : String(value); }
@@ -1436,8 +1428,7 @@ export class OneTimeCodeInput extends Field {
 }
 
 /**
- * Texte en lecture seule dans un formulaire (port de Placeholder, déprécié dans Filament au profit de TextEntry avec `state()`).
- * Rien n'est enregistré. Une `HtmlString` est insérée telle quelle.
+ * Read-only text in a form. Nothing is saved. An `HtmlString` is inserted as is.
  */
 export class Placeholder extends Component {
     private _label: Lazy<string | null, ComponentContext> = null;
@@ -1459,7 +1450,7 @@ export class Placeholder extends Component {
     }
 }
 
-// --- état imbriqué : un champ placé dans un groupe à état (ex. `address.city`) se lit et s'écrit à son chemin relatif au schéma
+// Nested state: a field inside a stateful group (e.g. `address.city`) is read and written at its path relative to the schema.
 function relativePath(schema: Schema, field: Field): string[] {
     const base = schema.getStatePath();
     const full = field.getStatePath();
@@ -1472,11 +1463,11 @@ function writePath(target: Record<string, unknown>, segments: string[], value: u
     node[segments[segments.length - 1]] = value;
 }
 
-/** Remplit l'état par défaut de tous les champs d'un schéma (équivalent de `$this->form->fill()`). */
+/** Fills the default state of every field in a schema. */
 export function fillSchema(schema: Schema, target: Record<string, unknown>): void {
     for (const c of schema.getFlatComponents()) if (c instanceof Field) writePath(target, relativePath(schema, c), c.getDefaultState());
 }
-/** Remplit l'état du formulaire à partir d'un enregistrement, champ par champ (équivalent de `$this->form->fill($record->attributesToArray())`). */
+/** Fills the form state from a record, field by field. */
 export function fillSchemaFromRecord(schema: Schema, target: Record<string, unknown>, record: Record<string, unknown>): void {
     for (const c of schema.getFlatComponents()) {
         if (!(c instanceof Field)) continue;
@@ -1484,7 +1475,7 @@ export function fillSchemaFromRecord(schema: Schema, target: Record<string, unkn
         writePath(target, segments, c.hydrateState(readPath(record, segments) ?? c.getDefaultState()));
     }
 }
-/** Valide tous les champs visibles d'un schéma ; retourne les erreurs par chemin d'état. */
+/** Validates every visible field of a schema; returns errors by state path. */
 export async function validateSchema(schema: Schema): Promise<Record<string, string[]>> {
     const errors: Record<string, string[]> = {};
     for (const c of await schema.getVisibleFlatComponents()) {
@@ -1495,7 +1486,7 @@ export async function validateSchema(schema: Schema): Promise<Record<string, str
     return errors;
 }
 
-/** État à enregistrer : seulement les champs déclarés, visibles et « déshydratés » ; une chaîne vide vaut `null` (comme Laravel). */
+/** State to save: only declared, visible, dehydrated fields; an empty string becomes `null`. */
 export async function getSchemaState(schema: Schema): Promise<Record<string, unknown>> {
     const data: Record<string, unknown> = {};
     const fields: Field[] = [];
@@ -1505,7 +1496,7 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
         fields.push(c);
     }
-    // Du plus profond au moins profond : un conteneur voit ses enfants déjà mis en forme.
+    // Deepest first: a container sees its children already shaped.
     for (const c of fields.reverse()) {
         const path = relativePath(schema, c);
         const current = readPath(data, path);
@@ -1515,12 +1506,11 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     return data;
 }
 
-// ------------------------------------------------------------------ assistant par étapes
 type StepHook = (ctx: ComponentContext) => void | Promise<void>;
-/** Lancée depuis `beforeValidation` / `afterValidation` d'une étape pour rester sur l'étape courante (équivalent de l'exception `Halt` de Filament). */
+/** Throw from a step's `beforeValidation` / `afterValidation` to stay on the current step. */
 export class Halt extends Error { constructor() { super('Halt'); } }
 
-/** Une étape d'un assistant : un titre, une description et une icône facultatives, son propre schéma (port de Wizard\Step). */
+/** A wizard step: a label, an optional description and icon, and its own schema. */
 export class Step extends Component {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = {};
@@ -1537,9 +1527,9 @@ export class Step extends Component {
     description(description: string | null): this { this._description = description; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
     completedIcon(name: string | null): this { this._completedIcon = name; return this; }
-    /** Avant la validation de l'étape, au clic sur « Next » ; lever `Halt` pour rester sur l'étape. */
+    /** Runs before the step is validated, on "Next"; throw `Halt` to stay on the step. */
     beforeValidation(callback: StepHook | null): this { this._beforeValidation = callback; return this; }
-    /** Après une validation réussie, avant de passer à l'étape suivante ; lever `Halt` pour rester sur l'étape. */
+    /** Runs after a successful validation, before moving to the next step; throw `Halt` to stay on the step. */
     afterValidation(callback: StepHook | null): this { this._afterValidation = callback; return this; }
     getLabel(): string { return this.label; }
     getDescription(): string | null { return this._description; }
@@ -1549,7 +1539,7 @@ export class Step extends Component {
     async callAfterValidation(): Promise<void> { await this._afterValidation?.(this.context()); }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns)]; }
     async toHtml(): Promise<string> { return this.getChildSchemas()[0].toHtml(); }
-    /** Panneau de l'étape : un `<form>` quand l'assistant sait quoi soumettre (Entrée passe à l'étape suivante, ou enregistre à la dernière). */
+    /** Step panel: a `<form>` when the wizard has a submit handler (Enter goes to the next step, or saves on the last one). */
     async toStepHtml(submitHandler: string | null, hasHeader: boolean): Promise<string> {
         const key = this.getKey()!;
         const tag = submitHandler ? 'form' : 'div';
@@ -1572,8 +1562,8 @@ export class Step extends Component {
 }
 
 /**
- * Assistant par étapes (port de Wizard) : toutes les étapes sont rendues, le navigateur n'affiche que l'étape courante.
- * « Next » valide l'étape courante côté serveur avant d'avancer, sauf si l'assistant est `skippable()`.
+ * Multi-step wizard: every step is rendered, the browser only shows the current one.
+ * "Next" validates the current step on the server before moving on, unless the wizard is `skippable()`.
  */
 export class Wizard extends Component {
     private steps: Step[];
@@ -1592,20 +1582,20 @@ export class Wizard extends Component {
     static make(steps: Step[] = []): Wizard { return configured(new Wizard(steps)); }
     schema(steps: Step[]): this { this.steps = steps; return this; }
     label(label: string | null): this { this._label = label; return this; }
-    /** Étapes accessibles dans n'importe quel ordre, sans validation au passage. */
+    /** Steps can be visited in any order, without validation. */
     skippable(condition = true): this { this._skippable = condition; return this; }
-    /** Étape affichée à l'ouverture (à partir de 1). */
+    /** Step shown on open (1-based). */
     startOnStep(step: number): this { this._startStep = step; return this; }
-    /** Faux : sans carte autour de l'assistant (c'est le cas sur une page de resource). */
+    /** `false`: no card around the wizard (as on a resource page). */
     contained(condition = true): this { this._contained = condition; return this; }
     hiddenHeader(condition = true): this { this._headerHidden = condition; return this; }
-    /** Action affichée à la place de « Back » sur la première étape. */
+    /** Action shown instead of "Back" on the first step. */
     cancelAction(action: Action | null): this { this._cancelAction = action; return this; }
-    /** Action affichée à la place de « Next » sur la dernière étape. */
+    /** Action shown instead of "Next" on the last step. */
     submitAction(action: Action | null): this { this._submitAction = action; return this; }
-    /** Expression Alpine exécutée quand la dernière étape est soumise au clavier (ex. `$wire.create()`). */
+    /** Alpine expression run when the last step is submitted from the keyboard (e.g. `$wire.create()`). */
     alpineSubmitHandler(handler: string | null): this { this._alpineSubmitHandler = handler; return this; }
-    /** Garde l'étape courante dans l'adresse (`?step=…`). */
+    /** Keeps the current step in the URL (`?step=…`). */
     persistStepInQueryString(key: string | null = 'step'): this { this._stepQueryStringKey = key; return this; }
     nextAction(modify: ((action: Action) => Action | void) | null): this { this._modifyNext = modify; return this; }
     previousAction(modify: ((action: Action) => Action | void) | null): this { this._modifyPrevious = modify; return this; }
@@ -1616,12 +1606,12 @@ export class Wizard extends Component {
         return `${this.container.getKey()}.${this._label ? `${slug(this._label)}::${own}` : own}`;
     }
     getExposedMethods(): string[] { return ['nextStep', 'previousStep']; }
-    /** « Next » redessine le composant : les erreurs de validation de l'étape doivent apparaître. */
+    /** "Next" re-renders the component so the step's validation errors show up. */
     isRenderlessMethod(): boolean { return false; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.steps)]; }
     private getSteps(): Step[] { this.getChildSchemas(); return this.steps; }
 
-    /** Appelée par le navigateur au clic sur « Next » : valide l'étape courante, puis annonce l'étape suivante. */
+    /** Called by the browser on "Next": validates the current step, then announces the next one. */
     async nextStep(currentStepIndex: unknown = null, currentStepKey: unknown = null): Promise<void> {
         const steps = this.getSteps();
         if (!Number.isInteger(currentStepIndex) || (currentStepIndex as number) < 0 || (currentStepIndex as number) >= steps.length - 1) return;
@@ -1642,7 +1632,7 @@ export class Wizard extends Component {
         }
         livewire.dispatch('next-wizard-step', { key: this.getKey(), step: steps[(currentStepIndex as number) + 1].getKey(), currentStep: current.getKey() });
     }
-    /** Le retour en arrière se fait dans le navigateur ; la méthode existe pour le contrat de Filament. */
+    /** Going back happens in the browser; this exposed method is a no-op the front end still calls. */
     previousStep(): void {}
 
     async toHtml(): Promise<string> {
@@ -1686,19 +1676,18 @@ export class Wizard extends Component {
     }
 }
 
-// ------------------------------------------------------------------ téléversement de fichiers
-/** Fichier temporaire reçu par le runtime (voir @navette-js/wire). */
+/** Temporary file received by the runtime (see @navette-js/wire). */
 export type TemporaryUpload = { id: string; path: string; name: string; type: string; size: number; extension: string };
 export type UploadedFileInfo = { name: string; size: number; type: string; url: string };
-/** Élément de l'état enregistré quand le champ ne stocke pas lui-même (`storeFiles(false)`) : fichier déjà enregistré, ou fichier temporaire à traiter. */
+/** Saved state item when the field does not store files itself (`storeFiles(false)`): an already saved file, or a temporary file to process. */
 export type FileUploadEntry = { key: string } | { file: TemporaryUpload };
-/** Où vont les fichiers une fois le formulaire enregistré. */
+/** Where files go once the form is saved. */
 export interface FileStorage {
-    /** Enregistre un fichier temporaire et rend sa clé (chemin relatif). */
+    /** Stores a temporary file and returns its key (relative path). */
     store(file: TemporaryUpload, directory: string | null): Promise<string>;
     info(key: string): Promise<UploadedFileInfo | null>;
 }
-/** Stockage sur le disque local, servi sous une adresse publique. Le nom du fichier est aléatoire, son extension vient du type détecté. */
+/** Local disk storage, served under a public URL. File names are random; the extension comes from the detected type. */
 export class LocalFileStorage implements FileStorage {
     private root: string;
     private baseUrl: string;
@@ -1710,7 +1699,7 @@ export class LocalFileStorage implements FileStorage {
     async store(file: TemporaryUpload, directory: string | null): Promise<string> {
         const key = [directory, `${randomUUID()}.${file.extension}`].filter(Boolean).join('/');
         const target = this.resolve(key);
-        if (!target) throw new Error('Dossier de téléversement invalide.');
+        if (!target) throw new Error('Invalid upload directory.');
         mkdirSync(nodePath.dirname(target), { recursive: true });
         copyFileSync(file.path, target);
         writeFileSync(`${target}.meta.json`, JSON.stringify({ name: file.name, type: file.type }));
@@ -1720,18 +1709,18 @@ export class LocalFileStorage implements FileStorage {
         const target = this.resolve(key);
         if (!target || !existsSync(target)) return null;
         let meta: { name?: string; type?: string } = {};
-        try { meta = JSON.parse(readFileSync(`${target}.meta.json`, 'utf8')); } catch { /* fichier déposé sans métadonnées */ }
+        try { meta = JSON.parse(readFileSync(`${target}.meta.json`, 'utf8')); } catch { /* file dropped in without metadata */ }
         return { name: meta.name ?? nodePath.basename(key), size: statSync(target).size, type: meta.type ?? 'application/octet-stream', url: `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}` };
     }
 }
 
 /**
- * Téléversement de fichiers (port de FileUpload, rendu FilePond de Filament).
- * État : `{ <clé de fichier>: <clé enregistrée> | 'livewire-file:<id temporaire>' }`. Une clé enregistrée n'est acceptée du navigateur
- * que si elle figure déjà dans l'enregistrement en cours d'édition : on ne peut pas s'attribuer le fichier d'un autre.
+ * File upload (FilePond).
+ * State: `{ <file key>: <stored key> | 'livewire-file:<temporary id>' }`. A stored key from the browser is only accepted
+ * if the record being edited already has it, so nobody can claim someone else's file.
  */
 export class FileUpload extends Field {
-    /** Stockage par défaut de l'application. */
+    /** Application-wide default storage. */
     static storage: FileStorage | null = null;
     private _multiple = false;
     private _maxFiles: number | null = null;
@@ -1745,17 +1734,17 @@ export class FileUpload extends Field {
     static make(name: string): FileUpload { return configured(new FileUpload(name)); }
     multiple(condition = true): this { this._multiple = condition; return this; }
     maxFiles(count: number | null): this { this._maxFiles = count; return this; }
-    /** Taille maximale d'un fichier, en kilo-octets. */
+    /** Maximum file size, in kilobytes. */
     maxSize(kilobytes: number | null): this { this._maxSize = kilobytes; return this; }
     reorderable(condition = true): this { this._reorderable = condition; return this; }
-    /** Types MIME acceptés (`image/jpeg`, `image/*`…), vérifiés sur le contenu du fichier reçu. */
+    /** Accepted MIME types (`image/jpeg`, `image/*`…), checked against the received file's content. */
     acceptedFileTypes(types: string[] | null): this { this._acceptedFileTypes = types; return this; }
     image(): this { return this.acceptedFileTypes(['image/*']); }
     directory(directory: string | null): this { this._directory = directory; return this; }
     storage(storage: FileStorage): this { this._storage = storage; return this; }
-    /** `false` : le champ n'enregistre rien lui-même ; les données reçoivent des `FileUploadEntry`, à traiter par l'adaptateur (médias). */
+    /** `false`: the field stores nothing itself; the data receives `FileUploadEntry` items for the adapter to process (media). */
     storeFiles(condition = true): this { this._storeFiles = condition; return this; }
-    /** Informations d'un fichier déjà enregistré (nom, taille, type, adresse), quand elles ne viennent pas du stockage. */
+    /** Info about an already saved file (name, size, type, URL), when it does not come from the storage. */
     getUploadedFileUsing(resolver: (key: string, ctx: ComponentContext) => UploadedFileInfo | null | Promise<UploadedFileInfo | null>): this { this._getUploadedFileUsing = resolver; return this; }
 
     getDefaultState(): unknown { return {}; }
@@ -1765,20 +1754,19 @@ export class FileUpload extends Field {
     }
     private get uploads(): { resolve(value: unknown): TemporaryUpload | null; remove(id: string): void } | null { return (this.livewire as any)._runtime?.uploads ?? null; }
     private getStorage(): FileStorage | null { return this._storage ?? FileUpload.storage; }
-    /** Entrées de l'état, nettoyées : clé de fichier sûre, valeur chaîne. */
+    /** Sanitized state entries: safe file key, string value. */
     private entries(): [string, string][] {
         const state = this.context().state;
         if (!state || typeof state !== 'object' || Array.isArray(state)) return [];
         return Object.entries(state as Record<string, unknown>).filter(([key, value]) => /^[A-Za-z0-9-]{1,64}$/.test(key) && typeof value === 'string').map(([key, value]): [string, string] => [key, value as string]).slice(0, 100);
     }
-    /** Clés enregistrées que l'enregistrement en cours possède déjà : les seules qu'on accepte de relire depuis le navigateur. */
+    /** Stored keys the current record already owns: the only ones accepted back from the browser. */
     private originalKeys(): Set<string> {
         const record = this.container.getRecord() as Record<string, unknown> | null;
         return new Set(Object.values(this.hydrateState(record?.[this.getName()]) as Record<string, string>));
     }
     private isTemporary(value: string): boolean { return value.startsWith('livewire-file:'); }
 
-    // --- méthodes exposées au JavaScript du champ
     getExposedMethods(): string[] { return ['deleteUploadedFile', 'removeUploadedFile', 'reorderUploadedFiles', 'getUploadedFiles']; }
     async getUploadedFiles(): Promise<Record<string, UploadedFileInfo | null>> {
         const original = this.originalKeys();
@@ -1786,13 +1774,13 @@ export class FileUpload extends Field {
         for (const [fileKey, value] of this.entries()) {
             if (this.isTemporary(value) || !original.has(value)) { files[fileKey] = null; continue; }
             const info = this._getUploadedFileUsing ? await this._getUploadedFileUsing(value, this.context()) : await this.getStorage()?.info(value);
-            // Seules des adresses locales ou http(s) partent vers le navigateur.
+            // Only local or http(s) URLs are sent to the browser.
             files[fileKey] = info && /^(\/(?!\/)|https?:\/\/)/.test(info.url) ? info : null;
         }
         return files;
     }
     private writeState(entries: [string, string][]): void { writePath(this.livewire as any, this.getStatePath().split('.'), Object.fromEntries(entries)); }
-    /** Retire un fichier du champ. Le fichier enregistré n'est supprimé qu'à l'enregistrement du formulaire, par l'application. */
+    /** Removes a file from the field. A stored file is only deleted by the application when the form is saved. */
     removeUploadedFile(fileKey: unknown): void {
         const removed = this.entries().find(([key]) => key === fileKey);
         if (removed && this.isTemporary(removed[1])) this.uploads?.remove(removed[1].slice('livewire-file:'.length));
@@ -1819,14 +1807,14 @@ export class FileUpload extends Field {
         if (this._maxSize !== null) rules.push({ name: 'max', passes: () => temporary().every((file) => file !== null && file.size <= this._maxSize! * 1024), message: (a) => `The ${a} field must not be greater than ${this._maxSize} kilobytes.` });
         return rules;
     }
-    /** La validation porte sur l'état entier, même vide (un champ obligatoire sans fichier doit échouer). */
+    /** Validates the whole state, even when empty (a required field without files must fail). */
     async validate(): Promise<string[]> {
         if (!(await this.isDehydrated())) return [];
         const attribute = (await this.getLabel()).toLowerCase();
         for (const rule of await this.getValidationRules()) if (!(await rule.passes(this.context().state, this.context()))) return [rule.message(attribute)];
         return [];
     }
-    /** À l'enregistrement : les fichiers temporaires sont stockés, les clés existantes non reconnues sont écartées. */
+    /** On save: temporary files are stored, unrecognized existing keys are dropped. */
     async dehydrateState(): Promise<unknown> {
         const original = this.originalKeys();
         const out: (string | FileUploadEntry)[] = [];
@@ -1836,7 +1824,7 @@ export class FileUpload extends Field {
                 if (!file) continue;
                 if (!this._storeFiles) { out.push({ file }); continue; }
                 const storage = this.getStorage();
-                if (!storage) throw new Error('FileUpload : aucun stockage configuré (FileUpload.storage).');
+                if (!storage) throw new Error('FileUpload: no storage configured (FileUpload.storage).');
                 out.push(await storage.store(file, this._directory));
                 this.uploads?.remove(file.id);
             } else if (original.has(value)) out.push(this._storeFiles ? value : { key: value });

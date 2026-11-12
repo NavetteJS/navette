@@ -1,4 +1,4 @@
-// @navette-js/panels — port de filament/panels : Panel, mises en page, pages, navigation, connexion, session.
+// @navette-js/panels: Panel, layouts, pages, resources, navigation, authentication and session.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkVerificationUrl, consoleMailer, readToken, signToken, signVerificationUrl, type Mailer, type MailMessage } from './auth.ts';
@@ -32,75 +32,74 @@ views.namespace('filament', fileURLToPath(new URL('../views', import.meta.resolv
 views.share({ t, tc });
 export const ASSET_VERSION = '5.11.2.0';
 
-/** Utilisateur connecté. Votre fournisseur d'authentification peut y ajouter ce qu'il veut (rôle, équipe…) : les politiques le reçoivent tel quel. */
+/** The signed-in user. Your auth provider may add any field (role, team…): policies receive it as-is. */
 export type User = { id: string | number; name: string; email: string; [key: string]: unknown };
 
 /**
- * Politique d'une resource : une fonction par capacité, nommée comme dans Laravel
- * (`viewAny`, `create`, `update`, `delete`, `deleteAny`, `restore`, `forceDelete`, `reorder`, ou vos propres noms).
- * Capacité absente : autorisée.
+ * Resource policy: one function per ability
+ * (`viewAny`, `create`, `update`, `delete`, `deleteAny`, `restore`, `forceDelete`, `reorder`, or your own names).
+ * A missing ability is allowed.
  */
 export type Policy<R = any> = Partial<Record<string, (user: User, record: R | null) => boolean | Promise<boolean>>>;
-/** Plugin : un paquet de configuration réutilisable. `register` reçoit le panel en cours de construction ; `boot` est appelé au montage du routeur. */
+/** A reusable bundle of configuration. `register` receives the panel being built; `boot` is called when the router is mounted. */
 export type Plugin = { id: string; register(panel: Panel): void; boot?(panel: Panel): void };
-/** Question posée au crochet d'autorisation du panel. `resource`, `page` ou `widget` dit sur quoi elle porte. */
+/** Question asked to the panel's authorization hook. `resource`, `page` or `widget` tells what it is about. */
 export type AuthorizationCheck = { user: User; ability: string; resource: unknown | null; record: unknown | null; page: typeof Page | null; widget: typeof Widget | null };
-/** Rend `true` ou `false` pour décider, `undefined` pour laisser la politique de la resource (ou `canAccess` / `canView`) répondre. */
+/** Return `true` or `false` to decide, or `undefined` to let the resource policy (or `canAccess` / `canView`) answer. */
 export type Authorizer = (check: AuthorizationCheck) => boolean | undefined | Promise<boolean | undefined>;
 type MaybePromise<T> = T | Promise<T>;
 /**
- * Fournisseur d'utilisateurs. `attempt` et `find` suffisent pour la connexion ; les méthodes facultatives activent
- * l'inscription (`create`, `findByEmail`), la réinitialisation du mot de passe (`findByEmail`, `update`, `getPasswordFingerprint`),
- * la vérification de l'adresse (`hasVerifiedEmail`, `markEmailAsVerified`) et la page de profil (`update`).
- * `knexAuthProvider(knex)` les fournit toutes pour une table `users` au format de Laravel.
+ * User provider. `attempt` and `find` are enough for login; the optional methods enable
+ * registration (`create`, `findByEmail`), password reset (`findByEmail`, `update`, `getPasswordFingerprint`),
+ * email verification (`hasVerifiedEmail`, `markEmailAsVerified`) and the profile page (`update`).
+ * `knexAuthProvider(knex)` implements all of them for a `users` table.
  */
 export interface AuthProvider {
     attempt(email: string, password: string): MaybePromise<User | null>;
     find(id: string | number): MaybePromise<User | null>;
     findByEmail?(email: string): MaybePromise<User | null>;
-    /** Crée l'utilisateur ; le mot de passe est reçu en clair, à hacher par le fournisseur. */
+    /** Creates the user. The password is plain text; the provider must hash it. */
     create?(data: { name: string; email: string; password: string }): MaybePromise<User>;
-    /** Met à jour nom, adresse ou mot de passe (en clair, à hacher). Changer d'adresse doit annuler sa vérification. */
+    /** Updates name, email or password (plain text, to hash). Changing the email must reset its verification. */
     update?(user: User, data: { name?: string; email?: string; password?: string }): MaybePromise<User>;
     hasVerifiedEmail?(user: User): MaybePromise<boolean>;
     markEmailAsVerified?(user: User): MaybePromise<void>;
-    /** Valeur qui change avec le mot de passe enregistré : un lien de réinitialisation déjà servi devient invalide. */
+    /** A value that changes with the stored password, so a used reset link becomes invalid. */
     getPasswordFingerprint?(user: User): MaybePromise<string>;
 }
 /**
- * Locataires d'un panel (équipes, organisations…) : port de `->tenant(Team::class)`. Chaque page du panel vit alors
- * sous `/<panel>/<clé du locataire>/…`, et seul un membre du locataire peut l'ouvrir.
+ * Panel tenants (teams, organizations…). Every panel page then lives under
+ * `/<panel>/<tenant key>/…`, and only a member of the tenant can open it.
  */
 export interface TenantProvider<T = any> {
-    /** Locataires dont l'utilisateur est membre. */
+    /** Tenants the user is a member of. */
     getTenants(user: User): MaybePromise<T[]>;
-    /** Locataire d'après sa clé dans l'adresse (venue du navigateur : à valider). */
+    /** Tenant from its URL key (comes from the browser: validate it). */
     find(key: string): MaybePromise<T | null>;
     canAccess(user: User, tenant: T): MaybePromise<boolean>;
     getKey(tenant: T): string;
     getName(tenant: T): string;
-    /** Texte au-dessus du nom dans le menu (« Current team »), ou `null`. */
+    /** Text above the tenant name in the menu ("Current team"), or `null`. */
     getCurrentTenantLabel?(tenant: T): string | null;
     getAvatarUrl?(tenant: T): string | null;
-    /** Création (page d'inscription d'un locataire) : l'utilisateur en devient membre. */
+    /** Creates a tenant (tenant registration page); the user becomes a member. */
     create?(data: Record<string, unknown>, user: User): MaybePromise<T>;
     update?(tenant: T, data: Record<string, unknown>): MaybePromise<T>;
 }
 export type PanelContext = { req: Request; res: Response; panel: Panel; user: User | null; mailbox: string; tenant?: unknown };
 
 /**
- * Thème prédéfini d'un panel : un jeu de couleurs (palettes ou simples couleurs), éventuellement une police et du CSS.
- * Quand un panel en déclare plusieurs, l'utilisateur choisit le sien dans son menu ; le choix est gardé dans un cookie.
+ * Predefined panel theme: a set of colors (palettes or plain colors), optionally a font and some CSS.
+ * When a panel declares several, users pick theirs from the user menu; the choice is kept in a cookie.
  */
 export type Theme = {
     id: string; label: string;
     colors?: Record<string, Palette | string>;
     font?: { family: string; url?: string };
-    /** CSS ajouté à la page pour ce thème (écrit par le développeur du panel, inséré tel quel). */
+    /** CSS added to the page for this theme (written by the panel developer, inserted as-is). */
     css?: string;
 };
 
-// ------------------------------------------------------------------ navigation
 export class NavigationItem {
     label: string;
     _url = '#';
@@ -117,13 +116,12 @@ export class NavigationItem {
     group(group: string | null): this { this._group = group; return this; }
     sort(sort: number): this { this._sort = sort; return this; }
     badge(badge: string | number | null, color = 'primary'): this { this._badge = badge; this._badgeColor = color; return this; }
-    /** Par défaut un élément est actif sur son URL exacte, comme une page Filament (les resources fourniront leur propre règle). */
+    /** By default an item is active on its exact URL; this overrides the rule. */
     isActiveWhen(fn: (path: string) => boolean): this { this._isActive = fn; return this; }
     isActive(path: string): boolean { return this._isActive ? this._isActive(path) : path === this._url; }
 }
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// ------------------------------------------------------------------ panel
 export class Panel {
     private _id = 'admin';
     private _path = '';
@@ -153,46 +151,46 @@ export class Panel {
     brandLogo(url: string): this { this._brandLogo = url; return this; }
     darkModeBrandLogo(url: string): this { this._darkModeBrandLogo = url; return this; }
     brandLogoHeight(height: string): this { this._brandLogoHeight = height; return this; }
-    /** Icône d'onglet du navigateur. */
+    /** Browser tab icon. */
     favicon(url: string | null): this { this._favicon = url; return this; }
     getFavicon(): string | null { return this._favicon; }
     /**
-     * Feuille de thème compilée par l'application (Tailwind) : elle remplace la feuille par défaut de Filament.
-     * Équivalent de `->viteTheme()` : le thème importe `@navette-js/panels/theme.css` et déclare ses propres sources.
+     * Theme stylesheet compiled by the application (Tailwind); it replaces the default stylesheet.
+     * The theme imports `@navette-js/panels/theme.css` and declares its own sources.
      */
     theme(url: string | null): this { this._theme = url; return this; }
     getTheme(): string | null { return this._theme; }
     /**
-     * Mouvement et indicateurs de chargement propres à Navette (ressorts, pastille d'activité, roue des zones différées).
-     * C'est un écart assumé avec Filament : `motion(false)` rend l'interface d'origine, sans rien d'ajouté.
+     * Navette's motion and loading indicators (springs, activity dot, spinner for deferred areas).
+     * `motion(false)` renders the plain interface without them.
      */
     motion(enabled = true): this { this._motion = enabled; return this; }
     hasMotion(): boolean { return this._motion; }
-    /** Thèmes proposés à l'utilisateur ; le premier est le thème par défaut. */
+    /** Themes offered to the user; the first one is the default. */
     themes(themes: Theme[]): this {
-        for (const theme of themes) if (!/^[a-z0-9-]{1,40}$/.test(theme.id)) throw new Error(`Identifiant de thème invalide : ${theme.id}`);
+        for (const theme of themes) if (!/^[a-z0-9-]{1,40}$/.test(theme.id)) throw new Error(`Invalid theme id: ${theme.id}`);
         this._themes = themes;
         return this;
     }
     getThemes(): Theme[] { return this._themes; }
-    /** Thème de la requête : celui du cookie s'il est déclaré, sinon le premier. Null si le panel n'a pas de thèmes. */
+    /** Theme for the request: the cookie's theme if declared, otherwise the first one. `null` if the panel has no themes. */
     resolveTheme(req: Request): Theme | null {
         if (!this._themes.length) return null;
         const id = (req.headers.cookie ?? '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`navette_${this._id}_theme=`))?.split('=')[1];
         return this._themes.find((theme) => theme.id === id) ?? this._themes[0];
     }
     rememberTheme(res: Response, theme: Theme): void { res.cookie(`navette_${this._id}_theme`, theme.id, { sameSite: 'lax', secure: res.req?.secure === true, maxAge: 1000 * 60 * 60 * 24 * 365 }); }
-    /** Exécute un rendu avec les couleurs du thème de la requête. */
+    /** Runs a render with the colors of the request's theme. */
     withTheme<T>(req: Request, fn: () => T): T {
         const theme = this.resolveTheme(req);
-        // Les composants des autres paquets lisent un gestionnaire de couleurs partagé par tous les panels :
-        // les couleurs de ce panel (et de son thème) n'y valent que le temps de la requête.
+        // Components from other packages read a color manager shared by all panels:
+        // this panel's (and its theme's) colors only apply for the duration of the request.
         const withPanelColors = () => sharedColors.runWith(`${this._id}:${theme?.id ?? ''}`, this.colors.getColors(), fn);
-        // Les render hooks du panel ne valent que pour ses propres requêtes.
+        // A panel's render hooks only apply to its own requests.
         return runWithRenderHooks(this._renderHooks, () => (theme?.colors ? this.colors.runWith(theme.id, theme.colors, withPanelColors) : withPanelColors()));
     }
     setColors(colors: Record<string, Palette | string>): this { this.colors.register(colors); return this; }
-    /** Police du panel. Sans URL : fournisseur Bunny Fonts, comme `->font('Albert Sans')` dans Filament. */
+    /** Panel font. Without a URL, it is loaded from Bunny Fonts. */
     font(family: string, url?: string): this {
         this._font = { family, url: url ?? `https://fonts.bunny.net/css?family=${slug(family)}:400,500,600,700&display=swap`, preconnect: url ? null : 'https://fonts.bunny.net' };
         return this;
@@ -201,18 +199,18 @@ export class Panel {
     auth(provider: AuthProvider): this { this._auth = provider; return this; }
     key(key: string): this { this._key = key; return this; }
     pages(pages: (typeof Page)[]): this { this._pages.push(...pages); return this; }
-    /** Enregistre des resources : leurs pages et leur élément de navigation. */
+    /** Registers resources: their pages and navigation items. */
     resources(resources: (typeof Resource)[]): this {
         for (const resource of resources) { resource.panel = this; this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
         return this;
     }
     navigationItems(items: NavigationItem[]): this { this._navigationItems.push(...items); return this; }
-    /** Ordre des groupes de navigation. */
+    /** Order of navigation groups. */
     navigationGroups(groups: string[]): this { this._navigationGroups = groups; return this; }
     private _plugins: Plugin[] = [];
-    /** Applique un plugin : un objet qui configure le panel (resources, pages, render hooks, thèmes…). */
+    /** Applies a plugin: an object that configures the panel (resources, pages, render hooks, themes…). */
     plugin(plugin: Plugin): this {
-        if (this._plugins.some((p) => p.id === plugin.id)) throw new Error(`Plugin déjà enregistré : ${plugin.id}`);
+        if (this._plugins.some((p) => p.id === plugin.id)) throw new Error(`Plugin already registered: ${plugin.id}`);
         this._plugins.push(plugin);
         plugin.register(this);
         return this;
@@ -221,22 +219,22 @@ export class Panel {
     getPlugins(): Plugin[] { return this._plugins; }
     private _renderHooks = new RenderHookRegistry();
     /**
-     * Insère du HTML à un emplacement nommé de l'interface de ce panel (noms : `PanelsRenderHook`, `TablesRenderHook`, `ActionsRenderHook`, `WidgetsRenderHook`).
-     * `scopes` limite le hook à certaines pages ou resources (leur classe). Le HTML rendu est inséré tel quel : échappez toute donnée avec `e()`.
+     * Inserts HTML at a named location of this panel's UI (names: `PanelsRenderHook`, `TablesRenderHook`, `ActionsRenderHook`, `WidgetsRenderHook`).
+     * `scopes` limits the hook to some pages or resources (their class). The HTML is inserted as-is: escape any data with `e()`.
      */
     renderHook(name: string, render: RenderHookCallback, scopes: unknown | unknown[] | null = null): this { this._renderHooks.register(name, render, scopes); return this; }
     getRenderHooks(): RenderHookRegistry { return this._renderHooks; }
     private _authorizer: Authorizer | null = null;
-    /** Branche votre propre système de permissions : consulté avant toute politique, pour chaque capacité, page et widget. */
+    /** Plugs in your own permission system: consulted before any policy, for every ability, page and widget. */
     authorizeUsing(authorizer: Authorizer | null): this { this._authorizer = authorizer; return this; }
-    /** Décision d'autorisation : le crochet du panel d'abord, puis la règle fournie ; sans utilisateur, toujours non. */
+    /** Authorization decision: the panel hook first, then the given rule. Always `false` without a user. */
     async authorize(user: User | null, ability: string, subject: { resource?: unknown; record?: unknown; page?: typeof Page; widget?: typeof Widget; rule?: (() => boolean | Promise<boolean>) | null } = {}): Promise<boolean> {
         if (!user) return false;
         const decided = await this._authorizer?.({ user, ability, resource: subject.resource ?? null, record: subject.record ?? null, page: subject.page ?? null, widget: subject.widget ?? null });
         if (typeof decided === 'boolean') return decided;
         return subject.rule ? Boolean(await subject.rule()) : true;
     }
-    /** Une page est-elle accessible à cet utilisateur ? Liste : `viewAny` ; création : `create` ; édition : vérifiée sur l'enregistrement ; page libre : `canAccess`. */
+    /** Whether the user can open a page. List: `viewAny`; create: `create`; edit: checked against the record; custom page: `canAccess`. */
     async canAccessPage(PageClass: typeof Page, user: User | null): Promise<boolean> {
         const resource = (PageClass as any).resource as typeof Resource | undefined;
         if (resource && PageClass.prototype instanceof EditRecord) return user !== null;
@@ -245,37 +243,37 @@ export class Panel {
         return this.authorize(user, 'access', { page: PageClass, rule: () => PageClass.canAccess(user!) });
     }
     private _widgets: (typeof Widget)[] = [];
-    /** Widgets du panel (tableau de bord, pages libres) : enregistrés comme composants, à afficher par `getHeaderWidgets()` d'une page. */
+    /** Panel widgets (dashboard, custom pages): registered as components, displayed through a page's `getHeaderWidgets()`. */
     widgets(widgets: (typeof Widget)[]): this { this._widgets.push(...widgets); return this; }
     getWidgets(): (typeof Widget)[] { return this._widgets; }
     maxContentWidth(width: string): this { this._maxContentWidth = width; return this; }
 
     getId(): string { return this._id; }
     getBrandName(): string { return this._brandName; }
-    getAuth(): AuthProvider { if (!this._auth) throw new Error('Aucun fournisseur d\'authentification : panel.auth(...).'); return this._auth; }
+    getAuth(): AuthProvider { if (!this._auth) throw new Error('No auth provider: call panel.auth(...).'); return this._auth; }
     getLoginPage(): typeof Login | null { return this._login; }
     getPages(): (typeof Page)[] { return this._pages; }
     getResources(): (typeof Resource)[] { return this._resources; }
 
-    // -------------------------------------------------------------- recherche globale
+    // -------------------------------------------------------------- global search
     private _globalSearch = true;
     private _globalSearchKeyBindings: string[] = [];
     private _globalSearchDebounce = '500ms';
     private _globalSearchSuffix: string | null | ((userAgent: string) => string | null) = null;
-    /** `false` retire le champ de recherche globale. Il n'apparaît de toute façon que si une resource est cherchable. */
+    /** `false` removes the global search field. It only appears when at least one resource is searchable. */
     globalSearch(condition = true): this { this._globalSearch = condition; return this; }
-    /** Raccourcis qui placent le curseur dans le champ : `['command+k', 'ctrl+k']`. */
+    /** Keyboard shortcuts that focus the field: `['command+k', 'ctrl+k']`. */
     globalSearchKeyBindings(keyBindings: string[]): this { this._globalSearchKeyBindings = keyBindings.filter((binding) => /^[a-z0-9+]+$/.test(binding)); return this; }
     getGlobalSearchKeyBindings(): string[] { return this._globalSearchKeyBindings; }
-    /** Délai entre la frappe et la recherche (`500ms` par défaut). */
+    /** Delay between typing and searching (`500ms` by default). */
     globalSearchDebounce(debounce: string): this { if (/^[0-9]+m?s$/.test(debounce)) this._globalSearchDebounce = debounce; return this; }
     getGlobalSearchDebounce(): string { return this._globalSearchDebounce; }
     globalSearchFieldSuffix(suffix: string | null): this { this._globalSearchSuffix = suffix; return this; }
-    /** Affiche le premier raccourci dans le champ, écrit selon la plateforme du navigateur (comme Filament : « META+K » hors Mac pour `command+k`). */
+    /** Shows the first shortcut in the field, written for the browser's platform (`command+k` shows as "META+K" outside macOS). */
     globalSearchFieldKeyBindingSuffix(): this { this._globalSearchSuffix = (userAgent) => keyBindingSuffix(this._globalSearchKeyBindings, userAgent); return this; }
     getGlobalSearchFieldSuffix(userAgent = ''): string | null { return typeof this._globalSearchSuffix === 'function' ? this._globalSearchSuffix(userAgent) : this._globalSearchSuffix; }
     hasGlobalSearch(): boolean { return this._globalSearch && this._resources.some((resource) => resource.canGloballySearch()); }
-    /** Résultats par resource, dans l'ordre d'enregistrement ; seules les resources que l'utilisateur peut lister sont interrogées. */
+    /** Results per resource, in registration order. Only resources the user can list are queried. */
     async getGlobalSearchResults(search: string, user: User | null): Promise<GlobalSearchCategory[]> {
         const categories: GlobalSearchCategory[] = [];
         if (!this._globalSearch) return categories;
@@ -288,39 +286,39 @@ export class Panel {
         return categories;
     }
 
-    // -------------------------------------------------------------- notifications en base
+    // -------------------------------------------------------------- database notifications
     private _databaseNotifications: DatabaseNotificationStore | null = null;
     private _databaseNotificationsPolling: string | null = '30s';
-    /** Active la cloche des notifications enregistrées en base, lues et écrites par ce stockage (`knexNotificationStore(knex)`). */
+    /** Enables the database notifications bell, read from and written to this store (`knexNotificationStore(knex)`). */
     databaseNotifications(store: DatabaseNotificationStore | null): this { this._databaseNotifications = store; return this; }
     getDatabaseNotifications(): DatabaseNotificationStore | null { return this._databaseNotifications; }
-    /** Intervalle de rafraîchissement (`30s` par défaut) ; `null` pour ne pas interroger le serveur. */
+    /** Polling interval (`30s` by default); `null` disables polling. */
     databaseNotificationsPolling(interval: string | null): this { this._databaseNotificationsPolling = interval; return this; }
     getDatabaseNotificationsPollingInterval(): string | null { return this._databaseNotificationsPolling; }
 
-    // -------------------------------------------------------------- mise en page : barre du haut, navigation, sidebar
+    // -------------------------------------------------------------- layout: topbar, navigation, sidebar
     private _topbar = true;
     private _topNavigation = false;
     private _navigation = true;
     private _sidebarCollapsibleOnDesktop = false;
     private _sidebarFullyCollapsibleOnDesktop = false;
     private _positions: { userMenu: 'topbar' | 'sidebar' | null; globalSearch: 'topbar' | 'sidebar' | null; databaseNotifications: 'topbar' | 'sidebar' | null } = { userMenu: null, globalSearch: null, databaseNotifications: null };
-    /** Barre du haut (présente par défaut, comme dans Filament) : `topbar(false)` met logo, recherche, cloche et menu dans la sidebar. */
+    /** Topbar, shown by default. `topbar(false)` moves the logo, search, bell and user menu into the sidebar. */
     topbar(condition = true): this { this._topbar = condition; return this; }
     hasTopbar(): boolean { return this._topbar; }
-    /** Navigation dans la barre du haut (menus déroulants par groupe) au lieu de la sidebar. */
+    /** Navigation in the topbar (one dropdown per group) instead of the sidebar. */
     topNavigation(condition = true): this { this._topNavigation = condition; return this; }
     hasTopNavigation(): boolean { return this._topNavigation; }
-    /** `navigation(false)` retire toute navigation (ni sidebar ni menus). */
+    /** `navigation(false)` removes all navigation (no sidebar, no menus). */
     navigation(condition = true): this { this._navigation = condition; return this; }
     hasNavigation(): boolean { return this._navigation; }
-    /** Sidebar repliable sur grand écran en une colonne d'icônes. */
+    /** On desktop, the sidebar can collapse to a column of icons. */
     sidebarCollapsibleOnDesktop(condition = true): this { this._sidebarCollapsibleOnDesktop = condition; return this; }
     isSidebarCollapsibleOnDesktop(): boolean { return this._sidebarCollapsibleOnDesktop; }
-    /** Sidebar entièrement masquable sur grand écran. */
+    /** On desktop, the sidebar can be fully hidden. */
     sidebarFullyCollapsibleOnDesktop(condition = true): this { this._sidebarFullyCollapsibleOnDesktop = condition; return this; }
     isSidebarFullyCollapsibleOnDesktop(): boolean { return this._sidebarFullyCollapsibleOnDesktop; }
-    /** Emplacement du menu utilisateur ; par défaut, la barre du haut si elle existe. */
+    /** Where the user menu goes; defaults to the topbar when there is one. */
     userMenuPosition(position: 'topbar' | 'sidebar' | null): this { this._positions.userMenu = position; return this; }
     getUserMenuPosition(): 'topbar' | 'sidebar' { return this._positions.userMenu ?? (this._topbar ? 'topbar' : 'sidebar'); }
     globalSearchPosition(position: 'topbar' | 'sidebar' | null): this { this._positions.globalSearch = position; return this; }
@@ -328,37 +326,37 @@ export class Panel {
     databaseNotificationsPosition(position: 'topbar' | 'sidebar' | null): this { this._positions.databaseNotifications = position; return this; }
     getDatabaseNotificationsPosition(): 'topbar' | 'sidebar' { return this._positions.databaseNotifications ?? (this._topbar ? 'topbar' : 'sidebar'); }
     private _userMenuItems: Record<string, Action> = {};
-    /** Éléments ajoutés au menu utilisateur (actions à adresse ou à modale). `sort()` négatif : au-dessus du choix du thème. Clés `profile` et `logout` : remplacent ceux par défaut. */
+    /** Items added to the user menu (URL or modal actions). A negative `sort()` places them above the theme switcher. Keys `profile` and `logout` replace the defaults. */
     userMenuItems(items: Record<string, Action> | Action[]): this {
         for (const [key, item] of Array.isArray(items) ? items.map((item) => [item.getName(), item] as const) : Object.entries(items)) this._userMenuItems[key] = item;
         return this;
     }
     getUserMenuItems(): Record<string, Action> { return this._userMenuItems; }
 
-    // -------------------------------------------------------------- inscription, mot de passe oublié, vérification, profil
+    // -------------------------------------------------------------- registration, password reset, email verification, profile
     private _registration: typeof Register | null = null;
     private _passwordReset: { request: typeof RequestPasswordReset; reset: typeof ResetPassword } | null = null;
     private _emailVerification: { prompt: typeof EmailVerificationPrompt; isRequired: boolean } | null = null;
     private _profile: { page: typeof EditProfile; isSimple: boolean } | null = null;
     private _mailer: Mailer = consoleMailer;
-    /** Page d'inscription (`/register`). Le fournisseur d'utilisateurs doit savoir créer (`create`) et chercher par adresse (`findByEmail`). */
+    /** Registration page (`/register`). The auth provider must implement `create` and `findByEmail`. */
     registration(page: typeof Register | null = Register): this { this._registration = page; return this; }
     hasRegistration(): boolean { return this._registration !== null; }
     getRegistrationPage(): typeof Register | null { return this._registration; }
-    /** Mot de passe oublié : demande (`/password-reset/request`) et réinitialisation par un lien signé envoyé par e-mail. */
+    /** Password reset: request page (`/password-reset/request`), then reset through a signed link sent by email. */
     passwordReset(request: typeof RequestPasswordReset = RequestPasswordReset, reset: typeof ResetPassword = ResetPassword): this { this._passwordReset = { request, reset }; return this; }
     hasPasswordReset(): boolean { return this._passwordReset !== null; }
     getPasswordResetPages() { return this._passwordReset; }
-    /** Vérification de l'adresse e-mail : un lien signé est envoyé à l'inscription ; tant qu'il n'est pas suivi, seule l'invitation à vérifier est accessible (`isRequired`). */
+    /** Email verification: a signed link is sent on registration. Until it is followed, only the verification prompt is accessible (`isRequired`). */
     emailVerification(prompt: typeof EmailVerificationPrompt = EmailVerificationPrompt, isRequired = true): this { this._emailVerification = { prompt, isRequired }; return this; }
     hasEmailVerification(): boolean { return this._emailVerification !== null; }
     isEmailVerificationRequired(): boolean { return this._emailVerification?.isRequired === true; }
     getEmailVerificationPrompt(): typeof EmailVerificationPrompt | null { return this._emailVerification?.prompt ?? null; }
-    /** Page de profil (`/profile`) : nom, adresse, mot de passe. `isSimple` : mise en page simple (par défaut) ou complète. */
+    /** Profile page (`/profile`): name, email, password. `isSimple`: simple layout (default) or full panel layout. */
     profile(page: typeof EditProfile = EditProfile, isSimple = true): this { this._profile = { page, isSimple }; return this; }
     hasProfile(): boolean { return this._profile !== null; }
     getProfile() { return this._profile; }
-    /** Envoi des e-mails (réinitialisation, vérification). Par défaut : écrits dans la console. */
+    /** Mailer for password reset and verification emails. Defaults to the console. */
     mailer(mailer: Mailer): this { this._mailer = mailer; return this; }
     async sendMail(message: MailMessage): Promise<void> { await this._mailer.send(message); }
     getAuthKey(): string { return this._key; }
@@ -368,7 +366,7 @@ export class Panel {
         const token = signToken(this._key, `${this._id}.password-reset`, { uid: user.id, fp: fingerprint }, 60 * 60);
         return `${this.getBaseUrl('password-reset/reset')}?email=${encodeURIComponent(user.email)}&token=${encodeURIComponent(token)}`;
     }
-    /** Charge d'un jeton de réinitialisation valide pour ce panel, sinon `null`. */
+    /** Payload of a password reset token valid for this panel, otherwise `null`. */
     readResetPasswordToken(token: unknown): { uid: string | number; fp: string } | null { return readToken(this._key, `${this._id}.password-reset`, token) as any; }
     getVerifyEmailUrl(user: User): string {
         const expires = Math.floor(Date.now() / 1000) + 60 * 60;
@@ -378,14 +376,14 @@ export class Panel {
     checkVerifyEmailUrl(id: string, hash: string, expires: unknown, signature: unknown): boolean { return checkVerificationUrl(`${this._key}.${this._id}`, id, hash, expires, signature); }
     getEmailVerificationPromptUrl(): string { return this.getBaseUrl('email-verification/prompt'); }
     getProfileUrl(): string | null { return this._profile ? this.getBaseUrl('profile') : null; }
-    /** L'utilisateur doit-il encore vérifier son adresse avant d'utiliser le panel ? */
+    /** Whether the user must still verify their email before using the panel. */
     async mustVerifyEmail(user: User | null): Promise<boolean> {
         if (!user || !this.isEmailVerificationRequired()) return false;
         const auth = this.getAuth();
         return auth.hasVerifiedEmail ? !(await auth.hasVerifiedEmail(user)) : false;
     }
 
-    // -------------------------------------------------------------- locataires (multi-tenancy)
+    // -------------------------------------------------------------- multi-tenancy
     private _tenant: TenantProvider | null = null;
     private _tenantOwnershipColumn: string | null = null;
     private _tenantRegistration: typeof RegisterTenant | null = null;
@@ -394,17 +392,17 @@ export class Panel {
     private _tenantMenuItems: Record<string, Action> = {};
     private _tenantScope = new AsyncLocalStorage<{ tenant: unknown }>();
     /**
-     * Rend le panel multi-locataire. `ownershipColumn` : colonne qui rattache un enregistrement à son locataire (`team_id`) ;
-     * les resources du panel ne lisent et n'écrivent alors que les enregistrements du locataire courant (voir `Resource.isScopedToTenant`).
+     * Makes the panel multi-tenant. `ownershipColumn` is the column linking a record to its tenant (`team_id`);
+     * the panel's resources then only read and write the current tenant's records (see `Resource.isScopedToTenant`).
      */
     tenant(provider: TenantProvider | null, options: { ownershipColumn?: string } = {}): this { this._tenant = provider; this._tenantOwnershipColumn = options.ownershipColumn ?? null; return this; }
     hasTenancy(): boolean { return this._tenant !== null; }
-    getTenantProvider(): TenantProvider { if (!this._tenant) throw new Error('Panel sans locataires : panel.tenant(...).'); return this._tenant; }
+    getTenantProvider(): TenantProvider { if (!this._tenant) throw new Error('Panel has no tenancy: call panel.tenant(...).'); return this._tenant; }
     getTenantOwnershipColumn(): string | null { return this._tenantOwnershipColumn; }
-    /** Page de création d'un locataire (`/new`). */
+    /** Tenant registration page (`/new`). */
     tenantRegistration(page: typeof RegisterTenant | null): this { this._tenantRegistration = page; return this; }
     getTenantRegistrationPage(): typeof RegisterTenant | null { return this._tenantRegistration; }
-    /** Page de profil du locataire (`/<locataire>/profile`). */
+    /** Tenant profile page (`/<tenant>/profile`). */
     tenantProfile(page: typeof EditTenantProfile | null): this { this._tenantProfile = page; return this; }
     getTenantProfilePage(): typeof EditTenantProfile | null { return this._tenantProfile; }
     tenantMenu(condition = true): this { this._tenantMenu = condition; return this; }
@@ -414,43 +412,43 @@ export class Panel {
         return this;
     }
     getTenantMenuItems(): Record<string, Action> { return this._tenantMenuItems; }
-    /** Exécute `fn` pour un locataire : les adresses produites (`getUrl`) et les requêtes des resources lui sont rattachées. */
+    /** Runs `fn` for a tenant: generated URLs (`getUrl`) and resource queries are scoped to it. */
     withTenant<T>(tenant: unknown, fn: () => T): T { return this._tenantScope.run({ tenant }, fn); }
-    /** Locataire de la requête en cours (équivalent de `Filament::getTenant()`), ou `null`. */
+    /** Tenant of the current request, or `null`. */
     getTenant<T = any>(): T | null { return (this._tenantScope.getStore()?.tenant ?? null) as T | null; }
     getTenantUrlKey(tenant: unknown): string { return this.getTenantProvider().getKey(tenant); }
 
     private _subNavigationPosition: 'start' | 'end' | 'top' = 'start';
-    /** Position par défaut de la sous-navigation des pages (`start`, comme Filament). */
+    /** Default position of page sub-navigation (`start`). */
     subNavigationPosition(position: 'start' | 'end' | 'top'): this { this._subNavigationPosition = position; return this; }
     getSubNavigationPosition(): 'start' | 'end' | 'top' { return this._subNavigationPosition; }
     private _appUrl: string | null = null;
-    /** Adresse publique de l'application (`https://exemple.fr`), utilisée dans les liens envoyés par e-mail. Sans elle, l'origine de la requête est reprise : à éviter en production (en-tête `Host` falsifiable). */
+    /** Public URL of the application (`https://example.com`), used in emailed links. Without it the request origin is used, which should be avoided in production (the `Host` header can be forged). */
     appUrl(url: string | null): this { this._appUrl = url ? url.replace(/\/$/, '') : null; return this; }
     getAppUrl(): string | null { return this._appUrl; }
 
     getMaxContentWidth(): string { return this._maxContentWidth; }
-    /** Adresse dans le panel ; dans un panel à locataires, préfixée par le locataire courant (ou celui donné). */
+    /** URL inside the panel; in a multi-tenant panel, prefixed with the current (or given) tenant. */
     getUrl(sub = '', tenant: unknown = this.getTenant()): string {
         if (this._tenant && tenant) return '/' + [this._path, encodeURIComponent(this.getTenantUrlKey(tenant)), sub.replace(/^\/|\/$/g, '')].filter(Boolean).join('/');
         return this.getBaseUrl(sub);
     }
-    /** Adresse hors locataire (connexion, inscription, profil, création d'un locataire). */
+    /** URL outside any tenant (login, registration, profile, tenant registration). */
     getBaseUrl(sub = ''): string { return '/' + [this._path, sub.replace(/^\/|\/$/g, '')].filter(Boolean).join('/'); }
     getLoginUrl(): string { return this.getBaseUrl('login'); }
     getLogoutUrl(): string { return this.getBaseUrl('logout'); }
-    /** Préfixe de l'endpoint Livewire de ce panel (`/livewire`, ou `/<chemin>/livewire`) : chaque panel a le sien. */
+    /** Prefix of this panel's Livewire endpoint (`/livewire` or `/<path>/livewire`): each panel has its own. */
     getLivewirePrefix(): string { return this._path ? `/${this._path}/livewire` : '/livewire'; }
     assetUrl(file: string): string { return `/${file}?v=${ASSET_VERSION}`; }
     getBrand(): Record<string, unknown> { return { name: this._brandName, logo: this._brandLogo, darkLogo: this._darkModeBrandLogo, height: this._brandLogoHeight }; }
     getFont(): typeof this._font { return this._font; }
 
-    /** Avatar par défaut : port de UiAvatarsProvider (service externe ui-avatars.com, initiales du nom). */
+    /** Default avatar: the name's initials from the external ui-avatars.com service. */
     getUserAvatarUrl(user: User): string { return this.getAvatarUrlFor(user.name); }
-    /** Avatar d'un locataire : celui de son fournisseur (`getAvatarUrl`), sinon ses initiales. */
+    /** Tenant avatar: from the tenant provider (`getAvatarUrl`), otherwise its initials. */
     getTenantAvatarUrl(tenant: unknown): string { return this.getTenantProvider().getAvatarUrl?.(tenant) ?? this.getAvatarUrlFor(this.getTenantProvider().getName(tenant)); }
     private _spa = false;
-    /** Navigation sans rechargement (`wire:navigate`) entre les pages du panel, comme `->spa()`. */
+    /** SPA mode: navigate between panel pages without full reloads (`wire:navigate`). */
     spa(condition = true): this { this._spa = condition; return this; }
     hasSpaMode(): boolean { return this._spa; }
     getAvatarUrlFor(name: string): string {
@@ -459,14 +457,14 @@ export class Panel {
         return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials).replace(/%20/g, '+')}&format=svg&color=FFFFFF&background=${encodeURIComponent(background)}`;
     }
 
-    /** Groupes de navigation : pages enregistrées + éléments libres, triés, groupés dans l'ordre déclaré. */
-    /** Compteurs de navigation calculés (équivalent de getNavigationBadge()) : adresse de la page → valeur. */
+    /** Navigation groups: registered pages plus custom items, sorted, grouped in the declared order. */
+    /** Computed navigation badges: page URL → value. */
     async resolveNavigationBadges(): Promise<Map<string, string | number | null>> {
         const badges = new Map<string, string | number | null>();
         for (const page of this._pages) if (page.shouldRegisterNavigation && typeof (page as any).getNavigationBadge === 'function') badges.set(page.slug, await (page as any).getNavigationBadge());
         return badges;
     }
-    /** Adresses des pages du menu que cet utilisateur ne peut pas ouvrir. */
+    /** URLs of menu pages this user cannot open. */
     async resolveInaccessiblePages(user: User | null): Promise<Set<string>> {
         const hidden = new Set<string>();
         for (const page of this._pages) if (page.shouldRegisterNavigation && !(await this.canAccessPage(page, user))) hidden.add(page.slug);
@@ -488,7 +486,7 @@ export class Panel {
         }).filter((g) => g.items.length);
     }
 
-    // --- session : cookie signé (identifiant d'utilisateur), suffisant pour le jalon 2
+    // --- session: an HMAC-signed cookie holding the user id
     private sign(value: string): string { return createHmac('sha256', this._key).update(value).digest('base64url'); }
     logIn(res: Response, user: User, remember: boolean): void {
         const value = Buffer.from(JSON.stringify({ uid: user.id })).toString('base64url');
@@ -505,11 +503,8 @@ export class Panel {
     }
 }
 
-// ------------------------------------------------------------------ render hooks
 /**
- * Emplacements de render hook d'un panel — mêmes noms que `Filament\View\PanelsRenderHook`.
- * Ceux d'une brique pas encore portée (barre du haut, recherche globale, menu de locataire, sous-navigation, inscription,
- * réinitialisation du mot de passe, enregistrements liés) sont déclarés mais ne sont rendus nulle part pour l'instant : voir `UNPLACED_RENDER_HOOKS`.
+ * Render hook locations of a panel. A few are declared but not rendered anywhere yet: see `UNPLACED_RENDER_HOOKS`.
  */
 export const PanelsRenderHook = {
     AUTH_LOGIN_FORM_AFTER: 'panels::auth.login.form.after',
@@ -549,7 +544,7 @@ export const PanelsRenderHook = {
     PAGE_HEADER_WIDGETS_END: 'panels::page.header-widgets.end',
     PAGE_HEADER_WIDGETS_START: 'panels::page.header-widgets.start',
     PAGE_START: 'panels::page.start',
-    /** Le nom contient « module-menu » dans Filament : conservé tel quel. */
+    /** The hook name says "module-menu", not "mobile-menu": kept for compatibility. */
     PAGE_SUB_NAVIGATION_MOBILE_MENU_AFTER: 'panels::page.sub-navigation.module-menu.after',
     PAGE_SUB_NAVIGATION_MOBILE_MENU_BEFORE: 'panels::page.sub-navigation.module-menu.before',
     PAGE_SUB_NAVIGATION_SIDEBAR_AFTER: 'panels::page.sub-navigation.sidebar.after',
@@ -597,24 +592,22 @@ export const PanelsRenderHook = {
     USER_MENU_PROFILE_AFTER: 'panels::user-menu.profile.after',
     USER_MENU_PROFILE_BEFORE: 'panels::user-menu.profile.before',
 } as const;
-/** Emplacements de render hook des widgets — mêmes noms que `Filament\Widgets\View\WidgetsRenderHook`. Rendus par `TableWidget`. */
+/** Widget render hook locations, rendered by `TableWidget`. */
 export const WidgetsRenderHook = {
     TABLE_WIDGET_END: 'widgets::table-widget.end',
     TABLE_WIDGET_START: 'widgets::table-widget.start',
 } as const;
 /**
- * Emplacements déclarés mais rendus nulle part pour l'instant, avec la brique qui leur manque.
- * Les quatre « tabs » ne sont rendus par aucune vue de Filament 5.11.2 non plus.
+ * Hook locations that are declared but not rendered anywhere yet, with the reason.
  */
 export const UNPLACED_RENDER_HOOKS: Record<string, string> = {
-    ...Object.fromEntries(['RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_AFTER', 'RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE'].map((k) => [(PanelsRenderHook as any)[k], 'page ManageRelatedRecords'])),
-    ...Object.fromEntries(['RESOURCE_PAGES_LIST_RECORDS_TABS_END', 'RESOURCE_PAGES_LIST_RECORDS_TABS_START', 'RESOURCE_TABS_END', 'RESOURCE_TABS_START'].map((k) => [(PanelsRenderHook as any)[k], 'non rendu par Filament 5.11.2'])),
+    ...Object.fromEntries(['RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_AFTER', 'RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE'].map((k) => [(PanelsRenderHook as any)[k], 'ManageRelatedRecords page not implemented'])),
+    ...Object.fromEntries(['RESOURCE_PAGES_LIST_RECORDS_TABS_END', 'RESOURCE_PAGES_LIST_RECORDS_TABS_START', 'RESOURCE_TABS_END', 'RESOURCE_TABS_START'].map((k) => [(PanelsRenderHook as any)[k], 'reserved, no view renders it'])),
 };
 
-// ------------------------------------------------------------------ pages
-/** Portée Alpine d'un composant de schéma sans clé (cellule de grille anonyme). */
+/** Alpine scope of a schema component without a key (anonymous grid cell). */
 const ANONYMOUS_SCHEMA_COMPONENT = `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
-/** Base commune : composant à état hébergeant des schémas (`<nom>Schema(schema)`). */
+/** Common base: a stateful component hosting schemas (`<name>Schema(schema)`). */
 abstract class BasePage extends Component implements SchemaHost {
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
     getSchema(name: string): Schema {
@@ -623,16 +616,16 @@ abstract class BasePage extends Component implements SchemaHost {
         return (this as any)[`${name}Schema`](schema);
     }
     contentSchema(schema: Schema): Schema { return schema.components([]); }
-    /** Portées des render hooks de cette page : sa classe (et sa resource pour une page de resource), comme `getRenderHookScopes()` dans Filament. */
+    /** Render hook scopes of this page: its class (and its resource, for a resource page). */
     getRenderHookScopes(): unknown[] {
         const resource = (this.constructor as any).resource;
         return resource ? [this.constructor, resource] : [this.constructor];
     }
 }
 
-/** Page d'un panel, dans la mise en page complète (sidebar, en-tête). */
+/** A panel page, in the full layout (sidebar, header). */
 export class Page extends BasePage {
-    /** Méthodes que le navigateur peut appeler. Une sous-classe ajoute les siennes : `static callable = ['approve']`. */
+    /** Methods the browser may call. A subclass adds its own: `static callable = ['approve']`. */
     static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
     static slug = '';
     static title: string | null = null;
@@ -643,20 +636,20 @@ export class Page extends BasePage {
     static navigationBadge: string | number | null = null;
     static navigationBadgeColor = 'primary';
     static shouldRegisterNavigation = true;
-    /** Page réservée à certains utilisateurs : rendre `false` la retire du menu et la refuse (403). */
+    /** Restricts the page to some users: returning `false` hides it from the menu and denies it (403). */
     static canAccess(_user: User): boolean | Promise<boolean> { return true; }
     static getTitle(): string { return this.title ?? this.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
     static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
 
-    /** Chaque requête, y compris les mises à jour envoyées par le navigateur, exige un utilisateur authentifié : un snapshot conservé après déconnexion ne suffit pas. */
+    /** Every request, including browser updates, requires an authenticated user: a snapshot kept after logout is not enough. */
     async boot(): Promise<void> {
         const ctx = this._ctx as PanelContext | null;
-        if (!ctx?.user) throw new WireError(401, 'Non authentifié.');
-        // Dans un panel à locataires, toute page vit chez un locataire dont l'utilisateur est membre (vérifié par le routeur).
-        if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Locataire introuvable.');
-        if (await ctx.panel.mustVerifyEmail(ctx.user)) throw new WireError(403, 'Adresse e-mail à vérifier.');
-        // Vérifié à chaque requête, pas seulement à l'affichage : une requête forgée vers une page interdite est refusée.
-        if (!(await this.isAccessAuthorized(ctx))) throw new WireError(403, 'Accès refusé.');
+        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
+        // In a multi-tenant panel, every page belongs to a tenant the user is a member of (checked by the router).
+        if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
+        if (await ctx.panel.mustVerifyEmail(ctx.user)) throw new WireError(403, 'Email address not verified.');
+        // Checked on every request, not only on display: a forged request to a forbidden page is denied.
+        if (!(await this.isAccessAuthorized(ctx))) throw new WireError(403, 'Forbidden.');
     }
     protected isAccessAuthorized(ctx: PanelContext): boolean | Promise<boolean> { return ctx.panel.canAccessPage(this.constructor as typeof Page, ctx.user); }
     getTitle(): string { return (this.constructor as typeof Page).getTitle(); }
@@ -664,44 +657,44 @@ export class Page extends BasePage {
     getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
     getHeaderActions(): Action[] { return []; }
     getPageClasses(): string[] { return []; }
-    /** Sous-navigation de la page : vide par défaut. */
+    /** Page sub-navigation; empty by default. */
     getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> { return []; }
-    /** Position de la sous-navigation : `start` (colonne avant le contenu), `end` (après) ou `top` (onglets). Par défaut : celle de la resource, sinon du panel. */
+    /** Sub-navigation position: `start` (column before the content), `end` (after) or `top` (tabs). Defaults to the resource's, then the panel's. */
     static subNavigationPosition: 'start' | 'end' | 'top' | null = null;
     getSubNavigationPosition(): 'start' | 'end' | 'top' {
         const own = (this.constructor as typeof Page).subNavigationPosition;
-        const resource = (this.constructor as any).resource ?? (this.constructor as any).related?.parentResource;
+        const resource = (this.constructor as any).resource ?? (this.constructor as any).parentResource;
         return own ?? resource?.subNavigationPosition ?? this.panel.getSubNavigationPosition();
     }
-    /** Widgets affichés sous le contenu de la page (port de getFooterWidgets). */
+    /** Widgets shown below the page content. */
     getFooterWidgets(): (typeof Widget)[] { return []; }
     getFooterWidgetsColumns(): number | Record<string, number> { return 2; }
-    /** Port de filament-widgets::components.widgets, dans le schéma `footerWidgets` de la page. */
+    /** Footer widget grid, in the page's `footerWidgets` schema. */
     protected async renderFooterWidgets(): Promise<string> {
         const widgets = await this.filterVisibleWidgets(this.getFooterWidgets());
         if (!widgets.length) return '';
         const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
         return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
     }
-    /** Widgets affichés au-dessus du contenu de la page, et données passées à chacun (propriétés du widget). */
+    /** Widgets shown above the page content, with the data passed to each (widget properties). */
     getHeaderWidgets(): (typeof Widget)[] { return []; }
     getHeaderWidgetsColumns(): number { return 2; }
     getWidgetData(): Record<string, unknown> { return {}; }
-    /** Port de filament-widgets::components.widgets, dans le schéma `headerWidgets` de la page. */
+    /** Header widget grid, in the page's `headerWidgets` schema. */
     protected async renderHeaderWidgets(): Promise<string> {
         const widgets = await this.filterVisibleWidgets(this.getHeaderWidgets());
         if (!widgets.length) return '';
         const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
         return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
     }
-    /** Widgets que l'utilisateur courant a le droit de voir (port de filterVisibleWidgets). */
+    /** Widgets the current user is allowed to see. */
     protected async filterVisibleWidgets(candidates: (typeof Widget)[]): Promise<(typeof Widget)[]> {
         const viewer = (this._ctx as PanelContext).user;
         const widgets: (typeof Widget)[] = [];
         for (const widget of candidates) if (await this.panel.authorize(viewer, 'view', { widget, rule: () => widget.canView(viewer!) })) widgets.push(widget);
         return widgets;
     }
-    /** Grille de widgets d'un schéma (port de Grid + getWidgetsSchemaComponents) : chaque widget est un composant enfant, « lazy » par défaut. */
+    /** Widget grid of a schema: each widget is a child component, lazy-loaded by default. */
     protected async renderWidgetsGrid(widgets: (typeof Widget)[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
         const items: string[] = [];
         for (const [index, widget] of widgets.entries()) {
@@ -713,48 +706,48 @@ export class Page extends BasePage {
         const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['fi-sc', 'fi-sc-has-gap']);
         return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
     }
-    /** Contenu de la page : par défaut son schéma `content`. */
+    /** Page content: its `content` schema by default. */
     protected async renderContent(): Promise<string> { return (await this.getSchema('content')).toHtml(); }
 
-    // --- actions montées (port de InteractsWithActions) : la pile vit dans l'état du composant, les modales sont rendues côté serveur
+    // --- mounted actions: the stack lives in the component state, modals are rendered server-side
     mountedActions: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }[] = [];
     getActionMountContext(): Record<string, unknown> { return {}; }
     protected getActionRecord(): unknown { return null; }
-    /** Enregistrement visé par une action montée dans un contexte donné (ligne de table…). */
+    /** Record targeted by an action mounted in a given context (table row…). */
     protected async resolveActionRecord(_context: Record<string, unknown>): Promise<unknown> { return this.getActionRecord(); }
-    /** Actions pouvant être montées dans un contexte donné (en-tête de page par défaut). */
+    /** Actions that can be mounted in a given context (page header by default). */
     protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
         return typeof context.schemaComponent === 'string' ? this.getSchemaComponentActions(context.schemaComponent) : this.getHeaderActions();
     }
     /**
-     * Actions portées par un composant de schéma (Repeater : ajouter, supprimer, déplacer ; Section : actions d'en-tête).
-     * La clé vient du navigateur : elle doit désigner un composant réel du schéma, ou le schéma lui-même.
+     * Actions owned by a schema component (Repeater: add, delete, move; Section: header actions).
+     * The key comes from the browser: it must match a real component of the schema, or the schema itself.
      */
     protected async getSchemaComponentActions(key: string): Promise<Action[]> {
         const name = key.split('.')[0];
-        // Le composant peut appartenir au formulaire d'une action déjà montée (éditeur riche dans une modale).
+        // The component may belong to the form of an already mounted action (rich editor in a modal).
         const mountedIndex = /^mountedActionSchema(\d+)$/.exec(name);
         if (!mountedIndex && (!/^[A-Za-z]+$/.test(name) || typeof (this as any)[`${name}Schema`] !== 'function')) return [];
         const schema = mountedIndex ? await this.getMountedActionSchema(Number(mountedIndex[1])) : this.getSchema(name);
         if (!schema) return [];
-        // Seuls les composants visibles exposent leurs actions : un composant masqué (section, callout…) n'en monte aucune.
+        // Only visible components expose their actions: a hidden component (section, callout…) mounts none.
         const components = (await schema.getVisibleFlatComponents()) as any[];
         const exact = components.find((c) => c.getKey() === key && typeof c.getActions === 'function');
         if (exact) return exact.getActions();
         return key === schema.getKey() ? components.filter((c) => !c.hasStatePath() && typeof c.getActions === 'function').flatMap((c) => c.getActions()) : [];
     }
-    /** Contexte retenu pour une action montée : celui du serveur, jamais celui du navigateur tel quel. */
+    /** Context kept for a mounted action: the server's, never the browser's as-is. */
     protected resolveMountContext(clientContext: unknown): Record<string, unknown> {
         const component = (clientContext as any)?.schemaComponent;
         return typeof component === 'string' && component.length <= 200 ? { ...this.getActionMountContext(), schemaComponent: component } : this.getActionMountContext();
     }
     private async findMountableAction(name: unknown, context: Record<string, unknown> = this.getActionMountContext()): Promise<Action> {
         const action = (await this.getMountableActions(context)).find((a) => a.getName() === name && a.isMountable());
-        if (!action) throw new WireError(404, `Action introuvable : ${String(name)}`);
+        if (!action) throw new WireError(404, `Action not found: ${String(name)}`);
         return action;
     }
     private async actionContext(mounted: { arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }) { return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}) }; }
-    /** Schéma du formulaire d'une action montée : clé `mountedActionSchema<n>`, état sous `mountedActions.<n>.data` (comme Filament). */
+    /** Form schema of a mounted action: key `mountedActionSchema<n>`, state under `mountedActions.<n>.data`. */
     async getMountedActionSchema(index: number): Promise<Schema | null> {
         const mounted = this.mountedActions[index];
         if (!mounted) return null;
@@ -765,11 +758,11 @@ export class Page extends BasePage {
         const mounted = this.mountedActions[index];
         return (await this.findMountableAction(mounted.name, mounted.context)).toModalHtml(await this.actionContext(mounted), index, (await (await this.getMountedActionSchema(index))?.toHtml()) ?? null);
     }
-    /** Annule un rendu partiel de modale préparé par un champ réactif, quand la même requête exécute ensuite une action. */
+    /** Cancels a partial modal render prepared by a live field when the same request then runs an action. */
     private cancelModalPartialRender(): void {
         for (const name of Object.keys(this._effects.partials ?? {})) if (name.startsWith('action-modals.')) { delete this._effects.partials![name]; this._skipRender = false; }
     }
-    /** Champ réactif du formulaire d'une action montée : exécute `afterStateUpdated`, puis ne renvoie que la modale concernée (comme Filament). */
+    /** Live field in a mounted action's form: runs `afterStateUpdated`, then only returns the affected modal. */
     async updatedMountedActions(_value: unknown, key: string | null): Promise<void> {
         const m = /^(\d+)\.data\.(.+)$/.exec(key ?? '');
         if (!m) return;
@@ -781,33 +774,33 @@ export class Page extends BasePage {
         await field.callAfterStateUpdated((name, value) => { data[name] = value; });
         this.renderPartial(`action-modals.${index}`, await this.renderActionModal(index));
     }
-    /** Appel, depuis le JavaScript d'un champ, d'une méthode que ce champ expose (ex. recherche d'un Select). Sans rendu. */
+    /** Calls a method exposed by a field, from that field's JavaScript (e.g. Select search). Does not re-render. */
     async callSchemaComponentMethod(componentKey: unknown, method: unknown, args: unknown = []): Promise<unknown> {
         if (typeof componentKey !== 'string' || typeof method !== 'string') { this.skipRender(); return null; }
         const name = componentKey.split('.')[0];
         const mountedIndex = /^mountedActionSchema(\d+)$/.exec(name);
         const schema = mountedIndex ? await this.getMountedActionSchema(Number(mountedIndex[1])) : typeof (this as any)[`${name}Schema`] === 'function' ? await this.getSchema(name) : null;
-        // Un composant masqué n'expose aucune méthode, même si le navigateur en forge l'appel.
+        // A hidden component exposes no method, even if the browser forges the call.
         const component: any = schema ? (await schema.getVisibleFlatComponents()).find((c: any) => c.getKey() === componentKey) : undefined;
-        // Seules les méthodes que le composant déclare exposées sont appelables depuis le navigateur.
+        // Only methods the component declares as exposed can be called from the browser.
         if (!component || !component.getExposedMethods().includes(method) || typeof component[method] !== 'function') { this.skipRender(); return null; }
         if (component.isRenderlessMethod(method)) this.skipRender();
-        // Arguments nommés (objet), comme les envoie le JavaScript de Filament : passés dans l'ordre de leurs clés.
+        // Named arguments (an object), as sent by the front-end JavaScript: passed in key order.
         return component[method](...(Array.isArray(args) ? args : args && typeof args === 'object' ? Object.values(args) : []));
     }
-    /** Une action masquée ne peut être ni montée ni exécutée, même par un appel forgé depuis le navigateur. */
+    /** A hidden action can be neither mounted nor run, even through a call forged by the browser. */
     private async assertActionVisible(action: Action, context: Record<string, unknown> = {}): Promise<void> {
         const record = await this.resolveActionRecord(context);
-        if (context.recordKey !== undefined && record === null) throw new WireError(404, 'Enregistrement introuvable');
+        if (context.recordKey !== undefined && record === null) throw new WireError(404, 'Record not found.');
         const ctx = { livewire: this as any, component: null as any, operation: null, record, get: () => undefined, state: undefined };
-        if (!(await action.isVisible(ctx)) || (await action.isDisabled(ctx))) throw new WireError(403, `Action indisponible : ${action.getName()}`);
-        // Une action qui mène à une adresse pour cet enregistrement est un lien : elle ne se monte pas.
-        if (action.resolveUrl(ctx) !== null) throw new WireError(404, `Action introuvable : ${action.getName()}`);
+        if (!(await action.isVisible(ctx)) || (await action.isDisabled(ctx))) throw new WireError(403, `Action unavailable: ${action.getName()}`);
+        // An action with a URL for this record is a link: it cannot be mounted.
+        if (action.resolveUrl(ctx) !== null) throw new WireError(404, `Action not found: ${action.getName()}`);
     }
     private syncActionModals(): void {
         this.dispatch('sync-action-modals', { id: this.id, newActionNestingIndex: this.mountedActions.length ? this.mountedActions.length - 1 : null, shouldOverlayParentActions: false });
     }
-    /** Faux pour un composant à table : ses modales sont rendues dans la table (comme Filament). */
+    /** False for a table component: its modals are rendered inside the table. */
     protected rendersActionModalsInPage(): boolean { return true; }
     async renderActionModals(): Promise<string> {
         const modals: string[] = [];
@@ -816,7 +809,7 @@ export class Page extends BasePage {
                     livewireId: ${js(this.id)},
                 })" style="height: 0">${modals.join('')}</div>`;
     }
-    /** Monte une action : sans modale elle s'exécute tout de suite ; avec modale, seul le fragment des modales est renvoyé. */
+    /** Mounts an action: without a modal it runs immediately; with one, only the modals fragment is returned. */
     async mountAction(name: unknown, args: unknown = {}, _context: unknown = {}): Promise<void> {
         this.cancelModalPartialRender();
         const context = this.resolveMountContext(_context);
@@ -827,7 +820,7 @@ export class Page extends BasePage {
         this.mountedActions.push(mounted);
         const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
         if (schema) {
-            // État initial : valeurs par défaut des champs, puis `fillForm()`.
+            // Initial state: field defaults, then `fillForm()`.
             const data: Record<string, unknown> = {};
             mounted.data = data;
             fillSchema(schema, data);
@@ -857,7 +850,7 @@ export class Page extends BasePage {
         const callContext = await this.actionContext(mounted);
         if (schema) callContext.data = await getSchemaState(schema);
         await action.call(callContext);
-        // « … & create another » : la modale reste ouverte sur un formulaire remis à zéro.
+        // "… & create another": the modal stays open with a reset form.
         if (schema && _args && typeof _args === 'object' && (_args as any).another === true) {
             const data: Record<string, unknown> = {};
             mounted.data = data;
@@ -881,24 +874,24 @@ export class Page extends BasePage {
     }
 }
 /**
- * Tableau de bord (port de Filament\Pages\Dashboard) : une grille de widgets, précédée d'un formulaire de filtres
- * quand la page définit `filtersFormSchema(schema)` (port de HasFiltersForm). Les filtres sont passés aux widgets sous `pageFilters`.
+ * Dashboard: a widget grid, preceded by a filters form when the page defines `filtersFormSchema(schema)`.
+ * The filters are passed to widgets as `pageFilters`.
  */
 export class Dashboard extends Page {
     static slug = '';
     static title = 'Dashboard';
     static navigationIcon = 'o-home';
     static navigationSort = -2;
-    /** État du formulaire de filtres. Reste `null` tant que la page n'a pas de filtres. */
+    /** Filters form state. Stays `null` while the page has no filters. */
     filters: Record<string, unknown> | null = null;
-    /** Widgets du tableau de bord. Par défaut : ceux du panel (`panel.widgets([...])`). */
+    /** Dashboard widgets. Defaults to the panel's (`panel.widgets([...])`). */
     getWidgets(): (typeof Widget)[] { return this.panel.getWidgets(); }
-    /** Colonnes de la grille : un nombre (au point de rupture `lg`), ou un nombre par point de rupture. */
+    /** Grid columns: a number (at the `lg` breakpoint), or one number per breakpoint. */
     getColumns(): number | Record<string, number> { return 2; }
     hasFiltersForm(): boolean { return typeof (this as any).filtersFormSchema === 'function'; }
     getSchema(name: string): Schema {
         if (name !== 'filtersForm') return super.getSchema(name);
-        // Comme getFiltersForm() : grille 2 / 3 / 4 colonnes, état sous `filters`, champs « live ».
+        // 2 / 3 / 4 column grid, state under `filters`, live fields.
         const schema = (this as any).filtersFormSchema(Schema.make(this).key('filtersForm').columns({ md: 2, xl: 3, '2xl': 4 }).statePath('filters').partialName('table-filters-form')) as Schema;
         for (const component of schema.getFlatComponents() as any[]) if (component instanceof Field && typeof (component as any).live === 'function') (component as any).live();
         return schema;
@@ -916,19 +909,19 @@ export class Dashboard extends Page {
     }
 }
 
-/** Limiteur de tentatives en mémoire : `max` essais par fenêtre, par clé. Suffisant pour une instance ; à remplacer par un magasin partagé si le panel tourne sur plusieurs. */
+/** In-memory rate limiter: `max` attempts per window, per key. Fine for a single instance; use a shared store when running several. */
 export class Throttle {
     private hits = new Map<string, number[]>();
     private max: number;
     private windowMs: number;
     constructor(max = 5, windowMs = 60_000) { this.max = max; this.windowMs = windowMs; }
-    /** Enregistre un essai ; rend 0 s'il est permis, sinon le nombre de secondes à attendre. */
+    /** Records an attempt; returns 0 if allowed, otherwise the number of seconds to wait. */
     hit(key: string, now = Date.now()): number {
         const recent = (this.hits.get(key) ?? []).filter((at) => at > now - this.windowMs);
         if (recent.length >= this.max) { this.hits.set(key, recent); return Math.max(1, Math.ceil((recent[0] + this.windowMs - now) / 1000)); }
         recent.push(now);
         this.hits.set(key, recent);
-        // Le magasin ne grossit pas indéfiniment.
+        // Keep the store from growing forever.
         if (this.hits.size > 10_000) for (const [k, v] of this.hits) if (!v.some((at) => at > now - this.windowMs)) this.hits.delete(k);
         return 0;
     }
@@ -936,11 +929,11 @@ export class Throttle {
 }
 const loginThrottle = new Throttle();
 
-/** Page à mise en page « simple » (connexion, inscription…). */
+/** Page with the simple layout (login, registration…). */
 export abstract class SimplePage extends BasePage {
     abstract getTitle(): string;
     getHeading(): string | null { return this.getTitle(); }
-    /** Sous-titre, en HTML de confiance (composé par la page, données échappées). */
+    /** Subheading, as trusted HTML (built by the page, with data escaped). */
     getSubheading(): string | null { return null; }
     hasLogo(): boolean { return true; }
     async render(): Promise<string> {
@@ -948,25 +941,25 @@ export abstract class SimplePage extends BasePage {
     }
 }
 
-/** Gestionnaire de couleurs lu par les autres paquets, partagé par tous les panels ; chaque requête y pose les couleurs de son panel (`Panel.withTheme`). */
+/** Color manager read by the other packages and shared by all panels; each request sets its panel's colors on it (`Panel.withTheme`). */
 const sharedColors = new ColorManager();
-/** Lien « fi-link » d'une page d'authentification (port de `Action::make()->link()`). */
+/** `fi-link` link of an authentication page. */
 function authLink(url: string, label: string, options: { iconName?: string | null; size?: string } = {}): string {
     const classes = ['fi-ac-link-action', 'fi-link', `fi-size-${options.size ?? 'md'}`, ...sharedColors.getComponentClasses('link', 'primary')];
     return `<a href="${e(url)}" class="${classes.join(' ')}" >${options.iconName ? icon(options.iconName) : ''}<span class="fi-link-label"> ${e(label)} </span></a>`;
 }
-/** Adresse absolue pour un e-mail : celle déclarée par `panel.appUrl()`, sinon l'origine de la requête. */
+/** Absolute URL for an email: based on `panel.appUrl()`, otherwise the request origin. */
 function absoluteUrl(panel: Panel, req: Request, path: string): string { return `${panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}`}${path}`; }
 const registerThrottle = new Throttle(2);
 const passwordResetThrottle = new Throttle(2);
 const verificationThrottle = new Throttle(2);
 const throttled = (group: string, wait: number) => Notification.make().danger().title(t(`${group}.notifications.throttled.title`, { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t(`${group}.notifications.throttled.body`, { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
-/** Règles de mot de passe de Laravel (`Password::default()` : 8 caractères au moins) et de confirmation (`same`). */
+/** Password rules (at least 8 characters) and confirmation rule (`same`). */
 const passwordRules = (confirmationField: string, confirmationLabel: string) => [
     { name: 'min', passes: (value: unknown) => String(value).length >= 8, message: (attribute: string) => `The ${attribute} field must be at least 8 characters.` },
     { name: 'same', passes: (value: unknown, ctx: any) => value === ctx.get(confirmationField), message: (attribute: string) => `The ${attribute} field must match ${confirmationLabel}.` },
 ];
-/** E-mail de vérification de l'adresse (texte de la notification `VerifyEmail` de Laravel). */
+/** Email verification message. */
 async function sendVerificationEmail(panel: Panel, req: Request, user: User): Promise<void> {
     await panel.sendMail({
         to: user.email, subject: 'Verify Email Address',
@@ -982,7 +975,7 @@ const formContent = (submit: string, actions: Action[], options: { fullWidth?: b
     ...(options.after ? [RenderHook.make(options.after)] : []),
 ];
 
-/** Inscription (port de Filament\Auth\Pages\Register) : nom, adresse, mot de passe confirmé ; l'utilisateur est connecté, puis invité à vérifier son adresse si le panel l'exige. */
+/** Registration page: name, email, confirmed password. The user is logged in, then asked to verify their email if the panel requires it. */
 export class Register extends SimplePage {
     static callable = ['register', 'callSchemaComponentMethod'];
     data: Record<string, unknown> = {};
@@ -1009,9 +1002,9 @@ export class Register extends SimplePage {
     contentSchema(schema: Schema): Schema {
         return schema.components(formContent('register', [Action.make('register').label(t('filament-panels::auth/pages/register.form.actions.register.label')).submit('register')], { before: PanelsRenderHook.AUTH_REGISTER_FORM_BEFORE, after: PanelsRenderHook.AUTH_REGISTER_FORM_AFTER }));
     }
-    /** Données validées, juste avant la création (ajouter une valeur, normaliser l'adresse…). */
+    /** Validated data, just before creation (add a value, normalize the email…). */
     protected mutateFormDataBeforeRegister(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
-    /** Création de l'utilisateur : par défaut `create()` du fournisseur d'utilisateurs. */
+    /** Creates the user; defaults to the auth provider's `create()`. */
     protected handleRegistration(data: Record<string, unknown>): Promise<User> | User {
         return this.panel.getAuth().create!({ name: String(data.name), email: String(data.email), password: String(data.password) });
     }
@@ -1029,7 +1022,7 @@ export class Register extends SimplePage {
     }
 }
 
-/** Demande de réinitialisation du mot de passe (port de RequestPasswordReset) : un lien signé, valable 60 minutes, part par e-mail. */
+/** Password reset request page: a signed link, valid for 60 minutes, is sent by email. */
 export class RequestPasswordReset extends SimplePage {
     static callable = ['request', 'callSchemaComponentMethod'];
     data: Record<string, unknown> = {};
@@ -1065,15 +1058,15 @@ export class RequestPasswordReset extends SimplePage {
                 outro: ['This password reset link will expire in 60 minutes.', 'If you did not request a password reset, no further action is required.'],
             });
         }
-        // Écart de sécurité assumé : Filament (via Laravel) répond « adresse inconnue » quand aucun compte n'existe, ce qui
-        // révèle quelles adresses sont inscrites. Navette répond toujours de la même façon.
+        // Security: always answer the same way, whether or not an account exists, so the response
+        // does not reveal which email addresses are registered.
         Notification.make().success().title('We have emailed your password reset link.').body(t('filament-panels::auth/pages/password-reset/request-password-reset.notifications.sent.body')).send();
         this.data = {};
         fillSchema(form, this.data);
     }
 }
 
-/** Nouveau mot de passe, depuis le lien reçu par e-mail (port de ResetPassword). Le lien ne sert qu'une fois : il meurt avec l'ancien mot de passe. */
+/** Sets a new password from the emailed link. The link works once: it dies with the old password. */
 export class ResetPassword extends SimplePage {
     static callable = ['resetPassword', 'callSchemaComponentMethod'];
     static locked = ['email', 'token'];
@@ -1086,7 +1079,7 @@ export class ResetPassword extends SimplePage {
         this.token = typeof params.token === 'string' ? params.token : null;
         this.email = typeof params.email === 'string' ? params.email : null;
     }
-    /** Comme Filament : le formulaire n'a pas de chemin d'état, ses champs sont des propriétés de la page. */
+    /** The form has no state path: its fields are page properties. */
     getSchema(name: string): Schema { return name === 'form' ? this.formSchema(Schema.make(this).key('form')) : super.getSchema(name); }
     getTitle(): string { return t('filament-panels::auth/pages/password-reset/reset-password.title'); }
     getHeading(): string { return t('filament-panels::auth/pages/password-reset/reset-password.heading'); }
@@ -1109,7 +1102,7 @@ export class ResetPassword extends SimplePage {
         const auth = panel.getAuth();
         const payload = panel.readResetPasswordToken(this.token);
         const user = payload ? await auth.find(payload.uid) : null;
-        // Le jeton désigne l'utilisateur ; l'adresse de l'URL doit être la sienne et son mot de passe ne doit pas avoir changé depuis l'envoi.
+        // The token identifies the user; the URL's email must be theirs and their password must not have changed since the link was sent.
         if (!payload || !user || user.email !== this.email || (await auth.getPasswordFingerprint!(user)) !== payload.fp) {
             Notification.make().danger().title('This password reset token is invalid.').send();
             return;
@@ -1120,7 +1113,7 @@ export class ResetPassword extends SimplePage {
     }
 }
 
-/** Invitation à vérifier son adresse (port de EmailVerificationPrompt), avec le lien « Resend it. ». */
+/** Email verification prompt, with a "Resend it." link. */
 export class EmailVerificationPrompt extends SimplePage {
     static callable = ['mountAction'];
     async mount(): Promise<void> {
@@ -1139,10 +1132,10 @@ export class EmailVerificationPrompt extends SimplePage {
             text(`${e(t('filament-panels::auth/pages/email-verification/email-verification-prompt.messages.notification_not_received'))} ${link}`),
         ]);
     }
-    /** Seule action de la page : renvoyer l'e-mail (deux fois par minute au plus). */
+    /** The page's only action: resend the email (at most twice per minute). */
     async mountAction(name: unknown): Promise<void> {
         const { req, panel, user } = this._ctx as PanelContext;
-        if (name !== 'resendNotification' || !user) throw new WireError(404, 'Action introuvable.');
+        if (name !== 'resendNotification' || !user) throw new WireError(404, 'Action not found.');
         this.skipRender();
         const wait = verificationThrottle.hit(`${panel.getId()}:verify:${user.id}`);
         if (wait > 0) {
@@ -1154,7 +1147,7 @@ export class EmailVerificationPrompt extends SimplePage {
     }
 }
 
-/** Profil de l'utilisateur (port de EditProfile) : nom, adresse, nouveau mot de passe ; le mot de passe actuel est exigé pour changer l'adresse ou le mot de passe. */
+/** User profile page: name, email, new password. The current password is required to change the email or password. */
 export class EditProfile extends SimplePage {
     static callable = ['save', 'callSchemaComponentMethod'];
     static slug = 'profile';
@@ -1162,10 +1155,10 @@ export class EditProfile extends SimplePage {
     static getLabel(): string { return t('filament-panels::auth/pages/edit-profile.label'); }
     async mount(): Promise<void> {
         const { user } = this._ctx as PanelContext;
-        if (!user) throw new WireError(401, 'Non authentifié.');
+        if (!user) throw new WireError(401, 'Unauthenticated.');
         this.data = { name: user.name, email: user.email, password: null, passwordConfirmation: null, currentPassword: null };
     }
-    async boot(): Promise<void> { if (!(this._ctx as PanelContext | null)?.user) throw new WireError(401, 'Non authentifié.'); }
+    async boot(): Promise<void> { if (!(this._ctx as PanelContext | null)?.user) throw new WireError(401, 'Unauthenticated.'); }
     getTitle(): string { return (this.constructor as typeof EditProfile).getLabel(); }
     hasLogo(): boolean { return false; }
     formSchema(schema: Schema): Schema {
@@ -1192,7 +1185,7 @@ export class EditProfile extends SimplePage {
     }
     async save(): Promise<void> {
         const { panel, user } = this._ctx as PanelContext;
-        if (!user) throw new WireError(401, 'Non authentifié.');
+        if (!user) throw new WireError(401, 'Unauthenticated.');
         const form = this.getSchema('form');
         this._errors = await validateSchema(form);
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
@@ -1204,17 +1197,17 @@ export class EditProfile extends SimplePage {
 }
 const blankValue = (value: unknown) => value === null || value === undefined || value === '';
 
-/** Création d'un locataire (port de RegisterTenant) : la sous-classe donne son libellé et son formulaire (`formSchema`). */
+/** Tenant registration page: the subclass provides its label and form (`formSchema`). */
 export abstract class RegisterTenant extends SimplePage {
     static callable = ['register', 'callSchemaComponentMethod'];
     static slug = 'new';
     data: Record<string, unknown> = {};
     static getLabel(): string { return 'Register tenant'; }
-    /** Le panel accepte-t-il la création ? Par défaut : si le fournisseur de locataires sait créer. */
+    /** Whether tenants can be created; by default, if the tenant provider implements `create`. */
     static canView(panel: Panel, _user: User): boolean | Promise<boolean> { return typeof panel.getTenantProvider().create === 'function'; }
     async boot(): Promise<void> {
         const ctx = this._ctx as PanelContext | null;
-        if (!ctx?.user) throw new WireError(401, 'Non authentifié.');
+        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
         if (!(await (this.constructor as typeof RegisterTenant).canView(ctx.panel, ctx.user))) throw new WireError(404, 'Not Found');
     }
     mount(): void { fillSchema(this.getSchema('form'), this.data); }
@@ -1239,7 +1232,7 @@ export abstract class RegisterTenant extends SimplePage {
     }
 }
 
-/** Profil du locataire courant (port de EditTenantProfile), dans la mise en page complète. */
+/** Current tenant's profile page, in the full layout. */
 export abstract class EditTenantProfile extends Page {
     static callable = [...Page.callable, 'save'];
     static slug = 'profile';
@@ -1291,7 +1284,7 @@ export class Login extends SimplePage {
             RenderHook.make(PanelsRenderHook.AUTH_LOGIN_FORM_BEFORE),
             Form.make([EmbeddedSchema.make('form')]).id('form').livewireSubmitHandler('authenticate')
                 .footer([Actions.make([Action.make('authenticate').label(t('filament-panels::auth/pages/login.form.actions.authenticate.label')).submit('authenticate')]).fullWidth().key('form-actions')]),
-            // Formulaire de défi multi-facteur : masqué tant que la MFA n'est pas portée (jalon 7).
+            // Multi-factor challenge form: hidden until MFA is implemented.
             Form.make([]).id('multiFactorChallengeForm').hidden(),
             RenderHook.make(PanelsRenderHook.AUTH_LOGIN_FORM_AFTER),
         ]);
@@ -1301,7 +1294,7 @@ export class Login extends SimplePage {
         this._errors = await validateSchema(this.getSchema('form'));
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         const { req, res, panel } = this._ctx as PanelContext;
-        // Comme Filament : cinq tentatives par minute et par adresse IP, puis attente.
+        // Five attempts per minute per IP address, then wait.
         const wait = loginThrottle.hit(`${panel.getId()}:${req.ip ?? ''}`);
         if (wait > 0) {
             Notification.make().danger().title(t('filament-actions::notifications.throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('filament-actions::notifications.throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
@@ -1315,7 +1308,7 @@ export class Login extends SimplePage {
     }
 }
 
-/** L'utilisateur du composant hôte a-t-il cette capacité sur la resource (ou le relation manager) du composant ? À utiliser dans `authorize()` de vos actions. */
+/** Whether the host component's user has this ability on the component's resource (or relation manager). Use it in your actions' `authorize()`. */
 export const can = (livewire: unknown, ability: string, record: unknown = null): Promise<boolean> | boolean => canOn(livewire, ability, record);
 function canOn(livewire: any, ability: string, record: unknown = null): Promise<boolean> | boolean {
     const resource = livewire?.resource;
@@ -1324,11 +1317,10 @@ function canOn(livewire: any, ability: string, record: unknown = null): Promise<
 
 
 
-// ------------------------------------------------------------------ resources
 const plural = (s: string) => (/[^aeiou]y$/.test(s) ? s.slice(0, -1) + 'ies' : /(s|x|z|ch|sh)$/.test(s) ? s + 'es' : s + 's');
 const ucfirst = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
-/** Resource : un modèle, ses pages, sa table et sa navigation (port partiel de Filament\Resources\Resource). */
+/** Resource: a model with its pages, table and navigation. */
 export abstract class Resource {
     static panel: Panel;
     static slug = '';
@@ -1339,33 +1331,33 @@ export abstract class Resource {
     static navigationSort = 0;
     static navigationBadge: string | number | null = null;
     static adapter: DataAdapter;
-    /** Dans un panel à locataires : les enregistrements sont-ils propres à chaque locataire ? (vrai par défaut, comme Filament) */
+    /** In a multi-tenant panel, whether records belong to each tenant (`true` by default). */
     static isScopedToTenant = true;
-    /** Colonne du locataire pour cette resource (par défaut celle du panel : `panel.tenant(provider, { ownershipColumn })`). */
+    /** Tenant column for this resource (defaults to the panel's: `panel.tenant(provider, { ownershipColumn })`). */
     static tenantOwnershipColumn: string | null = null;
     /**
-     * Pages de la resource, à remplacer par vos sous-classes pour en changer le comportement :
+     * Resource pages; replace them with your subclasses to change their behavior:
      * `static pages = { index: MyList, create: MyCreate, edit: MyEdit }`.
      */
     static pages: { index?: typeof ListRecords; create?: typeof CreateRecord; edit?: typeof EditRecord; view?: typeof ViewRecord } = {};
-    /** Page de consultation (`ViewRecord`) : vrai pour l'ajouter aux pages de la resource ; la ligne d'une table y mène alors, comme dans Filament. */
+    /** `true` adds a view page (`ViewRecord`) to the resource; table rows then link to it. */
     static hasViewPage = false;
-    /** Qui peut faire quoi sur cette resource. Sans politique, tout utilisateur connecté peut tout. */
+    /** Who can do what on this resource. Without a policy, any signed-in user can do everything. */
     static policy: Policy | null = null;
-    /** L'utilisateur a-t-il cette capacité (sur cet enregistrement, s'il y en a un) ? */
+    /** Whether the user has this ability (on this record, if any). */
     static can(ability: string, user: User | null, record: unknown = null): Promise<boolean> {
         const rule = this.policy?.[ability];
         return this.panel.authorize(user, ability, { resource: this, record, rule: rule ? () => rule(user!, record) : null });
     }
-    /** Widgets de la resource (équivalent de getWidgets()) : enregistrés comme composants. */
+    /** Resource widgets, registered as components. */
     static widgets: (typeof Widget)[] = [];
-    /** Widgets affichés au-dessus de la table de la page de liste (équivalent de ListRecords::getHeaderWidgets()). */
+    /** Widgets shown above the table on the list page. */
     static headerWidgets: (typeof Widget)[] = [];
-    /** Relation managers affichés sous le formulaire d'édition (équivalent de getRelations()). */
+    /** Relation managers shown below the edit form. */
     static relations: any[] = [];
-    /** Onglets de la page de liste (équivalent de ListRecords::getTabs()). */
+    /** Tabs of the list page. */
     static tabs(): Record<string, Tab> { return {}; }
-    /** Resource « simple » (équivalent de ManageRecords) : une seule page, création et édition en modales. */
+    /** Simple resource: a single page, with create and edit in modals. */
     static isSimple = false;
 
     static getPluralModelLabel(): string { return this.pluralModelLabel ?? plural(this.modelLabel); }
@@ -1375,11 +1367,11 @@ export abstract class Resource {
         if (page in this.relatedPages) return `${base}/${record}/${page}`;
         return page === 'index' ? base : page === 'create' ? `${base}/create` : page === 'view' ? `${base}/${record}` : `${base}/${record}/edit`;
     }
-    /** Pages d'enregistrements liés (port de ManageRelatedRecords) : `{ comments: ManagePostComments }` répond sous `<slug>/{record}/comments`. */
+    /** Related records pages: `{ comments: ManagePostComments }` is served at `<slug>/{record}/comments`. */
     static relatedPages: Record<string, typeof ManageRelatedRecords> = {};
-    /** Pages proposées dans la sous-navigation d'un enregistrement, dans l'ordre : `['view', 'edit', 'comments']`. Vide : pas de sous-navigation. */
+    /** Pages listed in a record's sub-navigation, in order: `['view', 'edit', 'comments']`. Empty: no sub-navigation. */
     static recordSubNavigation: string[] = [];
-    /** Port de getRecordSubNavigation() + generateNavigationItems() : un onglet par page déclarée, celui de la page courante actif. */
+    /** Record sub-navigation: one tab per declared page, the current page's tab active. */
     static getRecordSubNavigation(page: { getRecordKey(): string | null; constructor: Function }): SubNavigationItem[] {
         const pages = this.getPages() as Record<string, typeof Page>;
         const key = page.getRecordKey() ?? '';
@@ -1394,26 +1386,26 @@ export abstract class Resource {
         });
     }
     private static _registered = new WeakMap<object, Record<string, typeof Page>>();
-    /** Classe de page réellement enregistrée pour un nom (les pages sont générées une seule fois par resource). */
+    /** Page class actually registered under a name (pages are generated once per resource). */
     static getRegisteredPage(name: string): typeof Page | undefined { return (this.getPages() as Record<string, typeof Page>)[name]; }
     static table(table: Table): Table { return table; }
     static form(schema: Schema): Schema { return schema; }
-    /** Schéma de la page de consultation (équivalent de `infolist()`). */
+    /** Schema of the view page. */
     static infolist(schema: Schema): Schema { return schema; }
 
-    // -------------------------------------------------------------- recherche globale
-    /** Colonnes interrogées par la recherche globale ; par défaut, l'attribut de titre. Tableau vide : resource non cherchable. */
+    // -------------------------------------------------------------- global search
+    /** Columns searched by global search; defaults to the title attribute. Empty array: the resource is not searchable. */
     static globallySearchableAttributes: string[] | null = null;
     static getGloballySearchableAttributes(): string[] { return this.globallySearchableAttributes ?? (this.recordTitleAttribute ? [this.recordTitleAttribute] : []); }
     static canGloballySearch(): boolean { return this.getGloballySearchableAttributes().length > 0; }
-    /** Rang du groupe de cette resource dans les résultats (`$globalSearchSort`) ; sans rang : après les autres, dans l'ordre d'enregistrement. */
+    /** Position of this resource's group in the results; without one, after the others in registration order. */
     static globalSearchSort: number | null = null;
-    /** Nombre de résultats rendus par resource (50, comme Filament). */
+    /** Maximum results rendered per resource. */
     static globalSearchResultsLimit = 50;
     static getGlobalSearchResultTitle(record: any): string { return this.getRecordTitle(record); }
-    /** Précisions affichées sous le titre : `{ Author: 'Jane' }`. Les valeurs vides sont écartées. */
+    /** Details shown under the title: `{ Author: 'Jane' }`. Empty values are skipped. */
     static getGlobalSearchResultDetails(_record: any): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
-    /** Adresse d'un résultat : page « View », sinon édition ; pour une resource simple, la liste avec l'action ouverte. Nul si l'utilisateur n'a aucun accès. */
+    /** URL of a result: the view page, otherwise the edit page; for a simple resource, the list with the action open. `null` if the user has no access. */
     static async getGlobalSearchResultUrl(record: any, user: User | null): Promise<string | null> {
         const key = this.adapter.getKey(record);
         const canView = await this.can('view', user, record);
@@ -1436,12 +1428,12 @@ export abstract class Resource {
         return results;
     }
 
-    /** Attribut affiché comme titre d'un enregistrement (`$recordTitleAttribute`). */
+    /** Attribute used as a record's title. */
     static recordTitleAttribute: string | null = null;
-    /** Sans attribut de titre : le libellé du modèle, en capitales initiales (« Leave Request »), comme Filament. */
+    /** Without a title attribute: the model label in title case ("Leave Request"). */
     static getRecordTitle(record: any): string { return this.recordTitleAttribute ? String(record?.[this.recordTitleAttribute] ?? '') : this.modelLabel.split(' ').map(ucfirst).join(' '); }
 
-    /** Pages de la resource, générées : liste, création, édition. */
+    /** Generated resource pages: list, create, edit. */
     static getPages(): Record<string, typeof Page> {
         const known = Resource._registered.get(this);
         if (known) return known;
@@ -1490,37 +1482,36 @@ export abstract class Resource {
     }
 }
 
-// ------------------------------------------------------------------ widgets
-/** Onglet de sous-navigation d'une page. */
+/** Sub-navigation tab of a page. */
 export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean };
 type ColumnSpan = number | 'full';
-/** Widget : composant affiché dans une grille de page (port de Filament\Widgets\Widget). */
+/** Widget: a component displayed in a page's widget grid. */
 export abstract class Widget extends Component {
     static componentName: string;
-    /** Largeur dans la grille de widgets : un nombre de colonnes, ou `'full'`. */
+    /** Width in the widget grid: a number of columns, or `'full'`. */
     static columnSpan: ColumnSpan = 1;
-    /** Chargé quand il devient visible (comme `$isLazy`). */
+    /** Loaded when it becomes visible. */
     static isLazy = true;
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
-    /** Widget réservé à certains utilisateurs : rendre `false` le retire de la page et refuse son chargement. */
+    /** Restricts the widget to some users: returning `false` removes it from the page and refuses to load it. */
     static canView(_user: User): boolean | Promise<boolean> { return true; }
     async boot(): Promise<void> {
         const ctx = this._ctx as PanelContext | null;
-        if (!ctx?.user) throw new WireError(401, 'Non authentifié.');
+        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
         const WidgetClass = this.constructor as typeof Widget;
-        if (!(await ctx.panel.authorize(ctx.user, 'view', { widget: WidgetClass, rule: () => WidgetClass.canView(ctx.user!) }))) throw new WireError(403, 'Accès refusé.');
+        if (!(await ctx.panel.authorize(ctx.user, 'view', { widget: WidgetClass, rule: () => WidgetClass.canView(ctx.user!) }))) throw new WireError(403, 'Forbidden.');
     }
-    /** Classes et style de colonne de grille, au point de rupture `lg` comme Filament. */
+    /** Grid column classes and style, at the `lg` breakpoint. */
     protected gridColumn(): { classes: string[]; style: string } {
         const span = (this.constructor as typeof Widget).columnSpan;
-        // Comme Filament : la portée est toujours écrite, même pour une seule colonne.
+        // The span is always written, even for a single column.
         return { classes: ['fi-grid-col', 'lg:fi-grid-col-span'], style: `--col-span-lg: ${span === 'full' ? '1 / -1' : `span ${Math.floor(span)} / span ${Math.floor(span)}`};` };
     }
     placeholder(): string {
         const column = this.gridColumn();
         return `<div role="status" aria-busy="true" style="height: 8rem; ${column.style}" class="${cls(['fi-section', 'fi-loading-section', ...column.classes])}"><span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
     }
-    /** Enveloppe commune (port de filament-widgets::components.widget). */
+    /** Common widget wrapper. */
     protected wrap(content: string, classes: string[] = []): string {
         const column = this.gridColumn();
         return `<div${column.style ? ` style="${column.style}"` : ''} class="${cls(['fi-wi-widget', ...column.classes, ...classes])}">${content}</div>`;
@@ -1528,59 +1519,59 @@ export abstract class Widget extends Component {
 }
 
 /**
- * Calendrier (propre à Navette) : vues mois, semaine et liste, navigation rendue par le serveur, sans bibliothèque JavaScript.
+ * Calendar widget: month, week and list views, server-rendered navigation, no JavaScript library.
  *
- * Le minimum : étendre la classe et rendre les événements de la période affichée.
+ * Minimal use: extend the class and return the events of the displayed period.
  *
  *     class LeaveCalendar extends CalendarWidget {
  *         static heading = 'Leave';
  *         async getEvents({ start, end }) { return [{ id: 1, title: 'Ada — vacation', start: '2026-11-12', end: '2026-11-14', color: 'success' }]; }
  *     }
  *
- * Tout le reste se redéfinit méthode par méthode : vues proposées, premier jour de la semaine, langue, libellés, nombre
- * d'événements par case, réaction au clic sur un jour (`onDateClick`) ou sur un événement (`onEventClick`), rendu d'un
- * événement (`renderEvent`), pied de case (`renderDayFooter`), boutons de la barre d'outils (`renderToolbarEnd`), et
- * l'apparence par les variables CSS de `.nv-cal` (`getExtraClasses`, `getStyle`).
+ * Everything else can be overridden method by method: available views, first day of the week, locale, labels, events
+ * per cell, day clicks (`onDateClick`) and event clicks (`onEventClick`), event rendering (`renderEvent`), cell footer
+ * (`renderDayFooter`), toolbar buttons (`renderToolbarEnd`), and appearance through the `.nv-cal` CSS variables
+ * (`getExtraClasses`, `getStyle`).
  */
 export abstract class CalendarWidget extends Widget {
     static columnSpan: ColumnSpan = 'full';
-    /** Titre affiché avant la période (« Leave — November 2026 »). */
+    /** Heading shown before the period ("Leave — November 2026"). */
     static heading: string | null = null;
     static callable = ['previousPeriod', 'nextPeriod', 'goToToday', 'setView', 'selectDate', 'selectEvent', 'showDay'];
-    /** La vue et la date ne changent que par les méthodes ci-dessous, qui les valident. */
+    /** View and date only change through the methods below, which validate them. */
     static locked = ['view', 'date'];
     view: CalendarView = 'month';
-    /** Date d'ancrage (`YYYY-MM-DD`) : le mois ou la semaine affichés la contiennent. Vide : aujourd'hui. */
+    /** Anchor date (`YYYY-MM-DD`): the displayed month or week contains it. Empty: today. */
     date = '';
 
-    // ---------------------------------------------------------- à redéfinir
-    /** Événements dont une partie tombe entre `start` et `end` (inclus, `YYYY-MM-DD`). Appelée à chaque rendu : filtrez en base. */
+    // ---------------------------------------------------------- overridable
+    /** Events overlapping `start`–`end` (inclusive, `YYYY-MM-DD`). Called on every render: filter in the database. */
     abstract getEvents(range: { start: string; end: string; view: CalendarView }): CalendarEvent[] | Promise<CalendarEvent[]>;
-    /** Vues proposées, la première étant celle d'arrivée. Une seule vue : le sélecteur disparaît. */
+    /** Available views; the first is the initial one. With a single view, the switcher is hidden. */
     getViews(): CalendarView[] { return ['month', 'week', 'list']; }
-    /** 0 = dimanche, 1 = lundi… */
+    /** 0 = Sunday, 1 = Monday… */
     getFirstDayOfWeek(): number { return 1; }
-    /** Langue des noms de mois et de jours (`Intl`). */
+    /** Locale for month and day names (`Intl`). */
     getLocale(): string { return 'en-US'; }
     getLabels(): CalendarLabels { return CALENDAR_LABELS; }
-    /** En vue mois, au-delà de ce nombre, la case affiche « +N more » (qui ouvre la liste sur ce jour). */
+    /** In month view, beyond this number the cell shows "+N more" (which opens the list on that day). */
     getMaxEventsPerDay(): number { return 3; }
     getHeading(): string | null { return (this.constructor as typeof CalendarWidget).heading; }
-    /** Date du jour, `YYYY-MM-DD` (UTC par défaut ; à redéfinir pour un autre fuseau). */
+    /** Today's date, `YYYY-MM-DD` (UTC by default; override for another time zone). */
     getToday(): string { return new Date().toISOString().slice(0, 10); }
-    /** Clic sur un numéro de jour. Redéfinir cette méthode rend les jours cliquables : ouvrir une page (`this.redirect`), notifier, changer de vue… */
+    /** Click on a day number. Overriding this makes days clickable: open a page (`this.redirect`), notify, switch view… */
     onDateClick(_date: string): void | Promise<void> {}
-    /** Clic sur un événement sans adresse. L'événement est relu côté serveur : `event.extra` est disponible. */
+    /** Click on an event without a URL. The event is reloaded server-side, so `event.extra` is available. */
     onEventClick(_event: CalendarEvent): void | Promise<void> {}
-    /** HTML d'un événement (déjà échappé), ou `null` pour le rendu par défaut (`renderCalendarEvent`). */
+    /** Already-escaped HTML for an event, or `null` for the default rendering (`renderCalendarEvent`). */
     renderEvent(_event: CalendarEvent, _context: { day: string; view: CalendarView }): string | null { return null; }
-    /** HTML ajouté au bas de chaque case (déjà échappé). */
+    /** Already-escaped HTML appended to the bottom of each cell. */
     renderDayFooter(_day: string, _events: CalendarEvent[]): string { return ''; }
-    /** HTML placé à droite de la barre d'outils (déjà échappé) : un lien « New », un filtre… */
+    /** Already-escaped HTML at the end of the toolbar: a "New" link, a filter… */
     renderToolbarEnd(): string { return ''; }
-    /** Classes ajoutées au calendrier, pour y accrocher vos styles ou redéfinir ses variables CSS. */
+    /** Extra classes on the calendar, to hook your styles or override its CSS variables. */
     getExtraClasses(): string[] { return []; }
-    /** Variables CSS posées sur le calendrier : `{ '--nv-cal-day-min-height': '9rem' }`. */
+    /** CSS variables set on the calendar: `{ '--nv-cal-day-min-height': '9rem' }`. */
     getStyle(): Record<string, string> { return {}; }
 
     // ---------------------------------------------------------- navigation
@@ -1591,7 +1582,7 @@ export abstract class CalendarWidget extends Widget {
     nextPeriod(): void { this.shift(1); }
     goToToday(): void { this.date = this.getToday(); }
     setView(view: unknown): void { if (typeof view === 'string' && (this.getViews() as string[]).includes(view) && (CALENDAR_VIEWS as string[]).includes(view)) this.view = view as CalendarView; }
-    /** « +N more » : la liste, ancrée sur ce jour (ou la semaine si la liste n'est pas proposée). */
+    /** "+N more": the list view anchored on that day (or the week view if list is not available). */
     showDay(date: unknown): void {
         if (!isDate(date)) return;
         this.date = date;
@@ -1601,7 +1592,7 @@ export abstract class CalendarWidget extends Widget {
     private datesClickable(): boolean { return this.onDateClick !== CalendarWidget.prototype.onDateClick; }
     private eventsClickable(): boolean { return this.onEventClick !== CalendarWidget.prototype.onEventClick; }
     async selectDate(date: unknown): Promise<void> { if (isDate(date) && this.datesClickable()) await this.onDateClick(date); }
-    /** L'identifiant vient du navigateur : l'événement est recherché parmi ceux de la période affichée, jamais cru sur parole. */
+    /** The id comes from the browser: the event is looked up among those of the displayed period, never trusted as-is. */
     async selectEvent(id: unknown): Promise<void> {
         if ((typeof id !== 'string' && typeof id !== 'number') || !this.eventsClickable()) return;
         const view = this.currentView();
@@ -1628,20 +1619,20 @@ export abstract class CalendarWidget extends Widget {
 }
 
 /**
- * Page calendrier (propre à Navette) : le même calendrier que `CalendarWidget`, sur une page entière, avec les actions de
- * Filament — donc des modales, des formulaires, des confirmations, des panneaux latéraux.
+ * Calendar page: the same calendar as `CalendarWidget`, on a full page, with actions — so modals, forms,
+ * confirmations and slide-overs.
  *
  *     class Planning extends CalendarPage {
  *         static slug = 'planning';
  *         async getEvents({ start, end }) { return db('shifts').where('day', '>=', start).where('day', '<=', end)… }
- *         // Clic sur un jour : une modale avec un formulaire, prérempli avec la date.
+ *         // Day click: a modal with a form, prefilled with the date.
  *         dateAction() {
  *             return Action.make('createShift').modalHeading('New shift')
  *                 .schema([Select.make('employee_id').options(…).required(), DatePicker.make('day').required()])
  *                 .fillForm(({ arguments: args }) => ({ day: CalendarPage.dateOf(args) }))
  *                 .action(async ({ data }) => { await db('shifts').insert(data); Notification.make().success().title('Saved').send(); });
  *         }
- *         // Clic sur un événement : une autre action ; l'événement est relu côté serveur.
+ *         // Event click: another action; the event is reloaded server-side.
  *         eventAction() {
  *             return Action.make('editShift').schema([…])
  *                 .fillForm(async ({ livewire, arguments: args }) => (await livewire.findEvent(args.event))?.extra ?? {})
@@ -1649,10 +1640,10 @@ export abstract class CalendarWidget extends Widget {
  *         }
  *     }
  *
- * Trois façons de réagir à un clic, au choix : une **adresse** sur l'événement (`url` : page dédiée), une **action** (modale),
- * ou du **code libre** en redéfinissant `onDateClick()` / `onEventClick()` (rediriger, notifier, écrire en base, monter l'action
- * de son choix avec `this.mountAction(nom, arguments)`). `getHeaderActions()` ajoute des boutons en tête de page, et
- * `getCalendarActions()` déclare d'autres actions montables depuis votre propre rendu (`renderEvent`, `renderToolbarEnd`).
+ * Three ways to handle a click: a **URL** on the event (`url`: dedicated page), an **action** (modal),
+ * or **custom code** by overriding `onDateClick()` / `onEventClick()` (redirect, notify, write to the database, mount any
+ * action with `this.mountAction(name, arguments)`). `getHeaderActions()` adds buttons to the page header, and
+ * `getCalendarActions()` declares other actions mountable from your own rendering (`renderEvent`, `renderToolbarEnd`).
  */
 export abstract class CalendarPage extends Page {
     static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod', 'previousPeriod', 'nextPeriod', 'goToToday', 'setView', 'selectDate', 'selectEvent', 'showDay'];
@@ -1660,7 +1651,7 @@ export abstract class CalendarPage extends Page {
     view: CalendarView = 'month';
     date = '';
 
-    // ---------------------------------------------------------- à redéfinir (mêmes réglages que CalendarWidget)
+    // ---------------------------------------------------------- overridable (same settings as CalendarWidget)
     abstract getEvents(range: { start: string; end: string; view: CalendarView }): CalendarEvent[] | Promise<CalendarEvent[]>;
     getViews(): CalendarView[] { return ['month', 'week', 'list']; }
     getFirstDayOfWeek(): number { return 1; }
@@ -1674,20 +1665,20 @@ export abstract class CalendarPage extends Page {
     renderToolbarEnd(): string { return ''; }
     getExtraClasses(): string[] { return []; }
     getStyle(): Record<string, string> { return {}; }
-    /** Action ouverte au clic sur un jour ; elle reçoit `arguments.date`. Nul : les jours ne sont pas cliquables (sauf `onDateClick` redéfini). */
+    /** Action opened on day click; it receives `arguments.date`. `null`: days are not clickable (unless `onDateClick` is overridden). */
     dateAction(): Action | null { return null; }
-    /** Action ouverte au clic sur un événement sans adresse ; elle reçoit `arguments.event` (identifiant, à relire avec `findEvent`). */
+    /** Action opened on click on an event without a URL; it receives `arguments.event` (an id, to resolve with `findEvent`). */
     eventAction(): Action | null { return null; }
-    /** Autres actions montables depuis votre propre HTML : `wire:click="mountAction('nom', { … })"`. */
+    /** Other actions mountable from your own HTML: `wire:click="mountAction('name', { … })"`. */
     getCalendarActions(): Action[] { return []; }
-    /** Par défaut : ouvre `dateAction()`. À redéfinir pour faire autre chose (rediriger vers une page de création, par exemple). */
+    /** Opens `dateAction()` by default. Override to do something else (e.g. redirect to a create page). */
     async onDateClick(date: string): Promise<void> { const action = this.dateAction(); if (action) await this.mountAction(action.getName(), { date }); }
-    /** Par défaut : ouvre `eventAction()`. L'événement a été retrouvé côté serveur avant l'appel. */
+    /** Opens `eventAction()` by default. The event has been resolved server-side before the call. */
     async onEventClick(event: CalendarEvent): Promise<void> { const action = this.eventAction(); if (action) await this.mountAction(action.getName(), { event: String(event.id) }); }
 
-    /** Date d'un clic, relue dans les arguments d'une action : ils viennent du navigateur, seule une vraie date est rendue. */
+    /** Clicked date, read from an action's arguments. They come from the browser: only a valid date is returned. */
     static dateOf(args: Record<string, unknown> | null | undefined): string | null { return isDate(args?.date) ? (args!.date as string) : null; }
-    /** Événement de la période affichée portant cet identifiant, ou nul : ne jamais agir sur un identifiant reçu sans passer par ici. */
+    /** Event of the displayed period with this id, or `null`. Never act on a received id without going through this. */
     async findEvent(id: unknown): Promise<CalendarEvent | null> {
         if (typeof id !== 'string' && typeof id !== 'number') return null;
         const view = this.currentView();
@@ -1737,12 +1728,12 @@ export abstract class CalendarPage extends Page {
     }
 }
 
-/** Section sans en-tête des widgets fournis (port de `<x-filament::section>`). */
+/** Header-less section used by the built-in widgets. */
 const widgetSection = (content: string) => `<section x-data="{
         isCollapsed:  false ,
     }" class="fi-section"><div class="fi-section-content-ctn"><div class="fi-section-content">${content}</div></div></section>`;
 
-/** Compte de l'utilisateur connecté : avatar, nom, déconnexion (port de Filament\Widgets\AccountWidget). */
+/** Signed-in user's account: avatar, name, logout. */
 export class AccountWidget extends Widget {
     static isLazy = false;
     render(): string {
@@ -1753,7 +1744,7 @@ export class AccountWidget extends Widget {
     }
 }
 
-/** Version de Navette et liens utiles (pendant de Filament\Widgets\FilamentInfoWidget, dont il reprend le balisage et les classes). */
+/** Navette version and useful links. */
 export class NavetteInfoWidget extends Widget {
     static isLazy = false;
     static homeUrl = 'https://github.com/NavetteJS';
@@ -1768,10 +1759,10 @@ export class NavetteInfoWidget extends Widget {
     }
 }
 
-/** Propriétés de table qu'une page de liste expose à ses widgets (port de InteractsWithPageTable / ExposesTableToWidgets). */
+/** Table properties a list page exposes to its widgets. */
 const PAGE_TABLE_PROPERTIES = ['activeTab', 'paginators', 'tableColumnSearches', 'tableFilters', 'tableRecordsPerPage', 'tableSearch', 'tableSort'];
 
-/** Une statistique d'un StatsOverviewWidget (port de Stat). */
+/** One stat of a StatsOverviewWidget. */
 export class Stat {
     private _description: string | null = null;
     private _descriptionIcon: string | null = null;
@@ -1786,10 +1777,10 @@ export class Stat {
     static make(label: string, value: string | number | null): Stat { return new Stat(label, value); }
     description(text: string | null): this { this._description = text; return this; }
     descriptionIcon(name: string | null, position: 'before' | 'after' = 'after'): this { this._descriptionIcon = name; this._descriptionIconPosition = position; return this; }
-    /** Couleur de la description et de la courbe. */
+    /** Color of the description and chart. */
     color(color: string | null): this { this._color = color; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
-    /** Courbe de tendance : une liste de valeurs, ou des valeurs par libellé. */
+    /** Trend chart: a list of values, or values keyed by label. */
     chart(values: Record<string, number> | number[] | null): this { this._chart = values; return this; }
     url(url: string | null): this { this._url = url; return this; }
     hasChart(): boolean { return this._chart !== null; }
@@ -1812,19 +1803,19 @@ export class Stat {
     }
 }
 
-/** Rangée de statistiques (port de StatsOverviewWidget). */
+/** A row of stats. */
 export abstract class StatsOverviewWidget extends Widget {
     static columnSpan: ColumnSpan = 'full';
-    /** Intervalle de rafraîchissement (`'5s'` dans Filament par défaut), ou null pour ne pas rafraîchir. */
+    /** Polling interval, or `null` to disable polling. */
     static pollingInterval: string | null = '5s';
     abstract getStats(): Stat[] | Promise<Stat[]>;
-    /** Colonnes de la rangée : comme Filament, trois, ou quatre quand le nombre de statistiques s'y prête. */
+    /** Row columns: three, or four when the number of stats fits better. */
     protected getColumns(count: number): number { return count < 3 ? 3 : count % 3 !== 1 ? 3 : 4; }
     async render(): Promise<string> {
         const stats = await this.getStats();
         const columns = this.getColumns(stats.length);
         const anonymous = `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
-        // Comme Filament : une statistique à courbe reçoit un identifiant (`stats-overview-stat-<n>`), donc une clé de composant ; les autres restent anonymes.
+        // A stat with a chart gets an id (`stats-overview-stat-<n>`), hence a component key; the others stay anonymous.
         const cells = stats.map((stat, index) => {
             if (!stat.hasChart()) return `<div ${anonymous} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(this.panel, `${this.id}.stats.${index}`)}</div></div>`;
             const id = `stats-overview-stat-${index}`, key = `content.${id}`;
@@ -1838,47 +1829,47 @@ export abstract class StatsOverviewWidget extends Widget {
     }
 }
 
-/** Données d'un graphique, au format de Chart.js : `{ datasets: [{ label, data, … }], labels: [...] }`. */
+/** Chart data in Chart.js format: `{ datasets: [{ label, data, … }], labels: [...] }`. */
 export type ChartData = { datasets?: Record<string, unknown>[]; labels?: unknown[]; [key: string]: unknown };
 
 /**
- * Graphique Chart.js (port de Filament\Widgets\ChartWidget). Une sous-classe donne `getType()` (`'line'`, `'bar'`, `'pie'`,
- * `'doughnut'`, `'radar'`, `'polarArea'`, `'scatter'`, `'bubble'`) et `getData()`. Le rendu est fait dans le navigateur par le
- * composant `chart.js` de Filament ; le serveur n'envoie de nouvelles données que si elles ont changé (somme de contrôle).
+ * Chart.js chart. A subclass provides `getType()` (`'line'`, `'bar'`, `'pie'`, `'doughnut'`, `'radar'`, `'polarArea'`,
+ * `'scatter'`, `'bubble'`) and `getData()`. Rendering happens in the browser; the server only sends new data when it
+ * has changed (checksum).
  */
 export abstract class ChartWidget extends Widget {
     static callable = ['updateChartData'];
     static locked = ['dataChecksum'];
-    /** Intervalle de rafraîchissement (`'5s'` par défaut dans Filament), ou null pour ne pas rafraîchir. */
+    /** Polling interval, or `null` to disable polling. */
     static pollingInterval: string | null = '5s';
     static heading: string | null = null;
     static description: string | null = null;
-    /** Couleur des séries qui n'en précisent pas. */
+    /** Color of datasets that do not set one. */
     static color = 'primary';
-    /** Hauteur maximale du graphique (`'300px'`). */
+    /** Maximum chart height (`'300px'`). */
     static maxHeight: string | null = null;
     static isCollapsible = false;
     dataChecksum: string | null = null;
-    /** Filtre choisi, parmi `getFilters()`. */
+    /** Selected filter, one of `getFilters()`. */
     filter: string | null = null;
     private _cachedData: ChartData | null = null;
 
     abstract getType(): string;
     getData(): ChartData | Promise<ChartData> { return {}; }
-    /** Options de Chart.js. */
+    /** Chart.js options. */
     getOptions(): Record<string, unknown> | null { return null; }
-    /** Filtres proposés dans l'en-tête : valeur vers libellé. */
+    /** Filters offered in the header: value → label. */
     getFilters(): Record<string, string> | null { return null; }
     getHeading(): string | null { return (this.constructor as typeof ChartWidget).heading; }
     getDescription(): string | null { return (this.constructor as typeof ChartWidget).description; }
     getColor(): string { return (this.constructor as typeof ChartWidget).color; }
     getMaxHeight(): string | null { return (this.constructor as typeof ChartWidget).maxHeight; }
-    /** Texte lu par les lecteurs d'écran à la place du graphique. */
+    /** Text read by screen readers instead of the chart. */
     getChartAssistiveContent(): string | null { return null; }
     protected async getCachedData(): Promise<ChartData> { return (this._cachedData ??= await this.getData()); }
     protected async generateDataChecksum(): Promise<string> { return createHash('md5').update(JSON.stringify(await this.getCachedData())).digest('hex'); }
     async mount(): Promise<void> { this.dataChecksum = await this.generateDataChecksum(); }
-    /** Appelé par le rafraîchissement périodique et avant chaque rendu : n'émet les données que si elles ont changé. */
+    /** Called by polling and before each render: only emits data when it has changed. */
     async updateChartData(): Promise<void> {
         const checksum = await this.generateDataChecksum();
         if (checksum === this.dataChecksum) return;
@@ -1923,13 +1914,13 @@ export abstract class ChartWidget extends Widget {
 }
 
 /**
- * Table dans un widget (port de Filament\Widgets\TableWidget) : recherche, tri, pagination simple (précédent / suivant).
- * Une sous-classe donne `table(table)` et `getDataAdapterForTable()`. Pas d'actions ni de filtres pour l'instant.
+ * Table in a widget: search, sort, simple pagination (previous / next).
+ * A subclass provides `table(table)` and `getDataAdapterForTable()`. No actions or filters yet.
  */
 export abstract class TableWidget extends Widget implements TableHost {
     static columnSpan: ColumnSpan = 'full';
     static callable = ['sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableColumnManager', 'resetTableColumnManager'];
-    /** Titre de la table ; par défaut tiré du nom de la classe (`FlaggedOrders` : « Flagged Orders »). */
+    /** Table heading; derived from the class name by default (`FlaggedOrders` → "Flagged Orders"). */
     static heading: string | null = null;
     tableSearch = '';
     tableSort: string | null = null;
@@ -1969,15 +1960,15 @@ export abstract class TableWidget extends Widget implements TableHost {
     }
 }
 
-/** Widgets qui reçoivent les filtres du tableau de bord (port de InteractsWithPageFilters) : `static reactive = PAGE_FILTERS` et une propriété `pageFilters`. */
+/** For widgets that receive the dashboard filters: `static reactive = PAGE_FILTERS` plus a `pageFilters` property. */
 export const PAGE_FILTERS = ['pageFilters'];
 
 /**
- * Widget de statistiques lié à la table d'une page de liste (port de InteractsWithPageTable) : il reçoit l'état de la table
- * (recherche, filtres, onglet…) et peut agréger exactement les enregistrements qu'elle affiche.
+ * Stats widget bound to a list page's table: it receives the table state (search, filters, tab…)
+ * and can aggregate exactly the records the table displays.
  */
 export abstract class PageTableStatsWidget extends StatsOverviewWidget {
-    /** Page de liste dont la table est observée (équivalent de getTablePage()). */
+    /** List page whose table is observed. */
     static tablePage: () => typeof ListRecords;
     static reactive = PAGE_TABLE_PROPERTIES;
     activeTab: string | null = null;
@@ -1987,17 +1978,17 @@ export abstract class PageTableStatsWidget extends StatsOverviewWidget {
     tableRecordsPerPage = 10;
     tableSearch = '';
     tableSort: string | null = null;
-    /** Agrégats sur la requête courante de la table. L'état reçu passe par la même validation que sur la page. */
+    /** Aggregates over the table's current query. The received state goes through the same validation as on the page. */
     protected async aggregatePageTable(columns: { sum?: string[]; avg?: string[] } = {}, modify: ((query: any) => void) | null = null): Promise<{ count: number; sum: Record<string, number>; avg: Record<string, number> }> {
         const PageClass = (this.constructor as typeof PageTableStatsWidget).tablePage();
         const page = new PageClass();
         for (const property of PAGE_TABLE_PROPERTIES) (page as any)[property] = (this as any)[property];
         const query = getTableQuery(page.getTable(), page);
-        // Restriction supplémentaire propre à une statistique (« parmi les lignes affichées, celles qui… »).
+        // Extra restriction for one stat ("among the displayed rows, those that…").
         if (modify) (query.modifiers ??= []).push(modify);
         return PageClass.resource.adapter.aggregate(query, columns);
     }
-    /** Tendance mensuelle sur la requête courante de la table (voir `ObjectionAdapter.trendPerMonth`). */
+    /** Monthly trend over the table's current query (see `ObjectionAdapter.trendPerMonth`). */
     protected async trendPageTable(options: { start: Date; end: Date; dateColumn?: string; average?: string; modify?: (query: any) => void }): Promise<number[]> {
         const PageClass = (this.constructor as typeof PageTableStatsWidget).tablePage();
         const page = new PageClass();
@@ -2006,12 +1997,12 @@ export abstract class PageTableStatsWidget extends StatsOverviewWidget {
     }
 }
 
-/** Composant de schéma qui intègre la table du composant hôte (port de EmbeddedTable). */
+/** Schema component that embeds the host component's table. */
 export class EmbeddedTable extends SchemaComponent {
     static make(): EmbeddedTable { return new EmbeddedTable(); }
     async toHtml(): Promise<string> { return (this.livewire as unknown as ListRecords).renderTable(); }
 }
-/** Onglets des relation managers d'une page d'édition : seul le manager de l'onglet actif est monté, en composant enfant « lazy » (port de RelationManagers + Tabs). */
+/** Relation manager tabs of an edit page: only the active tab's manager is mounted, as a lazy child component. */
 class RelationManagerTabs extends SchemaComponent {
     constructor() { super(); this._keyName = 'relationManagerTabs'; }
     getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
@@ -2047,7 +2038,7 @@ class RelationManagerTabs extends SchemaComponent {
  })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${active}" /><div x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${tabs.join('')}</div></div>${panels.join('')}</div>`;
     }
 }
-/** Onglet d'une page de liste : restreint la requête de la table et peut afficher un compteur (port de Tab). */
+/** List page tab: restricts the table query and can show a badge. */
 export class Tab {
     private _label: string | null;
     private _badge: (() => number | string | null | Promise<number | string | null>) | null = null;
@@ -2056,7 +2047,7 @@ export class Tab {
     private _query: ((query: any) => void) | null = null;
     constructor(label: string | null = null) { this._label = label; }
     static make(label: string | null = null): Tab { return new Tab(label); }
-    /** Compteur, calculé après l'affichage de la page (comme `lazyLoadedBadge()`). */
+    /** Badge computed after the page is displayed. */
     badge(resolver: () => number | string | null | Promise<number | string | null>): this { this._badge = resolver; return this; }
     badgeColor(color: string): this { this._badgeColor = color; this._hasBadgeColor = true; return this; }
     query(modifier: (query: any) => void): this { this._query = modifier; return this; }
@@ -2064,17 +2055,17 @@ export class Tab {
     hasBadge(): boolean { return this._badge !== null; }
     async getBadge(): Promise<number | string | null> { return this._badge ? this._badge() : null; }
     getBadgeColor(): string { return this._badgeColor; }
-    /** Faux tant que `badgeColor()` n'a pas été appelé : un badge chargé après coup ne reçoit alors aucune classe de couleur, comme dans Filament. */
+    /** False until `badgeColor()` is called: a lazy-loaded badge then gets no color class. */
     hasBadgeColor(): boolean { return this._hasBadgeColor; }
     getQuery(): ((query: any) => void) | null { return this._query; }
 }
 
-/** Onglets de la page de liste (port de ResourceTabs) : masqués quand la page n'en déclare pas. */
+/** List page tabs: hidden when the page declares none. */
 class ResourceTabs extends SchemaComponent {
     constructor() { super(); this._keyName = 'resourceTabs'; this._hidden = ({ livewire }) => Object.keys((livewire as any).getTabs()).length === 0; }
     getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
     getDeferredTabBadges(): Record<string, unknown> { return {}; }
-    /** Compteurs des onglets, demandés par le navigateur une fois la page affichée. */
+    /** Tab badges, requested by the browser once the page is displayed. */
     async getLazyLoadedTabBadges(): Promise<Record<string, unknown>> {
         const page = this.livewire as unknown as ListRecords;
         const badges: Record<string, unknown> = {};
@@ -2139,7 +2130,7 @@ class ResourceTabs extends SchemaComponent {
     }
 }
 
-/** Page de liste d'une resource : état de table et méthodes appelées par le navigateur (port de ListRecords + InteractsWithTable). */
+/** Resource list page: table state and methods called by the browser. */
 export class ListRecords extends Page implements TableHost {
     static callable = ['updateTableColumnState', 'sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableFilters', 'resetTableFiltersForm', 'removeTableFilters', 'removeTableFilter', 'applyTableColumnManager', 'resetTableColumnManager', 'toggleTableReordering', 'reorderTable'];
     static resource: typeof Resource;
@@ -2148,21 +2139,21 @@ export class ListRecords extends Page implements TableHost {
     tableColumnSearches: Record<string, string> = {};
     tableRecordsPerPage = 10;
     paginators: Record<string, number> = { page: 1 };
-    // Sélection : tenue par le navigateur, envoyée avec l'appel de l'action groupée (port de CanSelectRecords).
+    // Selection: kept by the browser, sent along with the bulk action call.
     selectedTableRecords: string[] = [];
     deselectedTableRecords: string[] = [];
     isTrackingDeselectedTableRecords = false;
-    // Filtres : `tableDeferredFilters` est l'état du formulaire, `tableFilters` l'état appliqué (filtres différés, comme Filament par défaut).
+    // Filters: `tableDeferredFilters` is the form state, `tableFilters` the applied state (deferred filters by default).
     tableFilters: Record<string, FilterState> = {};
     tableDeferredFilters: Record<string, FilterState> = {};
     tableColumns: ColumnState[] = [];
     isTableReordering = false;
-    /** Regroupement courant de la table (`identifiant:direction`), choisi dans la barre d'outils. */
+    /** Current table grouping (`id:direction`), chosen in the toolbar. */
     tableGrouping: string | null = null;
     updatedTableGrouping(): void { this.paginators.page = 1; }
-    /** Entre dans le mode « tri manuel » ou en sort (port de toggleTableReordering). */
+    /** Toggles manual reordering mode. */
     async toggleTableReordering(): Promise<void> { if (this.getTable().getReorderColumn() !== null && (await canOn(this, 'reorder'))) { this.isTableReordering = !this.isTableReordering; this.deselectAllTableRecords(); } }
-    /** Enregistre le nouvel ordre : seules les clés de la table sont retenues, chacune reçoit son rang (port de reorderTable). */
+    /** Saves the new order: only keys belonging to the table are kept, each gets its position. */
     async reorderTable(order: unknown, _draggedRecordKey: unknown = null): Promise<void> {
         const column = this.getTable().getReorderColumn();
         if (column === null || !this.isTableReordering || !Array.isArray(order) || order.length > REORDER_LIMIT || !(await canOn(this, 'reorder'))) return;
@@ -2177,21 +2168,21 @@ export class ListRecords extends Page implements TableHost {
         this.tableFilters = table.getDefaultFilterState();
         this.tableDeferredFilters = table.getDefaultFilterState();
         this.tableColumns = table.getDefaultColumnState();
-        // Groupe par défaut présélectionné, comme Filament.
+        // Preselect the default group.
         initializeTableGrouping(table, this as any);
-        // `?tableAction=view&tableActionRecord=12` (lien d'un résultat de recherche globale) : l'action de ligne s'ouvre à l'arrivée, avec les contrôles habituels.
+        // `?tableAction=view&tableActionRecord=12` (global search result link): the row action opens on arrival, with the usual checks.
         const query = ((this._ctx as PanelContext | null)?.req?.query ?? {}) as Record<string, unknown>;
         if (typeof query.tableAction === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(query.tableAction) && typeof query.tableActionRecord === 'string' && query.tableActionRecord.length <= 64) {
             try { await this.mountAction(query.tableAction, {}, { table: true, recordKey: query.tableActionRecord }); } catch (error) { if (!(error instanceof WireError)) throw error; }
         }
     }
-    /** Formulaire des filtres : un groupe par filtre, lié à `tableDeferredFilters.<filtre>`. */
+    /** Filters form: one group per filter, bound to `tableDeferredFilters.<filter>`. */
     tableFiltersFormSchema(schema: Schema): Schema {
         const table = this.getTable();
-        // Au-dessus du contenu, les filtres se répartissent sur plusieurs colonnes (comme Filament) ; dans le menu déroulant, sur une seule.
+        // Above the content, filters spread over several columns; in the dropdown, a single one.
         const columns = table.getFiltersLayout() === 'above-content-collapsible' ? { sm: 2, lg: 3, xl: 4, '2xl': 5 } : 1;
         return schema.statePath('tableDeferredFilters').columns(columns).partiallyRendered().components(table.getFilters().map((filter) => {
-            // Un filtre peut fournir son propre formulaire (constructeur de requêtes) ; sinon c'est un sélecteur.
+            // A filter may provide its own form (query builder); otherwise it is a select.
             const custom = filter.getFormComponents?.() as SchemaComponent[] | undefined;
             if (custom) return StatefulGroup.make(filter.name, custom).columnSpan(filter.getColumnSpan?.() ?? { default: 1, lg: 1 });
             const definition = filter.getFormDefinition();
@@ -2199,7 +2190,7 @@ export class ListRecords extends Page implements TableHost {
         }));
     }
     applyTableFilters(): void {
-        // Seuls les filtres déclarés par la table passent dans l'état appliqué : chacun nettoie son état, ou à défaut seules ses clés connues sont reprises.
+        // Only filters declared by the table reach the applied state: each sanitizes its own state, or else only its known keys are kept.
         this.tableFilters = Object.fromEntries(this.getTable().getFilters().map((filter) => {
             const deferred = this.tableDeferredFilters?.[filter.name];
             if (filter.sanitizeState) return [filter.name, filter.sanitizeState(deferred)];
@@ -2207,7 +2198,7 @@ export class ListRecords extends Page implements TableHost {
         }));
         this.paginators.page = 1;
     }
-    /** Retrait d'un indicateur de filtre actif : le champ visé est effacé de l'état appliqué et du formulaire. */
+    /** Removes an active filter indicator: the field is cleared from both the applied state and the form. */
     removeTableFilter(filterName: unknown, field: unknown = null): void {
         const filter = this.getTable().getFilters().find((candidate) => candidate.name === filterName);
         if (!filter) return;
@@ -2217,7 +2208,7 @@ export class ListRecords extends Page implements TableHost {
         this.tableDeferredFilters = { ...this.tableDeferredFilters, [filter.name]: JSON.parse(JSON.stringify(next)) };
         this.paginators.page = 1;
     }
-    /** Champ réactif du formulaire des filtres (changement d'opérateur d'une règle) : exécute son `afterStateUpdated`. */
+    /** Live field in the filters form (e.g. a rule's operator changed): runs its `afterStateUpdated`. */
     async updatedTableDeferredFilters(_value: unknown, key: string | null): Promise<void> {
         if (!key) return;
         const path = `tableDeferredFilters.${key}`;
@@ -2241,10 +2232,10 @@ export class ListRecords extends Page implements TableHost {
     applyTableColumnManager(state: unknown = null, _wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state); }
     resetTableColumnManager(): void { this.tableColumns = this.getTable().getDefaultColumnState(); }
 
-    // --- onglets de liste : la clé vide est l'onglet par défaut (`null` côté navigateur)
+    // --- list tabs: the empty key is the default tab (`null` in the browser)
     activeTab: string | null = null;
     getTabs(): Record<string, Tab> { return (this.resource as any).tabs?.() ?? {}; }
-    /** Onglet actif, ramené à une clé déclarée (une valeur inconnue envoyée par le navigateur vaut l'onglet par défaut). */
+    /** Active tab, coerced to a declared key (an unknown value from the browser means the default tab). */
     getActiveTabKey(): string {
         const tabs = this.getTabs();
         const key = this.activeTab ?? '';
@@ -2259,11 +2250,11 @@ export class ListRecords extends Page implements TableHost {
 
     get resource(): typeof Resource { return (this.constructor as typeof ListRecords).resource; }
     getHeaderWidgets(): (typeof Widget)[] { return this.resource.headerWidgets ?? []; }
-    /** Port de ExposesTableToWidgets : l'état de la table est passé aux widgets, qui peuvent refaire la même requête. */
+    /** The table state is passed to widgets, which can rerun the same query. */
     getWidgetData(): Record<string, unknown> { return Object.fromEntries(PAGE_TABLE_PROPERTIES.map((property) => [property, (this as any)[property]])); }
     protected rendersActionModalsInPage(): boolean { return false; }
     getBulkActions(): Action[] { return this.getTable().getBulkActions() ?? [DeleteBulkAction.make()]; }
-    /** Actions de ligne déclarées par la table, groupes dépliés. */
+    /** Row actions declared by the table, with groups flattened. */
     getRecordActions(): Action[] { return this.getTable().getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])); }
     protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
         if (typeof context.schemaComponent === 'string') return this.getSchemaComponentActions(context.schemaComponent);
@@ -2272,7 +2263,7 @@ export class ListRecords extends Page implements TableHost {
         if (context.table === true) return this.getTable().getHeaderActions();
         return this.getHeaderActions();
     }
-    /** Seules les formes de contexte connues sont retenues ; la clé d'enregistrement est revérifiée en base au montage. */
+    /** Only known context shapes are kept; the record key is checked again in the database on mount. */
     protected resolveMountContext(clientContext: unknown): Record<string, unknown> {
         const c = clientContext && typeof clientContext === 'object' ? (clientContext as Record<string, unknown>) : {};
         if (typeof c.schemaComponent === 'string' && c.schemaComponent.length <= 200) return { schemaComponent: c.schemaComponent };
@@ -2285,17 +2276,17 @@ export class ListRecords extends Page implements TableHost {
         return typeof context.recordKey === 'string' ? ((await this.resource.adapter.find(context.recordKey)) ?? null) : null;
     }
     /**
-     * Écriture d'une cellule modifiable (port de `updateTableColumnState`). Tout vient du navigateur : la colonne doit exister, être
-     * modifiable et visible, l'enregistrement être dans la portée de la table et modifiable par l'utilisateur, la valeur être valide.
+     * Writes an editable cell. Everything comes from the browser: the column must exist and be editable and visible, the record
+     * must be in the table's scope and editable by the user, and the value must be valid.
      */
     async updateTableColumnState(columnName: unknown, recordKey: unknown, input: unknown): Promise<unknown> {
-        // Toutes les vérifications (colonne visible et modifiable, portée, désactivation, autorisation, validation, crochets) sont dans le paquet tables.
+        // All checks (visible and editable column, scope, disabled state, authorization, validation, hooks) live in the tables package.
         return updateEditableColumnState(this.getTable(), this, this.getDataAdapterForTable(), columnName, recordKey, input, { authorize: (record: unknown) => canOn(this, 'update', record) });
     }
-    /** Clés sélectionnées : la liste envoyée, ou — en mode « tout sélectionner » — tous les enregistrements de la requête courante sauf ceux désélectionnés. */
+    /** Selected keys: the sent list, or, in "select all" mode, every record of the current query except deselected ones. */
     async getSelectedRecordKeys(): Promise<string[]> {
         const clean = (list: unknown) => (Array.isArray(list) ? list.filter((k) => typeof k === 'string' || typeof k === 'number').map(String) : []);
-        // La sélection vient du navigateur : elle est ramenée aux enregistrements que cette table peut réellement afficher.
+        // The selection comes from the browser: it is narrowed to records this table can actually display.
         if (!this.isTrackingDeselectedTableRecords) return this.resource.adapter.keysInScope(clean(this.selectedTableRecords));
         const excluded = new Set(clean(this.deselectedTableRecords));
         return (await this.resource.adapter.listKeys(getTableQuery(this.getTable(), this))).filter((k) => !excluded.has(k));
@@ -2307,7 +2298,7 @@ export class ListRecords extends Page implements TableHost {
     getTable(): Table {
         const resource = this.resource;
         const table = new Table().pluralModelLabel(resource.getPluralModelLabel());
-        // Resource simple : la ligne ouvre l'édition en modale ; sinon elle mène à la page d'édition.
+        // Simple resource: the row opens the edit modal; otherwise it links to the edit page.
         return resource.table(resource.isSimple ? table.recordAction('edit') : table.recordUrl((record) => resource.getUrl(resource.hasViewPage ? 'view' : 'edit', resource.adapter.getKey(record))));
     }
     async renderTable(): Promise<string> {
@@ -2335,7 +2326,7 @@ export class ListRecords extends Page implements TableHost {
         });
     }
 
-    /** Actions affichées dans l'en-tête de la table (aucune pour une page de liste : elles sont dans l'en-tête de page). */
+    /** Table header actions (none on a list page: they go in the page header). */
     protected async renderTableHeaderActions(ctx: any): Promise<string[]> {
         const html: string[] = [];
         for (const action of this.getTable().getHeaderActions()) if (await action.isVisible(ctx)) html.push(await action.toHtml(ctx, { table: true }));
@@ -2357,7 +2348,7 @@ export class ListRecords extends Page implements TableHost {
         return [{ label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() }, { label: t('filament-panels::resources/pages/list-records.breadcrumb'), url: null }];
     }
     getHeaderActions(): Action[] {
-        // Resource simple : création en modale ; sinon lien vers la page de création.
+        // Simple resource: create in a modal; otherwise link to the create page.
         if (this.resource.isSimple) return [CreateAction.make(this.resource)];
         return [...((this.resource as any).listHeaderActions?.() ?? []), Action.make('create').label(t('filament-actions::create.single.label', { label: this.resource.modelLabel })).url(this.resource.getUrl('create')).authorize(({ livewire }) => canOn(livewire, 'create'))];
     }
@@ -2368,28 +2359,28 @@ export class ListRecords extends Page implements TableHost {
 }
 
 /**
- * Table des enregistrements liés à un autre (port de RelationManager) : composant enfant de la page d'édition, chargé quand il devient visible.
- * Les sous-classes déclarent `relationship`, `adapterFor()`, `table()` et `form()`.
+ * Table of records related to another one: a child component of the edit page, loaded when it becomes visible.
+ * Subclasses declare `relationship`, `adapterFor()`, `table()` and `form()`.
  */
 export class RelationManager extends ListRecords {
     static relationship = '';
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
-    /** Adaptateur limité aux enregistrements liés au propriétaire donné. */
-    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('RelationManager.adapterFor() doit être défini.'); }
-    /** Politique des enregistrements liés (mêmes capacités que celle d'une resource). */
+    /** Data adapter limited to records related to the given owner. */
+    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('RelationManager.adapterFor() must be defined.'); }
+    /** Policy for related records (same abilities as a resource policy). */
     static policy: Policy | null = null;
     protected isAccessAuthorized(ctx: PanelContext): Promise<boolean> { return this.resource.can('viewAny', ctx.user); }
     static table(table: Table): Table { return table; }
     static form(schema: Schema): Schema { return schema; }
     static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
 
-    /** Clé de l'enregistrement propriétaire : fixée au montage par la page, jamais modifiable depuis le navigateur. */
+    /** Owner record key: set on mount by the page, never writable from the browser. */
     ownerRecord = '';
     static locked = ['ownerRecord'];
     _facade: any = null;
-    /** Ce que ListRecords attend d'une resource, fourni ici par le relation manager. */
+    /** What ListRecords expects from a resource, provided here by the relation manager. */
     get resource(): any {
         const manager = this.constructor as typeof RelationManager;
         return (this._facade ??= {
@@ -2404,24 +2395,24 @@ export class RelationManager extends ListRecords {
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
         const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()));
-        // Comme Filament : s'il existe une action de ligne « edit », cliquer la ligne l'ouvre.
+        // If there is an "edit" row action, clicking the row opens it.
         const hasEdit = table.getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])).some((a: Action) => a.getName() === 'edit');
         return hasEdit ? table.recordAction('edit') : table;
     }
-    // --- relations plusieurs-à-plusieurs : à définir par le manager qui propose Attach / Detach
-    /** Rattache un enregistrement existant au propriétaire. */
-    static attach(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('RelationManager.attach() doit être défini.'); }
-    /** Détache des enregistrements du propriétaire, sans les supprimer. */
-    static detach(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('RelationManager.detach() doit être défini.'); }
-    /** Enregistrements rattachables correspondant à la recherche : [clé, libellé]. */
-    static searchAttachable(_ownerKey: string, _search: string): Promise<[string, string][]> { throw new Error('RelationManager.searchAttachable() doit être défini.'); }
-    /** Libellé d'un enregistrement rattachable, ou null s'il ne l'est pas (sert aussi de validation). */
-    static attachableLabel(_ownerKey: string, _recordKey: string): Promise<string | null> { throw new Error('RelationManager.attachableLabel() doit être défini.'); }
+    // --- many-to-many: to be defined by managers offering Attach / Detach
+    /** Attaches an existing record to the owner. */
+    static attach(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('RelationManager.attach() must be defined.'); }
+    /** Detaches records from the owner without deleting them. */
+    static detach(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('RelationManager.detach() must be defined.'); }
+    /** Attachable records matching the search: [key, label]. */
+    static searchAttachable(_ownerKey: string, _search: string): Promise<[string, string][]> { throw new Error('RelationManager.searchAttachable() must be defined.'); }
+    /** Label of an attachable record, or `null` if it is not attachable (also used as validation). */
+    static attachableLabel(_ownerKey: string, _recordKey: string): Promise<string | null> { throw new Error('RelationManager.attachableLabel() must be defined.'); }
     getHeaderActions(): Action[] { return []; }
     placeholder(): string {
         return `<div role="status" aria-busy="true" style="height: 8rem; ;" class="fi-section fi-loading-section fi-grid-col"><span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
     }
-    /** Comme Filament : un relation manager a ses propres emplacements, pas ceux de la page de liste. */
+    /** A relation manager has its own render hook locations, not the list page's. */
     contentSchema(schema: Schema): Schema {
         return schema.components([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_AFTER)]);
     }
@@ -2431,26 +2422,26 @@ export class RelationManager extends ListRecords {
 }
 
 /**
- * Page des enregistrements liés à un enregistrement (port de ManageRelatedRecords) : une table, avec création, consultation et
- * édition en modales. Déclarée par `static relatedPages` de la resource propriétaire, elle répond sous `<slug>/{record}/<nom>`.
+ * Page listing records related to a record: a table, with create, view and edit in modals.
+ * Declared in the owner resource's `static relatedPages`, it is served at `<slug>/{record}/<name>`.
  */
 export class ManageRelatedRecords extends ListRecords {
-    /** Resource propriétaire : fixée à l'enregistrement de la page. */
+    /** Owner resource: set when the page is registered. */
     static parentResource: typeof Resource;
     static relationship = '';
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
     static policy: Policy | null = null;
-    /** Adaptateur limité aux enregistrements liés au propriétaire donné. */
-    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('ManageRelatedRecords.adapterFor() doit être défini.'); }
+    /** Data adapter limited to records related to the given owner. */
+    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('ManageRelatedRecords.adapterFor() must be defined.'); }
     static table(table: Table): Table { return table; }
     static form(schema: Schema): Schema { return schema; }
     static infolist(schema: Schema): Schema { return schema; }
     static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
     static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
 
-    /** Clé de l'enregistrement propriétaire : tirée de l'adresse au montage, jamais modifiable depuis le navigateur. */
+    /** Owner record key: read from the URL on mount, never writable from the browser. */
     recordKey = '';
     static locked = ['recordKey'];
     _owner: any = null;
@@ -2461,16 +2452,16 @@ export class ManageRelatedRecords extends ListRecords {
         await this.hydrate();
         await (ListRecords.prototype as any).mount?.call(this, params);
     }
-    /** Le propriétaire est relu et son accès vérifié à chaque requête. */
+    /** The owner is reloaded and access to it checked on every request. */
     async hydrate(): Promise<void> {
         const parent = this.related.parentResource;
         this._owner = await parent.adapter.find(this.recordKey);
-        if (!this._owner) throw new WireError(404, 'Enregistrement introuvable.');
-        if (!(await parent.can('view', (this._ctx as PanelContext | null)?.user ?? null, this._owner))) throw new WireError(403, 'Accès refusé.');
+        if (!this._owner) throw new WireError(404, 'Record not found.');
+        if (!(await parent.can('view', (this._ctx as PanelContext | null)?.user ?? null, this._owner))) throw new WireError(403, 'Forbidden.');
         await (ListRecords.prototype as any).hydrate?.call(this);
     }
     getRecordKey(): string | null { return this.recordKey; }
-    /** Ce que ListRecords attend d'une resource, fourni ici par la page. */
+    /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
         return (this._facade ??= {
@@ -2484,7 +2475,7 @@ export class ManageRelatedRecords extends ListRecords {
     }
     getTable(): Table { return this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel())); }
     getHeaderActions(): Action[] { return []; }
-    /** Comme Filament : le contenu de la page est un groupe (onglets éventuels, puis la table). */
+    /** The page content is a group (tabs, if any, then the table). */
     contentSchema(schema: Schema): Schema {
         return schema.components([Group.make([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_AFTER)]), new RelationManagerTabs().key(null).hidden()]);
     }
@@ -2501,37 +2492,37 @@ export class ManageRelatedRecords extends ListRecords {
     getPageClasses(): string[] { return ['fi-resource-manage-related-records-page', `fi-resource-${this.related.parentResource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
 }
 
-/** Adresse de la page précédente si elle appartient à ce site, sinon la racine du site (sans barre finale, comme Laravel). */
+/** Previous page URL if it belongs to this site, otherwise the site root (without a trailing slash). */
 function previousUrlOf(req: Request | undefined): string {
     if (!req) return '';
     const origin = `${req.protocol}://${req.get('host')}`;
     try {
         const referer = new URL(String(req.get('referer') ?? ''));
         if (referer.origin === origin) return `${origin}${referer.pathname === '/' ? '' : referer.pathname}${referer.search}`;
-    } catch { /* pas de Referer exploitable */ }
+    } catch { /* no usable Referer */ }
     return origin;
 }
 
-/** Couleur représentative d'un thème (nuance 500 de sa couleur primaire), pour la pastille du menu. */
+/** A theme's representative color (shade 500 of its primary color), for the menu swatch. */
 function swatchOf(theme: Theme, panel: Panel): string {
     const primary = theme.colors?.primary;
     return (typeof primary === 'string' ? primary : primary?.[500]) ?? panel.colors.getColor('primary')?.[500] ?? 'currentColor';
 }
 
-/** Police d'un thème : sans adresse, elle est servie par Bunny Fonts comme celle du panel. */
+/** A theme's font: without a URL, it is served by Bunny Fonts like the panel font. */
 function fontOf(font: { family: string; url?: string }): { family: string; url: string; preconnect?: string } {
     return font.url ? { family: font.family, url: font.url } : { family: font.family, url: `https://fonts.bunny.net/css?family=${encodeURIComponent(font.family.toLowerCase().replace(/ /g, '-'))}:400,500,600,700&display=swap`, preconnect: 'https://fonts.bunny.net' };
 }
 
 function emptyToNull(data: Record<string, unknown>): Record<string, unknown> { return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v === '' ? null : v])); }
 
-/** Base des pages à formulaire d'une resource. */
+/** Base class for a resource's form pages. */
 abstract class ResourceFormPage extends Page {
-    /** Champ réactif du formulaire (`live()` + `afterStateUpdated()`) : `set(nom, valeur)` écrit à côté du champ modifié. */
+    /** Live form field (`live()` + `afterStateUpdated()`): `set(name, value)` writes next to the updated field. */
     async updatedData(_value: unknown, key: string | null): Promise<void> {
         if (!key) return;
         const path = `data.${key}`;
-        // Le champ modifié d'abord, puis ses champs parents (un Repeater recalcule un total quand une de ses lignes change), comme Filament.
+        // The updated field first, then its parent fields (a Repeater recomputes a total when one of its rows changes).
         const fields = (this.getSchema('form').getFlatComponents().filter((c) => c instanceof Field && c.hasAfterStateUpdated() && (c.getStatePath() === path || path.startsWith(`${c.getStatePath()}.`))) as Field[])
             .sort((a, b) => b.getStatePath().length - a.getStatePath().length);
         for (const field of fields) {
@@ -2554,21 +2545,21 @@ abstract class ResourceFormPage extends Page {
     abstract getFormActions(): Action[];
     protected getRecord(): unknown { return null; }
 
-    /** Deux colonnes par défaut à partir de `lg`, comme `defaultForm()` de Filament ; la resource peut en décider autrement. */
+    /** Two columns from `lg` by default; the resource may decide otherwise. */
     formSchema(schema: Schema): Schema {
         const form = this.resource.form(schema.columns(2).operation(this.getOperation()).record(this.getRecord()));
         const steps = this.getSteps();
-        // Assistant : les étapes remplacent les composants du formulaire de la resource (comme le trait HasWizard).
+        // Wizard: the steps replace the resource form's components.
         return steps === null ? form : form.columns(null).components([this.getWizardComponent(steps)]);
     }
     /**
-     * Étapes d'un assistant (équivalent du trait HasWizard de Filament) : dès que la méthode en retourne, la page présente son formulaire
-     * étape par étape, avec « Back » / « Next » et le bouton d'enregistrement sur la dernière étape.
+     * Wizard steps: as soon as this method returns some, the page shows its form step by step,
+     * with "Back" / "Next" and the submit button on the last step.
      */
     protected getSteps(): Step[] | null { return null; }
-    /** Vrai : les étapes sont accessibles dans n'importe quel ordre, sans validation au passage. */
+    /** `true`: steps can be visited in any order, without validation along the way. */
     protected hasSkippableSteps(): boolean { return false; }
-    /** Étape affichée à l'ouverture (à partir de 1). */
+    /** Step shown on open (1-based). */
     protected getStartStep(): number { return 1; }
     protected getWizardComponent(steps: Step[]): Wizard {
         const [submit] = this.getFormActions();
@@ -2577,20 +2568,20 @@ abstract class ResourceFormPage extends Page {
             .alpineSubmitHandler(`$wire.${this.getSubmitMethod()}()`).skippable(this.hasSkippableSteps()).contained(false);
     }
     contentSchema(schema: Schema): Schema {
-        // Assistant : pas de balise <form> autour, chaque étape a la sienne et l'assistant porte les actions.
+        // Wizard: no surrounding <form>; each step has its own and the wizard holds the actions.
         if (this.getSteps() !== null) return schema.components([EmbeddedSchema.make('form')]);
         return schema.components([
             Form.make([EmbeddedSchema.make('form')]).id('form').livewireSubmitHandler(this.getSubmitMethod())
                 .footer([Actions.make(this.getFormActions()).alignment('start').key('form-actions')]),
         ]);
     }
-    /** Destination de « Cancel » quand le navigateur n'a pas d'historique : la liste, sauf si la page en décide autrement. */
+    /** Where "Cancel" goes when the browser has no history: the list page, unless the page decides otherwise. */
     protected getCancelUrl(): string { return this.resource.getUrl(); }
     protected cancelAction(): Action {
         return Action.make('cancel').label(t(`filament-panels::resources/pages/${this.getOperation()}-record.form.actions.cancel.label`)).color('gray')
             .alpineClickHandler(`document.referrer ? window.history.back() : Livewire.navigate(${js(this.getCancelUrl())})`);
     }
-    /** Valide le formulaire ; en cas d'erreur, les pose sur le composant et prévient le navigateur. */
+    /** Validates the form; on error, sets the errors on the component and notifies the browser. */
     protected async validateForm(): Promise<boolean> {
         this._errors = await validateSchema(this.getSchema('form'));
         if (!Object.keys(this._errors).length) return true;
@@ -2599,7 +2590,7 @@ abstract class ResourceFormPage extends Page {
     }
 }
 
-/** Page de création d'un enregistrement (port de CreateRecord). */
+/** Record creation page. */
 export class CreateRecord extends ResourceFormPage {
     static callable = ['create', 'createAnother'];
     mount(): void { fillSchema(this.getSchema('form'), this.data); }
@@ -2617,18 +2608,18 @@ export class CreateRecord extends ResourceFormPage {
             this.cancelAction(),
         ];
     }
-    // --- crochets de cycle de vie, à surcharger dans une sous-classe (aucun n'est appelable depuis le navigateur)
-    /** Transforme les données validées avant la création (ajouter l'auteur, calculer un champ…). */
+    // --- lifecycle hooks, to override in a subclass (none can be called from the browser)
+    /** Transforms validated data before creation (add the author, compute a field…). */
     protected mutateFormDataBeforeCreate(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
-    /** Juste avant la création ; lever une erreur l'annule. */
+    /** Right before creation; throwing cancels it. */
     protected beforeCreate(_data: Record<string, unknown>): void | Promise<void> {}
-    /** La création elle-même : par défaut, l'adaptateur de la resource. */
+    /** The creation itself; defaults to the resource's data adapter. */
     protected handleRecordCreation(data: Record<string, unknown>): Promise<any> { return this.getDataAdapter().create(data); }
-    /** Après la création (journal, envoi d'un message…). */
+    /** After creation (logging, sending a message…). */
     protected afterCreate(_record: any): void | Promise<void> {}
-    /** Où aller ensuite : par défaut, la page d'édition du nouvel enregistrement. */
+    /** Where to go next; defaults to the new record's edit page. */
     protected getRedirectUrl(record: any): string { return this.resource.getUrl('edit', this.getDataAdapter().getKey(record)); }
-    /** Titre de la notification de succès ; `null` pour ne rien afficher. */
+    /** Success notification title; `null` to show nothing. */
     protected getCreatedNotificationTitle(): string | null { return t('filament-panels::resources/pages/create-record.notifications.created.title'); }
 
     async create(another = false): Promise<void> {
@@ -2645,14 +2636,14 @@ export class CreateRecord extends ResourceFormPage {
     createAnother(): Promise<void> { return this.create(true); }
 }
 
-/** Action de suppression d'un enregistrement, avec confirmation (port de Filament\Actions\DeleteAction dans une page de resource). */
+/** Delete action with confirmation. */
 export class DeleteAction {
-    /** Sur une page d'édition : supprime l'enregistrement de la page puis revient à la liste. Sur une ligne de table : supprime la ligne. */
+    /** On an edit page, deletes the page's record and returns to the list. On a table row, deletes the row. */
     static make(): Action {
         return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'delete', record))
             .label(t('filament-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon('c-trash').groupedIcon('m-trash')
             .requiresConfirmation().modalIcon('o-trash')
-            // Masquée pour un enregistrement déjà supprimé (suppression douce).
+            // Hidden for an already soft-deleted record.
             .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return target ? (livewire as any).getDataAdapter().isTrashed(target) : false; })
             .modalHeading(({ livewire, record }) => t('filament-actions::delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::delete.single.modal.actions.delete.label'))
@@ -2666,10 +2657,10 @@ export class DeleteAction {
     }
 }
 
-/** Action de duplication : comme `Action`, avec la liste des attributs à ne pas recopier. */
+/** Replicate action: an `Action` with a list of attributes not to copy. */
 export type ReplicateActionInstance = Action & { excludeAttributes(attributes: string[]): ReplicateActionInstance };
 
-/** Duplication d'une ligne de table (port de ReplicateAction) : la copie reprend les attributs de l'enregistrement, sauf sa clé, ses dates et ceux exclus. */
+/** Duplicates a table row: the copy takes the record's attributes, except its key, timestamps and excluded ones. */
 export class ReplicateAction {
     static make(): ReplicateActionInstance {
         let excluded: string[] = [];
@@ -2680,7 +2671,7 @@ export class ReplicateAction {
             .action(async ({ livewire, record }) => {
                 const adapter = livewire.getDataAdapter();
                 const source = typeof (record as any)?.toJSON === 'function' ? (record as any).toJSON() : { ...(record as any) };
-                // Comme Model::replicate() : ni clé primaire ni dates de création et de modification.
+                // No primary key, no created/updated timestamps.
                 for (const attribute of ['id', 'created_at', 'updated_at', ...excluded]) delete source[attribute];
                 await adapter.create(source);
                 Notification.make().success().title(t('filament-actions::replicate.single.notifications.replicated.title')).send();
@@ -2690,9 +2681,9 @@ export class ReplicateAction {
     }
 }
 
-/** Création en modale avec le formulaire de la resource (port de CreateAction). */
+/** Create in a modal with the resource form. */
 export class CreateAction {
-    /** Sans argument, la resource (ou le relation manager) est celle du composant hôte. */
+    /** Without an argument, the resource (or relation manager) is the host component's. */
     static make(resource: typeof Resource | null = null): Action {
         const of = (livewire: any) => resource ?? livewire.resource;
         return Action.make('create').authorize(({ livewire, record }) => canOn(livewire, 'create', record))
@@ -2708,9 +2699,9 @@ export class CreateAction {
     }
 }
 
-/** Édition en modale d'une ligne de table, avec le formulaire de la resource (port de EditAction). */
+/** Edit a table row in a modal, with the resource form. */
 export class EditAction {
-    /** Sans argument, la resource (ou le relation manager) est celle du composant hôte. */
+    /** Without an argument, the resource (or relation manager) is the host component's. */
     static make(resource: typeof Resource | null = null): Action {
         const of = (livewire: any) => resource ?? livewire.resource;
         return Action.make('edit').authorize(({ livewire, record }) => canOn(livewire, 'update', record))
@@ -2727,13 +2718,13 @@ export class EditAction {
     }
 }
 
-/** Lien vers la page de consultation de l'enregistrement (port de ViewAction, quand la resource a une page « View »). */
+/** Link to the record's view page (when the resource has one). */
 export class ViewAction {
     static make(resource: typeof Resource | null = null): Action {
         const of = (livewire: any) => resource ?? livewire.resource;
         return Action.make('view').authorize(({ livewire, record }) => canOn(livewire, 'view', record))
             .label(t('filament-actions::view.single.label')).color('gray').tableIcon('c-eye').groupedIcon('m-eye')
-            // Sans page « View » (resource simple, enregistrements liés) : l'infolist s'ouvre en modale, comme Filament.
+            // Without a view page (simple resource, related records): the infolist opens in a modal.
             .url(({ livewire, record }) => (record && of(livewire).hasViewPage ? of(livewire).getUrl('view', of(livewire).adapter.getKey(record)) : null))
             .modalHeading(({ livewire, record }) => t('filament-actions::view.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
             .modalSubmitAction(false).modalCancelActionLabel(t('filament-actions::view.single.modal.actions.close.label'))
@@ -2742,7 +2733,7 @@ export class ViewAction {
 }
 
 const managerOf = (livewire: any) => livewire.constructor as typeof RelationManager;
-/** Rattache un enregistrement existant au propriétaire d'un relation manager (port de AttachAction). */
+/** Attaches an existing record to a relation manager's owner. */
 export class AttachAction {
     static make(): Action {
         return Action.make('attach')
@@ -2762,7 +2753,7 @@ export class AttachAction {
             });
     }
 }
-/** Détache une ligne du propriétaire sans la supprimer (port de DetachAction). */
+/** Detaches a row from the owner without deleting it. */
 export class DetachAction {
     static make(): Action {
         return Action.make('detach')
@@ -2776,7 +2767,7 @@ export class DetachAction {
             });
     }
 }
-/** Détache les lignes sélectionnées (port de DetachBulkAction). */
+/** Detaches the selected rows. */
 export class DetachBulkAction {
     static make(): Action {
         return Action.make('detach')
@@ -2785,7 +2776,7 @@ export class DetachBulkAction {
             .modalHeading(({ livewire }) => t('filament-actions::detach.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
             .modalSubmitActionLabel(t('filament-actions::detach.multiple.modal.actions.detach.label'))
             .action(async ({ livewire }) => {
-                // Les clés sélectionnées sont celles de la requête courante du manager : elles appartiennent donc au propriétaire.
+                // Selected keys come from the manager's current query, so they belong to the owner.
                 await managerOf(livewire).detach(livewire.ownerRecord, await livewire.getSelectedRecordKeys());
                 Notification.make().success().title(t('filament-actions::detach.multiple.notifications.detached.title')).send();
                 livewire.deselectAllTableRecords();
@@ -2793,7 +2784,7 @@ export class DetachBulkAction {
     }
 }
 
-/** Restauration d'un enregistrement supprimé (port de RestoreAction). Visible seulement s'il est supprimé. */
+/** Restores a soft-deleted record. Only visible when the record is deleted. */
 export class RestoreAction {
     static make(): Action {
         return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restore', record))
@@ -2809,7 +2800,7 @@ export class RestoreAction {
             });
     }
 }
-/** Suppression définitive d'un enregistrement supprimé (port de ForceDeleteAction). Visible seulement s'il est supprimé. */
+/** Permanently deletes a soft-deleted record. Only visible when the record is deleted. */
 export class ForceDeleteAction {
     static make(): Action {
         return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDelete', record))
@@ -2826,7 +2817,7 @@ export class ForceDeleteAction {
     }
 }
 
-/** Suppression groupée des enregistrements sélectionnés dans une table (port de DeleteBulkAction). */
+/** Deletes the records selected in a table. */
 export class DeleteBulkAction {
     static make(): Action {
         return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'deleteAny', record))
@@ -2842,21 +2833,21 @@ export class DeleteBulkAction {
     }
 }
 
-/** Page d'édition d'un enregistrement (port de EditRecord). */
+/** Record edit page. */
 export class EditRecord extends ResourceFormPage {
     static callable = ['save'];
     recordKey = '';
-    /** Onglet de relation manager actif (indice dans `Resource.relations`). */
+    /** Active relation manager tab (index in `Resource.relations`). */
     activeRelationManager = '0';
     /**
-     * Page précédente (équivalent de `url()->previous()`), retenue au premier affichage. Elle vient de l'en-tête Referer :
-     * seule une adresse de ce même site est acceptée, et elle n'est plus modifiable ensuite.
+     * Previous page, captured on first display from the Referer header: only a same-site URL is accepted,
+     * and it cannot be changed afterwards.
      */
     previousUrl = '';
     protected getCancelUrl(): string { return this.previousUrl; }
     contentSchema(schema: Schema): Schema {
         const content = super.contentSchema(schema);
-        // Toujours présent, comme dans Filament : masqué (colonne vide) quand la resource n'a pas de relation manager.
+        // Always present: hidden (empty column) when the resource has no relation manager.
         return content.components([...content.getComponents(), this.resource.relations.length ? new RelationManagerTabs() : new RelationManagerTabs().key(null).hidden()]);
     }
     static locked = ['recordKey', 'previousUrl'];
@@ -2866,23 +2857,22 @@ export class EditRecord extends ResourceFormPage {
         this.recordKey = String(params.record ?? '');
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
         await this.hydrate();
-        // Remplit le formulaire avec les valeurs de l'enregistrement pour chaque champ déclaré.
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
     }
-    /** L'enregistrement est relu à chaque requête, comme dans Filament (pas de liaison de route). */
+    /** The record is reloaded on every request (no route model binding). */
     async hydrate(): Promise<void> {
         this._record = await this.getDataAdapter().find(this.recordKey);
-        if (!this._record) throw new WireError(404, 'Enregistrement introuvable.');
-        if (!(await canOn(this, 'update', this._record))) throw new WireError(403, 'Accès refusé.');
+        if (!this._record) throw new WireError(404, 'Record not found.');
+        if (!(await canOn(this, 'update', this._record))) throw new WireError(403, 'Forbidden.');
     }
     protected getRecord(): unknown { return this._record; }
     getRecordKey(): string | null { return this.recordKey; }
     getActionMountContext(): Record<string, unknown> { return { recordKey: this.recordKey }; }
     protected getActionRecord(): unknown { return this._record; }
-    /** Comme une page générée par Filament : suppression, plus restauration et suppression définitive si le modèle a la suppression douce. */
+    /** Delete, plus restore and force-delete when the model uses soft deletes. */
     getHeaderActions(): Action[] {
         const defaults = this.getDataAdapter().supportsSoftDeletes() ? [DeleteAction.make(), RestoreAction.make(), ForceDeleteAction.make()] : [DeleteAction.make()];
-        // Actions propres à la resource, placées avant les actions par défaut.
+        // Resource-specific actions come before the default ones.
         return [...((this.resource as any).editHeaderActions?.() ?? []), ...defaults];
     }
     getOperation(): 'edit' { return 'edit'; }
@@ -2891,7 +2881,7 @@ export class EditRecord extends ResourceFormPage {
     getBreadcrumbs(): { label: string; url: string | null }[] {
         return [
             { label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() },
-            // Le titre de l'enregistrement n'apparaît que si la resource déclare `recordTitleAttribute` ; il mène à la page « View » quand elle existe.
+            // The record title only appears if the resource declares `recordTitleAttribute`; it links to the view page when there is one.
             ...(this.resource.recordTitleAttribute ? [{ label: this.resource.getRecordTitle(this._record), url: this.resource.getUrl(this.resource.hasViewPage ? 'view' : 'edit', this.recordKey) }] : []),
             { label: t('filament-panels::resources/pages/edit-record.breadcrumb'), url: null },
         ];
@@ -2901,20 +2891,20 @@ export class EditRecord extends ResourceFormPage {
     getFormActions(): Action[] {
         return [Action.make('save').label(t('filament-panels::resources/pages/edit-record.form.actions.save.label')).submit('save').keyBindings(['mod+s']), this.cancelAction()];
     }
-    // --- crochets de cycle de vie, à surcharger dans une sous-classe (aucun n'est appelable depuis le navigateur)
-    /** Transforme les valeurs de l'enregistrement avant de remplir le formulaire. */
+    // --- lifecycle hooks, to override in a subclass (none can be called from the browser)
+    /** Transforms the record's values before filling the form. */
     protected mutateFormDataBeforeFill(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
-    /** Transforme les données validées avant l'enregistrement. */
+    /** Transforms validated data before saving. */
     protected mutateFormDataBeforeSave(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
-    /** Juste avant l'enregistrement ; lever une erreur l'annule. */
+    /** Right before saving; throwing cancels it. */
     protected beforeSave(_data: Record<string, unknown>): void | Promise<void> {}
-    /** L'enregistrement lui-même : par défaut, l'adaptateur de la resource. */
+    /** The save itself; defaults to the resource's data adapter. */
     protected handleRecordUpdate(record: any, data: Record<string, unknown>): Promise<any> { return this.getDataAdapter().update(this.getDataAdapter().getKey(record), data); }
-    /** Après l'enregistrement. */
+    /** After saving. */
     protected afterSave(_record: any): void | Promise<void> {}
-    /** Adresse où aller après l'enregistrement ; `null` (défaut) : rester sur la page. */
+    /** URL to go to after saving; `null` (default) stays on the page. */
     protected getRedirectUrl(_record: any): string | null { return null; }
-    /** Titre de la notification de succès ; `null` pour ne rien afficher. */
+    /** Success notification title; `null` to show nothing. */
     protected getSavedNotificationTitle(): string | null { return t('filament-panels::resources/pages/edit-record.notifications.saved.title'); }
 
     async save(): Promise<void> {
@@ -2930,12 +2920,12 @@ export class EditRecord extends ResourceFormPage {
     }
 }
 
-/** Page de consultation d'un enregistrement (port de ViewRecord) : le schéma `infolist()` de la resource, en lecture seule. */
+/** Record view page: the resource's read-only `infolist()` schema. */
 export class ViewRecord extends Page {
     static resource: typeof Resource;
     static locked = ['recordKey'];
     recordKey = '';
-    /** Onglet de relation manager actif (indice dans `Resource.relations`). */
+    /** Active relation manager tab (index in `Resource.relations`). */
     activeRelationManager = '0';
     _record: any = null;
     get resource(): typeof Resource { return (this.constructor as typeof ViewRecord).resource; }
@@ -2944,11 +2934,11 @@ export class ViewRecord extends Page {
         this.recordKey = String(params.record ?? '');
         await this.hydrate();
     }
-    /** L'enregistrement est relu à chaque requête, comme sur la page d'édition. */
+    /** The record is reloaded on every request, as on the edit page. */
     async hydrate(): Promise<void> {
         this._record = await this.getDataAdapter().find(this.recordKey);
-        if (!this._record) throw new WireError(404, 'Enregistrement introuvable.');
-        if (!(await canOn(this, 'view', this._record))) throw new WireError(403, 'Accès refusé.');
+        if (!this._record) throw new WireError(404, 'Record not found.');
+        if (!(await canOn(this, 'view', this._record))) throw new WireError(403, 'Forbidden.');
     }
     getRecordKey(): string | null { return this.recordKey; }
     getActionMountContext(): Record<string, unknown> { return { recordKey: this.recordKey }; }
@@ -2956,10 +2946,10 @@ export class ViewRecord extends Page {
     infolistSchema(schema: Schema): Schema { return this.resource.infolist(schema.columns(2).operation('view').record(this._record)); }
     contentSchema(schema: Schema): Schema {
         const content = schema.components([EmbeddedSchema.make('infolist')]);
-        // Toujours présent, comme dans Filament : masqué (colonne vide) quand la resource n'a pas de relation manager.
+        // Always present: hidden (empty column) when the resource has no relation manager.
         return content.components([...content.getComponents(), this.resource.relations.length ? new RelationManagerTabs() : new RelationManagerTabs().key(null).hidden()]);
     }
-    /** Par défaut : le lien vers la page d'édition (EditAction d'une page « View »). */
+    /** Defaults to a link to the edit page. */
     getHeaderActions(): Action[] { return [this.editAction()]; }
     protected editAction(): Action {
         return Action.make('edit').authorize(({ livewire, record }) => canOn(livewire, 'update', record)).label(t('filament-actions::edit.single.label')).url(() => this.resource.getUrl('edit', this.recordKey));
@@ -2968,7 +2958,7 @@ export class ViewRecord extends Page {
     getBreadcrumbs(): { label: string; url: string | null }[] {
         return [
             { label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() },
-            // Le titre de l'enregistrement n'apparaît que si la resource déclare `recordTitleAttribute`.
+            // The record title only appears if the resource declares `recordTitleAttribute`.
             ...(this.resource.recordTitleAttribute ? [{ label: this.resource.getRecordTitle(this._record), url: this.resource.getUrl('view', this.recordKey) }] : []),
             { label: t('filament-panels::resources/pages/view-record.breadcrumb'), url: null },
         ];
@@ -2977,10 +2967,9 @@ export class ViewRecord extends Page {
     getPageClasses(): string[] { return ['fi-resource-view-record-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
 }
 
-// ------------------------------------------------------------------ composants de mise en page
-/** Contexte d'évaluation des actions d'un menu du panel (pas d'enregistrement). */
+/** Evaluation context for panel menu actions (no record). */
 const menuContext = (livewire: unknown) => ({ livewire: livewire as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined });
-/** Menu utilisateur (port de HasUserMenu et de la vue user-menu) : profil, éléments du panel, thèmes, déconnexion. */
+/** User menu: profile, panel items, themes, logout. */
 async function renderUserMenu(component: Component, position: 'topbar' | 'sidebar'): Promise<string> {
     const { req, res, panel, user } = component._ctx as PanelContext;
     const ctx = menuContext(component);
@@ -3000,7 +2989,7 @@ async function renderUserMenu(component: Component, position: 'topbar' | 'sideba
         themes: panel.getThemes().map((theme) => ({ id: theme.id, label: theme.label, swatch: swatchOf(theme, panel) })), activeTheme: panel.resolveTheme(req)?.id ?? null,
     });
 }
-/** Menu du locataire (port de la vue tenant-menu) : locataire courant, autres locataires, création, profil. */
+/** Tenant menu: current tenant, other tenants, registration, profile. */
 async function renderTenantMenu(component: Component, options: { teleport: boolean }): Promise<string> {
     const { panel, user } = component._ctx as PanelContext;
     const tenant = panel.getTenant();
@@ -3029,13 +3018,13 @@ async function renderTenantMenu(component: Component, options: { teleport: boole
     });
 }
 
-/** Sidebar : logo, menu du locataire, recherche, navigation, et — sans barre du haut — cloche et menu utilisateur. */
+/** Sidebar: logo, tenant menu, search, navigation and, without a topbar, the bell and user menu. */
 export class Sidebar extends Component {
     static callable = ['setTheme'];
     currentPath = '/';
     static locked = ['currentPath'];
     mount(params: Record<string, unknown>): void { this.currentPath = String(params.path ?? '/'); }
-    /** Un élément de resource reste actif sur ses pages de création et d'édition. */
+    /** A resource item stays active on its create and edit pages. */
     async render(): Promise<string> {
         const { panel, user } = this._ctx as PanelContext;
         if (!user) return '<div></div>';
@@ -3051,21 +3040,21 @@ export class Sidebar extends Component {
             livewireId: this.id,
         });
     }
-    /** Choix d'un thème par l'utilisateur : seul un thème déclaré par le panel est accepté ; la page est rechargée pour l'appliquer. */
+    /** Theme choice by the user: only a theme declared by the panel is accepted; the page reloads to apply it. */
     setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
 }
-/** Choix d'un thème (sidebar ou barre du haut) : seul un thème déclaré par le panel est accepté ; la page est rechargée. */
+/** Theme choice (sidebar or topbar): only a theme declared by the panel is accepted; the page reloads. */
 function applyTheme(component: Component, id?: unknown): void {
     const { req, res, panel, user } = component._ctx as PanelContext;
-    if (!user) throw new WireError(401, 'Non authentifié.');
+    if (!user) throw new WireError(401, 'Unauthenticated.');
     const theme = panel.getThemes().find((candidate) => candidate.id === id);
-    if (!theme) throw new WireError(404, 'Thème inconnu.');
+    if (!theme) throw new WireError(404, 'Unknown theme.');
     panel.rememberTheme(res, theme);
     const referer = previousUrlOf(req);
     component.redirect(referer.replace(/^https?:\/\/[^/]+/, '') || '/');
 }
 
-/** Barre du haut (port de Filament\Livewire\Topbar) : logo, navigation éventuelle, recherche, cloche, menu utilisateur. */
+/** Topbar: logo, optional navigation, search, bell, user menu. */
 export class Topbar extends Component {
     static callable = ['setTheme'];
     currentPath = '/';
@@ -3093,7 +3082,7 @@ export class Topbar extends Component {
     setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
 }
 
-/** Menu utilisateur des pages simples d'un utilisateur connecté (port de SimpleUserMenu). */
+/** User menu on simple pages for a signed-in user. */
 export class SimpleUserMenu extends Component {
     static callable = ['setTheme'];
     async render(): Promise<string> {
@@ -3105,9 +3094,7 @@ export class SimpleUserMenu extends Component {
     setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
 }
 
-// ------------------------------------------------------------------ routage
-// ------------------------------------------------------------------ découverte (port de discoverResources / discoverPages / discoverWidgets)
-/** Modules `.ts`, `.mts`, `.js`, `.mjs` d'un dossier et de ses sous-dossiers, dans l'ordre alphabétique des chemins. */
+/** `.ts`, `.mts`, `.js`, `.mjs` modules of a folder and its subfolders, in alphabetical path order. */
 function moduleFiles(directory: string | URL): string[] {
     const root = directory instanceof URL ? fileURLToPath(directory) : directory;
     if (!existsSync(root)) return [];
@@ -3122,7 +3109,7 @@ function moduleFiles(directory: string | URL): string[] {
     walk(root);
     return files;
 }
-/** Classes exportées par les modules d'un dossier qui héritent de `base` (la classe de base elle-même, abstraite ou importée, est ignorée). */
+/** Classes exported by a folder's modules that extend `base` (the base class itself, abstract or imported, is skipped). */
 async function discoverClasses<T extends abstract new (...args: any[]) => any>(directory: string | URL, base: T): Promise<T[]> {
     const found: T[] = [];
     for (const file of moduleFiles(directory)) {
@@ -3131,13 +3118,13 @@ async function discoverClasses<T extends abstract new (...args: any[]) => any>(d
     }
     return found;
 }
-/** Resources définies dans un dossier : `.resources(await discoverResources(new URL('./resources/', import.meta.url)))`. Un fichier ajouté est pris en compte au démarrage suivant. */
+/** Resources defined in a folder: `.resources(await discoverResources(new URL('./resources/', import.meta.url)))`. New files are picked up on the next start. */
 export const discoverResources = (directory: string | URL) => discoverClasses(directory, Resource as any) as Promise<(typeof Resource)[]>;
-/** Pages libres (et tableaux de bord) définies dans un dossier. Les pages de resource et d'authentification n'en font pas partie. */
+/** Custom pages (and dashboards) defined in a folder. Resource and authentication pages are excluded. */
 export const discoverPages = async (directory: string | URL) => (await discoverClasses(directory, Page as any)).filter((page: any) => !page.resource && !(page.prototype instanceof EditTenantProfile)) as (typeof Page)[];
-/** Widgets définis dans un dossier. */
+/** Widgets defined in a folder. */
 export const discoverWidgets = (directory: string | URL) => discoverClasses(directory, Widget as any) as Promise<(typeof Widget)[]>;
-/** Panels exportés par défaut (`export default Panel.make()…`) par les modules d'un dossier. */
+/** Panels default-exported (`export default Panel.make()…`) by a folder's modules. */
 export async function discoverPanels(directory: string | URL): Promise<Panel[]> {
     const panels: Panel[] = [];
     for (const file of moduleFiles(directory)) {
@@ -3147,46 +3134,46 @@ export async function discoverPanels(directory: string | URL): Promise<Panel[]> 
     return panels;
 }
 
-/** Un runtime ne sert qu'un panel : chaque panel a son endpoint Livewire et ses composants. */
+/** A runtime serves a single panel: each panel has its own Livewire endpoint and components. */
 const runtimePanels = new WeakMap<WireRuntime, Panel>();
-/** Segments réservés juste après le chemin d'un panel à locataires (ils ne sont pas des clés de locataire). */
+/** Reserved segments right after a multi-tenant panel's path (they are not tenant keys). */
 const RESERVED_SEGMENTS = new Set(['login', 'logout', 'register', 'password-reset', 'email-verification', 'profile', 'livewire']);
 
-/** Routeur Express d'un panel : assets, endpoint du runtime, authentification, locataires, pages protégées. */
+/** Express router for a panel: assets, runtime endpoint, authentication, tenants, protected pages. */
 export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const owner = runtimePanels.get(runtime);
-    if (owner && owner !== panel) throw new Error(`Ce WireRuntime sert déjà le panel « ${owner.getId()} » : créez un WireRuntime par panel.`);
+    if (owner && owner !== panel) throw new Error(`This WireRuntime already serves panel "${owner.getId()}": create one WireRuntime per panel.`);
     runtimePanels.set(runtime, panel);
-    // Les envois de fichiers passent par l'endpoint de ce panel (session et utilisateur du panel).
+    // File uploads go through this panel's endpoint (panel session and user).
     const runtimeOptions = (runtime as any).options as { uploadPrefix?: string };
     runtimeOptions.uploadPrefix ??= panel.getLivewirePrefix();
-    // Un seul gestionnaire de couleurs pour tous les panels : chaque requête y pose les couleurs du sien.
+    // One color manager for all panels: each request sets its own panel's colors on it.
     useColorManager(sharedColors);
     useFormsColorManager(sharedColors);
     useTableColorManager(sharedColors);
     useInfolistsColorManager(sharedColors);
-    // HTML affiché tel quel par une entrée d'infolist : repassé par le schéma de l'éditeur de texte enrichi, qui ne garde que ses balises.
+    // HTML rendered by an infolist entry is sanitized through the rich editor schema, which only keeps its own tags.
     useHtmlSanitizer((html) => richDocumentToHtml(richHtmlToDocument(html)) ?? '');
     views.share({ assetUrl: (file: string) => panel.assetUrl(file) });
     for (const plugin of panel.getPlugins()) plugin.boot?.(panel);
     assertAuthCapabilities(panel);
-    // Locataires : les resources cloisonnées ne voient que les enregistrements du locataire de la requête.
+    // Tenancy: scoped resources only see the records of the request's tenant.
     const ownership = panel.getTenantOwnershipColumn();
     if (panel.hasTenancy() && ownership) {
         for (const resource of panel.getResources()) {
             if (!resource.isScopedToTenant) continue;
             const adapter = resource.adapter as any;
-            if (typeof adapter?.scopeToTenant !== 'function') throw new Error(`Resource ${resource.name} : son adaptateur ne sait pas se cloisonner par locataire (scopeToTenant).`);
+            if (typeof adapter?.scopeToTenant !== 'function') throw new Error(`Resource ${resource.name}: its adapter does not support tenant scoping (scopeToTenant).`);
             adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => { const tenant = panel.getTenant(); return tenant ? panel.getTenantUrlKey(tenant) : null; });
         }
     }
     const router = express.Router();
     const name = (suffix: string) => `navette.${panel.getId()}.${suffix}`;
     const livewire = panel.getLivewirePrefix();
-    // La boîte aux lettres des notifications est propre au navigateur : on la rattache à son jeton CSRF.
+    // The notifications mailbox is per browser: it is keyed by the CSRF token.
     const context = async (req: Request, res: Response): Promise<PanelContext> => ({ req, res, panel, user: await panel.user(req), mailbox: csrfToken(req, res), tenant: null });
 
-    /** Locataire désigné par une adresse du panel, si l'utilisateur en est membre. */
+    /** Tenant designated by a panel URL, if the user is a member. */
     const tenantFromPath = async (path: string, user: User | null): Promise<unknown> => {
         if (!panel.hasTenancy() || !user) return null;
         const base = panel.getBaseUrl();
@@ -3200,7 +3187,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const tenant = await provider.find(key);
         return tenant && (await provider.canAccess(user, tenant)) ? tenant : null;
     };
-    /** Accueil de l'utilisateur : la racine du panel, ou dans un panel à locataires celle de son premier locataire (sinon la création d'un locataire). */
+    /** User's home: the panel root or, in a multi-tenant panel, their first tenant's root (otherwise tenant registration). */
     const homeUrl = async (user: User): Promise<string | null> => {
         if (!panel.hasTenancy()) return panel.getUrl();
         const [first] = await panel.getTenantProvider().getTenants(user);
@@ -3234,9 +3221,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     for (const resource of panel.getResources()) for (const manager of resource.relations) runtime.register(name(`relation-managers.${resource.slug.replace(/\//g, '.')}.${manager.relationship}`), manager);
 
     router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
-    // Fichiers propres à Navette (hors balisage et styles de Filament).
+    // Navette's own front-end files.
     router.use(express.static(dir('../dist/navette')));
-    // Le locataire d'une mise à jour est celui de la page qui l'envoie (adresse du snapshot, signé), si l'utilisateur en est membre.
+    // An update's tenant is the one of the page sending it (from the signed snapshot URL), if the user is a member.
     const wireContext = async (req: Request, res: Response): Promise<PanelContext> => {
         const ctx = await context(req, res);
         let path = '';
@@ -3244,7 +3231,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         ctx.tenant = await tenantFromPath(path, ctx.user);
         return ctx;
     };
-    // Port du middleware PublishNotifications : les notifications envoyées pendant la requête partent dans un lot annoncé au navigateur.
+    // Notifications sent during the request go into a batch announced to the browser.
     router.use(wireRouter(runtime, livewire, wireContext, async (ctx: PanelContext, _req, res, handle) => {
         const { result, pending } = await runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle)));
         if (pending.length) {
@@ -3255,23 +3242,23 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (result.components.some((c: any) => c.effects?.redirect)) res.setHeader('X-Filament-Notifications-Redirect', 'true');
         }
         return result;
-    // Seul un utilisateur connecté peut envoyer des fichiers.
+    // Only a signed-in user can upload files.
     }, (ctx: PanelContext) => !!ctx.user));
 
     type DocumentOptions = { title: string; component: string; layout: 'simple' | 'index'; params?: Record<string, unknown> };
-    // Tout le rendu d'une page se fait avec les couleurs du thème de la requête, et pour son locataire.
+    // A page renders entirely with the request theme's colors, for the request's tenant.
     const document = (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => panel.withTheme(req, () => panel.withTenant(ctx.tenant ?? null, () => renderDocument(req, res, ctx, options)));
     const renderDocument = async (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => {
         const request = { path: req.path, method: req.method, ctx };
         const mounted = await runtime.mountWithInstance(options.component, options.params ?? {}, request);
-        // Une page qui redirige dès son montage (déjà connecté, adresse déjà vérifiée…) : redirection HTTP.
+        // A page that redirects on mount (already logged in, email already verified…): HTTP redirect.
         const redirect = (mounted.component as any)._effects?.redirect;
         if (typeof redirect === 'string') return void res.redirect(redirect);
         const slot = mounted.html;
-        // Le titre du document vient de l'instance (il peut dépendre de l'enregistrement).
+        // The document title comes from the instance (it may depend on the record).
         const instanceTitle = (mounted.component as any).getTitle?.();
         if (typeof instanceTitle === 'string') options.title = instanceTitle;
-        // Les emplacements de la mise en page portent les portées de la page affichée.
+        // Layout render hooks use the scopes of the displayed page.
         const renderHookScopes = (mounted.component as any).getRenderHookScopes?.() ?? [];
         const hasNavigation = panel.hasNavigation();
         const body = options.layout === 'simple'
@@ -3293,7 +3280,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
         }));
     };
-    /** Erreurs d'accès d'une page : 404 et 403 en clair, le reste remonte. */
+    /** Page access errors: 404 and 403 are answered directly, anything else is rethrown. */
     const guarded = async (res: Response, render: () => Promise<void>) => {
         try { await render(); } catch (error) {
             if (error instanceof WireError && error.status === 404) return void res.status(404).send('Not Found');
@@ -3301,7 +3288,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             throw error;
         }
     };
-    /** Page simple réservée aux invités (connexion, inscription, mot de passe oublié). */
+    /** Guest-only simple page (login, registration, password reset). */
     const guestPage = (path: string, component: string, title: string, params: (req: Request) => Record<string, unknown> = () => ({})) => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
@@ -3309,7 +3296,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             await guarded(res, () => document(req, res, ctx, { title, component, layout: 'simple', params: params(req) }));
         });
     };
-    /** Page simple d'un utilisateur connecté, hors locataire (profil, vérification, création d'un locataire). */
+    /** Simple page for a signed-in user, outside any tenant (profile, email verification, tenant registration). */
     const userPage = (path: string, component: string, title: string, layout: 'simple' | 'index' = 'simple') => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
@@ -3321,7 +3308,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (LoginPage) {
         guestPage('login', name('auth.login'), t('filament-panels::auth/pages/login.title'));
         router.post(panel.getLogoutUrl(), express.urlencoded({ extended: false }), (req, res) => {
-            if (!verifyCsrf(req, req.body?._token)) return res.status(419).send('Jeton CSRF invalide.');
+            if (!verifyCsrf(req, req.body?._token)) return res.status(419).send('Invalid CSRF token.');
             panel.logOut(res);
             res.redirect(panel.getLoginUrl());
         });
@@ -3333,7 +3320,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     }
     if (VerificationPrompt) {
         userPage('email-verification/prompt', name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'));
-        // Lien reçu par e-mail : signé, limité dans le temps, et valable seulement pour l'utilisateur connecté qu'il désigne.
+        // Emailed link: signed, time-limited, and only valid for the signed-in user it designates.
         router.get(panel.getBaseUrl('email-verification/verify/:id/:hash'), async (req, res) => {
             const ctx = await context(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
@@ -3347,7 +3334,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (profile) userPage(profile.page.slug, name('auth.profile'), profile.page.getLabel(), profile.isSimple || panel.hasTenancy() ? 'simple' : 'index');
     if (TenantRegistration) userPage(TenantRegistration.slug, name('tenancy.registration'), TenantRegistration.getLabel());
 
-    /** Contexte d'une page protégée : connexion, vérification de l'adresse, locataire. Rend null après avoir répondu. */
+    /** Context of a protected page: login, email verification, tenant. Returns `null` after responding. */
     const pageContext = async (req: Request, res: Response): Promise<PanelContext | null> => {
         const ctx = await context(req, res);
         if (!ctx.user) { res.redirect(panel.getLoginUrl()); return null; }
@@ -3360,7 +3347,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     };
     const tenantSegment = panel.hasTenancy() ? ':tenant/' : '';
     if (panel.hasTenancy()) {
-        // Racine du panel : le premier locataire de l'utilisateur, sinon la création d'un locataire.
+        // Panel root: the user's first tenant, otherwise tenant registration.
         router.get(panel.getBaseUrl(), async (req, res) => {
             const ctx = await context(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
@@ -3369,7 +3356,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (!url) return void res.status(404).send('Not Found');
             res.redirect(url);
         });
-        // Racine d'un locataire sans tableau de bord : la première page du menu (comme Filament).
+        // Tenant root without a dashboard: the first menu page.
         if (!panel.getPages().some((page) => page.slug === '')) {
             router.get(panel.getBaseUrl(':tenant'), async (req, res, next) => {
                 if (RESERVED_SEGMENTS.has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug) return next();
@@ -3384,7 +3371,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     for (const PageClass of panel.getPages()) {
         const component = name(`pages.${(PageClass.slug || 'dashboard').replace(/[{}]/g, '')}`);
         runtime.register(component, PageClass);
-        // `{record}` dans le slug devient un paramètre de route, passé à mount().
+        // `{record}` in the slug becomes a route parameter, passed to mount().
         router.get(panel.getBaseUrl(tenantSegment + PageClass.slug).replace(/\{(\w+)\}/g, ':$1'), async (req, res, next) => {
             if (panel.hasTenancy() && (RESERVED_SEGMENTS.has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug)) return next();
             const ctx = await pageContext(req, res);
@@ -3396,16 +3383,16 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     return router;
 }
 
-/** Une option d'authentification exige certaines méthodes du fournisseur d'utilisateurs : on le dit au démarrage plutôt qu'au premier clic. */
+/** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
 function assertAuthCapabilities(panel: Panel): void {
     if (!panel.hasRegistration() && !panel.hasPasswordReset() && !panel.hasEmailVerification() && !panel.hasProfile()) return;
     const auth = panel.getAuth();
     const missing = (feature: string, methods: (keyof AuthProvider)[]) => {
         const absent = methods.filter((method) => typeof auth[method] !== 'function');
-        if (absent.length) throw new Error(`${feature} : le fournisseur d'utilisateurs doit définir ${absent.join(', ')} (knexAuthProvider le fait).`);
+        if (absent.length) throw new Error(`${feature}: the auth provider must implement ${absent.join(', ')} (knexAuthProvider does).`);
     };
-    if (panel.hasRegistration()) missing('Inscription', ['create', 'findByEmail']);
-    if (panel.hasPasswordReset()) missing('Mot de passe oublié', ['findByEmail', 'update', 'getPasswordFingerprint']);
-    if (panel.hasEmailVerification()) missing('Vérification de l\'adresse', ['hasVerifiedEmail', 'markEmailAsVerified']);
-    if (panel.hasProfile()) missing('Profil', ['update']);
+    if (panel.hasRegistration()) missing('Registration', ['create', 'findByEmail']);
+    if (panel.hasPasswordReset()) missing('Password reset', ['findByEmail', 'update', 'getPasswordFingerprint']);
+    if (panel.hasEmailVerification()) missing('Email verification', ['hasVerifiedEmail', 'markEmailAsVerified']);
+    if (panel.hasProfile()) missing('Profile', ['update']);
 }

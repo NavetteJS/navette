@@ -9,7 +9,7 @@ import { Component, UploadStore, WireError, WireRuntime } from '../src/index.ts'
 const dir = mkdtempSync(path.join(tmpdir(), 'navette-uploads-'));
 const store = new UploadStore(dir, 'test-key', { maxFileSize: 1024 });
 
-/** Requête multipart minimale, comme l'envoie le navigateur. */
+/** Minimal multipart request, as sent by the browser. */
 function multipart(files: { name: string; content: Buffer }[]): any {
     const boundary = '----navette';
     const body = Buffer.concat([...files.flatMap((file) => [Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="files[]"; filename="${file.name}"\r\nContent-Type: image/jpeg\r\n\r\n`), file.content, Buffer.from('\r\n')]), Buffer.from(`--${boundary}--\r\n`)]);
@@ -17,7 +17,7 @@ function multipart(files: { name: string; content: Buffer }[]): any {
 }
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1]);
 
-test('adresse signée : acceptée, puis refusée si modifiée ou expirée', () => {
+test('signed URL: accepted, then rejected when modified or expired', () => {
     const url = new URL(store.signedUrl(), 'http://x');
     assert.ok(store.verifySignature(url.searchParams.get('expires'), url.searchParams.get('signature')));
     assert.equal(store.verifySignature(Number(url.searchParams.get('expires')) + 1, url.searchParams.get('signature')), false);
@@ -25,8 +25,8 @@ test('adresse signée : acceptée, puis refusée si modifiée ou expirée', () =
     assert.equal(store.verifySignature('abc', 'def'), false);
 });
 
-test('réception : le type vient du contenu, pas du nom ni du type annoncé', async () => {
-    const [real, fake] = await store.receive(multipart([{ name: 'photo.jpg', content: JPEG }, { name: 'faux.jpg', content: Buffer.from('<script>alert(1)</script>') }]));
+test('receive: the type comes from the content, not the file name or announced type', async () => {
+    const [real, fake] = await store.receive(multipart([{ name: 'photo.jpg', content: JPEG }, { name: 'fake.jpg', content: Buffer.from('<script>alert(1)</script>') }]));
     assert.equal(store.resolve(real)?.type, 'image/jpeg');
     assert.equal(store.resolve(real)?.name, 'photo.jpg');
     assert.equal(store.resolve(fake)?.type, 'application/octet-stream');
@@ -34,11 +34,11 @@ test('réception : le type vient du contenu, pas du nom ni du type annoncé', as
     assert.equal(store.resolve(`livewire-file:${real}`)?.id, real);
 });
 
-test('réception : fichier trop volumineux refusé et effacé', async () => {
-    await assert.rejects(store.receive(multipart([{ name: 'gros.jpg', content: Buffer.concat([JPEG, Buffer.alloc(4096)]) }])), /volumineux/);
+test('receive: a file that is too large is rejected and deleted', async () => {
+    await assert.rejects(store.receive(multipart([{ name: 'big.jpg', content: Buffer.concat([JPEG, Buffer.alloc(4096)]) }])), /too large/);
 });
 
-test('resolve : identifiants forgés et traversée de dossier refusés', () => {
+test('resolve: forged ids and directory traversal are rejected', () => {
     writeFileSync(path.join(dir, '..', 'secret'), 'x');
     for (const forged of ['../secret', 'livewire-file:../secret', 'livewire-file:' + 'z'.repeat(32), '', null, { id: 'x' }, 'a'.repeat(32)]) assert.equal(store.resolve(forged), null);
 });
@@ -50,14 +50,14 @@ class Form extends Component {
 const runtime = new WireRuntime({ key: 'test-key', uploads: store }).register('form', Form);
 const snapshotOf = (html: string) => JSON.parse(/wire:snapshot="([^"]*)"/.exec(html)![1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
 
-test('_startUpload puis _finishUpload : la propriété reçoit la référence du fichier reçu', async () => {
+test('_startUpload then _finishUpload: the property receives the uploaded file reference', async () => {
     const snapshot = snapshotOf(await runtime.mount('form'));
     const started = await runtime.update(snapshot, {}, [{ method: '_startUpload', params: ['data.photo', [{ name: 'a.jpg', size: 12, type: 'image/jpeg' }], false] }]);
     assert.match((started.effects.dispatches as any)[0].params.url, /^\/livewire\/upload-file\?expires=\d+&signature=[a-f0-9]{64}$/);
     const [id] = await store.receive(multipart([{ name: 'a.jpg', content: JPEG }]));
     const finished = await runtime.update(started.snapshot, {}, [{ method: '_finishUpload', params: ['data.photo', [id], false] }]);
     assert.deepEqual((finished.snapshot.data.data as any)[0].photo, `livewire-file:${id}`);
-    // Le navigateur peut renvoyer cette référence (état entrelacé), mais pas une référence inventée.
+    // The browser may send this reference back (interleaved state), but not a made-up one.
     await runtime.update(finished.snapshot, { 'data.photo': `livewire-file:${id}` }, []);
     await assert.rejects(runtime.update(finished.snapshot, { 'data.photo': `livewire-file:${'0'.repeat(32)}` }, []), (error: WireError) => error.status === 403);
     await assert.rejects(runtime.update(finished.snapshot, { data: { nested: { photo: 'livewire-files:["x"]' } } }, []), (error: WireError) => error.status === 403);
@@ -77,7 +77,7 @@ class Parent extends Component {
 }
 const nested = new WireRuntime({ key: 'test-key' }).register('child', Child).register('parent', Parent);
 
-test('propriétés réactives : fixées par le parent dans la même requête, jamais par le navigateur', async () => {
+test('reactive props: set by the parent in the same request, never by the browser', async () => {
     const html = await nested.mount('parent');
     const snapshots = [...html.matchAll(/wire:snapshot="([^"]*)"/g)].map((m) => m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
     const parent = snapshots.find((s) => JSON.parse(s).memo.name === 'parent')!, child = snapshots.find((s) => JSON.parse(s).memo.name === 'child')!;
@@ -85,7 +85,7 @@ test('propriétés réactives : fixées par le parent dans la même requête, ja
     const response = await nested.handle({ components: [{ snapshot: parent, updates: { search: 'alpine' }, calls: [] }, { snapshot: child, updates: {}, calls: [] }] });
     assert.equal(JSON.parse(response.components[1].snapshot).data.search, 'alpine');
     assert.match(String(response.components[1].effects.html), />alpine</);
-    await assert.rejects(nested.handle({ components: [{ snapshot: child, updates: { search: 'forgé' }, calls: [] }] }), (error: WireError) => error.status === 403);
-    // Une propriété ordinaire de l'enfant reste modifiable.
+    await assert.rejects(nested.handle({ components: [{ snapshot: child, updates: { search: 'forged' }, calls: [] }] }), (error: WireError) => error.status === 403);
+    // An ordinary child property is still writable.
     await nested.handle({ components: [{ snapshot: child, updates: { other: 'y' }, calls: [] }] });
 });

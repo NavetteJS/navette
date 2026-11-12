@@ -1,5 +1,4 @@
-<%# Table — port partiel de filament-tables::index. Portés : recherche, tri, sélection de page, lignes cliquables, action de ligne « lien », pagination.
-    Pas encore portés : actions groupées, filtres, gestionnaire de colonnes, recherche par colonne, groupes, résumés, réordonnancement, état vide. %>
+<%# Table: header, toolbar, filters, content (rows or layout cards), summaries and pagination. %>
 <% const selectPageBinding = `
                                 const recordsOnPage = getRecordsOnPage()
 
@@ -30,7 +29,7 @@
 
     <div class="fi-ta-ctn<%- contentLayout ? ' fi-ta-ctn-with-content-layout' : '' %> fi-ta-ctn-with-footer fi-ta-ctn-with-header">
         <div class="fi-ta-main">
-            <%# La barre d'outils n'est visible en permanence que si elle a un contenu (recherche, filtres, colonnes) ; sinon seulement pendant une sélection. %>
+            <%# The toolbar is always visible only when it has content (search, filters, columns); otherwise only while records are selected. %>
             <% const filtersAbove = filtersForm !== null && filtersLayout === 'above-content-collapsible'; %>
             <% const toolbarVisible = reorder !== null || groups.length > 0 || isSearchable || filtersForm !== null || hasColumnManager; %>
             <div x-show="<%- heading !== null || headerActions.length || toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header.visible" class="fi-ta-header-ctn">
@@ -53,7 +52,7 @@
                 <% } %>
                 <%- hook('tables::header.after') %>
                 <% if (filtersAbove) { %>
-                    <%# Filtres au-dessus du contenu, repliables (FiltersLayout::AboveContentCollapsible) %>
+                    <%# Collapsible filters above the content. %>
                     <div x-bind:class="{ 'fi-open': areFiltersOpen }" class="fi-ta-filters-above-content-ctn">
                         <div class="fi-ta-filters" x-cloak="x-cloak" x-show="areFiltersOpen">
                             <div class="fi-ta-filters-header">
@@ -274,7 +273,7 @@
                             </div>
                         <% } %>
 
-                        <%# Comme Filament : ces deux emplacements n'existent que s'il y a un déclencheur de filtres ou un gestionnaire de colonnes. %>
+                        <%# These two hook slots only exist when there is a filters trigger or a column manager. %>
                         <% if ((filtersForm !== null && !filtersAbove) || hasColumnManager) { %><%- hook('tables::toolbar.toggle-column-trigger.before') %><% } %>
                         <% if (hasColumnManager) { %>
                             <%- view('filament-tables::column-manager', { id, dangerLinkClasses, primaryButtonClasses }) %>
@@ -324,10 +323,10 @@
                     </div>
                 <% } %>
 
-            <%# Comme Filament : un hook `tables::filter.indicators` qui rend quelque chose remplace les indicateurs par défaut. %>
+            <%# A `tables::filter.indicators` hook that renders something replaces the default indicators. %>
             <% const filterIndicatorsView = filterIndicators.length ? hook('tables::filter.indicators', { filterIndicators }) : ''; %>
             <% if (filterIndicatorsView.trim() !== '') { %><%- filterIndicatorsView %><% } else if (filterIndicators.length) { %>
-                <%# Indicateurs des filtres actifs — port de filament-tables::components.filters.indicators %>
+                <%# Active filter indicators. %>
                 <div class="fi-ta-filter-indicators">
                     <div>
                         <span class="fi-ta-filter-indicators-label">
@@ -378,7 +377,7 @@
                 </div>
 
                 <% if (contentLayout) { %>
-                    <%# Mise en page des colonnes (Split / Stack) : une carte par enregistrement, tri par sélecteur %>
+                    <%# Column layout (Split / Stack): one card per record, sorting through a select. %>
                     <% if (rows.length) { %>
                     <% if (selectable || columns.some((c) => c.sortable)) { %>
                     <div class="fi-ta-content-header">
@@ -498,7 +497,7 @@
                         <% if (table.isStackedOnMobile()) { %>
                             <tr class="fi-ta-table-stacked-header-row">
                                 <td colspan="100%" class="fi-ta-table-stacked-header-cell">
-                                    <%# Tri empilé : seulement s'il existe des colonnes triables (comme Filament) %>
+                                    <%# Stacked sort controls: only when some columns are sortable. %>
                                     <% if (columns.some((c) => c.sortable)) { %>
                                     <div x-data="{
                                             sort: $wire.$entangle('tableSort', true),
@@ -600,7 +599,7 @@
                             </th>
                             <% } %>
 
-                            <%# Comme Filament : un hook `tables::header.cell` qui rend quelque chose remplace la cellule d'en-tête de la colonne. %>
+                            <%# A `tables::header.cell` hook that renders something replaces the column's header cell. %>
                             <% const hasHeaderCellHook = hasHook('tables::header.cell'); %>
                             <% for (const [columnIndex, column] of columns.entries()) { %>
                                 <% const headerCellView = hasHeaderCellHook ? hook('tables::header.cell', { column: visibleColumns[columnIndex], isReordering }) : ''; %>
@@ -711,7 +710,7 @@
                                 <td class="fi-ta-cell fi-ta-selection-cell">
                                     <input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox" value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" />
                                 </td>
-                                <% } %><%# fin cellule de sélection %>
+                                <% } %><%# end selection cell %>
 
                                 <% for (const cell of row.cells) { %>
                                     <td wire:key="<%= id %>.table.record.<%= row.key %>.column.<%= cell.name %>" class="<%- cls(['fi-ta-cell', 'fi-ta-cell-' + cell.cssName, cell.alignment && cell.alignment !== 'start' ? 'fi-align-' + cell.alignment : null]) %>">
@@ -728,7 +727,7 @@
                                             </button>
                                             <% if (table.isStackedOnMobile()) { %></div><% } %>
                                         <% } else { %>
-                                        <%# L'enveloppe de contenu n'existe qu'en mode empilé (comme Filament) %>
+                                        <%# The content wrapper only exists in stacked mode. %>
                                         <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
                                             <% if (row.url && !cell.plain) { %>
                                                 <a href="<%= row.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-col">
@@ -756,16 +755,16 @@
                                         <% } %>
                                     </div>
                                 </td>
-                                <% } %><%# fin cellule d'actions %>
+                                <% } %><%# end actions cell %>
                             </tr>
                         <% } %>
-                        <%# Résumés (lignes déjà rendues, échappées) : celui du dernier groupe, puis ceux de la table. %>
+                        <%# Summaries (already rendered and escaped rows): the last group's, then the table's. %>
                         <%- trailingGroupSummary %>
                         <%- summaryHtml %>
                     </tbody>
                     <% } %>
                 </table>
-                <% } %><%# fin tableau / cartes %>
+                <% } %><%# end table / cards %>
             </div>
 
             <%- hook('tables::content.after', { table, records: page.records }) %>

@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\HR\LeaveRequests (resource, formulaire, infolist, table, pages List / Create / Edit / View) de la démo Filament.
+// HR leave requests: form, infolist, table, and List / Create / Edit / View pages.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { DatePicker, Select, Textarea, TextInput, TimePicker, ToggleButtons } from '@navette-js/forms';
@@ -52,7 +52,7 @@ const badgeEntry = (name: string, cases: Record<string, EnumCase>) => TextEntry.
     .formatStateUsing(({ state }) => cases[String(state)]?.label ?? String(state))
     .color((record) => cases[record[name]]?.color ?? 'gray')
     .icon((record) => (cases[record[name]] ? `c-${cases[record[name]].icon}` : null));
-/** `Carbon::parse($start)->diffInDays(Carbon::parse($end)) + 1`, au moins une demi-journée. */
+/** Inclusive number of days from start to end, at least half a day. */
 const daysBetween = (start: unknown, end: unknown): number | null => {
     if (!start || !end) return null;
     const days = (Date.parse(`${String(end).slice(0, 10)}T00:00:00Z`) - Date.parse(`${String(start).slice(0, 10)}T00:00:00Z`)) / 86400000 + 1;
@@ -61,7 +61,7 @@ const daysBetween = (start: unknown, end: unknown): number | null => {
 const withDays = (data: Record<string, unknown>) => { const days = daysBetween(data.start_date, data.end_date); return days === null ? data : { ...data, days_requested: days }; };
 const calculateDays = ({ get, set }: { get: (name: string) => unknown; set: (name: string, value: unknown) => void }) => { const days = daysBetween(get('start_date'), get('end_date')); if (days !== null) set('days_requested', days); };
 
-/** `employee.name` et `approver.name` sont lus par sous-requêtes, pour le tri et la recherche. */
+/** `employee.name` and `approver.name` come from subqueries, for sorting and searching. */
 class LeaveRequests extends ObjectionAdapter<LeaveRequest> {
     constructor() {
         super(LeaveRequest, { modify: (query) => { query.select('leave_requests.*', employeeName('employee_id', 'employee_name'), employeeName('approver_id', 'approver_name')); } });
@@ -71,12 +71,12 @@ class LeaveRequests extends ObjectionAdapter<LeaveRequest> {
 const review = (status: 'approved' | 'rejected', extra: (data: Record<string, unknown>) => Record<string, unknown> = () => ({})) => async (record: LeaveRequest, data: Record<string, unknown> = {}) => {
     const changes = { status, ...extra(data), reviewed_at: now() };
     await LeaveRequestResource.adapter.update(record.id, changes);
-    // Comme `$record->update()` d'Eloquent : l'enregistrement en mémoire suit, la page « View » se redessine à jour.
+    // Also update the in-memory record so the View page re-renders with fresh data.
     Object.assign(record, changes);
 };
 const isPending = ({ record }: { record: unknown }) => (record as LeaveRequest | null)?.status === 'pending';
 const rejectionSchema = () => [Textarea.make('reviewer_notes').label('Reason for rejection').required()];
-/** Actions « Approve » et « Reject » : les mêmes sur une ligne de la table et dans l'en-tête de la page « View ». */
+/** Approve and Reject actions: the same on a table row and in the View page header. */
 const approveAction = () => Action.make('approve').icon('m-check').color('success').visible(isPending).requiresConfirmation()
     .action(async ({ record }) => { await review('approved')(record as LeaveRequest); Notification.make().success().title('Leave request approved').send(); });
 const rejectAction = () => Action.make('reject').icon('m-x-mark').color('danger').visible(isPending).modalWidth('md').modalSubmitActionLabel('Reject').schema(rejectionSchema())
@@ -102,7 +102,7 @@ export class LeaveRequestResource extends Resource {
     static hasViewPage = true;
     static pages = { create: CreateLeaveRequest, edit: EditLeaveRequest, view: ViewLeaveRequest };
     static adapter = new LeaveRequests();
-    /** Demandes en attente (équivalent de getNavigationBadge()). */
+    /** Pending requests (navigation badge). */
     static async getNavigationBadge(): Promise<string> { return String(await countWhere('pending')()); }
 
     static tabs(): Record<string, Tab> {

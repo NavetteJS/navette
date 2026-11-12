@@ -1,4 +1,3 @@
-<%# Scènes « components/modal » — même page que docs-assets/app (modal.blade.php). Contenus libres repris de la vue Blade. %>
 <% const livewireId = 'Navette0Scene0Demo12'; const gray = (label) => ui.button({ color: 'gray' }, label); %>
 <%- ui.modal({ id: 'demo-modal', livewireId, heading: 'Confirm your action', description: 'Are you sure you want to proceed? This action cannot be undone.', footerActions: [ui.button({}, 'Confirm'), gray('Cancel')] }) %>
 <%- ui.modal({ id: 'demo-modal-icon', livewireId, icon: 'heroicon-o-exclamation-triangle', iconColor: 'danger', heading: 'Delete record', description: 'Are you sure you would like to do this?', footerActions: [ui.button({ color: 'danger' }, 'Confirm'), gray('Cancel')] }) %>

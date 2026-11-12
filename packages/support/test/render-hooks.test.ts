@@ -6,7 +6,7 @@ class ListPage {}
 class EditPage {}
 class Resource {}
 
-test('render hooks : sans portee partout, avec portee seulement pour les appels qui la portent', () => {
+test('render hooks: unscoped everywhere, scoped only for calls carrying the scope', () => {
     const registry = new RenderHookRegistry();
     registry.register('panels::page.start', () => '[all]');
     registry.register('panels::page.start', () => '[list]', ListPage);
@@ -17,7 +17,7 @@ test('render hooks : sans portee partout, avec portee seulement pour les appels 
     assert.equal(registry.render('panels::page.end', [ListPage]), '');
 });
 
-test('render hooks : ordre de Filament (sans portee, puis portee par portee) et un hook rendu une seule fois', () => {
+test('render hooks: unscoped first, then scope by scope, each hook rendered once', () => {
     const registry = new RenderHookRegistry();
     const both = () => '[both]';
     registry.register('x', () => '[resource]', Resource);
@@ -27,7 +27,7 @@ test('render hooks : ordre de Filament (sans portee, puis portee par portee) et 
     assert.equal(registry.render('x', [Resource, ListPage]), '[all][resource][both]');
 });
 
-test('render hooks : le hook recoit les portees et les donnees de l\'emplacement ; null et undefined ne rendent rien', () => {
+test('render hooks: the hook receives scopes and slot data; null and undefined render nothing', () => {
     const registry = new RenderHookRegistry();
     registry.register('actions::modal.schema.before', ({ scopes, data }) => `${scopes.length}:${data.action.name}`);
     registry.register('actions::modal.schema.before', () => null);
@@ -35,7 +35,7 @@ test('render hooks : le hook recoit les portees et les donnees de l\'emplacement
     assert.equal(registry.render('actions::modal.schema.before', [ListPage], { action: { name: 'delete' } }), '1:delete');
 });
 
-test('render hooks : has() suit les memes regles de portee que render()', () => {
+test('render hooks: has() follows the same scope rules as render()', () => {
     const registry = new RenderHookRegistry();
     registry.register('tables::header.cell', () => '<th></th>', ListPage);
     assert.equal(registry.has('tables::header.cell'), false);
@@ -43,14 +43,14 @@ test('render hooks : has() suit les memes regles de portee que render()', () => 
     assert.equal(registry.has('tables::header.cell', ListPage), true);
 });
 
-test('render hooks : ceux d\'un panel ne valent que pendant ses propres rendus, les hooks communs partout', async () => {
+test('render hooks: panel hooks only apply during that panel\'s renders, shared hooks everywhere', async () => {
     renderHooks.clear();
     const admin = new RenderHookRegistry().register('panels::footer', () => '[admin]');
     const app = new RenderHookRegistry().register('panels::footer', () => '[app]');
     assert.equal(renderHook('panels::footer'), '');
     assert.equal(hasRenderHook('panels::footer'), false);
     renderHooks.register('panels::footer', () => '[commun]');
-    // Deux rendus entrelaces : chacun ne voit que les hooks de son panel.
+    // Two interleaved renders: each one only sees its own panel's hooks.
     const [a, b] = await Promise.all([
         runWithRenderHooks(admin, async () => { await new Promise((r) => setTimeout(r, 5)); return renderHook('panels::footer'); }),
         runWithRenderHooks(app, async () => renderHook('panels::footer')),

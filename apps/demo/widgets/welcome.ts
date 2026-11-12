@@ -1,5 +1,4 @@
-// Widgets du tableau de bord « Welcome » : compte, informations sur Navette, et l'aperçu des fonctionnalités
-// (port de App\Filament\Widgets\FeaturesOverview et de sa vue Blade, classes Tailwind comprises).
+// Widgets of the Welcome dashboard: account, Navette info, and the features overview.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { AccountWidget, NavetteInfoWidget, Widget } from '@navette-js/panels';
@@ -7,7 +6,7 @@ import { e, icon } from '@navette-js/support';
 
 type Feature = { name: string; description: string; url: string; resource: string };
 type Category = { name: string; icon: string; color: string; features: Feature[] };
-// Extrait de l'oracle par tools/oracle-capture/features.mjs. Certains liens mènent à des écrans qui ne sont pas encore portés.
+// Some links lead to screens that are not built yet.
 const categories: Category[] = JSON.parse(readFileSync(fileURLToPath(new URL('../fixtures/features.json', import.meta.url)), 'utf8'));
 
 const COLORS: Record<string, { gradient: string; bg: string; text: string; ring: string; dot: string }> = {
@@ -19,7 +18,7 @@ const COLORS: Record<string, { gradient: string; bg: string; text: string; ring:
     cyan: { gradient: 'from-cyan-500 to-sky-500', bg: 'bg-cyan-50 dark:bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400', ring: 'ring-cyan-200/80 dark:ring-cyan-500/20', dot: 'bg-cyan-500' },
     gray: { gradient: 'from-gray-500 to-slate-600', bg: 'bg-gray-100 dark:bg-gray-500/10', text: 'text-gray-600 dark:text-gray-400', ring: 'ring-gray-200/80 dark:ring-gray-500/20', dot: 'bg-gray-500' },
 };
-// Comme `<x-filament::icon class="…">` : les classes de l'icône d'abord, puis celles de l'appelant.
+// The icon's own classes come first, then the caller's.
 const svg = (name: string, classes: string) => icon(name).replace('class="fi-icon fi-size-md"', `class="fi-icon fi-size-md ${classes}"`);
 
 export class FeaturesOverview extends Widget {

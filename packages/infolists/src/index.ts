@@ -1,16 +1,16 @@
-// @navette-js/infolists — port de filament/infolists : entrées en lecture seule (TextEntry, IconEntry).
+// @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, type ComponentContext } from '@navette-js/schemas';
 import { Attributes, e, icon, js, type ColorManager, configured } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 
 const headline = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
-/** Libellé par défaut : pour `department.name`, c'est « Department » (comme Filament). */
+/** Default label: "Department" for `department.name`. */
 const defaultLabel = (name: string) => headline(name.includes('.') ? name.split('.').slice(-2, -1)[0] : name);
 
 let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 
-/** Base des entrées : libellé, valeur lue dans l'enregistrement (chemin pointé accepté) ou calculée. */
+/** Base entry: a label and a value read from the record (dotted paths allowed) or computed. */
 abstract class Entry extends Component {
     protected _label: string | null = null;
     protected _state: ((ctx: ComponentContext) => unknown | Promise<unknown>) | null = null;
@@ -18,32 +18,32 @@ abstract class Entry extends Component {
     hasStatePath(): boolean { return true; }
     label(label: string): this { this._label = label; return this; }
     protected _hiddenLabel = false;
-    /** Libellé gardé pour les lecteurs d'écran seulement. */
+    /** Keeps the label for screen readers only. */
     hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
-    /** Valeur calculée ; sans cela, l'attribut du même nom de l'enregistrement est affiché. */
+    /** Computed value; without it, the record attribute of the same name is shown. */
     state(resolver: (ctx: ComponentContext) => unknown | Promise<unknown>): this { this._state = resolver; return this; }
     protected async getState(): Promise<unknown> {
         const ctx = this.context();
         if (this._state) return this._state(ctx);
         const record = ctx.record as any;
-        // `department.name` : attribut à plat `department_name` (colonne calculée par l'adaptateur), sinon chemin dans l'objet.
+        // `department.name`: flat `department_name` attribute (column computed by the adapter), otherwise a path into the object.
         if (record && this._name!.includes('.')) return record[this._name!.replace(/\./g, '_')] ?? this._name!.split('.').reduce((node: any, key) => node?.[key], record);
         return record?.[this._name!];
     }
-    /** Balisage de Entry::wrapEmbeddedHtml(). */
+    /** Wraps the content with the entry label. */
     protected wrap(content: string): string {
         if (this._hiddenLabel) return `<div class="fi-in-entry"><div class="fi-in-entry-label fi-sr-only" role="term">${e(this._label ?? defaultLabel(this._name!))}</div><div class="fi-in-entry-content-col"><div class="fi-in-entry-content-ctn" role="definition"><div class="fi-in-entry-content">${content}</div></div></div></div>`;
         return `<div class="fi-in-entry"><div class="fi-in-entry-label-col"><div class="fi-in-entry-label-ctn"><div class="fi-in-entry-label" role="term">${e(this._label ?? defaultLabel(this._name!))}</div></div></div><div class="fi-in-entry-content-col"><div class="fi-in-entry-content-ctn" role="definition"><div class="fi-in-entry-content">${content}</div></div></div></div>`;
     }
 }
 
-/** Texte en lecture seule (port partiel de TextEntry) : pastille, couleur, icône, montant, date, texte de remplacement. */
 let htmlSanitizer: ((html: string) => string) | null = null;
 const TIGHT_ITEM = new RegExp('<li><p>((?:(?!</?p>|</?li>)[^])*)</p></li>', 'g');
 
-/** Filtre appliqué au HTML qu'une entrée affiche tel quel (`markdown()`). Sans filtre, le contenu est échappé. */
+/** Sanitizer applied to HTML an entry renders as is (`markdown()`). Without one, the content is escaped. */
 export const useHtmlSanitizer = (sanitizer: ((html: string) => string) | null) => { htmlSanitizer = sanitizer; };
 
+/** Read-only text: badge, color, icon, money, date, placeholder. */
 export class TextEntry extends Entry {
     private _badge = false;
     private _color: string | ((record: any) => string) | null = null;
@@ -68,46 +68,46 @@ export class TextEntry extends Entry {
     suffix(text: string | null): this { this._suffix = text; return this; }
     private _prose = false;
     private _markdown = false;
-    /** Mise en forme typographique du contenu (`fi-prose`). */
+    /** Typographic styling of the content (`fi-prose`). */
     prose(condition = true): this { this._prose = condition; return this; }
     /**
-     * Le contenu est du texte enrichi : il est rendu en HTML après nettoyage par le filtre posé avec `useHtmlSanitizer()`.
-     * Port partiel de `markdown()` : le HTML déjà présent est conservé (nettoyé), le texte brut devient des paragraphes ; la syntaxe Markdown n'est pas convertie.
+     * Rich text content, rendered as HTML after the sanitizer set with `useHtmlSanitizer()`.
+     * Existing HTML is kept (sanitized) and plain text becomes paragraphs; Markdown syntax itself is not converted.
      */
     markdown(condition = true): this { this._markdown = condition; return this; }
     private _copyable = false;
     private _numeric = false;
-    /** Un clic copie la valeur dans le presse-papiers. */
+    /** Clicking copies the value to the clipboard. */
     copyable(condition = true): this { this._copyable = condition; return this; }
-    /** Nombre formaté (séparateurs de milliers), aligné comme un nombre. */
+    /** Formatted number (thousands separators), aligned as a number. */
     numeric(condition = true): this { this._numeric = condition; return this; }
     async toHtml(): Promise<string> {
         const record = this.context().record as any;
         const state = await this.getState();
         const empty = state === null || state === undefined || state === '';
         if (empty && this._placeholder !== null) return this.wrap(`<div class="fi-in-text"><p class="fi-in-placeholder">${e(this._placeholder)}</p></div>`);
-        // Valeur vide : conteneur nu (avec `fi-numeric` pour un montant), comme Filament.
+        // Empty value: bare container (with `fi-numeric` for money).
         if (empty) return this._state || (!this._money && !this._date && !this._badge) ? this.wrap('<div class="fi-in-text-item fi-size-sm fi-in-text fi-wrapped"></div>') : this.wrap(`<div class="${['fi-in-text', this._money || this._numeric ? 'fi-numeric' : null].filter(Boolean).join(' ')}"></div>`);
         let shown = String(state);
         if (this._numeric) shown = new Intl.NumberFormat('en-US').format(Number(state));
         if (this._money) shown = new Intl.NumberFormat('en-US', { style: 'currency', currency: this._money }).format(Number(state));
         if (this._date) shown = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${shown.replace(' ', 'T').slice(0, 19)}Z`));
-        // `dateTime()` : « M j, Y H:i:s », le format par défaut de Filament.
+        // `dateTime()`: "Jan 5, 2024 13:45:00" (`M j, Y H:i:s`).
         if (this._dateTime) shown = `${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${shown.replace(' ', 'T').slice(0, 19)}Z`))} ${shown.slice(11, 19)}`;
-        // `time('H:i')` ou `time()` (« H:i:s ») : l'heure d'une valeur `H:i:s` ou `Y-m-d H:i:s`.
+        // `time('H:i')` or `time()` (`H:i:s`): the time part of an `H:i:s` or `Y-m-d H:i:s` value.
         if (this._time) shown = (shown.length > 8 ? shown.slice(11, 19) : shown).slice(0, this._time === 'H:i' ? 5 : 8);
         if (this._format) shown = this._format({ state, record });
         if (this._suffix !== null) shown += this._suffix;
         if (this._markdown) {
             const source = String(state);
             const html = /<[a-z][^>]*>/i.test(source)
-                // Listes « serrées », comme le rendu Markdown de Filament : le paragraphe unique d'une puce est retiré.
+                // Tight lists: a list item's single paragraph is unwrapped.
                 ? (htmlSanitizer ? htmlSanitizer(source).replace(TIGHT_ITEM, '<li>$1</li>') : e(source))
                 : source.split(/\n{2,}/).map((paragraph) => `<p>${e(paragraph.trim()).replace(/\n/g, '<br />')}</p>`).join('');
             return this.wrap(`<div class="${['fi-in-text-item', this._prose ? 'fi-prose' : null, 'fi-size-sm', 'fi-in-text', 'fi-wrapped'].filter(Boolean).join(' ')}">${html}</div>`);
         }
         if (this._badge && Array.isArray(state)) {
-            // Plusieurs valeurs : une liste de pastilles (étiquettes, par exemple).
+            // Several values: a list of badges (tags, for instance).
             const color = typeof this._color === 'function' ? this._color(record) : (this._color ?? 'primary');
             const classes = ['fi-badge', 'fi-size-sm', ...(color !== 'gray' ? (colorManager?.getComponentClasses('badge', color) ?? []) : [])].join(' ');
             return this.wrap(`<ul class="fi-in-text fi-in-text-has-badges fi-wrapped">${state.map((item) => `<li class="fi-in-text-item"><span class="${classes}">${e(String(item))}</span></li>`).join('')}</ul>`);
@@ -134,7 +134,7 @@ export class TextEntry extends Entry {
     }
 }
 
-/** Pastille de couleur (port de ColorEntry) : seules les couleurs hexadécimales ou fonctionnelles simples sont injectées dans le style. */
+/** Color swatch: only hex or simple functional colors are injected into the style attribute. */
 export class ColorEntry extends Entry {
     private _placeholder: string | null = null;
     static make(name: string): ColorEntry { return configured(new ColorEntry(name)); }
@@ -147,13 +147,13 @@ export class ColorEntry extends Entry {
     }
 }
 
-/** Image en lecture seule (port de ImageEntry) : seules une adresse du site (`/…`) ou une adresse http(s) sont affichées. */
+/** Read-only image: only same-site (`/…`) or http(s) URLs are rendered. */
 export class ImageEntry extends Entry {
     private _height = '8rem';
     private _alt: string | null = null;
     private _circular = false;
     static make(name: string): ImageEntry { return configured(new ImageEntry(name)); }
-    /** Hauteur CSS de l'image (`8rem` par défaut, comme Filament). */
+    /** CSS height of the image (`8rem` by default). */
     imageHeight(height: string): this { if (/^[0-9.]+(rem|px|em)$/.test(height)) this._height = height; return this; }
     alt(text: string | null): this { this._alt = text; return this; }
     circular(condition = true): this { this._circular = condition; return this; }
@@ -164,7 +164,7 @@ export class ImageEntry extends Entry {
     }
 }
 
-/** Icône selon la valeur ; `boolean()` affiche une coche verte ou une croix rouge (port partiel de IconEntry). */
+/** Icon based on the value; `boolean()` shows a green check or a red cross. */
 export class IconEntry extends Entry {
     private _boolean = false;
     static make(name: string): IconEntry { return configured(new IconEntry(name)); }
@@ -178,7 +178,7 @@ export class IconEntry extends Entry {
     }
 }
 
-/** Paires clé / valeur en table (port de KeyValueEntry) : l'état est un objet (ou sa forme JSON) ; une valeur non scalaire est montrée en JSON. */
+/** Key/value pairs as a table: the state is an object (or its JSON form); a non-scalar value is shown as JSON. */
 export class KeyValueEntry extends Entry {
     private _keyLabel: string | null = null;
     private _valueLabel: string | null = null;
@@ -186,9 +186,9 @@ export class KeyValueEntry extends Entry {
     static make(name: string): KeyValueEntry { return configured(new KeyValueEntry(name)); }
     keyLabel(label: string | null): this { this._keyLabel = label; return this; }
     valueLabel(label: string | null): this { this._valueLabel = label; return this; }
-    /** Texte affiché sans aucune paire (« No entries » par défaut). */
+    /** Text shown when there are no pairs ("No entries" by default). */
     placeholder(text: string | null): this { this._placeholder = text; return this; }
-    /** @deprecated Utilisez `placeholder()`. */
+    /** @deprecated Use `placeholder()`. */
     emptyMessage(text: string | null): this { return this.placeholder(text); }
     async toHtml(): Promise<string> {
         let state = await this.getState();
@@ -202,13 +202,13 @@ export class KeyValueEntry extends Entry {
     }
 }
 
-/** `json_encode($value, JSON_PRETTY_PRINT)` de PHP : quatre espaces, `/` et caractères non ASCII échappés. */
+/** Pretty-printed JSON: four-space indent, with `/` and non-ASCII characters escaped. */
 const phpPrettyJson = (value: unknown): string => (JSON.stringify(value, null, 4) ?? 'null').replace(/\//g, '\\/').replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
-/** Couleurs de fond et de texte des thèmes par défaut de Phiki (github-light / github-dark-high-contrast). */
+/** Background and text colors of the default themes (github-light / github-dark-high-contrast). */
 const PHIKI_DEFAULT_STYLE = 'background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;';
 /**
- * Code en lecture seule (port de CodeEntry). Même balisage `<pre class="phiki …">` que Filament, mais SANS coloration syntaxique :
- * le surligneur Phiki n'est pas porté, chaque ligne est un seul jeton de texte échappé. Un tableau ou un objet est montré en JSON indenté.
+ * Read-only code, rendered as `<pre class="phiki …">` but WITHOUT syntax highlighting:
+ * each line is a single escaped text token. An array or object is shown as indented JSON.
  */
 export class CodeEntry extends Entry {
     private _grammar: string | null = null;
@@ -219,13 +219,13 @@ export class CodeEntry extends Entry {
     private _copyMessage: string | null = null;
     private _copyMessageDuration = 2000;
     static make(name: string): CodeEntry { return configured(new CodeEntry(name)); }
-    /** Langage (`php`, `json`, `javascript`…) : nom donné à la classe `language-…` ; `html` par défaut, `json` pour un tableau. */
+    /** Language (`php`, `json`, `javascript`…) used in the `language-…` class; `html` by default, `json` for an array. */
     grammar(grammar: string | null): this { this._grammar = grammar; return this; }
-    /** Thèmes (noms de classes seulement : sans Phiki, les couleurs restent celles des thèmes par défaut). */
+    /** Theme class names only: without a highlighter, colors stay those of the default themes. */
     lightTheme(theme: string | null): this { this._lightTheme = theme; return this; }
     darkTheme(theme: string | null): this { this._darkTheme = theme; return this; }
     placeholder(text: string | null): this { this._placeholder = text; return this; }
-    /** Un clic copie le code dans le presse-papiers. */
+    /** Clicking copies the code to the clipboard. */
     copyable(condition = true): this { this._copyable = condition; return this; }
     copyMessage(message: string | null): this { this._copyMessage = message; return this; }
     copyMessageDuration(milliseconds: number): this { this._copyMessageDuration = milliseconds; return this; }
@@ -240,7 +240,7 @@ export class CodeEntry extends Entry {
         const language = (grammar ?? 'html').replace(/[^a-zA-Z0-9_+#-]/g, '');
         const light = (this._lightTheme ?? 'github-light').replace(/[^a-zA-Z0-9_-]/g, ''), dark = (this._darkTheme ?? 'github-dark-high-contrast').replace(/[^a-zA-Z0-9_-]/g, '');
         const style = this._lightTheme === null && this._darkTheme === null ? ` style="${PHIKI_DEFAULT_STYLE}"` : '';
-        // Phiki : une ligne par `<span class="line">`, le saut de ligne étant le dernier jeton de chaque ligne.
+        // One `<span class="line">` per line, the newline being the last token of each line.
         const lines = code.split('\n');
         const linesHtml = lines.map((line, index) => `<span class="line">${line === '' ? '' : `<span class="token">${e(line)}</span>`}${index < lines.length - 1 ? '<span class="token">\n</span>' : ''}</span>`).filter((html, index) => !(index === lines.length - 1 && lines[index] === '' && lines.length > 1)).join('');
         const pre = `<pre class="phiki language-${language} ${light} phiki-themes ${dark}" data-language="${language}"${style}><code>${linesHtml}</code></pre>`;
@@ -258,30 +258,30 @@ export class CodeEntry extends Entry {
 }
 
 /**
- * Entrée au rendu libre (port de ViewEntry) : la fonction fournie reçoit l'état, l'enregistrement et le contexte, et rend le contenu
- * placé dans l'enveloppe d'entrée. Ce HTML est inséré TEL QUEL : échappez toute valeur venue d'un utilisateur ou de la base avec `e()`.
+ * Custom-rendered entry: the given function receives the state, record and context, and returns the content
+ * placed in the entry wrapper. This HTML is inserted AS IS: escape any user- or database-supplied value with `e()`.
  */
 export class ViewEntry extends Entry {
     private _view: ((ctx: ComponentContext & { state: unknown; entry: ViewEntry }) => string | Promise<string>) | null = null;
     private _wrapped = true;
     static make(name: string): ViewEntry { return configured(new ViewEntry(name)); }
-    /** Fonction de rendu du contenu (équivalent de la vue Blade de Filament). */
+    /** Content render function. */
     view(renderer: ((ctx: ComponentContext & { state: unknown; entry: ViewEntry }) => string | Promise<string>) | null): this { this._view = renderer; return this; }
-    /** `false` : la fonction rend toute l'entrée, sans l'enveloppe (libellé) habituelle. */
+    /** `false`: the function renders the whole entry, without the usual wrapper (label). */
     wrapped(condition = true): this { this._wrapped = condition; return this; }
     async toHtml(): Promise<string> {
-        if (!this._view) throw new Error(`ViewEntry [${this._name}] : view() est requis.`);
+        if (!this._view) throw new Error(`ViewEntry [${this._name}]: view() is required.`);
         const html = await this._view({ ...this.context(), state: await this.getState(), entry: this });
         return this._wrapped ? this.wrap(html) : html;
     }
 }
 
-/** En-tête de colonne d'une entrée répétée en table (même forme que `TableColumn` de @navette-js/forms). */
+/** Column header of a table repeatable entry (same shape as `TableColumn` from @navette-js/forms). */
 export type RepeatableColumn = { label: string; getWidth(): string | null };
 
 /**
- * Liste d'éléments en lecture seule (port partiel de RepeatableEntry, en mode table) : une ligne par élément du tableau lu dans
- * l'enregistrement, une cellule par entrée du schéma.
+ * Read-only list of items, as a table: one row per item of the array read from
+ * the record, one cell per schema entry.
  */
 export class RepeatableEntry extends Entry {
     private _columns: RepeatableColumn[] = [];

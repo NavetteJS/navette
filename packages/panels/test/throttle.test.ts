@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Throttle } from '../src/index.ts';
 
-test('Throttle : cinq essais par minute, puis attente, puis reprise', () => {
+test('Throttle: five attempts per minute, then wait, then resume', () => {
     const throttle = new Throttle(5, 60_000);
     const t0 = 1_000_000;
     for (let i = 0; i < 5; i++) assert.equal(throttle.hit('ip', t0 + i * 1000), 0);

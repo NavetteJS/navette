@@ -15,18 +15,18 @@ before(async () => {
 });
 after(() => db.destroy());
 
-test('mots de passe : empreinte scrypt salée, vérification, empreintes étrangères ou forgées refusées', async () => {
+test('passwords: salted scrypt hash, verification, foreign or forged hashes rejected', async () => {
     const hash = await hashPassword('correct horse');
     assert.match(hash, /^\$scrypt\$16384\$8\$1\$/);
     assert.notEqual(hash, await hashPassword('correct horse'));
     assert.equal(await verifyPassword('correct horse', hash), true);
     assert.equal(await verifyPassword('wrong', hash), false);
     assert.equal(await verifyPassword('x', '$2y$10$abcdefghijklmnopqrstuv'), false);
-    // Coût démesuré dans une empreinte forgée : refusé sans calcul.
+    // Excessive cost in a forged hash: rejected without computing it.
     assert.equal(await verifyPassword('x', '$scrypt$1073741824$8$1$c2FsdA$aGFzaGhhc2hoYXNoaGFzaA'), false);
 });
 
-test('jetons signés : usage, altération et expiration', () => {
+test('signed tokens: purpose, tampering and expiry', () => {
     const token = signToken('key', 'reset', { uid: 3 }, 60);
     assert.equal(readToken('key', 'reset', token)?.uid, 3);
     assert.equal(readToken('key', 'verify', token), null);
@@ -37,7 +37,7 @@ test('jetons signés : usage, altération et expiration', () => {
     assert.equal(readToken('key', 'reset', signToken('key', 'reset', { uid: 3 }, -1)), null);
 });
 
-test('fournisseur d’utilisateurs knex : création, connexion, profil, vérification, empreinte du mot de passe', async () => {
+test('knex auth provider: create, login, profile, verification, password fingerprint', async () => {
     const auth = knexAuthProvider((table) => db(table));
     const user = await auth.create!({ name: 'Ada', email: 'ada@example.test', password: 'first-password' });
     assert.equal((await auth.attempt('ada@example.test', 'first-password'))?.id, user.id);
@@ -50,12 +50,12 @@ test('fournisseur d’utilisateurs knex : création, connexion, profil, vérific
     await auth.update!(user, { password: 'second-password' });
     assert.notEqual(await auth.getPasswordFingerprint!(user), before);
     assert.ok(await auth.attempt('ada@example.test', 'second-password'));
-    // Changer d'adresse annule sa vérification.
+    // Changing the email resets its verification.
     const moved = await auth.update!(user, { email: 'ada@new.example.test' });
     assert.equal(await auth.hasVerifiedEmail!(moved), false);
 });
 
-test('locataires knex : création et adhésion, accès réservé aux membres', async () => {
+test('knex tenant provider: creation and membership, access limited to members', async () => {
     const tenants = knexTenantProvider((table) => db(table), { label: 'Current team' });
     const owner = { id: 1, name: 'Ada', email: 'ada@example.test' };
     const stranger = { id: 2, name: 'Bob', email: 'bob@example.test' };
@@ -67,7 +67,7 @@ test('locataires knex : création et adhésion, accès réservé aux membres', a
     assert.equal(tenants.getCurrentTenantLabel!(team), 'Current team');
 });
 
-test('adresses d’un panel à locataires, cloisonnement des données par locataire', async () => {
+test('multi-tenant panel URLs, data scoped per tenant', async () => {
     const panel = Panel.make().id('app').path('app').tenant(knexTenantProvider((table) => db(table)), { ownershipColumn: 'team_id' });
     const red = { id: 7, name: 'Red' }, blue = { id: 8, name: 'Blue' };
     assert.equal(panel.getUrl('settings'), '/app/settings');
@@ -75,7 +75,7 @@ test('adresses d’un panel à locataires, cloisonnement des données par locata
     assert.equal(panel.withTenant(red, () => panel.getLoginUrl()), '/app/login');
     const adapter = new ObjectionAdapter(Project).scopeToTenant('team_id', () => { const tenant = panel.getTenant(); return tenant ? panel.getTenantUrlKey(tenant) : null; });
     const created = await panel.withTenant(red, () => adapter.create({ name: 'Rocket', team_id: 8 }));
-    assert.equal((created as any).team_id, 7, 'la colonne du locataire est imposée');
+    assert.equal((created as any).team_id, 7, 'the tenant column is enforced');
     await panel.withTenant(blue, () => adapter.create({ name: 'Boat' }));
     assert.deepEqual((await panel.withTenant(red, () => adapter.paginate({ page: 1, perPage: 10 }))).records.map((r: any) => r.name), ['Rocket']);
     assert.equal(await panel.withTenant(blue, () => adapter.find((created as any).id)), null);

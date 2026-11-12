@@ -1,4 +1,4 @@
-// Intégration Express du runtime : sert livewire.js embarqué, expose l'endpoint de mise à jour, protège par jeton CSRF.
+// Express integration: serves the bundled livewire.js and exposes the CSRF-protected update and upload endpoints.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,7 @@ const COOKIE = 'navette_csrf';
 const readCookie = (req: Request, name: string) =>
     (req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).find(([k]) => k === name)?.[1];
 
-/** Jeton CSRF par double soumission : cookie HttpOnly + jeton renvoyé dans le corps par livewire.js (`_token`). */
+/** Double-submit CSRF token: an HttpOnly cookie, plus the token livewire.js sends back in the body (`_token`). */
 export function csrfToken(req: Request, res: Response): string {
     let token = readCookie(req, COOKIE) ?? (res.locals.navetteCsrf as string | undefined);
     if (!token) {
@@ -24,16 +24,16 @@ export function csrfToken(req: Request, res: Response): string {
     return token;
 }
 
-/** Vérifie le jeton envoyé (corps ou formulaire) contre le cookie, en temps constant. */
+/** Checks the submitted token (body or form field) against the cookie, in constant time. */
 export function verifyCsrf(req: Request, token: unknown): boolean {
     const cookie = Buffer.from(readCookie(req, COOKIE) ?? ''), sent = Buffer.from(String(token ?? ''));
     return cookie.length > 0 && cookie.length === sent.length && timingSafeEqual(cookie, sent);
 }
 
 export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeContext: (req: Request, res: Response) => unknown | Promise<unknown> = (req, res) => ({ req, res }),
-    /** Exécute le traitement dans un contexte de requête et permet d'enrichir la réponse (notifications…). */
+    /** Wraps the handling in a request context and can enrich the response (notifications…). */
     around: (ctx: any, req: Request, res: Response, handle: () => Promise<any>) => Promise<any> = (_ctx, _req, _res, handle) => handle(),
-    /** Autorise un envoi de fichier (par exemple : utilisateur connecté). Sans cette fonction, tout porteur d'une adresse signée et du jeton CSRF peut envoyer. */
+    /** Authorizes a file upload (e.g. signed-in user). Without it, anyone holding a signed URL and the CSRF token can upload. */
     canUpload: (ctx: any) => boolean | Promise<boolean> = () => true): Router {
     const router = express.Router();
     router.get(`${prefix}/livewire.js`, (_req, res) => {
@@ -41,42 +41,42 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
     });
     router.post(`${prefix}/update`, express.json({ limit: '2mb' }), async (req, res) => {
         try {
-            if (!verifyCsrf(req, req.body?._token)) throw new WireError(419, 'Jeton CSRF invalide.');
+            if (!verifyCsrf(req, req.body?._token)) throw new WireError(419, 'Invalid CSRF token.');
             const ctx = await makeContext(req, res);
             res.json(await around(ctx, req, res, () => runtime.handle(req.body, ctx)));
         } catch (e) {
             const status = e instanceof WireError ? e.status : 500;
             if (status === 500) console.error(e);
             else if (process.env.NODE_ENV !== 'production') console.warn(`[wire] ${status} ${(e as Error).message} — calls=${JSON.stringify(req.body?.components?.map((c: any) => c.calls))} updates=${JSON.stringify(req.body?.components?.map((c: any) => c.updates))}`);
-            res.status(status).send(e instanceof Error ? e.message : 'Erreur');
+            res.status(status).send(e instanceof Error ? e.message : 'Error');
         }
     });
-    // Envoi de fichiers : adresse signée par `_startUpload`, jeton CSRF en en-tête, fichiers reçus dans le dossier temporaire.
+    // File uploads: URL signed by `_startUpload`, CSRF token in a header, files stored in the temporary directory.
     router.post(`${prefix}/upload-file`, async (req, res) => {
         try {
             const store = runtime.uploads;
-            if (!store) throw new WireError(404, 'Téléversement indisponible.');
-            if (!store.verifySignature(req.query.expires, req.query.signature)) throw new WireError(401, 'Adresse d\'envoi invalide ou expirée.');
-            if (!verifyCsrf(req, req.get('x-csrf-token'))) throw new WireError(419, 'Jeton CSRF invalide.');
-            if (!(await canUpload(await makeContext(req, res)))) throw new WireError(401, 'Non authentifié.');
+            if (!store) throw new WireError(404, 'Uploads are not available.');
+            if (!store.verifySignature(req.query.expires, req.query.signature)) throw new WireError(401, 'Invalid or expired upload URL.');
+            if (!verifyCsrf(req, req.get('x-csrf-token'))) throw new WireError(419, 'Invalid CSRF token.');
+            if (!(await canUpload(await makeContext(req, res)))) throw new WireError(401, 'Unauthenticated.');
             res.json({ paths: await store.receive(req) });
         } catch (e) {
             const status = e instanceof WireError ? e.status : Number((e as any)?.status) || 500;
             if (status === 500) console.error(e);
-            res.status(status).json({ message: e instanceof Error ? e.message : 'Erreur' });
+            res.status(status).json({ message: e instanceof Error ? e.message : 'Error' });
         }
     });
     return router;
 }
 
-/** Balise <script> attendue par livewire.js (équivalent de FrontendAssets::js). */
+/** `<script>` tag that loads livewire.js with its CSRF token and endpoint URLs. */
 export function wireScripts(req: Request, res: Response, prefix = '/livewire'): string {
     return `<script src="${prefix}/livewire.js?id=${versionHash}" data-csrf="${csrfToken(req, res)}" data-module-url="${prefix}" data-update-uri="${prefix}/update" data-navigate-once="true"></script>`;
 }
 
-/** Styles attendus par livewire.js (équivalent de FrontendAssets::styles) : à placer dans <head>. */
+/** Styles livewire.js expects (loading states, cloak, progress bar); place them in `<head>`. */
 export function wireStyles(progressBarColor = '#2299dd'): string {
-    const BS = String.fromCharCode(92); // barre oblique inverse : échappe « : » et « . » dans les sélecteurs CSS
+    const BS = String.fromCharCode(92); // backslash: escapes `:` and `.` in CSS selectors
     const sel = (n: string) => `[wire${BS}:${n.replaceAll('.', BS + '.')}]`;
     const doubled = (names: string[]) => names.map((n) => sel(n) + sel(n)).join(', ');
     return '<!-- Livewire Styles --><style>'

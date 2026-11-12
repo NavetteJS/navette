@@ -1,4 +1,4 @@
-<%# Document HTML d'un panel — port de filament-panels::components.layout.base %>
+<%# Panel HTML document %>
 <!DOCTYPE html>
 <html lang="en" dir="ltr" class="fi">
     <head>
@@ -44,7 +44,7 @@
 
         <%- colorVariables %>
 
-        <%# Thème compilé par l'application s'il existe, sinon la feuille par défaut de Filament %>
+        <%# The application's compiled theme if any, otherwise the default stylesheet %>
         <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/filament/filament/app.css') %>" data-navigate-track="reload" />
 
         <% if (font.url) { %>

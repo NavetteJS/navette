@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\HR\Timesheets (resource, formulaire, table, widget, pages List / Create / Edit) de la démo Filament.
+// HR timesheets: form, table, widget, and List / Create / Edit pages.
 import { Action } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { DatePicker, Select, Textarea, TextInput, Toggle } from '@navette-js/forms';
@@ -45,11 +45,11 @@ const isDate = (value: unknown): value is string => typeof value === 'string' &&
 const updateTotalCost = ({ get, set }: { get: (path: string) => unknown; set: (path: string, value: unknown) => void }) => {
     set('total_cost', ((Number(get('hours')) || 0) * (Number(get('hourly_rate')) || 0)).toFixed(2));
 };
-/** Entrée de plus de sept jours : sa facturation n'est plus modifiable depuis la liste. */
+/** Entries older than seven days: billing can no longer be toggled from the list. */
 const isLocked = (record: Timesheet) => Date.parse(`${String(record.date).slice(0, 10)}T00:00:00Z`) < Date.now() - 7 * 86400000;
 
 export class Timesheets extends ObjectionAdapter<Timesheet> {
-    /** `projectId` : entrées d'un seul projet (relation manager de la page d'un projet). */
+    /** `projectId`: entries of a single project (project relation manager). */
     constructor(projectId: number | string | null = null) {
         super(Timesheet, {
             modify: (query) => {
@@ -63,12 +63,12 @@ export class Timesheets extends ObjectionAdapter<Timesheet> {
     }
 }
 
-/** Équivalent de Widgets\TimesheetStats : chiffres calculés sur la requête de la table de la liste. */
+/** Figures computed from the list table's query. */
 export class TimesheetStats extends PageTableStatsWidget {
     static pollingInterval = null;
     static tablePage = () => TimesheetResource.getPages().index as any;
     async getStats(): Promise<Stat[]> {
-        // Semaine en cours, du lundi au dimanche (Carbon::startOfWeek / endOfWeek).
+        // Current week, Monday to Sunday.
         const today = new Date();
         const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - ((today.getUTCDay() + 6) % 7)));
         const sunday = new Date(monday.getTime() + 6 * 86400000);
@@ -93,11 +93,11 @@ const setBillable = (value: boolean) => async ({ livewire }: { livewire: any }) 
     livewire.deselectAllTableRecords();
 };
 
-/** Table des entrées de temps, partagée avec le relation manager d'un projet (qui n'affiche ni la colonne ni le filtre « Project »). */
+/** Timesheet table, shared with a project's relation manager (which hides the Project column and filter). */
 export function timesheetsTable(table: Table<Timesheet>, projectScoped = false): Table<Timesheet> {
     return table
         .columns([
-            // Comme dans la démo, la première colonne déclare un décompte ; Filament ne l'affiche pas : sa cellule porte l'intitulé de la ligne de résumé.
+            // The first column declares a Count summary that is not shown: its cell holds the summary row's label.
             TextColumn.make<Timesheet>('employee.name').getStateUsing(({ record }) => record.employee_name ?? null).searchable({ column: 'employee_name' }).sortable({ column: 'employee_name' }).weight('medium').summarize(Count.make()),
             ...(projectScoped ? [] : [TextColumn.make<Timesheet>('project.name').getStateUsing(({ record }) => record.project_name ?? null).searchable({ column: 'project_name' }).sortable({ column: 'project_name' })]),
             TextColumn.make<Timesheet>('task.title').getStateUsing(({ record }) => record.task_title ?? null).searchable({ column: 'task_title' }).limit(30)
@@ -158,7 +158,7 @@ export class TimesheetResource extends Resource {
         return schema.components([
             Section.make('Timesheet Entry').columns(2).columnSpanFull().schema([
                 Select.make('employee_id').label('Employee').options(options('employees')).searchable().preload().required().live()
-                    // Le taux horaire de l'employé choisi pré-remplit celui de l'entrée.
+                    // The selected employee's hourly rate prefills the entry's.
                     .afterStateUpdated(async ({ state, set }) => {
                         const id = Number(state);
                         if (!Number.isInteger(id) || id <= 0) return;
@@ -166,7 +166,7 @@ export class TimesheetResource extends Resource {
                         if (employee?.hourly_rate) set('hourly_rate', employee.hourly_rate);
                     }),
                 Select.make('project_id').label('Project').options(options('projects')).searchable().preload().required().live(),
-                // Les tâches proposées sont celles du projet choisi.
+                // Only the selected project's tasks are offered.
                 Select.make('task_id').label('Task').searchable().preload().options(async ({ get }) => {
                     const projectId = Number(get('project_id'));
                     const rows = await knex()('tasks').modify((query: any) => { if (Number.isInteger(projectId) && projectId > 0) query.where('project_id', projectId); }).orderBy('title').limit(50).select('id', 'title');

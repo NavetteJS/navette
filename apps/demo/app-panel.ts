@@ -1,25 +1,25 @@
-// Second panel de la démo, comme `AppPanelProvider` de filamentphp/demo : inscription, mot de passe oublié,
-// vérification de l'adresse, équipes (multi-locataire) et page « Settings » propre à chaque équipe.
+// The demo's second panel: registration, password reset, email verification,
+// teams (multi-tenancy) and a per-team Settings page.
 import path from 'node:path';
 import { EmailVerificationPrompt, fileMailer, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type User } from '@navette-js/panels';
 import { TextInput } from '@navette-js/forms';
 import type { Schema } from '@navette-js/schemas';
 import { Model } from '@navette-js/database';
 
-/** Comme App\Filament\App\Pages\RegisterTeam : création d'une équipe, dont l'utilisateur devient membre. */
+/** Creates a team and makes the current user a member. */
 export class RegisterTeam extends RegisterTenant {
     static getLabel(): string { return 'New team'; }
     formSchema(schema: Schema): Schema { return schema.components([TextInput.make('name').required()]); }
 }
 
-/** Comme App\Filament\App\Pages\Settings : une page vide, propre à chaque équipe. */
+/** An empty page, scoped to each team. */
 export class Settings extends Page {
     static slug = 'settings';
     static title = 'Settings';
     static navigationIcon = 'o-document-text';
 }
 
-/** `profile` : page de profil (absente de la démo Filament : retirée pour les comparaisons avec l'oracle). */
+/** `profile`: adds the profile page (off for screenshot comparisons). */
 export function appPanel(options: { key: string; login: typeof Login; demoUser: User & { password: string }; mailLog: string; appUrl: string; profile?: boolean }): Panel {
     const table = (name: string) => Model.knex()(name);
     const users = knexAuthProvider(table);
@@ -39,7 +39,7 @@ export function appPanel(options: { key: string; login: typeof Login; demoUser: 
         .pages([Settings])
         .auth({
             ...users,
-            // Le compte de démonstration (fixture) ouvre le compte n° 1 de la base, dont le mot de passe est une empreinte bcrypt de Laravel.
+            // The fixture demo account signs in as database user #1 directly, without checking the stored bcrypt hash.
             attempt: async (email, password) => (email === options.demoUser.email && password === options.demoUser.password ? users.find(options.demoUser.id) : users.attempt(email, password)),
         });
     return options.profile ? panel.profile() : panel;

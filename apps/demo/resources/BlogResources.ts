@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\Blog (Categories et Authors : resources « simples », une page et des modales) de la démo Filament.
+// Blog post categories and authors: simple resources, managed from one page with modals.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { CheckboxList, RichEditor, Textarea, TextInput, Toggle } from '@navette-js/forms';
@@ -15,11 +15,11 @@ const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const cheeky = () => { Notification.make().warning().title("Now, now, don't be cheeky, leave some records for others to play with!").send(); };
 const slugify = (text: string) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// Icônes de marque de la démo (resources/svg) : elles ne font pas partie de Heroicons.
+// Brand icons, which are not part of Heroicons.
 registerIcon('icon-github', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>');
 registerIcon('icon-twitter', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/></svg>');
 
-// ------------------------------------------------------------------ catégories d'articles
+// ------------------------------------------------------------------ post categories
 export class PostCategory extends Model {
     static tableName = 'post_categories';
     id!: number;
@@ -38,13 +38,13 @@ export class PostCategory extends Model {
     }
 }
 
-/** Découpe une ligne CSV (guillemets doublés acceptés). */
+/** Splits a CSV line (doubled quotes allowed). */
 const csvLine = (line: string): string[] => { const cells: string[] = []; let current = ''; let quoted = false; for (let i = 0; i < line.length; i++) { const c = line[i]; if (quoted) { if (c === '"' && line[i + 1] === '"') { current += '"'; i++; } else if (c === '"') quoted = false; else current += c; } else if (c === '"') quoted = true; else if (c === ',') { cells.push(current); current = ''; } else current += c; } cells.push(current); return cells.map((cell) => cell.trim()); };
 
 class ManageCategories extends ListRecords {
     getHeaderActions(): Action[] {
         return [
-            // Port partiel de ImportAction : le CSV est collé dans la modale (pas de téléversement, de correspondance de colonnes ni de file d'attente).
+            // Simplified import: the CSV is pasted into the modal (no upload, column mapping or queue).
             Action.make('import').label('Import post categories').color('gray').modalHeading('Import post categories').modalSubmitActionLabel('Import')
                 .schema(() => [Textarea.make('csv').label('CSV').rows(8).required().maxLength(200000).helperText('Columns: name, slug, description, is_visible. The first line is the header; rows are matched on the slug.')])
                 .action(async ({ data }) => {
@@ -92,7 +92,7 @@ export class PostCategoryResource extends Resource {
         ]);
     }
 
-    /** Affiché dans la modale « View » (la resource n'a pas de page de consultation). */
+    /** Shown in the View modal (the resource has no view page). */
     static infolist(schema: Schema): Schema {
         return schema.columns(1).components([
             TextEntry.make('name'),
@@ -112,7 +112,7 @@ export class PostCategoryResource extends Resource {
                 TextColumn.make<PostCategory>('updated_at').label('Last modified at').date().toggleable(true, { isToggledHiddenByDefault: true }),
             ])
             .defaultSort('name')
-            // Clic sur la ligne : la consultation (une action « View » existe), et non l'édition.
+            // Clicking a row views the record instead of editing it.
             .recordAction('view')
             .recordActions([
                 ActionGroup.make([
@@ -129,7 +129,7 @@ export class PostCategoryResource extends Resource {
     }
 }
 
-// ------------------------------------------------------------------ auteurs
+// ------------------------------------------------------------------ authors
 export class Author extends Model {
     static tableName = 'authors';
     id!: number;
@@ -145,7 +145,7 @@ export class Author extends Model {
     $beforeUpdate(): void { this.updated_at = now(); }
 }
 
-/** Colonnes exportables (équivalent de Exports\Blog\AuthorExporter). */
+/** Exportable columns. */
 const EXPORT_COLUMNS: [keyof Author & string, string][] = [
     ['id', 'ID'], ['name', 'Name'], ['email', 'Email address'], ['github_handle', 'GitHub handle'], ['twitter_handle', 'Twitter handle'], ['created_at', 'Created at'], ['updated_at', 'Last modified at'],
 ];
@@ -154,12 +154,12 @@ const csvCell = (value: unknown) => { const text = value === null || value === u
 class ManageAuthors extends ListRecords {
     getHeaderActions(): Action[] {
         return [
-            // Port partiel de ExportAction : choix des colonnes puis fichier CSV écrit sur le disque public (pas de file d'attente ni de XLSX).
+            // Simplified export: pick the columns, then a CSV file is written to the public disk (no queue, no XLSX).
             Action.make('export').label('Export authors').color('gray').modalHeading('Export authors').modalSubmitActionLabel('Export')
                 .fillForm(() => ({ columns: EXPORT_COLUMNS.map(([name]) => name) }))
                 .schema(() => [CheckboxList.make('columns').label('Columns').options(EXPORT_COLUMNS).required()])
                 .action(async ({ data }) => {
-                    // Seules les colonnes déclarées sont exportées, quelle que soit la liste reçue.
+                    // Only declared columns are exported, whatever list the browser sends.
                     const chosen = EXPORT_COLUMNS.filter(([name]) => Array.isArray(data.columns) && data.columns.includes(name));
                     const rows = await Author.query().orderBy('id');
                     const csv = [chosen.map(([, label]) => csvCell(label)).join(','), ...rows.map((row) => chosen.map(([name]) => csvCell(row[name])).join(','))].join('\r\n');
@@ -187,7 +187,7 @@ export class AuthorResource extends Resource {
     static isSimple = true;
     static pages = { index: ManageAuthors };
     static adapter = new ObjectionAdapter(Author);
-    /** Dossier public où déposer les exports (servi sous /storage), fixé par le serveur. */
+    /** Public folder for exports (served under /storage), set by the server. */
     static exportRoot: string | null = null;
 
     static form(schema: Schema): Schema {
@@ -217,7 +217,7 @@ export class AuthorResource extends Resource {
             .defaultSort('name')
             .recordActions([
                 ActionGroup.make([
-                    // Le pseudonyme est encodé : il ne peut pas sortir du chemin de l'adresse.
+                    // The handle is URL-encoded so it cannot escape the URL path.
                     Action.make('view_github').label('View GitHub').icon('icon-github').color('gray').openUrlInNewTab()
                         .url(({ record }) => `https://github.com/${encodeURIComponent((record as Author).github_handle ?? '')}`)
                         .hidden(({ record }) => !(record as Author).github_handle),

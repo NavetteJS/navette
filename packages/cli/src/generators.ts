@@ -1,5 +1,4 @@
-// Générateurs de fichiers du CLI : resources (avec formulaire et table déduits des colonnes de la base), pages, widgets, migrations.
-// Le code produit est en anglais, comme celui des projets créés par `npm create navette`.
+// CLI file generators: resources (form and table inferred from the database columns), pages, widgets, migrations.
 
 export type ColumnInfo = { name: string; type: string; nullable: boolean };
 
@@ -11,7 +10,7 @@ const plural = (value: string) => (/[^aeiou]y$/.test(value) ? value.slice(0, -1)
 export const tableName = (model: string) => plural(snake(model));
 const headline = (column: string) => column.replace(/_id$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-/** Colonnes jamais saisies dans un formulaire. */
+/** Columns never edited in a form. */
 const SKIPPED = new Set(['id', 'created_at', 'updated_at', 'deleted_at', 'password', 'remember_token', 'email_verified_at']);
 type Kind = 'text' | 'longText' | 'number' | 'boolean' | 'date' | 'dateTime' | 'email';
 function kindOf(column: ColumnInfo): Kind {
@@ -50,7 +49,7 @@ function tableColumn(column: ColumnInfo): string {
     }
 }
 
-/** Resource et modèle. Sans colonnes connues, le formulaire et la table sont à remplir (comme `make:filament-resource` sans `--generate`). */
+/** Resource and model. Without known columns (no `--generate`), the form and table are placeholders to fill in. */
 export function generateResource(model: string, table: string, columns: ColumnInfo[] | null): { model: string; resource: string } {
     const editable = (columns ?? []).filter((column) => !SKIPPED.has(column.name));
     const titleAttribute = editable.find((column) => ['name', 'title', 'label', 'subject'].includes(column.name))?.name ?? null;

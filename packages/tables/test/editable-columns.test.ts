@@ -27,7 +27,7 @@ before(async () => {
 });
 after(() => db.destroy());
 
-test('validation : règles Laravel, messages anglais, valeur vide, plusieurs erreurs', () => {
+test('validation: string rules, messages, empty value, several errors', () => {
     const toggle = ToggleColumn.make('is_featured');
     assert.equal(toggle.validate(true), null);
     assert.equal(toggle.validate('1'), null);
@@ -41,10 +41,10 @@ test('validation : règles Laravel, messages anglais, valeur vide, plusieurs err
     assert.equal(slug.validate({ toString: 'x' }), 'The slug field must be a string.');
     const rating = TextInputColumn.make('rating').rules(['numeric', 'max:10']).validationAttribute('note');
     assert.equal(rating.validate('12'), 'The note field must not be greater than 10.');
-    // Comme Laravel : un texte non numérique est mesuré en caractères par `max`.
+    // A non-numeric string is measured in characters by `max`.
     assert.equal(rating.validate('abc'), 'The note field must be a number.');
     assert.equal(rating.validate('abcdefghijkl'), 'The note field must be a number. (and 1 more error)');
-    assert.equal(rating.validationMessages({ numeric: 'Un nombre, svp.' }).validate('abcdefghijkl'), 'Un nombre, svp. (and 1 more error)');
+    assert.equal(rating.validationMessages({ numeric: 'A number, please.' }).validate('abcdefghijkl'), 'A number, please. (and 1 more error)');
     assert.equal(TextInputColumn.make('code').rules([{ name: 'even', passes: (v) => Number(v) % 2 === 0, message: (a) => `The ${a} must be even.` }]).validate('3'), 'The code must be even.');
     assert.throws(() => TextInputColumn.make('x').rules(['regex:/a/']));
     const select = SelectColumn.make('status').options({ draft: 'Draft', published: 'Published' });
@@ -54,7 +54,7 @@ test('validation : règles Laravel, messages anglais, valeur vide, plusieurs err
     assert.equal(select.required().validate(''), 'The status field is required.');
 });
 
-test('valeur écrite : vide → null, booléen normalisé pour l\'interrupteur et la case à cocher', () => {
+test('written value: blank → null, boolean normalized for toggle and checkbox', () => {
     assert.equal(ToggleColumn.make('a').castState('1'), true);
     assert.equal(CheckboxColumn.make('a').castState(0), false);
     assert.equal(CheckboxColumn.make('a').castState(null), null);
@@ -62,7 +62,7 @@ test('valeur écrite : vide → null, booléen normalisé pour l\'interrupteur e
     assert.equal(TextInputColumn.make('a').castState('x'), 'x');
 });
 
-test('updateTableColumnState : colonne, enregistrement, droits et valeur revérifiés côté serveur', async () => {
+test('updateTableColumnState: column, record, permission and value checked again on the server', async () => {
     const calls: string[] = [];
     const table = new Table<Post>().columns([
         TextColumn.make('title'),
@@ -71,21 +71,21 @@ test('updateTableColumnState : colonne, enregistrement, droits et valeur revéri
         TextInputColumn.make<Post>('author.name'),
     ]);
     const unavailable = { error: t('filament-tables::table.columns.editable.unavailable') };
-    // Colonne non modifiable, inconnue, masquée par l'utilisateur, ou de relation sans écriture personnalisée.
+    // Non-editable, unknown, user-hidden column, or relationship column without a custom write.
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'title', 1, 'Hacked'), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'secret', 1, 'x'), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host({ tableColumns: [{ type: 'column', name: 'rating', label: 'Rating', isHidden: false, isToggled: false, isToggleable: true, isToggledHiddenByDefault: false }] }), adapter, 'rating', 1, '4'), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'author.name', 1, 'Ada'), unavailable);
-    // Clé forgée, enregistrement désactivé pour la colonne, utilisateur non autorisé.
+    // Forged key, record disabled for the column, unauthorized user.
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'is_featured', { id: 1 }, true), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'is_featured', 99, true), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'rating', 2, '4'), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'is_featured', 1, true, { authorize: () => false }), unavailable);
-    // Valeur invalide : rien n'est écrit.
+    // Invalid value: nothing is written.
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'rating', 1, '4.5'), { error: 'The rating field must be an integer.' });
     assert.equal((await db('posts').where('id', 1).first()).rating, 3);
     assert.deepEqual(calls, []);
-    // Valeur valide : crochets avant / après, écriture de la seule colonne déclarée.
+    // Valid value: before / after hooks run, only the declared column is written.
     assert.equal(await updateTableColumnState(table, host(), adapter, 'is_featured', '1', '1', { authorize: async () => true }), true);
     assert.deepEqual(calls, ['before:true', 'after:true:1']);
     assert.equal((await db('posts').where('id', 1).first()).is_featured, 1);
@@ -93,7 +93,7 @@ test('updateTableColumnState : colonne, enregistrement, droits et valeur revéri
     assert.equal((await db('posts').where('id', 1).first()).rating, null);
 });
 
-test('updateStateUsing remplace l\'écriture ; afterStateUpdated est appelé même en cas d\'erreur', async () => {
+test('updateStateUsing replaces the write; afterStateUpdated runs even on error', async () => {
     const seen: unknown[] = [];
     const column = TextInputColumn.make<Post>('author.name').updateStateUsing(({ state, record }) => { seen.push([state, record.id]); return 'ok'; }).afterStateUpdated(() => { seen.push('after'); });
     const table = new Table<Post>().columns([column]);
@@ -104,7 +104,7 @@ test('updateStateUsing remplace l\'écriture ; afterStateUpdated est appelé mê
     assert.equal(seen.at(-1), 'after-failure');
 });
 
-test('rendu : balisage des composants Alpine de Filament, valeurs échappées', async () => {
+test('render: Alpine component markup, escaped values', async () => {
     const toggle = await ToggleColumn.make('is_featured').onIcon('m-check').toHtml({ is_featured: 1 }, 7);
     assert.match(toggle, /^<div wire:ignore\.self x-load="x-load" x-load-src="\/js\/filament\/tables\/components\/columns\/toggle\.js" x-data="toggleTableColumn\(\{/);
     assert.match(toggle, /recordKey: '7',\n\s+state: true,/);
@@ -116,10 +116,10 @@ test('rendu : balisage des composants Alpine de Filament, valeurs échappées', 
     const off = await ToggleColumn.make('is_featured').disabled().toHtml({ is_featured: 0 }, 7);
     assert.ok(!off.includes('x-cloak role') && !off.includes('inline-flex') && off.includes(' disabled="disabled"'));
 
-    const checkbox = await CheckboxColumn.make('is_featured').alignCenter().tooltip('Mise en avant').toHtml({ is_featured: 0 }, 3);
+    const checkbox = await CheckboxColumn.make('is_featured').alignCenter().tooltip('Featured').toHtml({ is_featured: 0 }, 3);
     assert.match(checkbox, /^<div x-on:click\.stop wire:ignore\.self x-load="x-load"/);
     assert.match(checkbox, /class="fi-ta-checkbox fi-align-center"><input type="hidden" value="0" x-ref="serverState" \/><input type="checkbox"/);
-    assert.match(checkbox, /x-tooltip="error === undefined \? \{\n\s+content: 'Mise en avant',/);
+    assert.match(checkbox, /x-tooltip="error === undefined \? \{\n\s+content: 'Featured',/);
 
     const evil = '"><script>alert(1)</script>';
     const input = await TextInputColumn.make('slug').prefix('/').suffixIcon('m-check-circle').suffixIconColor('success').placeholder(evil).toHtml({ slug: evil }, 1);
@@ -132,10 +132,10 @@ test('rendu : balisage des composants Alpine de Filament, valeurs échappées', 
     assert.match(await TextInputColumn.make('code').mask('99-99').type('number').toHtml({ code: 12 }, 1), /state: 12,[\s\S]*type="text" x-mask="99-99"/);
 });
 
-test('ViewColumn et alias dépréciés', async () => {
+test('ViewColumn and deprecated aliases', async () => {
     const view = ViewColumn.make<{ name: string }>('name').view(({ state }) => `<b>${String(state).toUpperCase()}</b>`);
     assert.equal(await view.toHtml({ name: 'ada' }), '<b>ADA</b>');
-    await assert.rejects(() => ViewColumn.make('x').toHtml({}), /aucune vue/);
+    await assert.rejects(() => ViewColumn.make('x').toHtml({}), /no view declared/);
     assert.equal(await BadgeColumn.make('status').toHtml({ status: 'draft' }), await TextColumn.make('status').badge().toHtml({ status: 'draft' }));
     assert.match(await BooleanColumn.make('ok').toHtml({ ok: 1 }), /fi-ta-icon/);
 });

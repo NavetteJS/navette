@@ -1,4 +1,4 @@
-<%# Logo ou nom de marque — port de filament-panels::components.logo %>
+<%# Brand logo or brand name %>
 <% if (brand.logo) { %>
     <img alt="<%= t('filament-panels::layout.logo.alt', { name: brand.name }) %>" src="<%= brand.logo %>" style="height: <%- brand.height %>;" class="<%- brand.darkLogo ? 'fi-logo fi-logo-light' : 'fi-logo' %>" />
     <% if (brand.darkLogo) { %>

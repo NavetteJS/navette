@@ -1,5 +1,4 @@
-// Équivalent de App\Filament\Resources\Shop\Brands\BrandResource + Tables\BrandsTable + Schemas\BrandForm de la démo Filament.
-// Écart : l'action d'en-tête « Export » (exports en file d'attente) n'est pas portée.
+// Shop brands: list, form, products and addresses.
 import { Action } from '@navette-js/actions';
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { RichEditor, TextInput, Toggle } from '@navette-js/forms';
@@ -34,12 +33,12 @@ export class Brand extends Model {
 const BRAND_TYPE = 'App\\Models\\Shop\\Brand';
 const slugify = (text: string) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const cheeky = () => { Notification.make().warning().title("Now, now, don't be cheeky, leave some records for others to play with!").send(); };
-/** Action « Visit website » : lien vers le site de la marque, masqué quand il n'y en a pas. */
+/** Visit website action, hidden when the brand has no website. */
 const visitWebsite = (icon = 'm-arrow-top-right-on-square') => Action.make('visit_website').icon(icon).color('gray').tooltip('Open brand website')
     .url(({ record }) => (record as Brand | null)?.website ?? null).openUrlInNewTab()
     .hidden(({ record }) => !(record as Brand | null)?.website);
 
-/** Équivalent de RelationManagers\ProductsRelationManager : la table et le formulaire des produits, restreints à la marque. */
+/** The product table and form, scoped to the brand. */
 export class BrandProductsRelationManager extends RelationManager {
     static relationship = 'products';
     static modelLabel = 'product';
@@ -53,7 +52,7 @@ export class BrandProductsRelationManager extends RelationManager {
             .groupedBulkActions([DeleteBulkAction.make()]);
     }
 }
-/** Adresses de la marque : même relation polymorphe que pour les clients. */
+/** Brand addresses: the same polymorphic relation as for customers. */
 export class BrandAddressesRelationManager extends AddressesRelationManager {
     static ownerType = BRAND_TYPE;
 }
@@ -68,7 +67,6 @@ export class BrandResource extends Resource {
     static globalSearchSort = 8;
     static adapter = new ObjectionAdapter(Brand);
     static relations = [BrandProductsRelationManager, BrandAddressesRelationManager];
-    /** Actions d'en-tête de la page d'édition (équivalent de EditBrand::getActions()). */
     static editHeaderActions = () => [visitWebsite()];
 
     static form(schema: Schema): Schema {

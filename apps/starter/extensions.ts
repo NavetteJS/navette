@@ -1,15 +1,14 @@
-// Points d'extension, illustrés : un champ et une colonne sur mesure, une page de création personnalisée, un plugin.
-// Voir docs/14-etendre.md.
+// Extension points by example: a custom field and column, a custom create page, a plugin.
 import { Field } from '@navette-js/forms';
 import { CreateRecord, type PanelContext, type Plugin } from '@navette-js/panels';
 import { e } from '@navette-js/support';
 import { Column } from '@navette-js/tables';
 
-/** Champ sur mesure : un curseur de 1 à 5. Un champ rend son contrôle et le confie à `wrap()`, qui ajoute libellé, aide et erreur. */
+/** Custom field: a 1-to-5 slider. A field renders its control and hands it to `wrap()`, which adds the label, hint and error. */
 export class EffortField extends Field {
     static make(name: string): EffortField { return new EffortField(name); }
     getDefaultState(): unknown { return this._default ?? 1; }
-    // La valeur vient du navigateur : elle est validée, puis convertie avant d'être enregistrée.
+    // The value comes from the browser: validate it, then convert it before saving.
     async getValidationRules() {
         return [...(await super.getValidationRules()), { name: 'between', passes: (value: unknown) => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5, message: (attribute: string) => `The ${attribute} field must be between 1 and 5.` }];
     }
@@ -20,7 +19,7 @@ export class EffortField extends Field {
     }
 }
 
-/** Colonne sur mesure : cinq pastilles. Une colonne rend le contenu de sa cellule ; `getState(record)` lit la valeur. */
+/** Custom column: five dots. A column renders its cell content; `getState(record)` reads the value. */
 export class EffortColumn<R = any> extends Column<R> {
     static make<R = any>(name: string): EffortColumn<R> { return new EffortColumn<R>(name); }
     async toHtml(record: R): Promise<string> {
@@ -29,20 +28,20 @@ export class EffortColumn<R = any> extends Column<R> {
     }
 }
 
-/** Page de création personnalisée : les crochets de cycle de vie complètent les données et réagissent à la création. */
+/** Custom create page: lifecycle hooks fill in data and react to the creation. */
 export class CreateTask extends CreateRecord {
     protected mutateFormDataBeforeCreate(data: Record<string, unknown>): Record<string, unknown> {
-        // L'auteur n'est pas un champ du formulaire : il est posé par le serveur, à partir de la session.
+        // The author is not a form field: the server sets it from the session.
         return { ...data, created_by: (this._ctx as PanelContext).user?.email ?? null };
     }
-    protected getCreatedNotificationTitle(): string { return 'Tâche créée'; }
+    protected getCreatedNotificationTitle(): string { return 'Task created'; }
 }
 
-/** Plugin : un paquet de configuration réutilisable d'un panel à l'autre. */
+/** Plugin: a reusable bundle of panel configuration. */
 export const footerPlugin = (text: string): Plugin => ({
     id: 'footer',
     register(panel) {
-        // Le HTML d'un render hook est inséré tel quel : on échappe ce qui n'est pas de nous.
+        // Render hook HTML is inserted as is: escape anything you don't control.
         panel.renderHook('panels::content.end', () => `<p class="app-footer">${e(text)}</p>`);
     },
 });

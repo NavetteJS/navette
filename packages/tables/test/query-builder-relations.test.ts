@@ -46,7 +46,7 @@ const constraints = (): Constraint[] => [
     BooleanConstraint.make('is_featured'),
 ];
 const rule = (type: string, operator: unknown, settings: unknown = null) => ({ type, data: { operator, settings } });
-/** Titres des articles retenus par les règles, et résumés des indicateurs. */
+/** Titles of the posts matched by the rules, and indicator summaries. */
 async function run(rules: Record<string, unknown>, list = constraints()) {
     const { nodes, summaries } = compileRules(list, sanitizeRules(list, rules));
     const query = Post.query().orderBy('id');
@@ -54,21 +54,21 @@ async function run(rules: Record<string, unknown>, list = constraints()) {
     return { titles: ((await query) as any[]).map((post) => post.title), summaries, nodes };
 }
 
-test('SelectConstraint : valeur unique ou multiple, valeurs inconnues ou forgées écartées, « Is filled »', async () => {
+test('SelectConstraint: single or multiple value, unknown or forged values dropped, "Is filled"', async () => {
     assert.deepEqual(await run({ a: rule('status', 'is', { value: 'draft' }) }).then((r) => [r.titles, r.summaries.a]), [['A'], 'Status is Draft']);
     assert.deepEqual((await run({ a: rule('status', 'is.inverse', { value: 'draft' }) })).titles, ['B', 'C']);
     const multiple = await run({ a: rule('statuses', 'is', { values: ['published', 'nope', ['draft'], { $ne: 1 }, 'draft'] }) });
     assert.deepEqual([multiple.titles, multiple.summaries.a], [['A', 'B'], 'Statuses is Draft or Published']);
     assert.deepEqual(multiple.nodes, [{ kind: 'in', column: 'status', values: ['published', 'draft'], negate: false }]);
-    // Une liste n'est pas acceptée pour une valeur unique ; une valeur absente des options ne filtre rien.
+    // A list is not accepted for a single value; a value missing from the options filters nothing.
     assert.deepEqual((await run({ a: rule('status', 'is', { value: ['draft'] }), b: rule('status', 'is', { value: "x' or 1=1" }) })).nodes, []);
     assert.deepEqual(await run({ a: rule('status', 'isFilled') }).then((r) => [r.titles, r.summaries.a]), [['A', 'B'], 'Status is filled']);
     assert.deepEqual(await run({ a: rule('status', 'isFilled.inverse') }).then((r) => [r.titles, r.summaries.a]), [['C'], 'Status is blank']);
-    // Sans `nullable()`, l'opérateur n'existe pas.
+    // Without `nullable()`, the operator does not exist.
     assert.deepEqual((await run({ a: rule('statuses', 'isFilled') })).nodes, []);
 });
 
-test('RelationshipConstraint : nombre d\'enregistrements liés, relation vide, enregistrements choisis', async () => {
+test('RelationshipConstraint: related record count, empty relationship, picked records', async () => {
     assert.deepEqual(await run({ a: rule('tags', 'hasMin', { count: '2' }) }).then((r) => [r.titles, r.summaries.a]), [['A'], 'Has minimum 2 Tags']);
     assert.deepEqual((await run({ a: rule('tags', 'hasMax', { count: 1 }) })).titles, ['B', 'C']);
     assert.deepEqual((await run({ a: rule('tags', 'equals', { count: 1 }) })).titles, ['B']);
@@ -76,14 +76,14 @@ test('RelationshipConstraint : nombre d\'enregistrements liés, relation vide, e
     assert.deepEqual(await run({ a: rule('tags', 'isEmpty') }).then((r) => [r.titles, r.summaries.a]), [['C'], 'Tags is empty']);
     assert.deepEqual((await run({ a: rule('tags', 'isRelatedTo', { values: [3, '2'] }) })).titles, ['A', 'B']);
     assert.deepEqual((await run({ a: rule('tags', 'isRelatedTo.inverse', { values: [3] }) })).titles, ['A', 'C']);
-    // Relation à un seul enregistrement : ni nombre ni choix, seulement « vide » (emptyable).
+    // Single-record relationship: no count or picking, only "empty" (emptyable).
     assert.deepEqual((await run({ a: rule('author', 'isEmpty.inverse') })).titles, ['A', 'B', 'C']);
     assert.deepEqual((await run({ a: rule('author', 'hasMin', { count: 1 }) })).nodes, []);
-    // Nombres forgés ou hors limites : sans effet.
+    // Forged or out-of-range counts: no effect.
     assert.deepEqual((await run({ a: rule('tags', 'hasMin', { count: '0' }), b: rule('tags', 'hasMin', { count: '1; drop' }), c: rule('tags', 'isRelatedTo', { values: [{ id: 1 }] }) })).nodes, []);
 });
 
-test('contrainte sur une relation (whereHas) et bloc OR', async () => {
+test('constraint on a relationship attribute and OR block', async () => {
     const r = await run({ a: rule('authorName', 'equals', { text: 'Ada' }) });
     assert.deepEqual([r.titles, r.summaries.a], [['A', 'C'], 'Author name equals Ada']);
     assert.deepEqual(r.nodes, [{ relationship: 'author', nodes: [{ kind: 'compare', column: 'name', operator: '=', value: 'Ada' }] }]);
@@ -91,7 +91,7 @@ test('contrainte sur une relation (whereHas) et bloc OR', async () => {
     assert.deepEqual([or.titles, or.summaries.o], [['A', 'B', 'C'], 'Has 1 Tags OR Author name contains ad']);
 });
 
-test('libellés des enregistrements liés : options de la liste et indicateurs', async () => {
+test('related record labels: select options and indicators', async () => {
     const list = constraints();
     const filter = QueryBuilder.make().constraints(list).model(Post);
     const tags = list[2] as RelationshipConstraint;
@@ -100,12 +100,12 @@ test('libellés des enregistrements liés : options de la liste et indicateurs',
     assert.deepEqual(filter.getIndicators(state).map((i) => i.label), ['Tags contains 3 or 1', 'Tags does not contain 2']);
     await filter.loadIndicatorData(state, {} as any);
     assert.deepEqual(filter.getIndicators(state).map((i) => i.label), ['Tags contains sql or js', 'Tags does not contain php']);
-    // Sans modèle déclaré ni hôte qui en fournit un, l'erreur est explicite.
+    // Without a declared model or a host that provides one, the error is explicit.
     const orphan = RelationshipConstraint.make('tags').selectable(IsRelatedToOperator.make().titleAttribute('name'));
     await assert.rejects(() => orphan.loadRelatedOptions(orphan.getSelectableOperator()!, null), /model\(\)/);
 });
 
-test('dates avec heure : date-heure fixe, préréglages horaires, unités de moins d\'un jour', async () => {
+test('dates with time: fixed date-time, time presets, sub-day units', async () => {
     const after = await run({ a: rule('published_at', 'isAfter', { mode: 'absolute', date: '2026-06-01T12:00' }) });
     assert.deepEqual([after.titles, after.summaries.a], [['B'], 'Published at is after Mon, Jun 1, 2026 12:00:00']);
     assert.deepEqual(after.nodes, [{ kind: 'compare', column: 'published_at', operator: '>=', value: '2026-06-01 12:00:00' }]);
@@ -117,13 +117,13 @@ test('dates avec heure : date-heure fixe, préréglages horaires, unités de moi
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'past_hour' }, now, true), '2026-11-12 09:34:56');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'this_hour' }, now, true), '2026-11-12 10:00:00');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'custom', tense: 'future', relative_value: 90, relative_unit: 'minute' }, now, true), '2026-11-12 12:04:56');
-    // Sans `time()`, préréglages et unités horaires sont inconnus : aujourd'hui, et des jours (comportement inchangé).
+    // Without `time()`, time presets and units are unknown: they fall back to today and days.
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'past_hour' }, now), '2026-11-12');
     assert.equal(resolveRuleDate({ mode: 'relative', preset: 'custom', relative_value: 2, relative_unit: 'hour' }, now), '2026-11-10');
     assert.equal(resolveRuleDate({ mode: 'absolute', date: '2026-06-01T08:15' }, now, true), '2026-06-01 08:15:00');
 });
 
-test('SQL portable : dialecte lu dans le client knex, SQLite inchangé', () => {
+test('portable SQL: dialect read from the knex client', () => {
     const nodes: ConditionNode[] = [
         { kind: 'like', column: 'title', pattern: '%Ab\\%%', negate: false }, { kind: 'date', column: 'published_at', operator: '>=', value: '2026-01-01' },
         { kind: 'month', column: 'published_at', operator: '=', value: 6 }, { kind: 'year', column: 'published_at', operator: '!=', value: 2025 },
@@ -134,14 +134,14 @@ test('SQL portable : dialecte lu dans le client knex, SQLite inchangé', () => {
     assert.deepEqual(sql('mysql2'), ['mysql', 'select * from `posts` where `title` like ? and date(`published_at`) >= ? and month(`published_at`) = ? and year(`published_at`) != ? and `is_featured` = ? and (`status` is not null and not (`status` = ?))']);
     assert.deepEqual(sql('pg'), ['pg', `select * from "posts" where lower(cast("title" as text)) like ? escape '\\' and cast("published_at" as date) >= ? and extract(month from "published_at") = ? and extract(year from "published_at") != ? and "is_featured" = ? and ("status" is not null and not (cast("status" as text) = ?))`]);
     assert.equal(sqlDialectOf(Post.query()), 'sqlite');
-    // PostgreSQL : motif en minuscules et vrai booléen.
+    // PostgreSQL: lowercase pattern and a real boolean.
     const pg = knexFactory({ client: 'pg' })('posts');
     applyConditions(pg, nodes);
     assert.deepEqual(pg.toSQL().bindings, ['%ab\\%%', '2026-01-01', 6, 2025, true, '']);
 });
 
-test('opérateurs proposés par chaque contrainte, dans l\'ordre de Filament', () => {
-    // Les contraintes existantes gardent leurs opérateurs (et « Is filled » seulement avec nullable()).
+test('operators offered by each constraint, in order', () => {
+    // "Is filled" is only offered with nullable().
     assert.deepEqual(TextConstraint.make('a').getOperatorOptions().map(([value]) => value), ['contains', 'contains.inverse', 'startsWith', 'startsWith.inverse', 'endsWith', 'endsWith.inverse', 'equals', 'equals.inverse']);
     assert.deepEqual(NumberConstraint.make('a').nullable().getOperators().map((o) => o.name), ['isMin', 'isMax', 'equals', 'isFilled']);
     assert.deepEqual(DateConstraint.make('a').getOperators().map((o) => o.name), ['isAfter', 'isBefore', 'isDate', 'isMonth', 'isYear']);

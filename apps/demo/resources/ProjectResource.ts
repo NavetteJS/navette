@@ -1,5 +1,5 @@
-// Équivalent de App\Filament\Resources\HR\Projects (resource, formulaire à onglets avec plan en blocs, infolist, table, widget,
-// relation managers Tasks et Timesheets, pages List / Create / Edit / View) de la démo Filament.
+// HR projects: tabbed form with a block-based plan, infolist, table, widget,
+// Tasks and Timesheets relation managers, and List / Create / Edit / View pages.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { ColorPicker, DatePicker, RichEditor, Select, TagsInput, Textarea, TextInput, ToggleButtons } from '@navette-js/forms';
@@ -49,7 +49,7 @@ const cheeky = () => { Notification.make().warning().title("Now, now, don't be c
 const slugify = (text: string) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const pairs = (cases: Record<string, EnumCase>) => Object.entries(cases).map(([value, item]): [string, string] => [value, item.label]);
 const options = (table: string, limit: number | null = 50, order = 'name') => async (): Promise<[string, string][]> =>
-    // Sans limite : l'ordre de la base, comme `Employee::pluck('name', 'id')` dans la démo.
+    // No limit, in database order.
     (await knex()(table).orderBy(order).modify((query: any) => { if (table !== 'departments') query.whereNull('deleted_at'); if (limit !== null) query.limit(limit); }).select('id', 'name')).map((row: any): [string, string] => [String(row.id), row.name]);
 const toggle = (name: string, cases: Record<string, EnumCase>) => ToggleButtons.make(name).inline().required()
     .options(pairs(cases))
@@ -76,11 +76,11 @@ class Projects extends ObjectionAdapter<Project> {
     }
 }
 
-// --- actions de suivi : les mêmes dans le menu d'une ligne et dans l'en-tête de la page « View »
+// --- workflow actions: the same in a row's menu and in the View page header
 const change = (changes: (data: Record<string, unknown>) => Record<string, unknown>, notify: (() => void) | null = null) => async ({ record, data }: { record: unknown; data: Record<string, unknown> }) => {
     const values = changes(data);
     await ProjectResource.adapter.update((record as Project).id, values);
-    // Comme `$record->update()` d'Eloquent : l'enregistrement en mémoire suit, la page « View » se redessine à jour.
+    // Also update the in-memory record so the View page re-renders with fresh data.
     Object.assign(record as Project, values);
     notify?.();
 };
@@ -106,7 +106,7 @@ class ViewProject extends ViewRecord {
     getHeaderActions(): Action[] { return [...workflowActions(), this.editAction()]; }
 }
 
-/** Équivalent de RelationManagers\TasksRelationManager : la table des tâches, limitée au projet. */
+/** The task table, limited to the project. */
 export class TasksRelationManager extends RelationManager {
     static relationship = 'tasks';
     static modelLabel = 'task';
@@ -124,14 +124,14 @@ export class TasksRelationManager extends RelationManager {
     }
     static table(table: Table): Table { return tasksTable(table as Table<Task>, true).headerActions([CreateAction.make()]); }
 }
-/** Tâches d'un projet : une tâche créée ici lui est rattachée, quelles que soient les données reçues. */
+/** Tasks of a project: a task created here is attached to it, whatever data is received. */
 class ProjectTasks extends Tasks {
     private owner: string;
     constructor(owner: string) { super(owner); this.owner = owner; }
     create(data: Record<string, unknown>): Promise<Task> { return super.create({ ...data, project_id: Number(this.owner) }); }
 }
 
-/** Équivalent de RelationManagers\TimesheetsRelationManager (lecture seule). */
+/** The project's timesheets (read-only). */
 export class TimesheetsRelationManager extends RelationManager {
     static relationship = 'timesheets';
     static modelLabel = 'timesheet';
@@ -149,7 +149,7 @@ export class TimesheetsRelationManager extends RelationManager {
     }
 }
 
-/** Équivalent de Widgets\ProjectStats : chiffres calculés sur la requête de la table de la liste. */
+/** Figures computed from the list table's query. */
 export class ProjectStats extends PageTableStatsWidget {
     static pollingInterval = null;
     static tablePage = () => ProjectResource.getPages().index as any;
@@ -159,7 +159,7 @@ export class ProjectStats extends PageTableStatsWidget {
             this.aggregatePageTable({ sum: ['budget', 'spent'] }),
             this.aggregatePageTable({ sum: ['actual_hours', 'estimated_hours'] }, (q) => { q.where('estimated_hours', '>', 0); }),
         ]);
-        // Moyenne des taux d'avancement par projet (et non taux global) : calculée projet par projet.
+        // Average of per-project completion rates (not the overall rate).
         const rows: { actual_hours: number; estimated_hours: number }[] = estimated.count
             ? await knex()('projects').whereNull('deleted_at').where('estimated_hours', '>', 0).select('actual_hours', 'estimated_hours')
             : [];
@@ -187,7 +187,7 @@ export class ProjectResource extends Resource {
     static widgets = [ProjectStats];
     static headerWidgets = [ProjectStats];
     static adapter = new Projects();
-    /** Projets actifs (équivalent de getNavigationBadge()). */
+    /** Active projects (navigation badge). */
     static async getNavigationBadge(): Promise<string> { return String(Number(((await Project.query().whereNull('deleted_at').where('status', 'active').count({ n: '*' }).first()) as any)?.n ?? 0)); }
 
     static form(schema: Schema): Schema {

@@ -1,4 +1,4 @@
-// @navette-js/database — contrat d'accès aux données (ADR 0005) et premier adaptateur : Knex + Objection.
+// @navette-js/database — data access contract and its Knex + Objection adapter.
 import knexFactory, { type Knex } from 'knex';
 import { Model, type ModelClass, type QueryBuilder } from 'objection';
 
@@ -7,30 +7,30 @@ export type { Knex };
 
 export type SortDirection = 'asc' | 'desc';
 export type ListQuery = {
-    /** Recherche globale : chaque mot doit apparaître dans au moins une des colonnes cherchables. */
+    /** Global search: every word must appear in at least one of the searchable columns. */
     search?: string | null;
     searchColumns?: string[];
-    /** Recherche par colonne : toutes les conditions doivent être vraies. */
+    /** Per-column search: all conditions must match. */
     columnSearches?: Record<string, string>;
-    /** Enregistrements supprimés (suppression douce) : exclus par défaut, inclus, ou seuls. */
+    /** Soft-deleted records: excluded by default, included, or only those. */
     trashed?: 'without' | 'with' | 'only';
     sort?: { column: string; direction: SortDirection } | null;
-    /** Regroupement de table : ce tri passe avant `sort`. */
+    /** Table grouping: this sort is applied before `sort`. */
     groupSort?: { column: string; direction: SortDirection } | null;
-    /** Conditions supplémentaires posées par le serveur (onglet de liste, filtre sur mesure) : jamais construites à partir de données du navigateur non validées. */
+    /** Extra server-side conditions (list tab, custom filter); never built from unvalidated browser input. */
     modifiers?: ((query: any) => void)[];
     page: number;
     perPage: number;
 };
 export type Page<T> = { records: T[]; total: number; page: number; perPage: number; lastPage: number; from: number | null; to: number | null };
 
-/** Ce dont le framework a besoin pour lister, lire et écrire des enregistrements, sans connaître l'ORM. */
+/** What the framework needs to list, read and write records, independently of the ORM. */
 export interface DataAdapter<T = any> {
     getKey(record: T): string;
-    /** Filtre des clés reçues du navigateur : seules celles de la portée de l'adaptateur sont rendues. */
+    /** Filters keys received from the browser: only those within the adapter's scope are returned. */
     keysInScope(keys: (string | number)[]): Promise<string[]>;
     sum(query: Omit<ListQuery, 'page' | 'perPage'>, columns: string[]): Promise<Record<string, number>>;
-    /** Agrégats sur les enregistrements d'une requête de liste : nombre, sommes et moyennes de colonnes. */
+    /** Aggregates over the records of a list query: count, and column sums, averages, minimums and maximums. */
     aggregate(query: Omit<ListQuery, 'page' | 'perPage'>, columns?: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] }): Promise<{ count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> }>;
     getLabel(): string;
     count(): Promise<number>;
@@ -39,15 +39,15 @@ export interface DataAdapter<T = any> {
     create(data: Record<string, unknown>): Promise<T>;
     update(key: string | number, data: Record<string, unknown>): Promise<T | null>;
     delete(key: string | number): Promise<boolean>;
-    /** Suppression douce : prise en charge, état d'un enregistrement, restauration, suppression définitive. */
+    /** Soft deletes: support, record state, restore, permanent delete. */
     supportsSoftDeletes(): boolean;
     isTrashed(record: T): boolean;
     restore(key: string | number): Promise<boolean>;
     forceDelete(key: string | number): Promise<boolean>;
-    /** Clés de tous les enregistrements correspondant à la requête (sans pagination), pour « tout sélectionner ». */
+    /** Keys of every record matching the query (unpaginated), for "select all". */
     listKeys(query: Omit<ListQuery, 'page' | 'perPage'>): Promise<string[]>;
     deleteMany(keys: (string | number)[]): Promise<number>;
-    /** Vrai si un autre enregistrement a déjà cette valeur (règle `unique`). */
+    /** True if another record already has this value (`unique` rule). */
     exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
 }
 
@@ -56,7 +56,7 @@ export function createConnection(config: Knex.Config): Knex {
     Model.knex(knex);
     return knex;
 }
-/** Connexion SQLite (pilote better-sqlite3), pour le développement et la démo. */
+/** SQLite connection (better-sqlite3 driver), for development and demos. */
 export function sqlite(filename: string): Knex {
     return createConnection({ client: 'better-sqlite3', connection: { filename }, useNullAsDefault: true });
 }
@@ -68,16 +68,18 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     private modify: ((query: QueryBuilder<M, M[]>) => void) | null;
     private softDeletes: string | null;
     private findsTrashed: boolean;
-    /** `softDeletes` : colonne d'horodatage de suppression (équivalent du trait SoftDeletes). `findsTrashed` : `find()` voit aussi les supprimés
-     *  (équivalent de `getRecordRouteBindingEloquentQuery()->withoutGlobalScopes([SoftDeletingScope::class])`). */
+    /**
+     * `modify`: base query constraints applied to every read. `softDeletes`: deletion timestamp column.
+     * `findsTrashed`: `find()` also returns soft-deleted records.
+     */
     constructor(model: ModelClass<M>, options: { modify?: (query: QueryBuilder<M, M[]>) => void; softDeletes?: string; findsTrashed?: boolean } = {}) {
         this.model = model; this.modify = options.modify ?? null; this.softDeletes = options.softDeletes ?? null; this.findsTrashed = options.findsTrashed === true;
     }
 
     private tenantScope: { column: string; key: () => string | number | null } | null = null;
     /**
-     * Cloisonne l'adaptateur par locataire : toute lecture filtre sur `column`, toute création la renseigne,
-     * avec la clé rendue par `key()` (celle du locataire de la requête ; `null` : pas de filtre). Posé par le panel (`panel.tenant()`).
+     * Scopes the adapter to a tenant: every read filters on `column` and every create fills it, with the key returned by `key()`
+     * (the request's tenant; `null` means no filter). Set by the panel (`panel.tenant()`).
      */
     scopeToTenant(column: string, key: () => string | number | null): this { this.tenantScope = { column, key }; return this; }
     private base(trashed: 'without' | 'with' | 'only' = 'without'): QueryBuilder<M, M[]> {
@@ -103,15 +105,15 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         return rows.map((r) => this.getKey(r));
     }
     /**
-     * Parmi des clés reçues du navigateur, celles qui appartiennent à la portée de l'adaptateur (`modify`, suppression douce comprise).
-     * Une sélection forgée ne peut ainsi pas viser un enregistrement que la table n'affiche pas.
+     * Keeps the browser-supplied keys that fall within the adapter's scope (`modify` and tenant; trashed records included),
+     * so a forged selection cannot target a record the table does not show.
      */
     async keysInScope(keys: (string | number)[]): Promise<string[]> {
         if (!keys.length) return [];
         const rows = await this.base('with').whereIn(`${this.model.tableName}.${this.keyColumn}`, keys.map(String).slice(0, 10000));
         return rows.map((r) => this.getKey(r));
     }
-    /** Somme de colonnes sur tous les enregistrements de la requête (pour les lignes de totaux). */
+    /** Count and column aggregates over every record of the query (for summary rows). */
     async aggregate(query: Omit<ListQuery, 'page' | 'perPage'>, columns: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] } = {}): Promise<{ count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> }> {
         const q = this.model.knex().from(this.filtered(query).toKnexQuery().as('t')).count({ __count: '*' });
         for (const column of columns.sum ?? []) q.sum({ [`sum_${column}`]: `t.${column}` });
@@ -128,9 +130,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         };
     }
     /**
-     * Tendance mensuelle sur la requête filtrée (équivalent de `Trend::query(...)->between()->perMonth()->count()` ou `->average()`
-     * de flowframe/laravel-trend) : une valeur par mois de `start` à `end`, 0 pour un mois sans enregistrement.
-     * SQL de date écrit pour SQLite ; dates en UTC, au format `Y-m-d H:i:s`.
+     * Monthly trend over the filtered query (count, or average of `average`): one value per month from `start` to `end`,
+     * 0 for months without records. The date SQL targets SQLite; dates are UTC, formatted `Y-m-d H:i:s`.
      */
     async trendPerMonth(query: Omit<ListQuery, 'page' | 'perPage'>, options: { start: Date; end: Date; dateColumn?: string; average?: string; modify?: (q: any) => void }): Promise<number[]> {
         const pad = (n: number) => String(n).padStart(2, '0');
@@ -141,7 +142,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         options.modify?.(q);
         const rows = new Map(((await q) as { month: string; aggregate: number }[]).map((row) => [row.month, Number(row.aggregate ?? 0)]));
         const values: number[] = [];
-        // Comme CarbonPeriod par pas d'un mois : même jour du mois que `start`, jusqu'à `end` compris.
+        // One step per calendar month from `start`, up to and including `end`.
         for (let i = 0; ; i++) {
             const month = new Date(Date.UTC(options.start.getUTCFullYear(), options.start.getUTCMonth() + i, 1));
             if (month.getTime() > options.end.getTime()) break;
@@ -151,7 +152,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     }
     async sum(query: Omit<ListQuery, 'page' | 'perPage'>, columns: string[]): Promise<Record<string, number>> {
         if (!columns.length) return {};
-        // La requête filtrée sert de sous-requête : ses colonnes calculées (alias) restent utilisables par la recherche.
+        // The filtered query is used as a subquery so its computed (aliased) columns remain usable by the search.
         const q = this.model.knex().from(this.filtered(query).toKnexQuery().as('t'));
         for (const column of columns) q.sum({ [column]: `t.${column}` });
         const row = ((await q.first()) ?? {}) as Record<string, unknown>;
@@ -168,14 +169,14 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         return this.finishPagination(this.filtered(query), query);
     }
 
-    /** Requête de base avec recherche globale et recherches par colonne appliquées. */
+    /** Base query with modifiers, global search and per-column searches applied. */
     private filtered(query: Omit<ListQuery, 'page' | 'perPage'>): QueryBuilder<M, M[]> {
         const q = this.base(query.trashed ?? 'without');
         for (const modifier of query.modifiers ?? []) modifier(q);
         const words = (query.search ?? '').trim().split(/\s+/).filter(Boolean);
         const columns = query.searchColumns ?? [];
         if (words.length && columns.length) {
-            // Comme Filament : chaque mot doit correspondre à au moins une colonne, sans tenir compte de la casse.
+            // Each word must match at least one column, case-insensitively; LIKE wildcards in the input are escaped.
             for (const word of words) {
                 q.where((sub) => {
                     for (const column of columns) sub.orWhereRaw("lower(??) like ? escape '\\'", [column, `%${escapeLike(word.toLowerCase())}%`]);
@@ -206,14 +207,14 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         return (await this.model.query().insertAndFetch((tenantKey !== null ? { ...data, [this.tenantScope!.column]: tenantKey } : data) as any)) as unknown as M;
     }
     async update(key: string | number, data: Record<string, unknown>): Promise<M | null> {
-        // Un enregistrement hors du locataire courant n'est pas modifiable, et la colonne du locataire ne change pas.
+        // Records outside the current tenant cannot be updated, and the tenant column never changes.
         if (this.tenantScope && this.tenantScope.key() !== null) {
             if (!(await this.base('with').findById(key))) return null;
             data = Object.fromEntries(Object.entries(data).filter(([column]) => column !== this.tenantScope!.column));
         }
         return ((await this.model.query().patchAndFetchById(key, data as any)) as unknown as M | undefined) ?? null;
     }
-    /** Avec suppression douce, l'enregistrement est horodaté, pas retiré. */
+    /** With soft deletes, the record is timestamped instead of removed. */
     async delete(key: string | number): Promise<boolean> {
         if (this.softDeletes) return (await this.model.query().findById(key).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any)) > 0;
         return (await this.model.query().deleteById(key)) > 0;

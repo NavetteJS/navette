@@ -1,5 +1,4 @@
-// Recherche globale et notifications en base — ports de Filament\Livewire\GlobalSearch et de
-// Filament\Notifications\Livewire\DatabaseNotifications. Les deux composants vivent dans la sidebar du panel.
+// Global search and database notifications: two components that live in the panel sidebar.
 import { Attributes, e, icon, js, loadingIndicator, renderHook } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
@@ -7,7 +6,7 @@ import type { NotificationData } from './notifications.ts';
 import { richDocumentToHtml, richHtmlToDocument } from '@navette-js/forms';
 import { pagination } from '@navette-js/support/ui';
 
-/** Corps d'une notification : du HTML est nettoyé (balises de l'éditeur de texte enrichi seulement), un texte simple est échappé. */
+/** Notification body: HTML is sanitized (rich editor tags only), plain text is escaped. */
 export const notificationBodyHtml = (body: string): string => (/<[a-z][\s\S]*>/i.test(body) ? (richDocumentToHtml(richHtmlToDocument(body)) ?? '') : e(body));
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -15,14 +14,13 @@ const safeIcon = (name: string | null, size: string, classes: string[]): string 
     if (!name || !/^[a-z0-9-]+$/.test(name)) return '';
     try { return icon(name, { size, attributes: new Attributes().class(classes) }); } catch { return ''; }
 };
-/** Seules une adresse du site (`/…`) ou une adresse http(s) peuvent devenir un lien. */
+/** Only a same-site path (`/…`) or an http(s) URL can become a link (no `javascript:` or protocol-relative URLs). */
 const safeUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
 
-// ------------------------------------------------------------------ recherche globale
 export type GlobalSearchResult = { title: string; url: string; details: Record<string, string> };
 export type GlobalSearchCategory = { label: string; results: GlobalSearchResult[] };
 
-/** Suffixe du champ d'après la plateforme du navigateur, comme `globalSearchFieldKeyBindingSuffix()` : rien si elle est inconnue. */
+/** Search field suffix showing the first key binding for the browser's platform; `null` if the platform is unknown. */
 export function keyBindingSuffix(keyBindings: string[], userAgent: string): string | null {
     const first = keyBindings[0];
     if (!first) return null;
@@ -85,12 +83,11 @@ export class GlobalSearch extends Component {
     }
 }
 
-// ------------------------------------------------------------------ notifications en base
 export type DatabaseNotificationAction = { label: string; url: string | null; openUrlInNewTab: boolean };
 export type DatabaseNotificationRecord = { id: string; title: string | null; body: string | null; icon: string | null; iconColor: string | null; status: string | null; actions: DatabaseNotificationAction[]; createdAt: Date | null; unread: boolean };
-/** Stockage des notifications d'un utilisateur. `knexNotificationStore()` en fournit un sur la table `notifications` de Laravel. */
+/** Storage for a user's notifications. `knexNotificationStore()` provides one backed by a `notifications` table. */
 export interface DatabaseNotificationStore {
-    /** Notifications les plus récentes d'abord ; `offset` : nombre à sauter (pagination). */
+    /** Most recent first; `offset` is the number of notifications to skip (pagination). */
     list(user: string | number, limit: number, offset?: number): Promise<DatabaseNotificationRecord[]>;
     count(user: string | number): Promise<number>;
     unreadCount(user: string | number): Promise<number>;
@@ -103,8 +100,8 @@ export interface DatabaseNotificationStore {
 
 const stamp = (date: Date) => date.toISOString().slice(0, 19).replace('T', ' ');
 /**
- * Stockage sur la table `notifications` de Laravel, au format de Filament : les notifications déjà présentes sont lues telles quelles,
- * et celles envoyées d'ici restent lisibles par une application Filament. `mapUrl` réécrit l'adresse des actions lues en base.
+ * Store backed by a `notifications` table (polymorphic `notifiable_type`/`notifiable_id`, JSON `data` with `format: 'filament'`).
+ * Existing rows in that format are read as-is. `mapUrl` rewrites action URLs read from the table.
  */
 export function knexNotificationStore(knex: any, options: { table?: string; notifiableType?: string; mapUrl?: (url: string) => string } = {}): DatabaseNotificationStore {
     const table = options.table ?? 'notifications';
@@ -116,7 +113,7 @@ export function knexNotificationStore(knex: any, options: { table?: string; noti
             const rows = await scope(user).orderBy('created_at', 'desc').limit(limit).offset(Math.max(0, Math.floor(offset)));
             return rows.map((row: any): DatabaseNotificationRecord => {
                 let data: any = {};
-                try { data = JSON.parse(row.data) ?? {}; } catch { /* données illisibles : notification vide */ }
+                try { data = JSON.parse(row.data) ?? {}; } catch { /* unreadable data: empty notification */ }
                 const iconName = text(data.icon)?.replace(/^heroicon-/, '') ?? null;
                 return {
                     id: String(row.id), title: text(data.title), body: text(data.body), icon: iconName, iconColor: text(data.iconColor), status: text(data.status),
@@ -142,7 +139,7 @@ export function knexNotificationStore(knex: any, options: { table?: string; noti
     };
 }
 
-/** « 2 days ago », comme `diffForHumans()` de Carbon. */
+/** Relative time in English, e.g. "2 days ago". */
 export function timeAgo(date: Date, now = new Date()): string {
     const seconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
     const units: [number, string][] = [[365 * 86400, 'year'], [30 * 86400, 'month'], [7 * 86400, 'week'], [86400, 'day'], [3600, 'hour'], [60, 'minute'], [1, 'second']];
@@ -152,7 +149,7 @@ export function timeAgo(date: Date, now = new Date()): string {
     return '0 seconds ago';
 }
 
-/** Notification affichée dans le panneau (mode « inline » de Filament). Titre et corps sont échappés. */
+/** A notification rendered inline in the panel. Title and body are escaped. */
 function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
     const color = n.iconColor ?? n.status;
     const iconHtml = safeIcon(n.icon ?? (n.status ? ({ danger: 'o-x-circle', info: 'o-information-circle', success: 'o-check-circle', warning: 'o-exclamation-circle' } as Record<string, string>)[n.status] ?? null : null), 'md', [...(color && color !== 'gray' && /^[a-z]+$/.test(color) ? ['fi-color', `fi-color-${color}`] : []), 'fi-no-notification-icon']);
@@ -172,25 +169,25 @@ function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
 const BADGE = 'fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-200 fi-badge';
 const linkAction = (label: string, method: string, color: string, extra = '') => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-link-action fi-link fi-size-md fi-color fi-color-${color} fi-text-color-600 dark:fi-text-color-300" wire:click="${method}"${extra}>${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': method }))}<span class="fi-link-label">${e(label)}</span></button>`;
 
-/** Cloche et panneau des notifications enregistrées en base pour l'utilisateur connecté. */
+/** Bell and slide-over listing the signed-in user's database notifications. */
 export class DatabaseNotifications extends Component {
     static callable = ['refresh', 'removeNotification', 'markNotificationAsRead', 'markNotificationAsUnread', 'clearNotifications', 'markAllNotificationsAsRead', 'previousPage', 'nextPage', 'gotoPage'];
-    /** Page du panneau (pagination simple, comme `simplePaginate(50)` de Filament). */
+    /** Current page of the panel (simple pagination). */
     paginators: Record<string, number> = { 'database-notifications-page': 1 };
     private get notificationsPage(): number { return Math.max(1, Math.min(10_000, Math.floor(Number(this.paginators?.['database-notifications-page']) || 1))); }
     previousPage(): void { this.paginators = { 'database-notifications-page': Math.max(1, this.notificationsPage - 1) }; }
     nextPage(): void { this.paginators = { 'database-notifications-page': this.notificationsPage + 1 }; }
     gotoPage(page: unknown): void { this.paginators = { 'database-notifications-page': Math.max(1, Math.floor(Number(page)) || 1) }; }
     static listeners = { databaseNotificationsSent: 'refresh', notificationClosed: 'removeNotification', markedNotificationAsRead: 'markNotificationAsRead', markedNotificationAsUnread: 'markNotificationAsUnread' };
-    /** Nombre de notifications par page du panneau (50, comme Filament). */
+    /** Notifications per page. */
     static limit = 50;
     isOpen = false;
 
-    /** Le stockage et l'utilisateur viennent du serveur : chaque opération est bornée aux notifications de cet utilisateur. */
+    /** Store and user come from the server: every operation is restricted to this user's notifications. */
     private get scope(): { store: DatabaseNotificationStore; user: string | number; interval: string | null } {
         const { panel, user } = (this._ctx ?? {}) as any;
         const store: DatabaseNotificationStore | null = panel?.getDatabaseNotifications() ?? null;
-        if (!user || !store) throw new WireError(401, 'Non authentifié.');
+        if (!user || !store) throw new WireError(401, 'Unauthenticated.');
         return { store, user: user.id, interval: panel.getDatabaseNotificationsPollingInterval() };
     }
     refresh(): void {}
@@ -248,7 +245,7 @@ export class DatabaseNotifications extends Component {
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}=""` : '';
         const windowClasses = ['fi-modal-window', 'fi-modal-window-has-close-btn', has ? 'fi-modal-window-has-content' : 'fi-modal-window-has-icon', `fi-align-${has ? 'start' : 'center'}`, 'fi-width-md'].join(' ');
         const transitions = 'x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end"';
-        // La fenêtre porte `autofocus` : le piège de focus s'y pose, et non sur « Mark all as read » qu'Entrée déclencherait aussitôt.
+        // The window has `autofocus` so the focus trap lands on it, not on "Mark all as read", which Enter would trigger at once.
         const dialog = `<div ${modal.toHtml()}${poll}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div><div tabindex="-1" x-on:click.self="${e(close)}" x-trap.noreturn="isTrapActive" class="fi-modal-window-ctn fi-clickable"><div x-on:keydown.window.escape="if (isTopmost()) ${e(close)}" x-show="isWindowVisible" ${transitions} wire:key="${e(key('window'))}" tabindex="-1" autofocus="autofocus" class="${windowClasses}">${header}${content}</div></div></div>`;
         const opened = "if ($event.detail.id === 'database-notifications' && ! $wire.isOpen) $wire.set('isOpen', true)";
         const closed = "if ($event.detail.id === 'database-notifications') $wire.set('isOpen', false, false)";

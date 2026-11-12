@@ -1,5 +1,5 @@
-// Calendrier des congés — exemples des deux formes du composant calendrier de Navette (absent de la démo Filament) :
-// `LeaveCalendarPage` (page entière, clics ouvrant des modales à formulaire) et une page d'accueil du widget `LeaveCalendar`.
+// Leave calendar, showing both forms of the calendar component:
+// `LeaveCalendarPage` (a full page whose clicks open form modals) and a page hosting the `LeaveCalendar` widget.
 import { Action } from '@navette-js/actions';
 import { DatePicker, Select, Textarea } from '@navette-js/forms';
 import { CalendarPage, Dashboard, Notification, type CalendarEvent } from '@navette-js/panels';
@@ -24,15 +24,15 @@ export class LeaveCalendarPage extends CalendarPage {
             .where('leave_requests.start_date', '<=', `${end} 23:59:59`).where('leave_requests.end_date', '>=', start)
             .orderBy('leave_requests.start_date').limit(500)
             .select('leave_requests.id', 'leave_requests.start_date', 'leave_requests.end_date', 'leave_requests.status', 'leave_requests.type', 'employees.name');
-        // Pas d'adresse : le clic ouvre l'action `eventAction()`. `extra` reste côté serveur.
+        // No URL, so a click opens `eventAction()`. `extra` stays on the server.
         return rows.map((row: any) => ({ id: row.id, title: row.name, start: String(row.start_date).slice(0, 10), end: String(row.end_date).slice(0, 10), color: COLORS[row.status] ?? 'primary', description: `${row.name} — ${row.type} (${row.status})`, extra: { status: row.status, type: row.type, name: row.name } }));
     }
     getMaxEventsPerDay(): number { return 4; }
 
-    /** Bouton d'en-tête : la page de création de la resource (le chemin « page dédiée »). */
+    /** Header button linking to the resource's create page. */
     getHeaderActions(): Action[] { return [Action.make('create').label('New leave request').url(LeaveRequestResource.getUrl('create'))]; }
 
-    /** Clic sur un jour : formulaire en modale, prérempli avec la date, qui crée la demande. */
+    /** Clicking a day opens a modal form, prefilled with the date, that creates a request. */
     dateAction(): Action {
         return Action.make('requestLeave').modalHeading('New leave request').modalSubmitActionLabel('Create').modalWidth('lg')
             .schema(() => [
@@ -50,7 +50,7 @@ export class LeaveCalendarPage extends CalendarPage {
                 Notification.make().success().title('Leave request created').send();
             });
     }
-    /** Clic sur un événement : son statut, modifiable. L'événement est relu côté serveur à chaque étape. */
+    /** Clicking an event lets you change its status. The event is reloaded on the server at every step. */
     eventAction(): Action {
         return Action.make('reviewLeave').modalSubmitActionLabel('Save').modalWidth('md')
             .modalHeading(async ({ livewire, arguments: args }) => { const event = await (livewire as LeaveCalendarPage).findEvent(args?.event); return event ? `${event.title} — ${String(event.extra?.type ?? '')}` : 'Leave request'; })
@@ -67,7 +67,7 @@ export class LeaveCalendarPage extends CalendarPage {
     renderToolbarEnd(): string { return '<a href="/hr/calendar-widget" wire:navigate class="nv-cal-today-btn">Widget version</a>'; }
 }
 
-/** Le même calendrier en widget (`LeaveCalendar`, `widgets/hr.ts`), tel qu'on le poserait sur un tableau de bord. */
+/** The same calendar as a widget (`LeaveCalendar`, `widgets/hr.ts`), as you would place it on a dashboard. */
 export class LeaveCalendarWidgetPage extends Dashboard {
     static slug = 'hr/calendar-widget';
     static title = 'Leave Calendar (widget)';

@@ -1,5 +1,5 @@
-// @navette-js/schemas — port de filament/schemas : Schema, Component et premiers composants de mise en page.
-// Rendu en deux temps par composant : résolution asynchrone des propriétés, puis vue EJS synchrone (ADR 0003).
+// @navette-js/schemas — Schema, Component and the layout components.
+// Each component renders in two steps: async property resolution, then a synchronous EJS view (ADR 0003).
 import { Attributes, HtmlString, cls, e, evaluate, icon, js, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 
 views.namespace('filament-schemas', fileURLToPath(new URL('../views', import.meta.url)));
 
-/** Ce qu'un schéma attend du composant à état qui l'héberge. */
+/** What a schema expects from the stateful component hosting it. */
 export interface SchemaHost {
     readonly id: string;
     _errors: Record<string, string[]>;
@@ -19,10 +19,10 @@ type ColumnSpan = Record<string, SpanValue> | number | string;
 
 export abstract class Component {
     private _grow = true;
-    /** Dans un Flex : `false` pour garder la largeur naturelle au lieu d'occuper la place disponible. */
+    /** Inside a Flex: `false` keeps the natural width instead of filling the available space. */
     grow(condition = true): this { this._grow = condition; return this; }
     canGrow(): boolean { return this._grow; }
-    /** Réglage par défaut de toutes les instances créées ensuite par `make()` : `TextInput.configureUsing((input) => input.maxLength(255))`. */
+    /** Default configuration for every instance later created by `make()`: `TextInput.configureUsing((input) => input.maxLength(255))`. */
     static configureUsing<T>(this: abstract new (...args: any[]) => T, configure: (instance: T) => void): void { configureUsing(this, configure); }
     protected _name: string | null = null;
     protected _keyName: string | null = null;
@@ -36,30 +36,30 @@ export abstract class Component {
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     visible(condition: Lazy<boolean, ComponentContext> = true): this { this._visible = condition; return this; }
     key(key: string | null): this { this._keyName = key; return this; }
-    /** Masqué pour une opération donnée (`'create'`, `'edit'`…). */
+    /** Hidden for the given operation(s) (`'create'`, `'edit'`…). */
     hiddenOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.hidden(({ operation }) => operation !== null && list.includes(operation)); }
-    /** Visible seulement pour une opération donnée. */
+    /** Visible only for the given operation(s). */
     visibleOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.visible(({ operation }) => operation !== null && list.includes(operation)); }
-    /** Comme Filament : un nombre vaut pour le point de rupture `lg` ; un objet remplace entièrement la valeur par défaut. Les valeurs peuvent être des closures. */
+    /** A number applies from the `lg` breakpoint; an object replaces the default entirely. Values may be closures. */
     columnSpan(span: ColumnSpan): this { this._columnSpan = typeof span === 'object' ? span : { default: 1, lg: span }; return this; }
     columnSpanFull(): this { this._columnSpan = { default: 'full' }; return this; }
-    /** Colonne de départ dans la grille, à partir du point de rupture `lg` (comme Filament). */
+    /** Starting grid column, from the `lg` breakpoint. */
     columnStart(start: number | null): this { this._columnStart = start; return this; }
-    /** Toute la largeur de la grille, quel que soit l'écran (`columnSpan('full')` ne vaut qu'à partir de `lg`). */
+    /** Full grid width on every screen size (`columnSpan('full')` only applies from `lg`). */
     columnSpanFull(): this { return this.columnSpan({ default: 'full' } as any); }
     extraAttributes(attributes: Record<string, string>): this { Object.assign(this._extraAttributes, attributes); return this; }
 
     get livewire(): SchemaHost { return this.container.livewire; }
     isLiberatedFromContainerGrid(): boolean { return false; }
-    /** Méthodes que le JavaScript du composant peut appeler côté serveur (annoncées au navigateur). */
+    /** Server methods the component's JavaScript may call (announced to the browser). */
     getExposedMethods(): string[] { return []; }
-    /** Faux pour une méthode exposée après laquelle le composant hôte doit être redessiné (étape suivante d'un assistant : erreurs de validation). */
+    /** False for an exposed method after which the host must re-render (e.g. next wizard step, to show validation errors). */
     isRenderlessMethod(_method: string): boolean { return true; }
     hasStatePath(): boolean { return false; }
 
-    /** Clé absolue du composant : `<clé du schéma>.<clé ou nom>`, ou null. */
+    /** Absolute component key: `<schema key>.<key or name>`, or null. */
     getKey(): string | null {
-        // `::data::` dans une clé générée (section, onglets) tient lieu du chemin d'état du schéma : absent sans chemin (infolist), comme dans Filament.
+        // `::data::` in a generated key (section, tabs) stands for the schema state path, and is dropped when there is none (infolists).
         const statePath = this.container.getStatePath();
         const own = (this._keyName ?? this._name)?.replace('::data::', statePath ? `::${statePath}::` : '::') ?? null;
         return own === null ? null : `${this.container.getKey()}.${own}`;
@@ -67,7 +67,7 @@ export abstract class Component {
     getLivewireKey(): string | null { const k = this.getKey(); return k === null ? null : `${this.livewire.id}.${k}`; }
     getStatePath(): string { return this.hasStatePath() ? [this.container.getStatePath(), this._name].filter(Boolean).join('.') : ''; }
     getAlpineScopeConfiguration(): Record<string, unknown> {
-        // Un composant sans état propre (mise en page) expose le chemin d'état de son conteneur.
+        // A stateless (layout) component exposes its container's state path.
         return { key: this.getKey(), exposedMethods: this.getExposedMethods(), path: this.hasStatePath() ? this.getStatePath() : this.container.getStatePath(), containerPath: this.container.getStatePath() };
     }
     context(): ComponentContext {
@@ -80,10 +80,10 @@ export abstract class Component {
         return !(await evaluate(this._hidden, ctx)) && (await evaluate(this._visible, ctx));
     }
 
-    /** HTML propre au composant (sans son enveloppe de grille). */
+    /** The component's own HTML, without its grid wrapper. */
     abstract toHtml(): Promise<string>;
 
-    /** Port de Component::toSchemaHtml : enveloppe de colonne de grille, rendue même si le composant est masqué. */
+    /** Grid column wrapper, rendered even when the component is hidden. */
     async toSchemaHtml(isVisible: boolean): Promise<string> {
         const key = this.getKey();
         const span: Record<string, number | string> = {};
@@ -127,22 +127,22 @@ export class Schema {
     inline(isInline = true): this { this._inline = isInline; return this; }
     operation(operation: string | null): this { this._operation = operation; return this; }
     record(record: unknown): this { this._record = record; return this; }
-    /** Classe placée avant celles de la grille (ex. `fi-section-content`). */
+    /** Class placed before the grid classes (e.g. `fi-section-content`). */
     extraClass(name: string | null): this { this._extraClass = name; return this; }
-    /** Espacement resserré entre composants (`fi-sc-dense`). */
+    /** Tighter spacing between components (`fi-sc-dense`). */
     dense(condition = true): this { this._dense = condition; return this; }
-    /** Schéma rendu partiellement : sa racine porte `wire:partial="schema.<clé>"`. */
+    /** Partially rendered schema: its root carries `wire:partial="schema.<key>"`. */
     partiallyRendered(condition = true): this { this._partial = condition; return this; }
     private _partialName: string | null = null;
-    /** Nom du fragment `wire:partial` de la racine, quand il ne suit pas la clé du schéma (formulaire de filtres : `table-filters-form`). */
+    /** Root `wire:partial` name when it differs from the schema key (filters form: `table-filters-form`). */
     partialName(name: string | null): this { this._partialName = name; return this; }
     private _gap = true;
-    /** `false` : composants accolés, sans espacement (`fi-sc-has-gap` absent), comme dans un FusedGroup. */
+    /** `false`: components touch, with no gap (no `fi-sc-has-gap`), as in a FusedGroup. */
     gap(condition = true): this { this._gap = condition; return this; }
     private _fieldWrapperView: string | null = null;
     /**
-     * Enveloppe des champs de ce schéma : `'filament-forms::plain-field-wrapper'` ne garde qu'un libellé réservé aux lecteurs d'écran
-     * (champs d'un FusedGroup). `null` : l'enveloppe habituelle.
+     * Field wrapper for this schema: `'filament-forms::plain-field-wrapper'` keeps only a screen-reader label
+     * (FusedGroup fields). `null`: the usual wrapper.
      */
     fieldWrapperView(view: string | null): this { this._fieldWrapperView = view; return this; }
     getFieldWrapperView(): string | null { return this._fieldWrapperView; }
@@ -155,11 +155,11 @@ export class Schema {
     isInline(): boolean { return this._inline; }
     isRoot(): boolean { return this._root; }
 
-    /** Tous les champs à état, en profondeur. */
+    /** All components, depth-first. */
     getFlatComponents(): Component[] {
         return this._components.flatMap((c) => [c, ...((c as any).getChildSchemas?.() ?? []).flatMap((s: Schema) => s.getFlatComponents())]);
     }
-    /** Les mêmes, sans les composants masqués ni leur descendance : un champ placé dans une section masquée n'est ni validé ni enregistré, comme dans Filament. */
+    /** Same, without hidden components or their descendants: a field inside a hidden section is neither validated nor saved. */
     async getVisibleFlatComponents(): Promise<Component[]> {
         const out: Component[] = [];
         for (const c of this._components) {
@@ -170,7 +170,6 @@ export class Schema {
         return out;
     }
 
-    /** Port de Schema::renderEmbeddedHtml. */
     async toHtml(): Promise<string> {
         const withVisibility = await Promise.all(this._components.map(async (c) => [c, await c.isVisible()] as const));
         if (!withVisibility.some(([, v]) => v)) return '';
@@ -192,13 +191,13 @@ export class Schema {
     }
 }
 
-/** Schéma enfant d'un composant de mise en page : partage la clé et le chemin d'état du parent, sans être racine. */
+/** Child schema of a layout component: shares the parent's key and state path, without being a root. */
 export function childSchema(parent: Component, components: Component[]): Schema {
     const c = parent.container;
     return new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).components(components);
 }
 
-/** Groupe à état : ses enfants vivent sous `<chemin du conteneur>.<nom>` (utilisé par les formulaires de filtres). */
+/** Stateful group: its children live under `<container path>.<name>` (used by filter forms). */
 export class StatefulGroup extends Component {
     private children: Component[];
     constructor(name: string, children: Component[]) { super(); this._name = name; this.children = children; }
@@ -211,7 +210,7 @@ export class StatefulGroup extends Component {
     async toHtml(): Promise<string> { return `<div id="${e(this.getKey()!)}">${await this.getChildSchemas()[0].toHtml()}</div>`; }
 }
 
-/** Regroupe des composants dans une grille, sans habillage (port de Group). */
+/** Groups components in a grid, without any chrome. */
 export class Group extends Component {
     protected children: Component[];
     protected _columns: Record<string, number> | number | null = {};
@@ -223,15 +222,15 @@ export class Group extends Component {
     async toHtml(): Promise<string> { return `<div>${await this.getChildSchemas()[0].toHtml()}</div>`; }
 }
 
-/** Grille de colonnes (port de Grid) : deux colonnes par défaut à partir de `lg`. */
+/** Column grid: two columns from `lg` by default. */
 export class Grid extends Group {
     constructor(columns: Record<string, number> | number = 2) { super(); this._columns = columns; }
     static make(columns: Record<string, number> | number | Component[] = 2): Grid { return configured(new Grid(Array.isArray(columns) ? 2 : columns)); }
 }
 
 /**
- * Composants côte à côte à partir d'un point de rupture (port de Flex) : chacun occupe la place disponible,
- * sauf ceux marqués `grow(false)`, qui gardent leur largeur naturelle.
+ * Components side by side from a breakpoint: each fills the available space,
+ * except those marked `grow(false)`, which keep their natural width.
  */
 export class Flex extends Component {
     private children: Component[];
@@ -253,7 +252,7 @@ export class Flex extends Component {
 
 export const slug = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-/** Section : carte regroupant des composants, avec un en-tête facultatif (titre, actions). Sans repli ni icône pour l'instant. */
+/** Card grouping components, with an optional header (heading, actions). */
 export class Section extends Component {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = {};
@@ -262,7 +261,7 @@ export class Section extends Component {
     constructor(heading: string | null = null) {
         super();
         this._heading = heading;
-        // Comme Filament : une section titrée a une clé dérivée de son titre.
+        // A section with a heading gets a key derived from it.
         if (heading !== null) this._keyName = `${slug(heading)}::data::section`;
     }
     static make(heading: string | null = null): Section { return configured(new Section(heading)); }
@@ -270,12 +269,12 @@ export class Section extends Component {
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
     private _collapsible = false;
     private _collapsed = false;
-    /** Section repliable par son en-tête ; `collapsed()` la replie d'emblée. */
+    /** Collapsible by clicking its header; `collapsed()` starts it collapsed. */
     collapsible(condition = true): this { this._collapsible = condition; return this; }
     collapsed(condition = true): this { this._collapsed = condition; if (condition) this._collapsible = true; return this; }
-    /** Actions affichées à droite du titre. */
+    /** Actions shown to the right of the heading. */
     afterHeader(actions: Renderable[]): this { this._afterHeader = actions; return this; }
-    /** Actions que la section expose au montage. */
+    /** Actions the section exposes for mounting. */
     getActions(): Renderable[] { return this._afterHeader; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).extraClass('fi-section-content')]; }
     async toHtml(): Promise<string> {
@@ -288,10 +287,10 @@ export class Section extends Component {
         const key = this.getKey()!;
         const ctx = this.context();
         const after: string[] = [];
-        // Contexte de montage : celui de l'hôte, plus le schéma auquel la section appartient (comme Filament).
+        // Mount context: the host's, plus the schema the section belongs to.
         const mountContext = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: this.container.getKey() };
         for (const action of this._afterHeader) if (await action.isVisible(ctx)) after.push(`<div class="fi-sc-action">${await (action as any).toHtml(ctx, mountContext)}</div>`);
-        // Section repliable : événements `collapse-section` / `expand-section`… et bouton dans l'en-tête (port de filament::components.section).
+        // Collapsible section: listens to `collapse-section` / `expand-section`… window events, with a toggle button in the header.
         const idTest = `if ($event.detail.id == (${js(key)} ?? $el.id))`;
         const collapse = this._collapsible ? ` x-on:collapse-section.window="${e(`${idTest} isCollapsed = true`)}" x-on:expand="isCollapsed = false" x-on:expand-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:open-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:toggle-section.window="${e(`${idTest} isCollapsed = ! isCollapsed`)}" x-on:reset-schema-component-state.window="${e(`if (($event.detail.livewireId === ${js(this.livewire.id)}) && ($event.detail.schemaKey === ${js(key.split('.')[0])})) $nextTick(() => isCollapsed = ${this._collapsed ? 'true' : 'false'})`)}" x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : '';
         const collapseButton = this._collapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(this._collapsed ? 'filament::components/section.actions.expand.label' : 'filament::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-expanded="${this._collapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()" aria-controls="${e(key)}-content" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up')}</button>` : '';
@@ -302,8 +301,8 @@ export class Section extends Component {
 }
 
 /**
- * Balisage libre dans un schéma. Le contenu est inséré TEL QUEL : n'y placez jamais une valeur venue d'un utilisateur ou de la base
- * sans l'échapper avec `e()` de `@navette-js/support`.
+ * Raw markup in a schema. The content is inserted AS IS: never put a user- or database-supplied value in it
+ * without escaping it with `e()` from `@navette-js/support`.
  */
 export class Html extends Component {
     private content: string | ((ctx: ComponentContext) => string | Promise<string>);
@@ -312,7 +311,7 @@ export class Html extends Component {
     async toHtml(): Promise<string> { return typeof this.content === 'function' ? this.content(this.context()) : this.content; }
 }
 
-/** Un onglet d'un composant Tabs : un titre, une icône facultative et son propre schéma (port de Tabs\Tab). */
+/** A tab of a Tabs component: a label, an optional icon and its own schema. */
 export class Tab extends Component {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = {};
@@ -325,14 +324,13 @@ export class Tab extends Component {
     icon(name: string | null): this { this._icon = name; return this; }
     getLabel(): string { return this.label; }
     getIcon(): string | null { return this._icon; }
-    /** Clé de l'onglet côté navigateur (sans le préfixe du schéma). */
-    /** Clé de l'onglet dans son groupe : `::data::` suit le chemin d'état du schéma, absent d'un infolist (comme dans Filament). */
+    /** Browser-side tab key (no schema prefix): `::data::` follows the schema state path, and is dropped in infolists. */
     getTabKey(): string { const statePath = this.container.getStatePath(); return this._keyName!.replace('::data::', statePath ? `::${statePath}::` : '::'); }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns)]; }
     async toHtml(): Promise<string> { return this.getChildSchemas()[0].toHtml(); }
 }
 
-/** Onglets de mise en page : tous les panneaux sont rendus, le navigateur n'affiche que l'onglet actif (port de Tabs). */
+/** Layout tabs: every panel is rendered, the browser only shows the active one. */
 export class Tabs extends Component {
     private tabs: Tab[] = [];
     private label: string;
@@ -344,7 +342,7 @@ export class Tabs extends Component {
     getDeferredTabBadges(): Record<string, unknown> { return {}; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.tabs)]; }
     async toHtml(): Promise<string> {
-        // Le schéma enfant rattache les onglets à leur conteneur : c'est lui qui donne leurs clés.
+        // Building the child schema attaches the tabs to their container, which is what gives them their keys.
         this.getChildSchemas();
         const key = this.getKey()!;
         const id = this.livewire.id;
@@ -380,7 +378,7 @@ export class Tabs extends Component {
     }
 }
 
-/** Point d'injection d'un render hook, avec les portées du composant hôte. Libéré de la grille du conteneur. */
+/** Render hook injection point, using the host's scopes. Liberated from the container grid. */
 export class RenderHook extends Component {
     private hook: string;
     constructor(hook: string) { super(); this.hook = hook; }
@@ -389,7 +387,7 @@ export class RenderHook extends Component {
     async toHtml(): Promise<string> { return renderHook(this.hook, (this.livewire as any).getRenderHookScopes?.() ?? []); }
 }
 
-/** Intègre un autre schéma du composant hôte (`form`, `infolist`…) comme schéma racine. */
+/** Embeds another schema of the host (`form`, `infolist`…) as a root schema. */
 export class EmbeddedSchema extends Component {
     private schemaName: string;
     constructor(name: string) { super(); this.schemaName = name; }
@@ -397,7 +395,7 @@ export class EmbeddedSchema extends Component {
     async toHtml(): Promise<string> { return (await this.livewire.getSchema(this.schemaName)).toHtml(); }
 }
 
-/** Balise <form> : contenu, pied (actions), soumission vers une méthode du composant hôte. */
+/** `<form>` element: content and footer (actions), submitted to a host method. */
 export class Form extends Component {
     private children: Component[];
     private _footer: Component[] = [];
@@ -416,10 +414,10 @@ export class Form extends Component {
     }
 }
 
-/** Élément rendu dans un conteneur d'actions : en pratique une Action (paquet actions). */
+/** Item rendered in an actions container: in practice an Action (actions package). */
 export interface Renderable { isVisible(ctx: ComponentContext): Promise<boolean>; toHtml(ctx: ComponentContext): Promise<string> }
 
-/** Rangée d'actions d'un schéma. */
+/** Row of actions in a schema. */
 export class Actions extends Component {
     private actions: Renderable[];
     private _fullWidth = false;
@@ -438,27 +436,26 @@ export class Actions extends Component {
     }
 }
 
-// ------------------------------------------------------------------ couleurs, infobulles et rangées « en ligne »
 let colorManager: ColorManager | null = null;
-/** Gestionnaire de couleurs utilisé hors d'un panel ; dans un panel, celui du panel de l'hôte a la priorité. */
+/** Color manager used outside a panel; inside a panel, the host panel's manager takes precedence. */
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 const colorsFor = (component: Component): ColorManager | null => (component.livewire as any)?.panel?.colors ?? colorManager;
-/** Couleur sans nuance calculée (icône, callout, état vide) : rien pour le gris, comme les composants `HasDefaultGrayColor` de Filament. */
+/** Color classes without computed shades (icon, callout, empty state); none for gray, the default. */
 const plainColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' ? ['fi-color', `fi-color-${color.replace(/[^a-zA-Z0-9_-]/g, '')}`] : []);
-/** Classe de taille ou de graisse : seuls les caractères d'un nom de classe sont gardés. */
+/** Size or weight class: only class-name characters are kept. */
 const safeClass = (value: string | null): string | null => (value ? value.replace(/[^a-zA-Z0-9_:-]/g, '') || null : null);
 const tooltipExpression = (text: string | null): string | null => (text ? `{ content: ${js(text)}, theme: $store.theme, allowHTML: false }` : null);
 const isBlank = (value: unknown) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '') || (value instanceof HtmlString && value.html.trim() === '');
-/** Texte échappé, ou HTML d'une `HtmlString` inséré tel quel (à ne construire qu'avec des valeurs échappées). */
+/** Escaped text, or an `HtmlString`'s HTML inserted as is (build it only from escaped values). */
 const textOrHtml = (value: string | HtmlString | null): string => (value instanceof HtmlString ? value.html : e(value));
 
-/** Élément d'une rangée en ligne : un composant de schéma ou une action. */
+/** Item in an inline row: a schema component or an action. */
 export type InlineItem = Component | Renderable;
 /**
- * Rangée « en ligne » (port d'un schéma enfant `inline()` de Filament : pied, contrôles, après le libellé) où composants et actions se mêlent.
- * Les actions sont montées avec `schemaComponent: mountKey` (par défaut le schéma racine, qui les retrouve par `getActions()` du composant parent).
- * `actionView` : `'button'` (bouton plein), `'link'` (lien, ou bouton-icône pour une action `iconButton()`), `'auto'` (bouton-icône si `iconButton()`, bouton sinon).
- * `scope` remplace des clés de la configuration Alpine des composants (`path`, `containerPath`).
+ * Inline row mixing components and actions (footers, controls, after a label).
+ * Actions are mounted with `schemaComponent: mountKey` (the root schema by default, which finds them through the parent's `getActions()`).
+ * `actionView`: `'button'` (full button), `'link'` (link, or icon button for an `iconButton()` action), `'auto'` (icon button if `iconButton()`, button otherwise).
+ * `scope` overrides keys of the components' Alpine configuration (`path`, `containerPath`).
  */
 export async function renderInlineItems(parent: Component, items: InlineItem[], options: { alignment?: string | null; scope?: Record<string, unknown>; mountKey?: string | null; actionView?: 'button' | 'link' | 'auto' } = {}): Promise<string> {
     const components = items.filter((item): item is Component => item instanceof Component);
@@ -482,17 +479,17 @@ export async function renderInlineItems(parent: Component, items: InlineItem[], 
         const action = item as any;
         const view = options.actionView ?? 'button';
         const asLink = typeof action.toLinkHtml === 'function' && (view === 'link' || (view === 'auto' && action._iconButton === true));
-        // Le rendu « lien » des actions sert aussi aux lignes de table : sa clé de ligne, vide ici, est retirée.
+        // The link rendering is shared with table rows: its row key, empty here, is stripped.
         const html = asLink ? String(await action.toLinkHtml(ctx, mountContext, '')).replace(' wire:key=""', '') : await action.toHtml(ctx, mountContext);
         parts.push(`<div class="fi-sc-action">${html}</div>`);
     }
     if (!parts.length) return '';
     return `<div class="${cls(['fi-sc', 'fi-inline', options.alignment ? `fi-align-${options.alignment}` : null, 'fi-sc-has-gap', 'fi-sc-dense'])}">${parts.join('')}</div>`;
 }
-/** Actions d'une liste d'éléments en ligne (à exposer par `getActions()` pour qu'elles puissent être montées). */
+/** Actions among inline items (expose them through `getActions()` so they can be mounted). */
 const actionsOf = (items: InlineItem[]): Renderable[] => items.filter((item) => !(item instanceof Component)) as Renderable[];
 
-/** Grille « en colonnes » (port de `grid($columns, GridDirection::Column)`) : les éléments se remplissent colonne par colonne. */
+/** Column-direction grid: items fill column by column. */
 function columnGrid(columns: Record<string, number> | number | null): Attributes {
     const cols: Record<string, number> = typeof columns === 'number' ? { lg: columns } : { ...(columns ?? {}) };
     for (const key of Object.keys(cols)) if (!cols[key]) delete cols[key];
@@ -504,8 +501,8 @@ function columnGrid(columns: Record<string, number> | number | null): Attributes
 }
 
 /**
- * Cadre titré regroupant des champs (port de Fieldset) : une légende et une grille de deux colonnes par défaut.
- * Avec `statePath()`, les champs vivent sous ce chemin et le fieldset reçoit une clé (et un `id`).
+ * Titled frame grouping fields: a legend and a two-column grid by default.
+ * With `statePath()`, the fields live under that path and the fieldset gets a key (and an `id`).
  */
 export class Fieldset extends Component {
     private children: Component[] = [];
@@ -519,13 +516,13 @@ export class Fieldset extends Component {
     schema(components: Component[]): this { this.children = components; return this; }
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
     label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
-    /** Légende gardée pour les lecteurs d'écran seulement. */
+    /** Keeps the legend for screen readers only. */
     hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
-    /** `false` : sans bordure ni marge intérieure. */
+    /** `false`: no border or padding. */
     contained(condition = true): this { this._contained = condition; return this; }
-    /** Astérisque après la légende (le fieldset lui-même n'est jamais validé). */
+    /** Asterisk after the legend (the fieldset itself is never validated). */
     markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
-    /** Chemin d'état des champs, relatif au conteneur (port de `statePath()`). */
+    /** State path of the fields, relative to the container. */
     statePath(path: string | null): this { this._name = path; return this; }
     hasStatePath(): boolean { return this._name !== null; }
     getChildSchemas(): Schema[] {
@@ -543,8 +540,8 @@ export class Fieldset extends Component {
 }
 
 /**
- * Texte dans un schéma (port de Text) : simple `<span>`, ou pastille avec `badge()`. Le contenu est échappé ;
- * une `HtmlString` (de `@navette-js/support`) est insérée telle quelle, à ne construire qu'avec des valeurs échappées.
+ * Text in a schema: a plain `<span>`, or a badge with `badge()`. The content is escaped;
+ * an `HtmlString` (from `@navette-js/support`) is inserted as is, so build it only from escaped values.
  */
 export class Text extends Component {
     private _content: Lazy<string | HtmlString | null, ComponentContext>;
@@ -564,22 +561,22 @@ export class Text extends Component {
     constructor(content: Lazy<string | HtmlString | null, ComponentContext>) { super(); this._content = content; }
     static make(content: Lazy<string | HtmlString | null, ComponentContext>): Text { return configured(new Text(content)); }
     content(content: Lazy<string | HtmlString | null, ComponentContext>): this { this._content = content; return this; }
-    /** Affiché en pastille. */
+    /** Renders as a badge. */
     badge(condition: Lazy<boolean, ComponentContext> = true): this { this._badge = condition; return this; }
-    /** Couleur (`gray` par défaut ; `primary`, `danger`…). */
+    /** Color (`gray` by default; `primary`, `danger`…). */
     color(color: Lazy<string | null, ComponentContext>): this { this._color = color; return this; }
-    /** Taille du texte (`xs`, `sm`, `md`, `lg`) ou de la pastille. */
+    /** Text or badge size (`xs`, `sm`, `md`, `lg`). */
     size(size: string | null): this { this._size = size; return this; }
-    /** Graisse (`bold`, `semibold`, `medium`…). */
+    /** Font weight (`bold`, `semibold`, `medium`…). */
     weight(weight: string | null): this { this._weight = weight; return this; }
-    /** Famille de police (`sans`, `serif`, `mono`). */
+    /** Font family (`sans`, `serif`, `mono`). */
     fontFamily(family: string | null): this { this._fontFamily = family; return this; }
-    /** Icône d'une pastille. */
+    /** Badge icon. */
     icon(name: string | null): this { this._icon = name; return this; }
     iconPosition(position: 'before' | 'after'): this { this._iconPosition = position; return this; }
     iconSize(size: string | null): this { this._iconSize = size; return this; }
     tooltip(text: Lazy<string | null, ComponentContext>): this { this._tooltip = text; return this; }
-    /** Un clic copie le texte (ou `copyableState()`) dans le presse-papiers. */
+    /** Clicking copies the text (or `copyableState()`) to the clipboard. */
     copyable(condition: Lazy<boolean, ComponentContext> = true): this { this._copyable = condition; return this; }
     copyableState(state: Lazy<string | null, ComponentContext>): this { this._copyableState = state; return this; }
     copyMessage(message: string | null): this { this._copyMessage = message; return this; }
@@ -600,7 +597,7 @@ export class Text extends Component {
             const iconHtml = this._icon ? icon(this._icon, { size: safeClass(this._iconSize) ?? 'sm' }) : '';
             return `<${tag} ${attributes.toHtml()}>${this._iconPosition === 'before' ? iconHtml : ''}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${textOrHtml(content)}</span></span>${this._iconPosition === 'after' ? iconHtml : ''}</${tag}>`;
         }
-        // Couleur du texte : même recherche de contraste que celle d'un lien (TextComponent de Filament).
+        // Text color: same contrast-aware classes as a link.
         const colorClasses = color !== 'gray' ? (colorsFor(this)?.getComponentClasses('link', color) ?? plainColorClasses(color)) : [];
         const attributes = new Attributes().merge({
             role: isCopyable ? 'button' : null, tabindex: isCopyable ? '0' : null, 'x-on:click': isCopyable ? copy : null,
@@ -611,7 +608,7 @@ export class Text extends Component {
     }
 }
 
-/** Icône Heroicons dans un schéma (port de Icon) : décorative, sauf si une infobulle ou un `aria-label` (attributs supplémentaires) la décrit. */
+/** Heroicon in a schema: decorative, unless a tooltip or an `aria-label` (extra attribute) describes it. */
 export class Icon extends Component {
     private _icon: Lazy<string | null, ComponentContext>;
     private _color: Lazy<string | null, ComponentContext> = null;
@@ -620,9 +617,9 @@ export class Icon extends Component {
     constructor(name: Lazy<string | null, ComponentContext>) { super(); this._icon = name; }
     static make(name: Lazy<string | null, ComponentContext>): Icon { return configured(new Icon(name)); }
     icon(name: Lazy<string | null, ComponentContext>): this { this._icon = name; return this; }
-    /** Couleur (`primary` par défaut). */
+    /** Color (`primary` by default). */
     color(color: Lazy<string | null, ComponentContext>): this { this._color = color; return this; }
-    /** Taille (`xs` … `2xl`) ; `base` revient à la taille par défaut. */
+    /** Size (`xs` … `2xl`); `base` resets to the default size. */
     size(size: string | null): this { this._size = size === 'base' ? null : size; return this; }
     tooltip(text: Lazy<string | null, ComponentContext>): this { this._tooltip = text; return this; }
     async toHtml(): Promise<string> {
@@ -640,7 +637,7 @@ export class Icon extends Component {
     }
 }
 
-/** Image dans un schéma (port de Image). Seules une adresse du site (`/…`) ou une adresse http(s) sont affichées. */
+/** Image in a schema. Only same-site (`/…`) or http(s) URLs are rendered. */
 export class Image extends Component {
     private _url: Lazy<string, ComponentContext>;
     private _alt: Lazy<string, ComponentContext>;
@@ -657,11 +654,11 @@ export class Image extends Component {
         const css = typeof value === 'number' ? `${value}px` : value.trim();
         return /^(\d+(\.\d+)?(px|rem|em|%|vh|vw)?|auto)$/.test(css) ? css : null;
     }
-    /** Hauteur (`8rem` par défaut) ; un nombre est en pixels. */
+    /** Height (`8rem` by default); a number is in pixels. */
     imageHeight(height: number | string | null): this { this._height = Image.dimension(height); return this; }
     imageWidth(width: number | string | null): this { this._width = Image.dimension(width); return this; }
     imageSize(size: number | string): this { return this.imageWidth(size).imageHeight(size); }
-    /** Alignement (`start`, `center`, `end`). */
+    /** Alignment (`start`, `center`, `end`). */
     alignment(alignment: string | null): this { this._alignment = alignment; return this; }
     alignStart(): this { return this.alignment('start'); }
     alignCenter(): this { return this.alignment('center'); }
@@ -679,7 +676,7 @@ export class Image extends Component {
     }
 }
 
-/** Liste à puces (port de UnorderedList) : chaque élément est un composant ; une chaîne devient un `Text`. Deux colonnes à partir de `sm`. */
+/** Bulleted list: each item is a component; a string becomes a `Text`. Two columns from `sm`. */
 export class UnorderedList extends Component {
     private children: Component[];
     private _columns: Record<string, number> | number | null = { sm: 2 };
@@ -689,7 +686,7 @@ export class UnorderedList extends Component {
     private static normalize(items: (Component | string | HtmlString)[]): Component[] { return items.map((item) => (item instanceof Component ? item : Text.make(item))); }
     schema(items: (Component | string | HtmlString)[]): this { this.children = UnorderedList.normalize(items); return this; }
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
-    /** Taille du texte (`xs`, `sm`, `md`, `lg`). */
+    /** Text size (`xs`, `sm`, `md`, `lg`). */
     size(size: string | null): this { this._size = size; return this; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children)]; }
     async toHtml(): Promise<string> {
@@ -702,7 +699,7 @@ export class UnorderedList extends Component {
     }
 }
 
-/** État vide (port de EmptyState) : icône, titre, description et un pied (actions, composants). */
+/** Empty state: icon, heading, description and a footer (actions, components). */
 export class EmptyState extends Component {
     private _heading: Lazy<string, ComponentContext>;
     private _description: Lazy<string | null, ComponentContext> = null;
@@ -718,18 +715,18 @@ export class EmptyState extends Component {
     heading(heading: Lazy<string, ComponentContext>): this { this._heading = heading; return this; }
     description(description: Lazy<string | null, ComponentContext>): this { this._description = description; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
-    /** Couleur de l'icône (`primary` par défaut). */
+    /** Icon color (`primary` by default). */
     iconColor(color: string | null): this { this._iconColor = color; return this; }
     iconSize(size: string | null): this { this._iconSize = size; return this; }
-    /** Version resserrée. */
+    /** Compact variant. */
     compact(condition = true): this { this._compact = condition; return this; }
-    /** `false` : sans carte autour. */
+    /** `false`: no surrounding card. */
     contained(condition = true): this { this._contained = condition; return this; }
-    /** Balise du titre (`h2` par défaut). */
+    /** Heading tag (`h2` by default). */
     headingTag(tag: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'): this { this._headingTag = tag; return this; }
-    /** Pied : actions et composants, en ligne. */
+    /** Footer: inline actions and components. */
     footer(items: InlineItem[]): this { this._footer = items; return this; }
-    /** Actions du pied, montées sur le schéma racine. */
+    /** Footer actions, mounted on the root schema. */
     getActions(): Renderable[] { return actionsOf(this._footer); }
     async toHtml(): Promise<string> {
         const ctx = this.context();
@@ -743,8 +740,8 @@ export class EmptyState extends Component {
 
 const CALLOUT_ICONS: Record<string, string> = { danger: 'o-x-circle', info: 'o-information-circle', success: 'o-check-circle', warning: 'o-exclamation-circle' };
 /**
- * Encadré d'information (port de Callout) : statut (`info()`, `success()`, `warning()`, `danger()`) qui fixe couleur et icône,
- * titre, description, actions de pied (en liens) et actions de contrôle (à droite).
+ * Information box: a status (`info()`, `success()`, `warning()`, `danger()`) setting color and icon,
+ * heading, description, footer actions (as links) and control actions (on the right).
  */
 export class Callout extends Component {
     private _heading: Lazy<string | null, ComponentContext>;
@@ -763,30 +760,30 @@ export class Callout extends Component {
     static make(heading: Lazy<string | null, ComponentContext> = null): Callout { return configured(new Callout(heading)); }
     heading(heading: Lazy<string | null, ComponentContext>): this { this._heading = heading; return this; }
     description(description: Lazy<string | null, ComponentContext>): this { this._description = description; return this; }
-    /** Statut : couleur, icône et préfixe lu par les lecteurs d'écran (« Note: »…). */
+    /** Status: sets color, icon and a screen-reader prefix ("Note:"…). */
     status(status: string | null): this { this._status = status; return this; }
     danger(): this { return this.status('danger'); }
     info(): this { return this.status('info'); }
     success(): this { return this.status('success'); }
     warning(): this { return this.status('warning'); }
-    /** Couleur du fond ; `null` retire celle du statut (l'icône la garde). */
+    /** Background color; `null` removes the status color (the icon keeps it). */
     color(color: string | null): this { this._color = color; this._hasColor = true; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
     iconColor(color: string | null): this { this._iconColor = color; return this; }
-    /** Taille de l'icône (`lg` par défaut). */
+    /** Icon size (`lg` by default). */
     iconSize(size: string | null): this { this._iconSize = size; return this; }
-    /** Actions du pied, rendues en liens (port de `actions()` / `footerActions()`). */
+    /** Footer actions, rendered as links. */
     actions(actions: Renderable[]): this { this._footerActions = [...this._footerActions, ...actions]; return this; }
     footerActions(actions: Renderable[]): this { return this.actions(actions); }
-    /** Alignement des actions du pied (`start`, `center`, `end`, `between`). */
+    /** Footer actions alignment (`start`, `center`, `end`, `between`). */
     footerActionsAlignment(alignment: string): this { this._footerActionsAlignment = alignment; return this; }
-    /** Pied libre (composants et actions), à la place des actions de pied. */
+    /** Free-form footer (components and actions), replacing the footer actions. */
     footer(items: InlineItem[] | null): this { this._footer = items; return this; }
-    /** Actions à droite de l'encadré (fermeture…), en petite taille. */
+    /** Small actions on the right of the callout (dismiss…). */
     controlActions(actions: Renderable[]): this { this._controlActions = [...this._controlActions, ...actions]; return this; }
     getColor(): string | null { return this._hasColor ? this._color : (this._color ?? this._status); }
     getIcon(): string | null { return this._icon ?? (this._status ? (CALLOUT_ICONS[this._status] ?? null) : null); }
-    /** Actions de l'encadré, montées sur le schéma racine. */
+    /** Callout actions, mounted on the root schema. */
     getActions(): Renderable[] { return [...(this._footer ? actionsOf(this._footer) : this._footerActions), ...this._controlActions]; }
     async toHtml(): Promise<string> {
         const ctx = this.context();
@@ -810,8 +807,8 @@ export class Callout extends Component {
 }
 
 /**
- * Champs accolés sous un seul libellé (port de FusedGroup) : chaque champ n'a plus qu'un libellé pour lecteurs d'écran,
- * et la première erreur de validation des champs s'affiche sous le groupe.
+ * Fields joined under a single label: each field keeps only a screen-reader label,
+ * and the first validation error among the fields is shown under the group.
  */
 export class FusedGroup extends Component {
     private children: Component[];
@@ -825,10 +822,10 @@ export class FusedGroup extends Component {
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
     label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
-    /** Astérisque après le libellé (la validation reste celle de chaque champ). */
+    /** Asterisk after the label (validation stays per field). */
     markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).gap(false).fieldWrapperView('filament-forms::plain-field-wrapper')]; }
-    /** Première erreur des champs du groupe (y compris d'un élément d'un champ à valeurs multiples). */
+    /** First error among the group's fields (including one on an item of a multi-valued field). */
     private firstError(): string | null {
         const errors = this.livewire._errors ?? {};
         for (const component of this.getChildSchemas()[0].getComponents()) {

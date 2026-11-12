@@ -1,8 +1,8 @@
 # Navette
 
-**Admin panels for Node.js — a port of [Filament](https://filamentphp.com).**
+**Admin panels for Node.js.**
 
-Navette brings Filament's way of building admin panels to Node.js and Express: resources with tables, forms and infolists, actions and modals, dashboards and widgets, global search, database notifications, multiple panels, authentication pages and multi-tenancy. The server renders Filament's markup and reuses its CSS and JavaScript, so panels look and behave like Filament — written in TypeScript, without PHP.
+Navette builds admin panels on Node.js and Express: resources with tables, forms and infolists, actions and modals, dashboards and widgets, global search, database notifications, multiple panels, authentication pages and multi-tenancy. Pages are rendered on the server and kept interactive by a small Livewire-compatible runtime, all written in TypeScript.
 
 > **Beta.** Navette is in `1.0.0-beta`. The API may change between beta releases. Feedback and issues are welcome.
 
@@ -19,6 +19,8 @@ Navette brings Filament's way of building admin panels to Node.js and Express: r
 | `@navette-js/database` | Data adapters (Knex / Objection) |
 | `@navette-js/wire` | Server runtime compatible with the Livewire 3 client |
 | `@navette-js/support` | Colors, icons, views, translations, render hooks |
+| `@navette-js/cli` | Project CLI (`npx navette`): migrations, users, code generators |
+| `create-navette` | Project scaffolding (`npm create navette@latest`) |
 
 ## Requirements
 
@@ -37,7 +39,7 @@ import { sqlite } from '@navette-js/database';
 import { knexAuthProvider, Panel, panelRouter } from '@navette-js/panels';
 import { WireRuntime } from '@navette-js/wire';
 
-// A Laravel-style `users` table (id, name, email, password, email_verified_at).
+// Expects a `users` table (id, name, email, password, email_verified_at).
 const db = sqlite('database.sqlite');
 
 const panel = Panel.make()
@@ -60,7 +62,8 @@ See `apps/starter` for a complete minimal dashboard, and the documentation site 
 |---|---|
 | `packages/*` | The published packages (TypeScript sources) |
 | `apps/starter` | Smallest useful dashboard, used as the getting-started example |
-| `apps/demo` | Port of the official Filament demo (shop, HR, projects, blog, a second panel with registration and teams) |
+| `apps/demo` | Full demo: shop, HR, projects, blog, and a second panel with registration and teams |
+| `apps/playground` | Runtime and UI component playground |
 | `apps/docs` | Documentation website |
 | `scripts/release.mjs` | Builds the npm packages (`.release/`) |
 
@@ -70,8 +73,8 @@ npm test              # unit tests
 npm run demo          # http://127.0.0.1:3200/login
 ```
 
-Publishing is described in `PUBLISHING.md`. Porting notes (in French) are in `NOTES.md`.
+Publishing is described in `PUBLISHING.md`.
 
 ## License
 
-MIT — see `LICENSE`. Navette is an independent project, not affiliated with Filament, Livewire or Heroicons; it reuses their MIT-licensed markup, assets and icons, and the Inter font (SIL OFL 1.1). See `THIRD-PARTY-NOTICES.md`.
+MIT — see `LICENSE`. Navette reuses third-party markup, assets, icons and fonts under their own licenses; see `THIRD-PARTY-NOTICES.md`.

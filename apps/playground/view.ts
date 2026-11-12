@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const cache = new Map<string, ejs.TemplateFunction>();
-/** Rendu synchrone d'une vue EJS compilée une fois (phase 2 du rendu, ADR 0003). */
+/** Renders an EJS view synchronously; each template is compiled once. */
 export function view(name: string, data: Record<string, unknown> = {}): string {
     let fn = cache.get(name);
     if (!fn) {

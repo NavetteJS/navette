@@ -17,17 +17,17 @@ class Secret extends Page {
     static canAccess(user: User): boolean { return user.role === 'admin'; }
 }
 
-test('politique de resource : capacité absente autorisée, règle appliquée, enregistrement transmis', async () => {
+test('resource policy: missing ability allowed, rule applied, record passed', async () => {
     Panel.make().id('t1').key('k').pages([Dashboard, Secret]).resources([Notes]);
     assert.equal(await Notes.can('viewAny', reader), true);
     assert.equal(await Notes.can('delete', reader), false);
     assert.equal(await Notes.can('delete', admin), true);
     assert.equal(await Notes.can('update', reader, { owner: 2 }), true);
     assert.equal(await Notes.can('update', reader, { owner: 9 }), false);
-    assert.equal(await Notes.can('delete', null), false, 'sans utilisateur : toujours refusé');
+    assert.equal(await Notes.can('delete', null), false, 'no user: always denied');
 });
 
-test('pages : canAccess, et liste / création d\'une resource selon sa politique', async () => {
+test('pages: canAccess, and resource list / create according to its policy', async () => {
     class Locked extends Resource { static slug = 'locked'; static policy: Policy = { viewAny: () => false, create: (user) => user.role === 'admin' }; }
     const panel = Panel.make().id('t2').key('k').pages([Dashboard, Secret]).resources([Locked]);
     assert.equal(await panel.canAccessPage(Secret, admin), true);
@@ -39,18 +39,18 @@ test('pages : canAccess, et liste / création d\'une resource selon sa politique
     assert.deepEqual([...(await panel.resolveInaccessiblePages(reader))].sort(), ['locked', 'secret']);
 });
 
-test('crochet du panel : décide avant la politique, ou la laisse répondre', async () => {
+test('panel hook: decides before the policy, or lets it answer', async () => {
     const seen: string[] = [];
     Panel.make().id('t3').key('k').pages([Dashboard, Secret]).resources([Notes]).authorizeUsing(({ user, ability, resource, page }) => {
         seen.push(`${ability}:${resource ? 'resource' : page ? 'page' : '-'}`);
-        if (user.role === 'admin') return true;            // l'administrateur passe partout
-        if (ability === 'viewAny') return false;           // système maison : les lecteurs ne listent rien
-        return undefined;                                  // sinon : la politique décide
+        if (user.role === 'admin') return true;            // admins can do everything
+        if (ability === 'viewAny') return false;           // custom system: readers cannot list anything
+        return undefined;                                  // otherwise the policy decides
     });
     assert.equal(await Notes.can('delete', admin), true);
     assert.equal(await Notes.can('viewAny', reader), false);
-    assert.equal(await Notes.can('delete', reader), false, 'politique consultée');
-    assert.equal(await Notes.can('update', reader, { owner: 2 }), true, 'politique consultée');
+    assert.equal(await Notes.can('delete', reader), false, 'policy consulted');
+    assert.equal(await Notes.can('update', reader, { owner: 2 }), true, 'policy consulted');
     assert.equal(await Notes.panel.canAccessPage(Secret, admin), true);
     assert.ok(seen.includes('delete:resource') && seen.includes('access:page'));
 });

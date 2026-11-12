@@ -1,7 +1,6 @@
-// @navette-js/forms/builder — port (partiel) de Filament\Forms\Components\Builder : une liste d'éléments dont chacun est un « bloc »
-// choisi dans un menu. L'état est une table `clé d'élément → { type, data }` ; l'ordre des clés est l'ordre d'affichage.
-// Portés : blocs, sélecteur de bloc, ajout / suppression / duplication / déplacement / réordonnancement, libellé entre éléments,
-// en-têtes de bloc (libellé et actions). Non portés : aperçus de bloc, repli, recherche dans le sélecteur, ajout entre éléments.
+// @navette-js/forms/builder — a list of items, each one a "block" picked from a menu.
+// The state is a map `item key → { type, data }`; key order is display order.
+// Not supported yet: block previews, collapsing, searching the block picker.
 import { Attributes, cls, e, icon, js, loadingIndicator, views, type ColorManager, configured } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Action } from '@navette-js/actions';
@@ -11,21 +10,21 @@ import { Field, fillSchema } from './index.ts';
 
 const asset = (name: string) => views.render('filament-forms::asset', { path: name }).trim();
 const ITEM_KEY = /^[A-Za-z0-9_-]{1,64}$/;
-/** Clé d'élément acceptable : les clés viennent du navigateur. */
+/** Whether an item key is acceptable: keys come from the browser. */
 export const isItemKey = (key: string) => ITEM_KEY.test(key) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype';
-/** Clé courte à la manière de `Str::random(4)`. */
+/** Random four-character alphanumeric key. */
 export const shortKey = () => Array.from(randomBytes(4), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join('');
 
-/** Écrit une valeur à un chemin d'état du composant hôte. */
+/** Writes a value at a state path of the host component. */
 export function writeState(target: any, segments: string[], value: unknown): void {
     let node = target;
     for (const key of segments.slice(0, -1)) { if (node[key] === null || typeof node[key] !== 'object') node[key] = {}; node = node[key]; }
     node[segments[segments.length - 1]] = value;
 }
 
-/** Bouton-icône d'action de composant (même balisage que Filament : icône, puis indicateur de chargement). */
+/** Icon button for a component action: the icon, then a loading indicator. */
 export function iconActionButton(options: { label: string; icon: string; expression: string; colorClasses?: string[]; attributes?: Record<string, string | null>; disabled?: boolean; inHeader?: boolean }): string {
-    // En-tête d'élément : Filament place `tabindex` avant `type` et la classe avant les attributs ajoutés.
+    // Item header buttons put `tabindex` before `type`, and the class before the extra attributes.
     const { tabindex = null, ...extra } = options.attributes ?? {};
     const attributes = new Attributes(options.inHeader ? {
         title: options.label, 'aria-disabled': options.disabled ? 'true' : null, 'aria-label': options.label, disabled: options.disabled ? 'disabled' : null, tabindex, type: 'button',
@@ -36,11 +35,11 @@ export function iconActionButton(options: { label: string; icon: string; express
     }).class(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': options.disabled === true }, 'fi-size-sm', ...(options.colorClasses ?? [])]);
     return `<button ${attributes.toHtml()}>${icon(options.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': options.expression }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': options.expression }))}</button>`;
 }
-/** Gestionnaire de couleurs du panel de l'hôte (les pages et widgets l'exposent par `panel`). */
+/** Color manager of the host's panel (pages and widgets expose it through `panel`). */
 export const colorsOf = (livewire: unknown): ColorManager | null => (livewire as any)?.panel?.colors ?? null;
 
 type BlockContext = { builder: Builder; itemKey: string; data: Record<string, unknown> };
-/** Type d'élément d'un Builder (port de Builder\Block). */
+/** Item type of a Builder. */
 export class Block {
     readonly name: string;
     private _label: string | null = null;
@@ -51,9 +50,9 @@ export class Block {
     static make(name: string): Block { return configured(new Block(name)); }
     label(label: string | null): this { this._label = label; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
-    /** Composants d'un élément : une fonction, appelée pour chaque élément (ses données courantes sont fournies). */
+    /** Item components: a function called for each item (with its current data). */
     schema(factory: (ctx: BlockContext) => Component[]): this { this._schema = factory; return this; }
-    /** Données d'un nouvel élément quand elles ne se déduisent pas des valeurs par défaut des champs (champs dépendant d'un autre). */
+    /** Data of a new item when it cannot be derived from the fields' defaults (fields depending on another). */
     defaultData(factory: (builder: Builder) => Record<string, unknown>): this { this._defaults = factory; return this; }
     getLabel(): string { return this._label ?? this.name.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase()); }
     getIcon(): string | null { return this._icon; }
@@ -62,7 +61,7 @@ export class Block {
 }
 
 type Item = { type: string; data: Record<string, unknown> };
-/** Empreinte du sélecteur de bloc : Filament y met `md5(serialize([largeur, placement, a des blocs, recherche]))`. */
+/** Precomputed block picker key hashes for common `width|placement|has blocks|searchable` signatures; others hash the signature itself. */
 const PICKER_HASHES: Record<string, string> = { 'fi-width-md|bottom-start|1|0': '8b2521a32ddb82abb3a5f4fd214c90b1', '||1|0': '9c288f69c73367423cc1eb48b3e9a82b' };
 
 export class Builder extends Field {
@@ -90,33 +89,32 @@ export class Builder extends Field {
     blockPickerColumns(columns: number | null = 2): this { this._pickerColumns = columns; return this; }
     blockPickerWidth(width: string | null): this { this._pickerWidth = width; return this; }
     labelBetweenItems(label: string | null): this { this._labelBetweenItems = label; return this; }
-    /** Sans en-tête, l'élément n'affiche que son contenu : ses actions sont alors à la charge du bloc. */
+    /** Without a header, an item only shows its content: its actions are then up to the block. */
     blockHeaders(condition = true): this { this._blockHeaders = condition; return this; }
     cloneable(condition = true): this { this._cloneable = condition; return this; }
-    /** Numéro de l'élément après le libellé du bloc (actif par défaut, comme Filament). */
+    /** Item number after the block label (on by default). */
     blockNumbers(condition = true): this { this._blockNumbers = condition; return this; }
-    /** Icône du bloc dans l'en-tête de l'élément (désactivée par défaut, comme Filament). */
+    /** Block icon in the item header (off by default). */
     blockIcons(condition = true): this { this._blockIcons = condition; return this; }
-    /** Balise du libellé d'en-tête (`h2` par défaut ; Filament la déduit du niveau de titre du schéma). */
+    /** Tag of the header label (`h2` by default). */
     blockLabelHeadingTag(tag: 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p'): this { this._headingTag = tag; return this; }
-    /** Sélecteur « Insérer entre les blocs » entre deux éléments (actif par défaut, comme Filament). */
+    /** "Insert between blocks" picker between two items (on by default). */
     addBetweenAction(condition = true): this { this._addBetween = condition; return this; }
     addBetweenActionLabel(label: string | null): this { this._addBetweenLabel = label; return this; }
     addActionLabel(label: string | null): this { this._addLabel = label; return this; }
     addActionIcon(name: string | null): this { this._addIcon = name; return this; }
     addActionAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._addAlignment = alignment; return this; }
     maxItems(count: number): this { this._maxItems = count; return this; }
-    /** Classe ajoutée à la racine (ex. `fi-fo-builder-not-contained`). */
+    /** Class added to the root (e.g. `fi-fo-builder-not-contained`). */
     extraClass(name: string | null): this { this._extraClass = name; return this; }
     generateUuidUsing(generator: () => string): this { this._uuid = generator; return this; }
 
     getBlocks(): Block[] { return (this._resolvedBlocks ??= typeof this._blocks === 'function' ? this._blocks() : this._blocks); }
     getBlock(name: unknown): Block | undefined { return typeof name === 'string' ? this.getBlocks().find((block) => block.name === name) : undefined; }
-    /** Blocs proposés dans le sélecteur (une sous-classe peut en retirer). */
+    /** Blocks offered in the picker (a subclass may remove some). */
     getBlockPickerBlocks(): Block[] { return this.getBlocks(); }
 
-    // --- état
-    /** Éléments bien formés : clé simple, type déclaré, données en objet. Le reste de ce qu'envoie le navigateur est ignoré. */
+    /** Well-formed items only: simple key, declared type, object data. Anything else the browser sends is ignored. */
     getItems(): Record<string, Item> {
         const state = this.context().state;
         if (!state || typeof state !== 'object' || Array.isArray(state)) return {};
@@ -130,8 +128,8 @@ export class Builder extends Field {
     protected setItems(items: Record<string, Item>): void { writeState(this.livewire, this.getStatePath().split('.'), items); }
     getDefaultState(): unknown { return {}; }
     /**
-     * Valeur enregistrée (liste `[{ type, data }]`, comme Filament, éventuellement en JSON) vers l'état du formulaire (table par clé).
-     * Les champs de chaque bloc hydratent leur propre valeur.
+     * Stored value (a `[{ type, data }]` list, possibly as JSON) to form state (a map by key).
+     * Each block's fields hydrate their own value.
      */
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = null; } }
@@ -151,14 +149,14 @@ export class Builder extends Field {
         return items;
     }
     private _storedAsList = true;
-    /** `false` : la valeur enregistrée reste la table par clé de l'état (filtres), au lieu de la liste `[{ type, data }]`. */
+    /** `false`: the stored value stays the keyed map of the state (filters) instead of a `[{ type, data }]` list. */
     storedAsList(condition = true): this { this._storedAsList = condition; return this; }
     finalizeDehydratedState(state: unknown): unknown {
         if (!this._storedAsList || !state || typeof state !== 'object' || Array.isArray(state)) return state;
         return Object.values(state as Record<string, unknown>);
     }
     dehydrateState(): unknown { return Object.fromEntries(Object.entries(this.getItems()).map(([key, item]) => [key, { type: item.type, data: {} }])); }
-    /** Schéma d'un élément : clé `<builder>.<élément>.data`, état au même chemin (comme Filament). */
+    /** Item schema: key `<builder>.<item>.data`, state at the same path. */
     protected itemSchema(itemKey: string, item: Item): Schema {
         const container = this.container;
         return new Schema(container.livewire).key(`${this.getKey()}.${itemKey}.data`).statePath(`${this.getStatePath()}.${itemKey}.data`).operation(container.getOperation()).record(container.getRecord()).root(false)
@@ -173,10 +171,9 @@ export class Builder extends Field {
         fillSchema(this.itemSchema('new', item), data);
         return item;
     }
-    /** Une sous-classe peut refuser l'ajout (plafond de règles, par exemple). */
+    /** A subclass may refuse adding (a rule cap, for instance). */
     protected canAdd(_block: Block): boolean { return Object.keys(this.getItems()).length < this._maxItems; }
 
-    // --- actions du composant
     getActions(): Action[] {
         const insert = (items: Record<string, Item>, after: string | null, key: string, item: Item) => {
             if (after === null || !Object.hasOwn(items, after)) return { ...items, [key]: item };
@@ -213,7 +210,7 @@ export class Builder extends Field {
             }),
             Action.make('moveUp').action(move(-1)),
             Action.make('moveDown').action(move(1)),
-            // Glisser-déposer : le nouvel ordre n'est accepté que si c'est une permutation des clés existantes.
+            // Drag and drop: the new order is only accepted if it is a permutation of the existing keys.
             Action.make('reorder').action(({ arguments: args }) => {
                 const items = this.getItems();
                 const keys = Object.keys(items);
@@ -223,10 +220,10 @@ export class Builder extends Field {
             }),
         ];
     }
-    /** Copie d'un élément ; une sous-classe renouvelle les clés des éléments imbriqués. */
+    /** Copy of an item; a subclass renews the keys of nested items. */
     protected cloneItem(item: Item): Item { return JSON.parse(JSON.stringify(item)); }
 
-    /** Expression `mountAction(...)` d'une action de ce composant. */
+    /** `mountAction(...)` expression for an action of this component. */
     actionExpression(action: string, args: Record<string, unknown> | null): string {
         const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: this.getKey() };
         return `mountAction(${js(action)}, ${args ? js(args) : '{}'}, ${js(context)})`;

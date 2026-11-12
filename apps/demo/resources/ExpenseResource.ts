@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\HR\Expenses (resource, formulaire, infolist, table, widget, pages List / Create en assistant / Edit / View) de la démo Filament.
+// HR expenses: form, infolist, table, widget, and List / Create (wizard) / Edit / View pages.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { DatePicker, FileUpload, Repeater, Select, Step, TableColumn, Textarea, TextInput, ToggleButtons, type Field } from '@navette-js/forms';
@@ -27,7 +27,7 @@ export class Expense extends Model {
     notes!: string | null;
     created_at!: string;
     updated_at!: string;
-    /** Lignes de la note de frais (`expense_lines`), jointes par l'adaptateur. */
+    /** Expense lines (`expense_lines`), loaded by the adapter. */
     expenseLines?: Record<string, unknown>[];
     $beforeInsert(): void { this.created_at = this.updated_at = now(); }
     $beforeUpdate(): void { this.updated_at = now(); }
@@ -61,7 +61,7 @@ const badgeColumn = (name: 'category' | 'status', cases: Record<string, EnumCase
 const lineAmount = (line: any) => Math.trunc(Number(line?.quantity ?? 1) || 0) * (Number(line?.unit_price ?? 0) || 0);
 const linesTotal = (lines: unknown) => Object.values((lines ?? {}) as Record<string, any>).reduce((sum: number, line) => sum + lineAmount(line), 0);
 
-/** `employee.name` et `project.name` sont lus par sous-requêtes ; les lignes suivent la note de frais. */
+/** `employee.name` and `project.name` come from subqueries; lines are saved with the expense. */
 class Expenses extends ObjectionAdapter<Expense> {
     constructor() {
         super(Expense, {
@@ -77,7 +77,7 @@ class Expenses extends ObjectionAdapter<Expense> {
         if (expense) expense.expenseLines = await knex()('expense_lines').where({ expense_id: key }).orderBy('id').select('id', 'description', 'quantity', 'unit_price', 'amount', 'date');
         return expense;
     }
-    /** Les lignes qui portent la clé `record-<id>` d'une ligne de CETTE note sont mises à jour, les autres créées, les absentes supprimées. */
+    /** Lines keyed `record-<id>` that belong to THIS expense are updated, others are created, missing ones deleted. */
     private async saveLines(expenseKey: string | number, lines: unknown): Promise<void> {
         if (!lines || typeof lines !== 'object' || Array.isArray(lines)) return;
         const existing = new Set<number>((await knex()('expense_lines').where({ expense_id: expenseKey }).select('id')).map((row: any) => Number(row.id)));
@@ -98,7 +98,7 @@ class Expenses extends ObjectionAdapter<Expense> {
     }
     async update(key: string | number, data: Record<string, unknown>): Promise<Expense | null> {
         const { expenseLines, ...attributes } = data;
-        // La note doit appartenir à la portée de l'adaptateur avant toute écriture.
+        // The expense must be within the adapter's scope before any write.
         if (!(await super.find(key))) return null;
         await super.update(key, attributes);
         await this.saveLines(key, expenseLines);
@@ -106,14 +106,14 @@ class Expenses extends ObjectionAdapter<Expense> {
     }
 }
 
-// --- champs partagés entre le formulaire d'édition (sections) et l'assistant de création (étapes)
+// --- fields shared by the edit form (sections) and the create wizard (steps)
 const expenseNumber = () => TextInput.make('expense_number').default(`EXP-${String(Math.floor(1 + Math.random() * 999999)).padStart(6, '0')}`).disabled().dehydrated().required().maxLength(255);
 const employee = () => Select.make('employee_id').label('Employee').options(options('employees', true)).searchable().preload().required();
 const project = () => Select.make('project_id').label('Project').options(options('projects', true)).searchable().preload();
 const description = () => Textarea.make('description').required().maxLength(65535).columnSpanFull();
 const updateAmount = ({ get, set }: { get: (name: string) => unknown; set: (name: string, value: unknown) => void }) => { set('amount', lineAmount({ quantity: get('quantity'), unit_price: get('unit_price') }).toFixed(2)); };
 const linesRepeater = () => Repeater.make('expenseLines').defaultItems(1).reorderable(false)
-    // Le total suit les lignes : appelé après le champ modifié (les champs parents sont prévenus à leur tour).
+    // The total follows the lines: called after the changed field (parent fields are notified in turn).
     .afterStateUpdated(({ state, set }) => { set('total_amount', linesTotal(state).toFixed(2)); })
     .table([TableColumn.make('Description'), TableColumn.make('Quantity').width(100), TableColumn.make('Unit Price').width(120), TableColumn.make('Amount').width(120), TableColumn.make('Date').width(150)])
     .schema((): Field[] => [
@@ -131,16 +131,16 @@ const summaryFields = (): Component[] => [
     FileUpload.make('receipt_path').directory('expense-receipts'),
     Textarea.make('notes').maxLength(65535).columnSpanFull(),
 ];
-/** Montants recalculés côté serveur avant l'enregistrement, comme `mutateFormDataBefore…` de la démo. */
+/** Amounts are recomputed on the server before saving. */
 const withTotals = (data: Record<string, unknown>) => {
     const lines = Object.fromEntries(Object.entries((data.expenseLines ?? {}) as Record<string, any>).map(([key, line]) => [key, { ...line, amount: lineAmount(line) }]));
     return { ...data, expenseLines: lines, total_amount: linesTotal(lines) };
 };
 
-// --- actions de suivi : les mêmes sur une ligne de la table et dans l'en-tête de la page « View »
+// --- workflow actions: the same on a table row and in the View page header
 const change = async (record: Expense, changes: Record<string, unknown>) => {
     await ExpenseResource.adapter.update(record.id, changes);
-    // Comme `$record->update()` d'Eloquent : l'enregistrement en mémoire suit, la page « View » se redessine à jour.
+    // Also update the in-memory record so the View page re-renders with fresh data.
     Object.assign(record, changes);
 };
 const is = (status: string) => ({ record }: { record: unknown }) => (record as Expense | null)?.status === status;
@@ -163,7 +163,7 @@ const workflowActions = (): Record<'approve' | 'reject' | 'submit' | 'reimburse'
         .action(async ({ record, data }) => { await change(record as Expense, { status: 'draft', notes: data.flag_reason }); Notification.make().warning().title('Expense flagged and returned to draft').send(); }),
 });
 
-/** Équivalent de Pages\CreateExpense : la création se fait en trois étapes ; la note naît en brouillon. */
+/** Created in three steps; the expense starts as a draft. */
 class CreateExpense extends CreateRecord {
     protected getSteps(): Step[] {
         return [
@@ -187,7 +187,7 @@ class ViewExpense extends ViewRecord {
     getHeaderActions(): Action[] { const actions = workflowActions(); return [actions.submit, actions.approve, actions.reject, actions.reimburse, actions.flag, this.editAction()]; }
 }
 
-/** Équivalent de Widgets\ExpenseStats : chiffres calculés sur la requête de la table de la liste. */
+/** Figures computed from the list table's query. */
 export class ExpenseStats extends PageTableStatsWidget {
     static pollingInterval = null;
     static tablePage = () => ExpenseResource.getPages().index as any;
@@ -216,14 +216,14 @@ export class ExpenseResource extends Resource {
     static navigationGroup = 'HR';
     static navigationSort = 3;
     static recordTitleAttribute = 'expense_number';
-    // Comme dans la démo Filament : les notes de frais ne sont pas proposées par la recherche globale.
+    // Expenses are left out of global search.
     static globallySearchableAttributes = [];
     static hasViewPage = true;
     static pages = { create: CreateExpense, edit: EditExpense, view: ViewExpense };
     static widgets = [ExpenseStats];
     static headerWidgets = [ExpenseStats];
     static adapter = new Expenses();
-    /** Notes soumises, en attente d'approbation (équivalent de getNavigationBadge()). */
+    /** Submitted expenses awaiting approval (navigation badge). */
     static async getNavigationBadge(): Promise<string> { return String(await countWhere('submitted')()); }
 
     static tabs(): Record<string, Tab> {

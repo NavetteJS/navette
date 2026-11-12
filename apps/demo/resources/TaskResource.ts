@@ -1,4 +1,4 @@
-// Équivalent de App\Filament\Resources\HR\Tasks (resource, formulaire, table, pages List / Create / Edit) de la démo Filament.
+// HR tasks: form, table, and List / Create / Edit pages.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { CheckboxList, DatePicker, DateTimePicker, Radio, RichEditor, Select, TextInput, ToggleButtons } from '@navette-js/forms';
@@ -55,7 +55,7 @@ const assignee = () => Select.make('assigned_to').label('Assignee').options(opti
 const hours = (name: string) => TextInput.make(name).numeric().step(0.5).minValue(0).maxValue(99999.9).suffix('hours');
 const isPast = (date: string | null) => date !== null && Date.parse(`${date.slice(0, 10)}T00:00:00Z`) < Date.now();
 
-/** Portée de la table : toutes les tâches, ou celles d'un projet (relation manager de la page d'un projet). */
+/** Table scope: all tasks, or those of one project (project relation manager). */
 export class Tasks extends ObjectionAdapter<Task> {
     constructor(projectId: number | string | null = null) {
         super(Task, {
@@ -79,7 +79,7 @@ class EditTask extends EditRecord {
     getHeaderActions(): Action[] { return [DeleteAction.make()]; }
 }
 
-/** Table des tâches, partagée avec le relation manager d'un projet (qui n'affiche ni la colonne ni le filtre « Project »). */
+/** Task table, shared with a project's relation manager (which hides the Project column and filter). */
 export function tasksTable(table: Table<Task>, projectScoped = false): Table<Task> {
     return table
         .columns([
@@ -136,7 +136,7 @@ export function tasksTable(table: Table<Task>, projectScoped = false): Table<Tas
                 }),
             DeleteBulkAction.make().action(cheeky),
         ])
-        // Tâche en retard (échéance passée, non terminée) : ligne teintée.
+        // Overdue task (past due, not completed): tinted row.
         .recordClasses((record) => (record.status !== 'completed' && isPast(record.due_date) ? 'bg-danger-50 dark:bg-danger-950/50' : null));
 }
 
@@ -150,7 +150,7 @@ export class TaskResource extends Resource {
     static globalSearchSort = 7;
     static pages = { edit: EditTask };
     static adapter = new Tasks();
-    /** Tâches en cours (équivalent de getNavigationBadge()). */
+    /** Tasks in progress (navigation badge). */
     static async getNavigationBadge(): Promise<string> { return String(Number(((await Task.query().where('status', 'in_progress').count({ n: '*' }).first()) as any)?.n ?? 0)); }
 
     static form(schema: Schema): Schema {
