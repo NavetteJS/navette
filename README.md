@@ -73,7 +73,7 @@ app.use(panelRouter(panel, new WireRuntime({ key: process.env.APP_KEY! })));
 app.listen(3000);
 ```
 
-See `apps/starter` for a complete minimal dashboard, and the documentation site in `apps/docs`.
+See `apps/starter` for a complete minimal dashboard. Documentation: https://navettejs.github.io/navette/
 
 ## Repository
 

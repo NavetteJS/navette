@@ -19,11 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Version shown on the site: the latest release tag.
+      - run: echo "DOCS_VERSION=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo v0.0.0)" >> "$GITHUB_ENV"
       # The site is served under https://navettejs.github.io/navette/: every absolute link gets this prefix.
       - run: node apps/docs/build.ts
         env:

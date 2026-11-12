@@ -11,7 +11,8 @@ const contentDir = path.join(here, 'content');
 const dist = process.env.DOCS_OUT ?? path.join(here, 'dist');
 const base = (process.env.DOCS_BASE ?? '').replace(/\/$/, '');
 const navette = path.resolve(here, '../..');
-const version = JSON.parse(readFileSync(path.join(navette, 'packages/panels/package.json'), 'utf8')).version as string;
+// `DOCS_VERSION` (the release tag, set by the docs workflow) wins over the workspace version, which stays 0.0.0 between releases.
+const version = (process.env.DOCS_VERSION ?? JSON.parse(readFileSync(path.join(navette, 'packages/panels/package.json'), 'utf8')).version as string).replace(/^v/, '');
 const GITHUB = 'https://github.com/NavetteJS/navette';
 
 export type DocPage = { file: string; url: string; title: string; section: string[]; html: string; headings: Heading[]; text: string; previews: string[] };
