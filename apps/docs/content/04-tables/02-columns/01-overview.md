@@ -79,7 +79,7 @@ TextColumn.make<Post>('meta.title')
 ```
 
 <Aside variant="warning">
-Filament's `state()` and `default()` methods are not available yet: use `getStateUsing()`, which can return a fallback value.
+`state()` and `default()` methods are not available yet: use `getStateUsing()`, which can return a fallback value.
 </Aside>
 
 #### Adding placeholder text if a column is empty
@@ -411,7 +411,7 @@ The first argument is the label of the group, and `columns()` takes the columns 
 ## Hiding columns
 
 <Aside variant="warning">
-Filament's `hidden()`, `visible()` and `visibleFrom()` methods on columns are not available yet. To show a column only to some users, build the column list conditionally in `table()`.
+`hidden()`, `visible()` and `visibleFrom()` methods on columns are not available yet. To show a column only to some users, build the column list conditionally in `table()`.
 </Aside>
 
 ### Allowing users to manage columns

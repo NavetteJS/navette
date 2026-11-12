@@ -6,62 +6,92 @@ title: Your first panel
 
 In this guide, you build a small shop back office: a list of customers, a form to create and edit them, their orders, and a dashboard widget. It covers the building blocks you use in every Navette application: [resources](/resources/overview), [forms](/forms/overview), [tables](/tables/overview), [relation managers](/resources/managing-relationships) and [widgets](/widgets/overview).
 
-Start from the `server.ts` file of the [installation guide](/getting-started/installation). The complete code of this guide is also in the Navette repository, in `apps/docs/examples/first-panel.ts`.
+Start from a blank project:
 
-## Creating the tables and models
+```bash
+npm create navette@latest my-shop -- --template=blank
+cd my-shop
+npm run dev
+```
 
-Navette reads and writes data through Knex and Objection.js. Add two tables after the `users` table, and one Objection model per table:
+Sign in at `http://127.0.0.1:3000/admin` with the admin account printed by the installation. Keep the server running: it restarts by itself whenever you save a file. The complete code of this guide, in a single file, is also in the Navette repository: `apps/docs/examples/first-panel.ts`.
+
+## Creating the tables
+
+Navette reads and writes data through Knex and Objection.js. Create two migrations:
+
+```bash
+npx navette make:migration create_customers_table
+npx navette make:migration create_orders_table
+```
+
+Open them in `src/migrations` and describe the two tables:
 
 ```ts
-import { Model } from '@navette-js/database';
+import type { Knex } from '@navette-js/database';
 
-if (!(await knex.schema.hasTable('customers'))) {
-    await knex.schema.createTable('customers', (table) => {
+export async function up(db: Knex): Promise<void> {
+    await db.schema.createTable('customers', (table) => {
         table.increments('id');
         table.string('name').notNullable();
-        table.string('email');
-        table.string('country');
+        table.string('email').nullable();
+        table.string('country').nullable();
         table.timestamps();
     });
-    await knex.schema.createTable('orders', (table) => {
+}
+```
+
+```ts
+import type { Knex } from '@navette-js/database';
+
+export async function up(db: Knex): Promise<void> {
+    await db.schema.createTable('orders', (table) => {
         table.increments('id');
         table.integer('customer_id').notNullable();
         table.string('number').notNullable();
         table.string('status').notNullable().defaultTo('new');
-        table.date('ordered_at');
+        table.date('ordered_at').nullable();
         table.timestamps();
     });
 }
-
-class Customer extends Model {
-    static tableName = 'customers';
-    id!: number;
-    name!: string;
-    email!: string | null;
-    country!: string | null;
-}
-
-class Order extends Model {
-    static tableName = 'orders';
-    id!: number;
-    customer_id!: number;
-    number!: string;
-    status!: string;
-    ordered_at!: string | null;
-}
 ```
 
-In a real application, you would create tables with [Knex migrations](https://knexjs.org/guide/migrations.html) instead of at startup.
+When the server restarts, it runs the two migrations and creates the tables.
 
 ## Creating a resource
 
 A resource is the set of pages that manage one kind of record. By default, a resource has three pages: a **list** with a table, a **create** page and an **edit** page. Its navigation item is added to the sidebar automatically.
 
+Generate the resource from the `customers` table:
+
+```bash
+npx navette make:resource Customer --generate
+```
+
+The command creates the model, `src/models/Customer.ts`, and the resource, `src/admin/resources/CustomerResource.ts`, with a form field and a table column for each column of the table. The panel discovers the resource in that folder: after the restart, a "Customers" item appears in the sidebar, and you can already list, create and edit customers.
+
+The rest of this guide edits these two files. The model describes the record:
+
+```ts
+import { Model } from '@navette-js/database';
+
+export class Customer extends Model {
+    static tableName = 'customers';
+    declare id: number;
+    declare name: string;
+    declare email: string | null;
+    declare country: string | null;
+}
+```
+
+And the resource starts like this:
+
 ```ts
 import { ObjectionAdapter } from '@navette-js/database';
 import { Resource } from '@navette-js/panels';
+import { Customer } from '../../models/Customer.ts';
 
-class CustomerResource extends Resource {
+export class CustomerResource extends Resource {
     static slug = 'customers';
     static modelLabel = 'customer';
     static navigationIcon = 'o-user-group';
@@ -70,21 +100,11 @@ class CustomerResource extends Resource {
 }
 ```
 
-- `slug` is the URL of the resource: its pages are `/customers`, `/customers/create` and `/customers/{id}/edit`.
+- `slug` is the URL of the resource in the panel: its pages are `/admin/customers`, `/admin/customers/create` and `/admin/customers/{id}/edit`.
 - `modelLabel` names a record in headings and buttons ("New customer"). The plural, "customers", is derived from it.
 - `navigationIcon` is a [Heroicon](/styling/icons): `o-` for outline icons, `s-` for solid, `m-` for mini.
-- `recordTitleAttribute` is the column that names a record in breadcrumbs and page titles.
+- `recordTitleAttribute` is the column that names a record in breadcrumbs, page titles and global search.
 - `adapter` tells the resource where its records come from. `ObjectionAdapter` reads and writes an Objection model; you can also [write your own adapter](/tables/custom-data).
-
-Register the resource on the panel:
-
-```ts
-const panel = Panel.make()
-    // ...
-    .resources([CustomerResource]);
-```
-
-Restart the server: a "Customers" item appears in the sidebar. The list is empty for now, because the resource has no columns yet.
 
 ## Adding a form
 
@@ -94,7 +114,7 @@ The `form()` method describes the fields of the create and edit pages. It receiv
 import { Select, TextInput } from '@navette-js/forms';
 import { Section, type Schema } from '@navette-js/schemas';
 
-class CustomerResource extends Resource {
+export class CustomerResource extends Resource {
     // ...
 
     static form(schema: Schema): Schema {
@@ -127,7 +147,7 @@ Section.make('Customer')
 
 Each field is bound to the column of the same name. The rules — `required()`, `email()`, `maxLength()` — are checked on the server when the form is submitted, and the errors are shown under each field. The `Section` groups the fields in a card, on two columns.
 
-Visit `/customers/create`, fill the form and save: Navette validates the data, creates the record, and opens its edit page.
+Visit `/admin/customers/create`, fill the form and save: Navette validates the data, creates the record, and opens its edit page.
 
 ## Adding a table
 
@@ -136,7 +156,7 @@ The `table()` method describes the list page. Each column displays one attribute
 ```ts
 import { SelectFilter, TextColumn, type Table } from '@navette-js/tables';
 
-class CustomerResource extends Resource {
+export class CustomerResource extends Resource {
     // ...
 
     static table(table: Table<Customer>): Table<Customer> {
@@ -173,11 +193,28 @@ Clicking a row opens the edit page. The table also gets pagination and bulk dele
 
 ## Managing related records
 
-Customers have orders. A **relation manager** displays the related records as a table on the edit page of the owner, with its own create, edit and delete actions.
-
-A relation manager needs an adapter limited to one owner. Extend `ObjectionAdapter` so that it only reads the orders of one customer, and assigns new orders to that customer:
+Customers have orders. Add the model of the `orders` table in `src/models/Order.ts`:
 
 ```ts
+import { Model } from '@navette-js/database';
+
+export class Order extends Model {
+    static tableName = 'orders';
+    declare id: number;
+    declare customer_id: number;
+    declare number: string;
+    declare status: string;
+    declare ordered_at: string | null;
+}
+```
+
+A **relation manager** displays the related records as a table on the edit page of the owner, with its own create, edit and delete actions.
+
+A relation manager needs an adapter limited to one owner. In `CustomerResource.ts`, extend `ObjectionAdapter` so that it only reads the orders of one customer, and assigns new orders to that customer:
+
+```ts
+import { Order } from '../../models/Order.ts';
+
 class CustomerOrders extends ObjectionAdapter<Order> {
     customerId: number;
 
@@ -233,7 +270,7 @@ class OrdersRelationManager extends RelationManager {
     }
 }
 
-class CustomerResource extends Resource {
+export class CustomerResource extends Resource {
     // ...
     static relations = [OrdersRelationManager];
 }
@@ -243,12 +280,20 @@ Open a customer: under the form, an "Orders" table lists their orders. "New orde
 
 ## Adding a widget
 
-Widgets display information on the dashboard. A stats overview widget shows a row of numbers:
+Widgets display information on the dashboard. Generate a stats overview widget, which shows a row of numbers:
+
+```bash
+npx navette make:widget CustomerStats
+```
+
+Then edit `src/admin/widgets/CustomerStats.ts`:
 
 ```ts
 import { Stat, StatsOverviewWidget } from '@navette-js/panels';
+import { Customer } from '../../models/Customer.ts';
+import { Order } from '../../models/Order.ts';
 
-class CustomerStats extends StatsOverviewWidget {
+export class CustomerStats extends StatsOverviewWidget {
     static pollingInterval = null;
 
     async getStats(): Promise<Stat[]> {
@@ -268,28 +313,18 @@ class CustomerStats extends StatsOverviewWidget {
 ]
 ```
 
-By default, stats are refreshed every 5 seconds; `pollingInterval = null` turns this off. Register the widget on the panel: the dashboard displays the panel's widgets.
-
-```ts
-const panel = Panel.make()
-    // ...
-    .pages([Dashboard])
-    .resources([CustomerResource])
-    .widgets([CustomerStats]);
-```
-
-Widgets are loaded after the page, so a slow query never delays the rest of the dashboard.
+By default, stats are refreshed every 5 seconds; `pollingInterval = null` turns this off. There is nothing to register: the panel discovers the widgets of `src/admin/widgets`, and its dashboard displays them. Widgets are loaded after the page, so a slow query never delays the rest of the dashboard.
 
 ## Customizing the panel
 
-A few options change the look of the whole panel:
+The panel itself is described in `src/panels/admin.ts`. A few options change the look of the whole panel:
 
 ```ts
 import { Color } from '@navette-js/support';
 
-const panel = Panel.make()
+export default Panel.make()
     .id('admin')
-    .key(key)
+    .path('admin')
     .brandName('My shop')
     .setColors({ primary: Color.Indigo })
     // ...

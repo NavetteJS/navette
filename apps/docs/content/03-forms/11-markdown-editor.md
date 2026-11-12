@@ -4,7 +4,7 @@ title: Markdown editor
 
 ## Introduction
 
-The Markdown editor allows you to edit and preview Markdown content. Like Filament, Navette uses the [EasyMDE](https://github.com/Ionaru/easy-markdown-editor) editor:
+The Markdown editor allows you to edit and preview Markdown content. Navette uses the [EasyMDE](https://github.com/Ionaru/easy-markdown-editor) editor:
 
 ```ts
 import { MarkdownEditor } from '@navette-js/forms';

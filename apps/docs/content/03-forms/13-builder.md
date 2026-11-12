@@ -60,7 +60,7 @@ return Builder.make('plan')
 
 `Block.schema()` takes a function returning the fields of a block. It is called for each item, and receives `{ builder, itemKey, data }`, where `data` is the current data of the item.
 
-The saved value is a list of blocks, like Filament's. Store it in a JSON column:
+The saved value is a list of blocks. Store it in a JSON column:
 
 ```json
 [

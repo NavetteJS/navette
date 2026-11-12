@@ -1,5 +1,5 @@
-// Générateur du site de documentation : lit content/**/*.md, écrit un site statique dans dist/.
-// Usage : node build.ts            (DOCS_BASE=/docs pour un site servi sous un sous-chemin)
+// Builds the documentation website from content/**/*.md into a static site.
+// Usage: node build.ts   (DOCS_BASE=/docs for a site served under a sub-path, DOCS_OUT=<dir> for another output directory)
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,7 @@ const titleOf = (name: string) => stripPrefix(name).replace(/-/g, ' ').replace(/
 const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const withBase = (html: string) => (base ? html.replace(/(href|src)="\/(?!\/)/g, `$1="${base}/`) : html);
 
-/** Pages et arbre de navigation, dans l'ordre des préfixes numériques. */
+/** Pages and navigation tree; numeric prefixes give the order and are dropped from URLs. */
 export function collect(): { pages: DocPage[]; nav: NavNode[]; home: DocPage | null } {
     const pages: DocPage[] = [];
     let home: DocPage | null = null;
@@ -55,7 +55,7 @@ export function collect(): { pages: DocPage[]; nav: NavNode[]; home: DocPage | n
     return { pages, nav, home };
 }
 
-// ------------------------------------------------------------------ mise en page
+// ------------------------------------------------------------------ layout
 const logo = `<span class="logo"><img class="logo-light" src="/assets/navette-light.svg" alt="Navette"><img class="logo-dark" src="/assets/navette-dark.svg" alt="Navette"></span>`;
 const icons = {
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5"/></svg>',
@@ -143,10 +143,10 @@ function homeHtml(home: DocPage | null, nav: NavNode[], pages: DocPage[]): strin
     return shell({ title: 'Navette', description: home?.text.slice(0, 160) ?? 'Navette documentation', nav, current: '/', main, toc: '', bodyClass: 'home' });
 }
 
-// ------------------------------------------------------------------ construction
+// ------------------------------------------------------------------ build
 export async function build(): Promise<{ pages: DocPage[]; previewErrors: string[] }> {
     const { pages, nav, home } = collect();
-    // Le dossier lui-même est gardé (Windows refuse de supprimer un dossier ouvert par un terminal) : seul son contenu est vidé.
+    // Empty the directory instead of removing it: Windows refuses to remove a directory that a terminal has open.
     mkdirSync(dist, { recursive: true });
     for (const entry of readdirSync(dist)) rmSync(path.join(dist, entry), { recursive: true, force: true });
     const write = (url: string, html: string) => {
@@ -154,7 +154,7 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
         mkdirSync(path.dirname(target), { recursive: true });
         writeFileSync(target, html);
     };
-    // Aperçus : chaque bloc ```preview devient une page autonome, affichée en iframe à la place de son repère.
+    // Each ```preview block becomes a standalone page, shown in an iframe where its marker was.
     const previewErrors: string[] = [];
     for (const page of pages) {
         for (const [index, code] of page.previews.entries()) {
@@ -166,7 +166,7 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
                 writeFileSync(target, previewDocument(await renderPreview({ code })));
                 frame = `<div class="preview"><div class="preview-label">Preview</div><iframe src="/previews/${name}.html" title="Preview" loading="lazy"></iframe></div>`;
             } catch (error) {
-                previewErrors.push(`${page.file} (aperçu ${index + 1}) : ${(error as Error).message}`);
+                previewErrors.push(`${page.file} (preview ${index + 1}): ${(error as Error).message}`);
             }
             page.html = page.html.replace(`<!--preview:${index}-->`, () => withBase(frame));
         }
@@ -176,19 +176,19 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
     write('/', homeHtml(home, nav, pages));
     writeFileSync(path.join(dist, '404.html'), shell({ title: 'Page not found', description: 'Page not found', nav, current: '', main: '<article class="prose"><h1>Page not found</h1><p>This page does not exist. Try the search, or go back to the <a href="/">documentation home</a>.</p></article>', toc: '' }));
 
-    // Index de recherche : une entrée par page et par titre de section.
+    // Search index: one entry per page and per heading.
     const index = pages.flatMap((page) => [
         { t: page.title, s: page.section.join(' / '), u: page.url, x: page.text.slice(0, 400) },
         ...page.headings.map((heading) => ({ t: heading.text, s: `${page.section.join(' / ')} / ${page.title}`, u: `${page.url}#${heading.id}`, x: '' })),
     ]);
     writeFileSync(path.join(dist, 'search.json'), JSON.stringify(index));
 
-    // Fichiers statiques : styles, script, logos, police Inter (celle des panels).
+
     const assets = path.join(dist, 'assets');
     cpSync(path.join(here, 'assets'), assets, { recursive: true });
     for (const name of ['navette-light.svg', 'navette-dark.svg', 'navette-icon.svg']) cpSync(path.join(navette, 'apps/demo/public/images/logo', name), path.join(assets, name));
     cpSync(path.join(navette, 'packages/panels/dist/filament/fonts/filament/filament/inter'), path.join(assets, 'fonts/inter'), { recursive: true });
-    // CSS et JavaScript de Filament pour les aperçus.
+    // Panel CSS and JavaScript, used by the previews.
     cpSync(path.join(navette, 'packages/panels/dist/filament'), path.join(assets, 'filament'), { recursive: true });
     return { pages, previewErrors };
 }
@@ -196,6 +196,6 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
 if (import.meta.url === `file:///${process.argv[1]?.replace(/\\/g, '/').replace(/^\//, '')}` || process.argv[1]?.endsWith('build.ts')) {
     const { pages, previewErrors } = await build();
     const previews = pages.reduce((total, page) => total + page.previews.length, 0);
-    console.log(`Navette docs : ${pages.length} pages, ${previews} aperçus, écrits dans ${path.relative(process.cwd(), dist) || dist}`);
-    if (previewErrors.length) { console.log(`\n${previewErrors.length} aperçu(s) en erreur :\n` + previewErrors.map((error) => ` - ${error}`).join('\n')); process.exitCode = 1; }
+    console.log(`Navette docs: ${pages.length} pages, ${previews} previews, written to ${path.relative(process.cwd(), dist) || dist}`);
+    if (previewErrors.length) { console.log(`\n${previewErrors.length} preview(s) failed:\n` + previewErrors.map((error) => ` - ${error}`).join('\n')); process.exitCode = 1; }
 }

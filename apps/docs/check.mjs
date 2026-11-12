@@ -1,5 +1,5 @@
-// Contrôle du contenu de la documentation : titre, « Introduction » en tête, liens internes et ancres résolus,
-// syntaxe hors du sous-ensemble de WRITING.md. Usage : node check.mjs   (code de sortie 1 en cas d'erreur)
+// Checks the documentation content: a title, "Introduction" first, internal links and anchors that resolve,
+// and no syntax outside the subset of WRITING.md. Usage: node check.mjs   (exit code 1 on problems)
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,23 +14,23 @@ const report = (page, message) => problems.push(`${page.file} : ${message}`);
 
 for (const page of all) {
     const source = readFileSync(path.join(here, 'content', page.file), 'utf8');
-    if (!/^---\r?\n[\s\S]*?^title:\s*\S/m.test(source)) report(page, 'pas de titre dans le front matter');
-    if (page !== home && page.headings[0]?.text !== 'Introduction') report(page, `la page doit commencer par « ## Introduction » (premier titre : ${page.headings[0]?.text ?? 'aucun'})`);
-    if (/^# /m.test(source.replace(/```[\s\S]*?```/g, ''))) report(page, 'titre de niveau 1 (#) : le titre vient du front matter');
-    if (/&lt;\/?(Aside|AutoScreenshot|UtilityInjection|Disclosure)/.test(page.html)) report(page, 'composant non pris en charge ou <Aside> mal fermé');
-    if ((source.match(/^\s*```/gm) ?? []).length % 2) report(page, 'bloc de code non fermé');
+    if (!/^---\r?\n[\s\S]*?^title:\s*\S/m.test(source)) report(page, 'no title in the front matter');
+    if (page !== home && page.headings[0]?.text !== 'Introduction') report(page, `the page must start with "## Introduction" (first heading: ${page.headings[0]?.text ?? 'none'})`);
+    if (/^# /m.test(source.replace(/```[\s\S]*?```/g, ''))) report(page, 'level-1 heading (#): the title comes from the front matter');
+    if (/&lt;\/?(Aside|AutoScreenshot|UtilityInjection|Disclosure)/.test(page.html)) report(page, 'unsupported component, or <Aside> not closed');
+    if ((source.match(/^\s*```/gm) ?? []).length % 2) report(page, 'code block not closed');
     for (const [, href] of page.html.matchAll(/href="([^"]+)"/g)) {
         if (/^https?:\/\//.test(href)) continue;
         const [target, anchor] = href.split('#');
         const url = target === '' ? page.url : target.replace(/\/$/, '') || '/';
-        if (!ids.has(url)) { report(page, `lien vers une page absente : ${href}`); continue; }
-        if (anchor && !ids.get(url).has(decodeURIComponent(anchor))) report(page, `ancre absente : ${href}`);
+        if (!ids.has(url)) { report(page, `link to a missing page: ${href}`); continue; }
+        if (anchor && !ids.get(url).has(decodeURIComponent(anchor))) report(page, `missing anchor: ${href}`);
     }
 }
 const sections = new Set(pages.map((page) => page.section[0]));
-console.log(`${all.length} pages, ${sections.size} sections : ${[...sections].join(', ')}`);
+console.log(`${all.length} pages, ${sections.size} sections: ${[...sections].join(', ')}`);
 if (problems.length) {
-    console.log(`\n${problems.length} problème(s) :\n` + problems.map((problem) => ` - ${problem}`).join('\n'));
+    console.log(`\n${problems.length} problem(s):\n` + problems.map((problem) => ` - ${problem}`).join('\n'));
     process.exit(1);
 }
-console.log('Aucun problème.');
+console.log('No problems.');

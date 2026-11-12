@@ -296,7 +296,7 @@ A default function is supported by `TextInput`, `Textarea`, `DatePicker`, `DateT
 </Aside>
 
 <Aside variant="info">
-On an Edit page, the form is filled from the record. Unlike Filament, Navette also uses the default value when the record's value is `null` or missing.
+On an Edit page, the form is filled from the record. When the record's value is `null` or missing, the default value is used.
 </Aside>
 
 ## Disabling a field

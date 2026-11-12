@@ -75,7 +75,7 @@ To customize the [icon](/styling/icons) of a navigation item, set `navigationIco
 static navigationIcon = 'o-document-text';
 ```
 
-The sidebar uses outline icons (`o-` prefix) in Filament's own pages; any Heroicon or [registered icon](/styling/icons#using-custom-svgs-as-icons) works.
+The sidebar uses outline icons (`o-` prefix) in Navette's own pages; any Heroicon or [registered icon](/styling/icons#using-custom-svgs-as-icons) works.
 
 ## Sorting navigation items
 

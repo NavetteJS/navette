@@ -72,12 +72,12 @@ Select.make('country')
 ```
 
 <Aside variant="warning">
-Filament's `relationship()` is not available. List related records with an options function, and save the foreign key (or, for a multi-select, the related keys) in your data adapter.
+`relationship()` is not available. List related records with an options function, and save the foreign key (or, for a multi-select, the related keys) in your data adapter.
 </Aside>
 
 ## Enabling the JavaScript select
 
-By default, Navette uses the native HTML select. You may enable the JavaScript select of Filament, which offers search, by calling `searchable()`. A [multi-select](#multi-select) always uses the JavaScript select.
+By default, Navette uses the native HTML select. You may enable the JavaScript select, which offers search, by calling `searchable()`. A [multi-select](#multi-select) always uses the JavaScript select.
 
 ## Searching options
 

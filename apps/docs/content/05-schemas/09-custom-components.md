@@ -339,5 +339,5 @@ export class Chart extends Component {
 ```
 
 <Aside variant="warning">
-Rendering components with JavaScript frameworks (`JsComponent`), inserting a nested Livewire component, and the `make:filament-schema-component` generator have no equivalent in Navette yet.
+Rendering components with JavaScript frameworks (`JsComponent`), inserting a nested Livewire component, and a command that generates a custom component are not available yet.
 </Aside>

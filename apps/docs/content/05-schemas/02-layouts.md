@@ -245,7 +245,7 @@ Flex.make([
 ```
 
 ```preview
-// state: {"title": "Announcing Navette", "content": "Navette brings Filament's components to Node.js.", "is_published": true, "is_featured": false}
+// state: {"title": "Announcing Navette", "content": "Navette brings admin panels to Node.js.", "is_published": true, "is_featured": false}
 // viewport: 1100
 Flex.make([
     Section.make().schema([

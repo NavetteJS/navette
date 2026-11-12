@@ -24,7 +24,7 @@ static table(table: Table<Post>): Table<Post> {
 ```
 
 ```preview
-// records: [{"title": "Introducing Navette", "status": "published"}, {"title": "Building your first panel", "status": "draft"}, {"title": "Ten tips for faster tables", "status": "published"}, {"title": "Migrating from Filament", "status": "reviewing"}, {"title": "Writing custom columns", "status": "draft"}]
+// records: [{"title": "Introducing Navette", "status": "published"}, {"title": "Building your first panel", "status": "draft"}, {"title": "Ten tips for faster tables", "status": "published"}, {"title": "Migrating an existing app", "status": "reviewing"}, {"title": "Writing custom columns", "status": "draft"}]
 new Table()
     .pluralModelLabel('posts')
     .columns([
@@ -66,7 +66,7 @@ static table(table: Table<Post>): Table<Post> {
 ```
 
 ```preview
-// records: [{"title": "Introducing Navette", "status": "published", "category": "News"}, {"title": "Building your first panel", "status": "draft", "category": "Tutorials"}, {"title": "Ten tips for faster tables", "status": "published", "category": "Tutorials"}, {"title": "Migrating from Filament", "status": "reviewing", "category": "Guides"}]
+// records: [{"title": "Introducing Navette", "status": "published", "category": "News"}, {"title": "Building your first panel", "status": "draft", "category": "Tutorials"}, {"title": "Ten tips for faster tables", "status": "published", "category": "Tutorials"}, {"title": "Migrating an existing app", "status": "reviewing", "category": "Guides"}]
 new Table()
     .pluralModelLabel('posts')
     .columns([
@@ -170,7 +170,7 @@ return new Table()
     )
 ```
 
-`getTitleFromRecordUsing()` is an alias, for code ported from Filament. The title is escaped.
+`getTitleFromRecordUsing()` is an alias of `getTitleUsing()`. The title is escaped.
 
 ### Disabling the title label prefix
 

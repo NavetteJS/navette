@@ -4,7 +4,7 @@ title: File upload
 
 ## Introduction
 
-The file upload field is based on [FilePond](https://pqina.nl/filepond), like Filament's:
+The file upload field is based on [FilePond](https://pqina.nl/filepond):
 
 ```ts
 import { FileUpload } from '@navette-js/forms';

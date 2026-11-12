@@ -31,7 +31,7 @@ SelectColumn.make<LeaveRequest>('status')
 When the user picks an option, the new value is sent to the server, [validated](#validation), and written to the record's attribute with the column's name. The select is disabled while the value is saved, and a validation error is displayed in a tooltip.
 
 <Aside variant="warning">
-The select column renders a native HTML select. Filament's JavaScript select, searchable options, relationship options, HTML option labels and disabled options are not available yet.
+The select column renders a native HTML select. A JavaScript select, searchable options, relationship options, HTML option labels and disabled options are not available yet.
 </Aside>
 
 ## Disable placeholder selection

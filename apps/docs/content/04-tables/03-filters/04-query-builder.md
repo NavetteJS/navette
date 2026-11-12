@@ -324,7 +324,7 @@ RelationshipConstraint.make('categories')
 
 ### Filtering an attribute of related records
 
-Filament uses dot syntax (`creator.name`) to filter an attribute of a relationship. In Navette, give the constraint its own name and call `relationship()` with the name of the relationship and the attribute to filter:
+To filter an attribute of a relationship, dot syntax (`creator.name`) is not supported: give the constraint its own name and call `relationship()` with the name of the relationship and the attribute to filter:
 
 ```ts
 import { TextConstraint } from '@navette-js/tables';

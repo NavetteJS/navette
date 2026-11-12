@@ -13,7 +13,7 @@ A panel is ordinary TypeScript running on Node.js, so you can test it with the t
 It ends with how Navette itself is tested, which you may use as a model.
 
 <Aside variant="warning">
-Navette has no equivalent yet of Filament's Livewire testing helpers (`livewire(CreatePost::class)->fillForm()->call('create')`). Test forms and actions through a browser.
+Helpers to fill forms and call actions without a browser are not available yet. Test forms and actions through a browser.
 </Aside>
 
 ## Running tests
@@ -154,4 +154,3 @@ Navette's own tests follow the same levels, and are good examples of each:
 
 - **Unit tests**, in `packages/*/test/*.test.ts`, run with `npm test` at the root of the repository: the component runtime (signed state, locked properties, callable methods), the data adapter, tables, forms, authorization, authentication tokens, render hooks, colors and themes.
 - **End-to-end journeys** with Playwright, one per screen of the demo application: they start the demo on a copy of the reference database, and check behaviour, security (forged requests, direct URLs per role) and the absence of JavaScript errors. `apps/starter` has a journey of its own, which checks that a read-only account sees no write buttons and gets 403 on direct URLs.
-- **Parity checks**, specific to the port: the markup of each screen is compared with the one rendered by Filament for the same data.

@@ -42,19 +42,19 @@ if (!(await knex.schema.hasTable('customers'))) {
 
 class Customer extends Model {
     static tableName = 'customers';
-    id!: number;
-    name!: string;
-    email!: string | null;
-    country!: string | null;
+    declare id: number;
+    declare name: string;
+    declare email: string | null;
+    declare country: string | null;
 }
 
 class Order extends Model {
     static tableName = 'orders';
-    id!: number;
-    customer_id!: number;
-    number!: string;
-    status!: string;
-    ordered_at!: string | null;
+    declare id: number;
+    declare customer_id: number;
+    declare number: string;
+    declare status: string;
+    declare ordered_at: string | null;
 }
 
 // ------------------------------------------------------------------ resource

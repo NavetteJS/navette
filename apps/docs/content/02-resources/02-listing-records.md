@@ -56,7 +56,7 @@ Tab.make('Pending')
     .query((query) => { query.where('status', 'pending'); })
 ```
 
-The color of a badge is set with `badgeColor()`. Without it, the badge has no color class, like in Filament.
+The color of a badge is set with `badgeColor()`. Without it, the badge has no color class.
 
 ### Customizing the default tab
 

@@ -1,6 +1,6 @@
 # Writing Navette documentation pages
 
-The site at `apps/docs` is built from the Markdown files in `apps/docs/content`. It follows the structure, tone and section order of the Filament v5 documentation (sources on disk: `sources/filament/docs` and `sources/filament/packages/*/docs`), adapted to Navette's Node.js/TypeScript API.
+The site at `apps/docs` is built from the Markdown files in `apps/docs/content`. Pages describe Navette on its own: never compare it with another framework or explain where a feature comes from. Third-party works are credited only on the [credits page](content/12-advanced/07-credits.md).
 
 ## Files
 
@@ -42,7 +42,7 @@ Variants: `tip`, `info`, `warning`, `danger`. No images, no screenshots, no othe
 
 ## Live previews
 
-Instead of screenshots, a page shows what a component looks like with a `preview` code block. At build time, the code is **run with the real Navette packages** and the HTML it renders is displayed in an isolated frame with Filament's CSS (light and dark themes follow the site). The code itself is not displayed: put the preview right after the example it illustrates.
+Instead of screenshots, a page shows what a component looks like with a `preview` code block. At build time, the code is **run with the real Navette packages** and the HTML it renders is displayed in an isolated frame with the panel CSS (light and dark themes follow the site). The code itself is not displayed: put the preview right after the example it illustrates.
 
 ````md
 ```preview
@@ -66,11 +66,10 @@ TextInput.make('name').label('Full name').required()
 
 ## Content rules
 
-1. **English**, direct, second person, like Filament: "You may set…", "To do this, use…". Headings are gerunds ("Making the field required", "Setting a placeholder").
+1. **English**, direct, second person: "You may set…", "To do this, use…". Headings are gerunds ("Making the field required", "Setting a placeholder").
 2. Start with `## Introduction`: what the feature is, then the simplest useful example.
-3. **Document only what exists in Navette.** Check every method name, argument and default in the source (`packages/*/src`) before writing it. When a Filament feature has no Navette equivalent, leave it out; if its absence would surprise a reader of the Filament docs, add one short `<Aside variant="warning">` saying it is not available yet.
+3. **Document only what exists in Navette.** Check every method name, argument and default in the source (`packages/*/src`) before writing it. When a common feature is not available yet, you may say so in one short `<Aside variant="warning">`.
 4. Examples are TypeScript ES modules importing from `@navette-js/<package>` (`@navette-js/panels`, `@navette-js/forms`, `@navette-js/tables`, `@navette-js/schemas`, `@navette-js/infolists`, `@navette-js/actions`, `@navette-js/support`, `@navette-js/database`, `@navette-js/wire`). Show the `import` line in the first example of a page.
-5. Where Filament injects utilities into closures (`$record`, `$get`, `$state`…), Navette passes one context object: write `({ record, get, state }) => …` and only use properties that the source actually provides.
-6. Security: say what Navette does (server-side validation, escaping, authorization checks) and what the application must still do, like Filament's security notes.
+5. Functions passed to components receive one context object: write `({ record, get, state }) => …` and only use properties that the source actually provides.
+6. Security: say what Navette does (server-side validation, escaping, authorization checks) and what the application must still do.
 7. Keep pages focused; link to related pages instead of repeating them.
-8. Facts already verified for Navette are in the old French docs (`navette/docs/*.md`) and in `navette/README.md`: reuse them, but not their structure or language.

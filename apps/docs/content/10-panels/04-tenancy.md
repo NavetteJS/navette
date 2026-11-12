@@ -64,7 +64,7 @@ Optional methods:
 
 ### Using the Knex tenant provider
 
-`knexTenantProvider()` implements every method for a `teams` table and a `team_user` pivot table, like the Filament demo:
+`knexTenantProvider()` implements every method for a `teams` table and a `team_user` pivot table:
 
 ```ts
 knexTenantProvider(knex, {

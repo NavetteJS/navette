@@ -131,7 +131,7 @@ panel
     .globalSearchFieldKeyBindingSuffix();
 ```
 
-With these bindings, the suffix reads "⌘+K" on a Mac and "META+K" on Windows and Linux, like in Filament. On another platform, no suffix is shown.
+With these bindings, the suffix reads "⌘+K" on a Mac and "META+K" on Windows and Linux. On another platform, no suffix is shown.
 
 To display your own text instead, use `globalSearchFieldSuffix('Search')`.
 

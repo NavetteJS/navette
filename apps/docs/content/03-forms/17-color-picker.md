@@ -16,7 +16,7 @@ The user may pick a color in a panel, or type it in the input. A swatch next to 
 
 ## Setting the color format
 
-The color picker stores colors in hexadecimal format, such as `#f59e0b`. `hex()` is accepted for compatibility with Filament, and changes nothing:
+The color picker stores colors in hexadecimal format, such as `#f59e0b`. `hex()` is accepted, and changes nothing:
 
 ```ts
 import { ColorPicker } from '@navette-js/forms';

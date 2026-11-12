@@ -188,5 +188,5 @@ When using `tel()`, the value is validated against this regular expression on th
 To accept another format, use `type('tel')` instead, which sets the input type without adding a rule, and add your own [custom rule](/forms/validation#custom-rules).
 
 <Aside variant="warning">
-Filament's `length()`, `datalist()`, `readOnly()`, `copyable()`, `trim()`, `inputMode()`, `autocapitalize()` and icon affixes are not available yet.
+`length()`, `datalist()`, `readOnly()`, `copyable()`, `trim()`, `inputMode()`, `autocapitalize()` and icon affixes are not available yet.
 </Aside>

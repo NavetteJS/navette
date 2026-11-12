@@ -4,7 +4,7 @@ title: Rich editor
 
 ## Introduction
 
-The rich editor allows you to edit and preview HTML content. It uses [TipTap](https://tiptap.dev) as the underlying editor, like Filament:
+The rich editor allows you to edit and preview HTML content. It uses [TipTap](https://tiptap.dev) as the underlying editor:
 
 ```ts
 import { RichEditor } from '@navette-js/forms';
@@ -16,7 +16,7 @@ In the browser, the editor works on a TipTap document. On the server, Navette co
 
 ## Understanding the toolbar
 
-The toolbar is the one of Filament's default rich editor: bold, italic, underline, strikethrough, subscript, superscript, link, headings (2 and 3), text alignment, blockquote, code block, bullet and numbered lists, tables, undo and redo.
+The toolbar contains: bold, italic, underline, strikethrough, subscript, superscript, link, headings (2 and 3), text alignment, blockquote, code block, bullet and numbered lists, tables, undo and redo.
 
 The link button opens a modal asking for the URL and whether to open it in a new tab. Only `http(s)://`, `mailto:`, `tel:`, relative (`/…`) and anchor (`#…`) URLs are accepted.
 

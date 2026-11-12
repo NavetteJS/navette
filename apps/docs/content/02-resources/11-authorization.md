@@ -9,7 +9,7 @@ Navette separates two questions:
 - **Who is logged in?** That is authentication, handled by the [user provider](/panels/users) of the panel.
 - **What may they do?** That is authorization, the subject of this page.
 
-Like Filament, Navette does not ship roles or permissions. It provides checkpoints, enforces them everywhere (navigation, buttons, direct URLs, forged requests), and lets you plug in your own logic: a `role` column, a permissions table, an external service.
+Navette does not ship roles or permissions. It provides checkpoints, enforces them everywhere (navigation, buttons, direct URLs, forged requests), and lets you plug in your own logic: a `role` column, a permissions table, an external service.
 
 Without any rule, every logged-in user may list, create, edit and delete every record. If your users do not all have the same rights, write the rules, and [test them](/advanced/testing#testing-authorization).
 
@@ -31,7 +31,7 @@ Since `find()` runs on every request, a change of role applies immediately.
 
 ## Policies
 
-A resource may declare a `policy`: an object with one function per ability. The ability names are those of Laravel and Filament:
+A resource may declare a `policy`: an object with one function per ability. The ability names are:
 
 ```ts
 import { Resource, type Policy } from '@navette-js/panels';

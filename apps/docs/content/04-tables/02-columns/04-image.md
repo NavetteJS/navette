@@ -34,7 +34,7 @@ ImageColumn.make<Product>('image')
 ```
 
 <Aside variant="warning">
-Filament's storage disks (`disk()`, `visibility()`) and temporary URLs are not available in image columns: the state is used as the image URL as it is. Make sure the URL points to a file the user may see.
+Storage disks (`disk()`, `visibility()`) and temporary URLs are not available in image columns: the state is used as the image URL as it is. Make sure the URL points to a file the user may see.
 </Aside>
 
 ## Setting the alt text

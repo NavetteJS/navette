@@ -1,15 +1,15 @@
-// Navette documentation : thème, navigation mobile, copie du code, sommaire actif, recherche (index JSON local).
+// Documentation site behaviour: theme, mobile navigation, code copy, active table of contents, search (local JSON index).
 (() => {
     const base = document.body.dataset.base || '';
     const html = document.documentElement;
 
-    // ------------------------------------------------------------------ thème clair / sombre
+    // ------------------------------------------------------------------ light / dark theme
     document.querySelector('.theme-button')?.addEventListener('click', () => {
         const dark = html.classList.toggle('dark');
         try { localStorage.setItem('navette-docs-theme', dark ? 'dark' : 'light'); } catch {}
     });
 
-    // ------------------------------------------------------------------ navigation mobile
+    // ------------------------------------------------------------------ mobile navigation
     const menu = document.querySelector('.menu-button');
     const overlay = document.querySelector('.sidebar-overlay');
     const setNav = (open) => {
@@ -19,7 +19,7 @@
     };
     menu?.addEventListener('click', () => setNav(!document.body.classList.contains('nav-open')));
     overlay?.addEventListener('click', () => setNav(false));
-    // Page courante visible dans la navigation, sans faire défiler la page elle-même.
+    // Bring the current page into view in the sidebar without scrolling the document (scrollIntoView would).
     const sidebar = document.querySelector('.sidebar');
     const active = sidebar?.querySelector('.active');
     if (sidebar && active) {
@@ -27,14 +27,14 @@
         if (top > sidebar.clientHeight - 80) sidebar.scrollTop = top - sidebar.clientHeight / 2;
     }
 
-    // ------------------------------------------------------------------ copie des blocs de code
+    // ------------------------------------------------------------------ code copy
     document.querySelectorAll('.code-block .copy').forEach((button) => button.addEventListener('click', async () => {
         const code = button.closest('.code-block')?.querySelector('code')?.innerText ?? '';
         try { await navigator.clipboard.writeText(code); button.textContent = 'Copied'; } catch { button.textContent = 'Error'; }
         setTimeout(() => { button.textContent = 'Copy'; }, 1500);
     }));
 
-    // ------------------------------------------------------------------ sommaire : titre visible
+    // ------------------------------------------------------------------ table of contents: highlight the visible heading
     const tocLinks = [...document.querySelectorAll('.toc a')];
     if (tocLinks.length && 'IntersectionObserver' in window) {
         const byId = new Map(tocLinks.map((link) => [decodeURIComponent(link.hash.slice(1)), link]));
@@ -48,7 +48,7 @@
         byId.forEach((_, id) => { const heading = document.getElementById(id); if (heading) observer.observe(heading); });
     }
 
-    // ------------------------------------------------------------------ recherche
+    // ------------------------------------------------------------------ search
     const dialog = document.querySelector('.search-dialog');
     const input = dialog?.querySelector('input');
     const list = dialog?.querySelector('.search-results');

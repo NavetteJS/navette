@@ -43,7 +43,7 @@ Once the View page exists:
 The header of the View page contains an "Edit" button, shown to users who may update the record.
 
 <Aside variant="info">
-Unlike Filament, Navette does not display a disabled copy of the form when `infolist()` is not defined: the View page always renders the infolist.
+The View page always renders the infolist, so define `infolist()` on the resource: when it is missing, the page does not fall back to a disabled copy of the form.
 </Aside>
 
 ## Viewing records in modals

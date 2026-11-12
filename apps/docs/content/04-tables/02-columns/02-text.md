@@ -371,5 +371,5 @@ Some options are not combined yet. Keep these in mind when you chain several of 
 To combine a formatted value with these options, compute the formatted value with `getStateUsing()` instead of `formatStateUsing()`.
 
 <Aside variant="warning">
-Descriptions below the text, lists of values, Markdown and HTML rendering, text size, font family and text wrapping options of Filament's text column are not available yet.
+Descriptions below the text, lists of values, Markdown and HTML rendering, text size, font family and text wrapping options are not available yet.
 </Aside>

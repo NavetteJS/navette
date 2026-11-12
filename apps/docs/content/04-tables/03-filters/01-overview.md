@@ -67,9 +67,9 @@ TernaryFilter.make('is_active')
 
 ## Applying filters
 
-The user changes the values of the filters in the form, then clicks the "Apply" button. Until then, the table does not change: filters are always deferred, as with Filament's `deferFilters()`. Applying the filters returns the table to its first page.
+The user changes the values of the filters in the form, then clicks the "Apply" button. Until then, the table does not change: filters are always deferred. Applying the filters returns the table to its first page.
 
-The "Reset" link in the filters form clears all filters at once. The `deferFilters()` method of the table exists for compatibility with Filament's API, and has no effect.
+The "Reset" link in the filters form clears all filters at once. The `deferFilters()` method of the table is accepted, and has no effect.
 
 <Aside variant="warning">
 Live filters (applied as soon as a value changes), default filter values, persisting filters in the session and customizing the filter trigger, apply and reset actions are not available yet.

@@ -18,7 +18,7 @@ export class TaskResource extends Resource {
 }
 ```
 
-The record is read again on every request sent by the page, like in Filament: inside the page, it is available as `this._record`, and its key as `this.recordKey`. The key is locked: the browser cannot change it.
+The record is read again on every request sent by the page: inside the page, it is available as `this._record`, and its key as `this.recordKey`. The key is locked: the browser cannot change it.
 
 Below the form, the page displays the [relation managers](/resources/managing-relationships) of the resource, in tabs.
 

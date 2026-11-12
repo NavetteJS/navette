@@ -4,7 +4,7 @@ title: Slider
 
 ## Introduction
 
-The slider component allows you to drag a handle across a track to select one or more numeric values. Like Filament, Navette uses [noUiSlider](https://refreshless.com/nouislider):
+The slider component allows you to drag a handle across a track to select one or more numeric values. Navette uses [noUiSlider](https://refreshless.com/nouislider):
 
 ```ts
 import { Slider } from '@navette-js/forms';
@@ -12,7 +12,7 @@ import { Slider } from '@navette-js/forms';
 Slider.make('slider')
 ```
 
-Like in Filament, a slider is required by default: an empty value fails validation. Use `required(false)` to allow it. Its default value is its minimum value.
+A slider is required by default: an empty value fails validation. Use `required(false)` to allow it. Its default value is its minimum value.
 
 ## Controlling the range of the slider
 

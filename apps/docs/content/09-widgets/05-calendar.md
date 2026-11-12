@@ -4,7 +4,7 @@ title: Calendar widgets
 
 ## Introduction
 
-Navette includes a calendar, which Filament does not have. It displays events in a month, week or list view, with navigation rendered on the server and no JavaScript library to install. It comes in two forms:
+Navette includes a calendar. It displays events in a month, week or list view, with navigation rendered on the server and no JavaScript library to install. It comes in two forms:
 
 - `CalendarWidget`, a widget to place on a dashboard or a page, next to other widgets.
 - `CalendarPage`, a full page whose clicks can open [action modals](/actions/modals): forms, confirmations and slide-overs.

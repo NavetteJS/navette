@@ -4,7 +4,7 @@ title: Code editor
 
 ## Introduction
 
-The code editor component allows you to write code in a textarea with line numbers. By default, no syntax highlighting is applied. Like Filament, Navette uses [CodeMirror](https://codemirror.net):
+The code editor component allows you to write code in a textarea with line numbers. By default, no syntax highlighting is applied. Navette uses [CodeMirror](https://codemirror.net):
 
 ```ts
 import { CodeEditor } from '@navette-js/forms';

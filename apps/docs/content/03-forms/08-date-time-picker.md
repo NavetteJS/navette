@@ -101,7 +101,7 @@ The date-time picker and the time picker cannot be `live()` yet.
 
 ## Setting a placeholder
 
-`DatePicker` accepts `placeholder()`. The attribute is set like in Filament, but most browsers don't display it on a native date input.
+`DatePicker` accepts `placeholder()`. The attribute is set on the input, but most browsers don't display it on a native date input.
 
 ## Date-time picker validation
 
@@ -128,5 +128,5 @@ The bounds are set on the input, and checked on the server. A function returning
 </Aside>
 
 <Aside variant="warning">
-The JavaScript date picker of Filament (`native(false)`, display formats, disabled dates, first day of the week), timezone handling and `minDate()` / `maxDate()` on the date-time picker are not available yet.
+A JavaScript date picker (`native(false)`, display formats, disabled dates, first day of the week), timezone handling and `minDate()` / `maxDate()` on the date-time picker are not available yet.
 </Aside>

@@ -4,7 +4,7 @@ title: Overview
 
 ## Introduction
 
-Tables are a common UI pattern for displaying lists of records. Navette provides a TypeScript API for defining tables with sorting, searching, filtering, pagination, actions, summaries and grouping, ported from Filament's table builder.
+Tables are a common UI pattern for displaying lists of records. Navette provides a TypeScript API for defining tables with sorting, searching, filtering, pagination, actions, summaries and grouping.
 
 In a panel, the table of a resource is defined by the static `table()` method of the resource. It receives a `Table` instance, already configured by the list page, and returns it:
 
@@ -27,7 +27,7 @@ export class PostResource extends Resource {
 ```
 
 ```preview
-// records: [{"title": "Introducing Navette", "slug": "introducing-navette", "is_featured": true}, {"title": "Building your first panel", "slug": "building-your-first-panel", "is_featured": false}, {"title": "Ten tips for faster tables", "slug": "ten-tips-for-faster-tables", "is_featured": true}, {"title": "Migrating from Filament", "slug": "migrating-from-filament", "is_featured": false}]
+// records: [{"title": "Introducing Navette", "slug": "introducing-navette", "is_featured": true}, {"title": "Building your first panel", "slug": "building-your-first-panel", "is_featured": false}, {"title": "Ten tips for faster tables", "slug": "ten-tips-for-faster-tables", "is_featured": true}, {"title": "Migrating an existing app", "slug": "migrating-an-existing-app", "is_featured": false}]
 new Table()
     .pluralModelLabel('posts')
     .columns([
@@ -230,7 +230,7 @@ static table(table: Table<Post>): Table<Post> {
 The options are enforced on the server: a page size sent by the browser that is not one of the options is replaced by the first option.
 
 <Aside variant="warning">
-Filament's `'all'` option and `paginated(false)` are not available yet: a Navette table is always paginated.
+An `'all'` option and `paginated(false)` are not available yet: a Navette table is always paginated.
 </Aside>
 
 ### Customizing the default pagination page option
@@ -262,7 +262,7 @@ static table(table: Table<Post>): Table<Post> {
 ```
 
 ```preview
-// records: [{"title": "Introducing Navette"}, {"title": "Building your first panel"}, {"title": "Ten tips for faster tables"}, {"title": "Migrating from Filament"}, {"title": "Writing custom columns"}, {"title": "Securing your panel"}, {"title": "Theming with CSS variables"}, {"title": "Testing resources"}, {"title": "Deploying to production"}, {"title": "Multi-tenancy explained"}, {"title": "Relation managers in depth"}, {"title": "What's next for Navette"}]
+// records: [{"title": "Introducing Navette"}, {"title": "Building your first panel"}, {"title": "Ten tips for faster tables"}, {"title": "Migrating an existing app"}, {"title": "Writing custom columns"}, {"title": "Securing your panel"}, {"title": "Theming with CSS variables"}, {"title": "Testing resources"}, {"title": "Deploying to production"}, {"title": "Multi-tenancy explained"}, {"title": "Relation managers in depth"}, {"title": "What's next for Navette"}]
 new Table()
     .pluralModelLabel('posts')
     .columns([

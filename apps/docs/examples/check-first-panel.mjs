@@ -1,4 +1,4 @@
-// Lance l'exemple du tutoriel sur une base jetable et vérifie ses pages (session signée de l'utilisateur n° 1).
+// Runs the tutorial's example on a throwaway database and checks its pages, signed in as user 1 (forged session cookie).
 // Usage : node apps/docs/examples/check-first-panel.mjs
 import { spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
@@ -20,15 +20,15 @@ const base = `http://127.0.0.1:${PORT}`;
 const failures = [];
 try {
     for (let i = 0; ; i++) {
-        if (i > 80) throw new Error('le serveur ne répond pas\n' + log);
+        if (i > 80) throw new Error('the server does not answer\n' + log);
         try { if ((await fetch(`${base}/login`)).ok) break; } catch {}
         await new Promise((r) => setTimeout(r, 250));
     }
     const get = async (route, expected) => {
         const response = await fetch(`${base}${route}`, { headers: route === '/login' ? {} : { cookie }, redirect: 'manual' });
         const html = await response.text();
-        if (response.status !== 200) failures.push(`${route} : statut ${response.status}`);
-        for (const text of expected) if (!html.includes(text)) failures.push(`${route} : « ${text} » absent`);
+        if (response.status !== 200) failures.push(`${route}: status ${response.status}`);
+        for (const text of expected) if (!html.includes(text)) failures.push(`${route}: "${text}" missing`);
     };
     await get('/login', ['Sign in']);
     await get('/', ['Dashboard', 'Customers']);
@@ -46,6 +46,6 @@ try {
     await new Promise((r) => server.on('exit', r));
     rmSync(dir, { recursive: true, force: true });
 }
-if (log.match(/Error/)) failures.push('erreurs du serveur :\n' + log.split('\n').filter((l) => /Error/.test(l)).slice(0, 5).join('\n'));
-console.log(failures.length ? `✖ tutoriel :\n - ${failures.join('\n - ')}` : '✔ tutoriel : toutes les pages répondent');
+if (log.match(/Error/)) failures.push('server errors:\n' + log.split('\n').filter((l) => /Error/.test(l)).slice(0, 5).join('\n'));
+console.log(failures.length ? `✖ tutorial:\n - ${failures.join('\n - ')}` : '✔ tutorial: every page answers');
 process.exitCode = failures.length ? 1 : 0;

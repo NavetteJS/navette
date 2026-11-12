@@ -235,5 +235,5 @@ Navette's messages are Laravel's default English messages, such as "The name fie
 Error messages are always escaped when displayed.
 
 <Aside variant="warning">
-Filament's `rules()` with Laravel rule strings, `validationAttribute()`, `validationMessages()`, translated messages and the Laravel rules without a dedicated method in Navette (`alpha`, `regex`, `confirmed`, `exists`, `different`, `uuid`…) are not available. Write them as custom rules with `rule()`.
+`rules()` with Laravel rule strings, `validationAttribute()`, `validationMessages()`, translated messages and the Laravel rules without a dedicated method in Navette (`alpha`, `regex`, `confirmed`, `exists`, `different`, `uuid`…) are not available. Write them as custom rules with `rule()`.
 </Aside>

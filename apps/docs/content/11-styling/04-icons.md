@@ -4,7 +4,7 @@ title: Icons
 
 ## Introduction
 
-Icons are used throughout the interface of Navette: in the navigation, in actions, in columns and entries, in notifications. Navette ships with [Heroicons](https://heroicons.com), the icon set of Filament, and lets you add your own SVG icons.
+Icons are used throughout the interface of Navette: in the navigation, in actions, in columns and entries, in notifications. Navette ships with [Heroicons](https://heroicons.com) and lets you add your own SVG icons.
 
 ## Using Heroicons in Navette
 
@@ -25,7 +25,7 @@ static navigationIcon = 'o-user-group';
 Action.make('export').icon('m-arrow-down-tray')
 ```
 
-Filament's names with the `heroicon-` prefix are accepted too: `heroicon-o-user-group` is the same icon as `o-user-group`. Like Filament's own components, the navigation uses outline icons, buttons use mini icons, and table row actions use micro icons (`tableIcon()`).
+Names with the `heroicon-` prefix are accepted too: `heroicon-o-user-group` is the same icon as `o-user-group`. In Navette's own components, the navigation uses outline icons, buttons use mini icons, and table row actions use micro icons (`tableIcon()`).
 
 The names are those of [heroicons.com](https://heroicons.com). An unknown name throws an error when the page is rendered, so a typo shows up during development.
 
@@ -45,7 +45,7 @@ The markup must be a complete `<svg>` element: other values throw an error. It i
 
 ## Rendering an icon in your own HTML
 
-In a render hook, a custom view or an `Html` component, `icon()` returns the markup of an icon with the classes of Filament (`fi-icon fi-size-md`). It accepts a size:
+In a render hook, a custom view or an `Html` component, `icon()` returns the markup of an icon with its CSS hook classes (`fi-icon fi-size-md`). It accepts a size:
 
 ```ts
 import { icon } from '@navette-js/support';

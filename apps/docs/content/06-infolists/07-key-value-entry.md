@@ -13,7 +13,7 @@ KeyValueEntry.make('meta')
 ```
 
 ```preview
-// record: {"meta": {"description": "Navette is a port of Filament to Node.js", "og:type": "website", "og:site_name": "Navette"}}
+// record: {"meta": {"description": "Admin panels for Node.js", "og:type": "website", "og:site_name": "Navette"}}
 KeyValueEntry.make('meta')
 ```
 
@@ -21,7 +21,7 @@ For example, the state of this entry might be represented as:
 
 ```ts
 {
-    description: 'Navette is a port of Filament to Node.js',
+    description: 'Admin panels for Node.js',
     'og:type': 'website',
     'og:site_name': 'Navette',
 }

@@ -13,7 +13,7 @@ Textarea.make('description')
 ```
 
 ```preview
-// state: {"description": "A lightweight admin panel for Node.js, inspired by Filament."}
+// state: {"description": "A lightweight admin panel for Node.js, written in TypeScript."}
 // width: 32rem
 Textarea.make('description')
 ```
@@ -30,7 +30,7 @@ Textarea.make('description')
 ```
 
 ```preview
-// state: {"description": "Navette renders Filament's components on the server.\n\nForms, tables, infolists and actions share the same schema system, so a page is described once and rendered with the same CSS as Filament."}
+// state: {"description": "Navette renders its components on the server.\n\nForms, tables, infolists and actions share the same schema system, so a page is described once and rendered with the same CSS everywhere."}
 // width: 32rem
 Textarea.make('description')
     .rows(10)

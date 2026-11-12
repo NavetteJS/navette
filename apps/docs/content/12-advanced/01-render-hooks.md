@@ -4,7 +4,7 @@ title: Render hooks
 
 ## Introduction
 
-Navette allows you to render HTML at various points of the layout, without overriding any view. These locations are called render hooks. They have the same names as in Filament, and each one sits at the same place of the markup.
+Navette allows you to render HTML at various points of the layout, without overriding any view. These locations are called render hooks. Each one has a fixed name and sits at a fixed place of the markup.
 
 ## Registering render hooks
 
@@ -97,13 +97,13 @@ Authentication and resources:
 
 #### Declared but not rendered
 
-A few names are declared for compatibility with Filament, but rendered nowhere. `UNPLACED_RENDER_HOOKS`, exported by `@navette-js/panels`, lists them with the reason:
+A few names are declared, but rendered nowhere. `UNPLACED_RENDER_HOOKS`, exported by `@navette-js/panels`, lists them:
 
 | Constant | Reason |
 |---|---|
 | `RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE`, `…_AFTER` | Relation pages render the relation manager hooks instead. |
-| `RESOURCE_PAGES_LIST_RECORDS_TABS_START`, `…_END` | Not rendered by Filament 5.11.2 either. |
-| `RESOURCE_TABS_START`, `RESOURCE_TABS_END` | Not rendered by Filament 5.11.2 either. |
+| `RESOURCE_PAGES_LIST_RECORDS_TABS_START`, `…_END` | Reserved: no page renders it yet. |
+| `RESOURCE_TABS_START`, `RESOURCE_TABS_END` | Reserved: no page renders it yet. |
 
 ### Table render hooks
 

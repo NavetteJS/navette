@@ -4,7 +4,7 @@ title: Overview
 
 ## Introduction
 
-Navette uses the stylesheet of Filament: the same markup, the same `fi-` classes, compiled with [Tailwind CSS](https://tailwindcss.com). There are several levels of customization, from the simplest to the most powerful:
+Navette's interface is styled by a stylesheet compiled with [Tailwind CSS](https://tailwindcss.com), which targets semantic `fi-` classes in the markup. There are several levels of customization, from the simplest to the most powerful:
 
 1. [Colors](/styling/colors), set with one method of the panel.
 2. [Themes offered to users](#offering-themes-to-users), each with its own colors, font and CSS.
@@ -110,9 +110,9 @@ By default, the brand name is displayed as the logo. To use an image, see [setti
 
 ## Motion
 
-Navette adds light animations on top of Filament's interface: the arrival of pages and of lazy-loaded content, a pressed state on buttons, the opening of modals and menus, and a "Loading…" pill at the top of the screen when a request takes more than 350 milliseconds. They follow the "reduce motion" setting of the operating system.
+Navette adds light animations to the interface: the arrival of pages and of lazy-loaded content, a pressed state on buttons, the opening of modals and menus, and a "Loading…" pill at the top of the screen when a request takes more than 350 milliseconds. They follow the "reduce motion" setting of the operating system.
 
-This is a deliberate difference with Filament. To render the original interface, without them:
+To render the interface without them:
 
 ```ts
 panel.motion(false);

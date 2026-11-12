@@ -118,5 +118,5 @@ Section.make('Line Items')
 ```
 
 <Aside variant="warning">
-The default layout of Filament, where each item is rendered as a card with its own grid (`grid()`, `columns()`, `contained()`), is not available in Navette yet: always use `table()`. `hiddenHeaderLabel()`, `wrapHeader()` and `alignment()` on table columns, and `maxItemsForProcessing()`, are not available either. Only entries can be placed in the schema of a repeatable entry, not layout components.
+Rendering each item as a card with its own grid (`grid()`, `columns()`, `contained()`) is not available yet: always use `table()`. `hiddenHeaderLabel()`, `wrapHeader()` and `alignment()` on table columns, and `maxItemsForProcessing()`, are not available either. Only entries can be placed in the schema of a repeatable entry, not layout components.
 </Aside>

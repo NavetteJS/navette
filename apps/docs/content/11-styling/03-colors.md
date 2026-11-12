@@ -65,7 +65,7 @@ Action.make('export').color('brand')
 The palette of the new color is available as CSS variables (`--brand-50` to `--brand-950`), and components receive the classes `fi-color fi-color-brand`.
 
 <Aside variant="warning">
-Unlike Filament, Navette does not yet generate the CSS rule that maps a new color name to the color variables of components. Add it yourself, for example in a [custom theme](/styling/overview#creating-a-custom-theme) or with the `panels::styles.after` render hook, with one variable per shade:
+Navette does not yet generate the CSS rule that maps a new color name to the color variables of components. Add it yourself, for example in a [custom theme](/styling/overview#creating-a-custom-theme) or with the `panels::styles.after` render hook, with one variable per shade:
 
 ```css
 .fi-color-brand {
@@ -101,7 +101,7 @@ panel.setColors({
 
 ### Generating a custom color palette
 
-When you pass a single color, Navette generates the eleven shades for you, keeping its hue, like Filament's `Color::hex()` and `Color::rgb()`. It accepts `#rrggbb`, `#rgb` and `rgb(r, g, b)`:
+When you pass a single color, Navette generates the eleven shades for you, keeping its hue. It accepts `#rrggbb`, `#rgb` and `rgb(r, g, b)`:
 
 ```ts
 panel.setColors({ primary: '#6366f1' });
@@ -111,7 +111,7 @@ panel.setColors({ primary: '#6366f1' });
 
 ## How Navette selects accessible shades
 
-Navette picks the shades of each component like Filament does, using contrast ratios. The same palette can produce different shades in a button, a badge or a link, because each component has different backgrounds and contrast requirements:
+Navette picks the shades of each component using contrast ratios. The same palette can produce different shades in a button, a badge or a link, because each component has different backgrounds and contrast requirements:
 
 - text-bearing components (buttons, badges, links, dropdown items) look for a contrast of 4.5:1, the WCAG AA level for normal text;
 - non-text components (icon buttons, toggles, icon columns) look for 3:1.

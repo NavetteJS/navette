@@ -1,13 +1,13 @@
-// Sert le site de documentation construit (dist/). Usage : node server.ts   (DOCS_PORT, 3300 par défaut)
+// Serves the built site (dist/). Usage: node server.ts   (DOCS_PORT, 3300 by default)
 import express from 'express';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
-if (!existsSync(path.join(dist, 'index.html'))) throw new Error('Site absent : lancez d\'abord `node build.ts`.');
+if (!existsSync(path.join(dist, 'index.html'))) throw new Error('No site to serve: run `node build.ts` first.');
 const app = express();
-// `/forms/select` sert `dist/forms/select/index.html` directement, sans redirection vers `/forms/select/`.
+// Serve `/forms/select` from `dist/forms/select/index.html` without redirecting to `/forms/select/`.
 app.use((req, res, next) => {
     if (req.method !== 'GET' || path.extname(req.path)) return next();
     const file = path.join(dist, ...req.path.split('/').filter((part) => part && part !== '..'), 'index.html');

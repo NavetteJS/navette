@@ -1,27 +1,25 @@
-// Convertisseur du sous-ensemble Markdown décrit dans WRITING.md : titres, paragraphes, emphase, code, liens,
-// listes (un niveau d'imbrication), blocs de code, tableaux et encarts <Aside>. Aucun HTML brut n'est accepté.
+// Renders the Markdown subset described in WRITING.md. Raw HTML is never passed through: only <Aside> is recognised.
 
 export type Heading = { level: number; text: string; id: string };
 export type Rendered = { html: string; headings: Heading[]; text: string; previews: string[] };
 
 const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** Ancre d'un titre : texte en minuscules, ponctuation retirée, espaces en tirets (règle de WRITING.md). */
+/** Heading anchor, as documented in WRITING.md: lowercase, punctuation removed, spaces as dashes. */
 export function slugify(text: string): string {
     return text.toLowerCase().replace(/`/g, '').replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-');
 }
 
-/** Texte brut d'une ligne Markdown en ligne (pour les ancres, le sommaire et la recherche). */
 export const plain = (text: string) => text.replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
 
-/** Éléments en ligne : code, liens, gras, italique. Le texte est échappé avant toute mise en forme. */
+/** Inline elements. Text is escaped before any formatting, and code spans are protected from it. */
 export function inline(source: string): string {
     const codes: string[] = [];
     let text = source.replace(/`([^`]+)`/g, (_, code) => `\u0000${codes.push(`<code>${escape(code)}</code>`) - 1}\u0000`);
     text = escape(text);
     text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
         const url = href.replace(/&amp;/g, '&');
-        // Seules les adresses du site, les ancres et http(s) deviennent des liens.
+        // Only site paths, anchors and http(s) URLs become links.
         if (!/^(\/|#|https?:\/\/)/.test(url)) return label;
         const external = /^https?:\/\//.test(url);
         return `<a href="${escape(url)}"${external ? ' target="_blank" rel="noopener"' : ''}>${label}</a>`;
@@ -30,7 +28,7 @@ export function inline(source: string): string {
     return text.replace(/\u0000(\d+)\u0000/g, (_, index) => codes[Number(index)]);
 }
 
-// ------------------------------------------------------------------ coloration syntaxique
+// ------------------------------------------------------------------ syntax highlighting
 const KEYWORDS: Record<string, string[]> = {
     ts: ['import', 'from', 'export', 'default', 'const', 'let', 'var', 'class', 'extends', 'implements', 'interface', 'type', 'static', 'async', 'await', 'return', 'new', 'if', 'else', 'for', 'of', 'in', 'while', 'function', 'this', 'super', 'true', 'false', 'null', 'undefined', 'as', 'typeof', 'keyof', 'readonly', 'private', 'protected', 'public', 'abstract', 'throw', 'try', 'catch', 'void', 'satisfies'],
     bash: ['npm', 'node', 'npx', 'cd', 'mkdir', 'export', 'git'],
@@ -40,7 +38,7 @@ const KEYWORDS: Record<string, string[]> = {
 };
 KEYWORDS.js = KEYWORDS.ts;
 
-/** Coloration simple par jetons : commentaires, chaînes, nombres, mots-clés, appels et propriétés. */
+/** A small tokenizer: good enough for documentation snippets, not a parser. */
 export function highlight(code: string, language: string): string {
     const lang = language === 'typescript' ? 'ts' : language === 'javascript' ? 'js' : language === 'sh' || language === 'shell' ? 'bash' : language;
     if (lang === 'html') return escape(code).replace(/(&lt;\/?)([\w-]+)/g, '$1<span class="tok-tag">$2</span>').replace(/([\w:-]+)=(&quot;[^&]*&quot;)/g, '<span class="tok-attr">$1</span>=<span class="tok-string">$2</span>');
@@ -78,14 +76,14 @@ export function highlight(code: string, language: string): string {
     return out;
 }
 
-// ------------------------------------------------------------------ blocs
+// ------------------------------------------------------------------ blocks
 const ASIDE_TITLES: Record<string, string> = { tip: 'Tip', info: 'Info', warning: 'Warning', danger: 'Danger' };
 
 export function render(markdown: string): Rendered {
     const headings: Heading[] = [];
     const used = new Map<string, number>();
     const textParts: string[] = [];
-    // Blocs ```preview : leur code n'est pas affiché ; un repère est laissé à leur place, remplacé au build par l'aperçu rendu.
+    // ```preview blocks are not displayed: a marker is left in their place and replaced by the rendered preview at build time.
     const previews: string[] = [];
     const uniqueId = (text: string) => {
         const base = slugify(text) || 'section';
@@ -171,7 +169,6 @@ export function render(markdown: string): Rendered {
         return out.join('\n');
     };
 
-    /** Liste à partir de la ligne `start` : éléments au même retrait, sous-listes plus en retrait, lignes de continuation. */
     const parseList = (lines: string[], start: number): { html: string; end: number } => {
         const first = /^(\s*)([-*]|\d+\.)\s+/.exec(lines[start])!;
         const indent = first[1].length;
@@ -183,7 +180,7 @@ export function render(markdown: string): Rendered {
             const marker = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(line);
             if (marker && marker[1].length === indent && /\d/.test(marker[2]) === ordered) { items.push([marker[3]]); index++; continue; }
             if (line.trim() === '') {
-                // Une ligne vide termine la liste, sauf si l'élément suivant ou une continuation en retrait suit.
+                // A blank line ends the list unless an item or an indented continuation follows.
                 const next = lines[index + 1];
                 if (next !== undefined && (next.length - next.trimStart().length > indent) && next.trim() !== '') { items[items.length - 1].push(''); index++; continue; }
                 const nextMarker = next !== undefined ? /^(\s*)([-*]|\d+\.)\s+/.exec(next) : null;
@@ -207,7 +204,7 @@ export function render(markdown: string): Rendered {
     return { html, headings, text: textParts.join(' ').replace(/\s+/g, ' '), previews };
 }
 
-/** Front matter `---\ntitle: …\n---` : seul `title` est lu. */
+/** Only `title` is read from the front matter. */
 export function frontMatter(source: string): { title: string | null; body: string } {
     const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(source);
     if (!match) return { title: null, body: source };

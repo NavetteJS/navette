@@ -8,7 +8,7 @@ Database notifications are stored for a user and listed in a slide-over panel, o
 
 ## Setting up the notifications database table
 
-Navette ships a store for the `notifications` table of Laravel, in the format used by Filament: an existing Filament application's notifications are read as they are, and notifications sent from Navette remain readable by that application. If you don't have this table yet, you may create it with a Knex migration:
+Navette ships a store for a `notifications` table with the columns of Laravel's notifications table. Each notification is stored as JSON in the `data` column, with a `format` key set to `filament`; rows with another format, written by other kinds of notifications, are ignored. If you don't have this table yet, you may create it with a Knex migration:
 
 ```ts
 export async function up(knex) {

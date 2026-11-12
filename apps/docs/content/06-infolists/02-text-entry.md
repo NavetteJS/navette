@@ -234,7 +234,7 @@ TextEntry.make('description')
 ```
 
 ```preview
-// record: {"description": "Navette is a port of Filament to Node.js.\n\nIt renders the same views as Filament, translated to TypeScript, with the same CSS."}
+// record: {"description": "Navette builds admin panels for Node.js.\n\nIt renders its views on the server, from components written in TypeScript."}
 TextEntry.make('description')
     .markdown()
     .placeholder('No description')

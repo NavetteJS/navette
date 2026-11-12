@@ -4,7 +4,7 @@ title: CSS hooks
 
 ## Introduction
 
-Navette renders the markup of Filament, with its "hook" classes: classes that start with `fi-` and name the elements of the interface, such as `fi-sidebar`, `fi-btn` or `fi-ta-row`. You can target them with your own CSS to change the look of the panel, without overriding any view.
+The markup rendered by Navette carries "hook" classes: classes that start with `fi-` and name the elements of the interface, such as `fi-sidebar`, `fi-btn` or `fi-ta-row`. You can target them with your own CSS to change the look of the panel, without overriding any view.
 
 ## Discovering hook classes
 

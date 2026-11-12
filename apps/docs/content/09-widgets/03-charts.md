@@ -4,7 +4,7 @@ title: Chart widgets
 
 ## Introduction
 
-Navette comes with many "chart" widgets, which you can use to display real-time, interactive charts. Charts are drawn in the browser by [Chart.js](https://www.chartjs.org), with the bundle shipped by Filament: you don't need to install anything.
+Navette comes with many "chart" widgets, which you can use to display real-time, interactive charts. Charts are drawn in the browser by [Chart.js](https://www.chartjs.org), which is bundled with Navette: you don't need to install anything.
 
 Create a class extending `ChartWidget`, return the type of chart from `getType()` and the data from `getData()`:
 

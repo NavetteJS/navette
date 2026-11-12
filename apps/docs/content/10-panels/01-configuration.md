@@ -90,7 +90,7 @@ The files are served by your application, for example with `app.use(express.stat
 
 ## Changing the font
 
-The panel uses the Inter font, served by the panel itself. To use another font, pass its family to `font()`. Without a second argument, the font is loaded from [Bunny Fonts](https://fonts.bunny.net), like in Filament:
+The panel uses the Inter font, served by the panel itself. To use another font, pass its family to `font()`. Without a second argument, the font is loaded from [Bunny Fonts](https://fonts.bunny.net):
 
 ```ts
 panel.font('Albert Sans');
@@ -106,7 +106,7 @@ Each [user-selectable theme](/styling/overview#offering-themes-to-users) may als
 
 ## Customizing the maximum content width
 
-By default, the content of a page is at most `7xl` wide. Change it with `maxContentWidth()`, which takes the size names of Filament (`xs` to `7xl`, `full`, `screen-sm` to `screen-2xl`, `screen`, `prose`):
+By default, the content of a page is at most `7xl` wide. Change it with `maxContentWidth()`, which takes a size name (`xs` to `7xl`, `full`, `screen-sm` to `screen-2xl`, `screen`, `prose`):
 
 ```ts
 panel.maxContentWidth('full');

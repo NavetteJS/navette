@@ -1,18 +1,14 @@
-// Aperçus de la documentation : le code d'un bloc ```preview est exécuté au build avec les vrais paquets Navette,
-// et le HTML qu'il produit est affiché tel quel, avec la CSS de Filament, dans une page isolée (iframe).
-// L'aperçu est donc le rendu réel du composant : il suit le code de Navette sans capture d'écran à refaire.
+// Live previews: the code of a ```preview block runs at build time with the real packages, and the HTML it renders
+// is shown in an isolated page (iframe) with the panel CSS. Previews therefore always match the current components.
 //
-// Le code est une expression JavaScript (ou un corps de fonction terminé par `return`) qui rend :
-// - un ou plusieurs composants de schéma (champs, mises en page, entrées d'infolist) ;
-// - une ou plusieurs actions (`Action`, `ActionGroup`) ;
-// - une table (`Table`), remplie par la directive `// records:`.
-// Directives facultatives, en tête du bloc :
-//   // state: {"name": "Ada"}          état du formulaire
-//   // record: {"name": "Ada"}         enregistrement affiché (infolist)
-//   // records: [{"name": "Ada"}]      lignes d'une table
-//   // errors: {"data.name": ["…"]}    erreurs de validation affichées
-//   // width: 32rem                    largeur maximale de l'aperçu
-//   // viewport: 1100                  rendu à cette largeur (px) puis réduit : utile pour les grilles à colonnes (point de rupture `lg`)
+// The code is a JavaScript expression, or a function body ending with `return`, that evaluates to schema components,
+// actions, a table or an array of `Stat`. Optional directives, as the first lines of the block:
+//   // state: {"name": "Ada"}          form state
+//   // record: {"name": "Ada"}         record shown by infolist entries
+//   // records: [{"name": "Ada"}]      table rows
+//   // errors: {"data.name": ["…"]}    validation messages
+//   // width: 32rem                    maximum width of the content
+//   // viewport: 1100                  render at this width (px), then scale down — grids only get columns from the `lg` breakpoint
 import * as actions from '@navette-js/actions';
 import * as database from '@navette-js/database';
 import * as forms from '@navette-js/forms';
@@ -29,19 +25,19 @@ import { wireStyles } from '@navette-js/wire/express';
 export type Preview = { code: string };
 export type RenderedPreview = { html: string; width: string | null; viewport: number | null; state: Record<string, unknown> };
 
-// Mêmes réglages qu'un panel : couleurs (primaire bleue, comme la démo), vues, traductions.
+// The same setup as a panel: colors (blue primary), views, translations.
 const colors = new support.ColorManager().register({ primary: support.Color.Blue });
 for (const use of [actions.useColorManager, forms.useColorManager, tables.useColorManager, infolists.useColorManager, useUiColorManager]) use(colors);
 support.views.share({ t, tc, assetUrl: (file: string) => `/assets/filament/${file}` });
-// HTML affiché par une entrée (markdown(), html()) : nettoyé comme dans un panel, par le schéma de l'éditeur de texte enrichi.
+// HTML displayed by entries (markdown(), html()) is sanitized as in a panel.
 infolists.useHtmlSanitizer((html: string) => forms.richDocumentToHtml(forms.richHtmlToDocument(html)) ?? '');
 
-/** Noms disponibles dans le code d'un aperçu : tout ce qu'exportent les paquets (classes, fonctions), sauf les réglages globaux. */
+/** Names available to preview code: every export of the packages, except the global `use…` setters. */
 const scope: Record<string, unknown> = {};
 for (const module of [support, schemas, forms, builder, infolists, actions, tables, database, panels]) {
     for (const [name, value] of Object.entries(module)) if (!name.startsWith('use') && /^[A-Za-z_$][\w$]*$/.test(name) && !(name in scope)) scope[name] = value;
 }
-// `Group` et `Tab` existent dans plusieurs paquets : ceux des schémas gardent le nom court, les autres ont un alias.
+// `Group` and `Tab` exist in several packages: the schema components keep the short names.
 scope.TableGroup = tables.Group;
 scope.ListTab = panels.Tab;
 const names = Object.keys(scope);
@@ -49,7 +45,7 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
 
 let knex: database.Knex | null = null;
 let tableCount = 0;
-/** Table SQLite en mémoire remplie avec les lignes de l'aperçu, lue par un ObjectionAdapter comme dans une vraie resource. */
+/** In-memory SQLite table filled with the preview rows, read through an ObjectionAdapter like a real resource. */
 async function adapterFor(records: Record<string, unknown>[]): Promise<database.DataAdapter> {
     knex ??= database.sqlite(':memory:');
     const name = `preview_${++tableCount}`;
@@ -95,7 +91,7 @@ export async function renderPreview(preview: Preview): Promise<RenderedPreview> 
         for (const item of items) parts.push(item instanceof actions.Action ? await item.toHtml(context) : await (item as actions.ActionGroup).toHtml(context, {}, (action: actions.Action) => action.getName()));
         html = `<div class="fi-ac fi-align-start">${parts.join('')}</div>`;
     } else if (items.length && items.every((item) => item instanceof panels.Stat)) {
-        // Rangée de statistiques, comme StatsOverviewWidget (les courbes demandent JavaScript : elles restent vides).
+        // Same grid as StatsOverviewWidget. Charts need JavaScript and stay empty.
         const panel = { colors, assetUrl: (file: string) => `/assets/filament/${file}` } as any;
         const columns = items.length < 3 ? 3 : items.length % 3 !== 1 ? 3 : 4;
         const cells = (items as panels.Stat[]).map((stat, index) => `<div class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(panel, `stat-${index}`)}</div></div>`).join('');
@@ -113,13 +109,13 @@ export async function renderPreview(preview: Preview): Promise<RenderedPreview> 
         }
         html = await schema.toHtml();
     } else {
-        throw new Error(`le code doit rendre des composants de schéma, des actions ou une table (reçu : ${items.map((item) => item?.constructor?.name ?? typeof item).join(', ') || 'rien'})`);
+        throw new Error(`the code must evaluate to schema components, actions, a table or stats (got: ${items.map((item) => item?.constructor?.name ?? typeof item).join(', ') || 'nothing'})`);
     }
     const viewport = Number(values.viewport);
     return { html, width: values.width ?? null, viewport: Number.isFinite(viewport) && viewport >= 320 && viewport <= 2000 ? viewport : null, state: { ...host.data, tableRecordsPerPage: 10 } };
 }
 
-/** Page HTML autonome d'un aperçu : CSS de Filament, couleurs, police ; thème clair ou sombre comme la page parente. */
+/** Standalone preview page. It follows the light or dark theme of the parent page and sizes its iframe. */
 export function previewDocument(rendered: RenderedPreview): string {
     return `<!DOCTYPE html>
 <html lang="en" class="fi">
@@ -142,7 +138,7 @@ html, body { margin: 0; background: transparent; }
     const sync = () => { try { document.documentElement.classList.toggle('dark', parent.document.documentElement.classList.contains('dark')); } catch {} };
     sync();
     try { new MutationObserver(sync).observe(parent.document.documentElement, { attributes: true, attributeFilter: ['class'] }); } catch {}
-    // Largeur de rendu : celle du cadre, ou une largeur « bureau » réduite à l'échelle du cadre (directive viewport).
+    // With a viewport, render at that width and scale the iframe down to the available width.
     const viewport = ${rendered.viewport ?? 0};
     const resize = () => {
         const frame = frameElement, box = frame?.parentElement;
@@ -153,7 +149,7 @@ html, body { margin: 0; background: transparent; }
         frame.style.height = height + 'px';
         box.style.height = Math.ceil(height * scale) + 'px';
     };
-    // Valeurs de l'état : Livewire les pose côté client ; ici elles sont recopiées dans les champs.
+    // Field values are normally set client-side from the component state: copy them into the inputs.
     const state = ${JSON.stringify(rendered.state).replace(/</g, '\\u003c')};
     const valueAt = (path) => path.replace(/^data\\./, '').split('.').reduce((node, key) => (node == null ? undefined : node[key]), state);
     const fill = () => {
@@ -168,7 +164,7 @@ html, body { margin: 0; background: transparent; }
             else field.value = String(value);
         }
     };
-    // Sans Alpine, aucun onglet ni aucune étape n'est actif : le premier l'est ici, comme au chargement d'une vraie page.
+    // Without Alpine, no tab or wizard step is active: activate the first one, as on page load.
     const activate = () => {
         for (const tabs of document.querySelectorAll('.fi-sc-tabs')) {
             tabs.querySelectorAll('[x-ref="tabsHeader"]').forEach((header) => header.removeAttribute('x-cloak'));
@@ -182,7 +178,7 @@ html, body { margin: 0; background: transparent; }
             step?.classList.add('fi-active');
             step?.removeAttribute('x-cloak');
         }
-        // Interrupteurs : Alpine choisit leurs classes d'après l'état ; le serveur a déjà posé aria-checked.
+        // Toggles get their classes from Alpine; the server already rendered aria-checked.
         for (const toggle of document.querySelectorAll('button[role="switch"][x-bind\\\\:class]')) {
             const classes = /\\?\\s*'([^']*)'\\s*:\\s*'([^']*)'/.exec(toggle.getAttribute('x-bind:class'));
             if (classes) toggle.className += ' ' + (toggle.getAttribute('aria-checked') === 'true' ? classes[1] : classes[2]);

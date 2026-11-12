@@ -22,7 +22,7 @@ CodeEntry.make('code')
 The code is escaped when it is rendered.
 
 <Aside variant="warning">
-Navette renders the same markup as Filament's code entry, but without syntax highlighting yet: the code is displayed in a single color. No server-side highlighter needs to be installed.
+Syntax highlighting is not available yet: the code is displayed in a single color. No server-side highlighter needs to be installed.
 </Aside>
 
 ## Changing the code's grammar (language)
