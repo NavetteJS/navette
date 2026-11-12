@@ -8,22 +8,44 @@ The quickest way to start is `npm create navette`: it asks a few questions, crea
 
 ### Requirements
 
-- Node.js 24 or later. Navette is written in TypeScript and runs `.ts` files directly with Node's built-in type stripping, without a build step.
-- A database supported by [Knex](https://knexjs.org): SQLite (no installation needed), PostgreSQL or MySQL.
+- **Node.js 24 or later**, with npm (npm comes with Node.js). Navette is written in TypeScript and runs `.ts` files directly with Node's built-in type stripping, without a build step.
+- A database supported by [Knex](https://knexjs.org): SQLite (nothing to install), PostgreSQL or MySQL.
 
 <Aside variant="info">
 Node's type stripping only removes type annotations. Code that TypeScript would have to transform — `enum`, `namespace`, constructor parameter properties — is not supported in `.ts` files run this way. Write plain classes and constants instead.
 </Aside>
 
+## Before you start: installing Node.js
+
+You do not need to install Navette itself beforehand: the next step downloads everything. You only need Node.js 24 or later. Check the version you have in a terminal:
+
+```bash
+node --version
+npm --version
+```
+
+If `node` is not found, or prints a version lower than `v24`, install the current LTS release of Node.js:
+
+- **Windows and macOS**: download the installer from [nodejs.org](https://nodejs.org), run it, then open a **new** terminal so that `node` and `npm` are on the `PATH`.
+- **Linux, or several Node versions side by side**: use a version manager such as [nvm](https://github.com/nvm-sh/nvm) (`nvm install --lts`) or [fnm](https://github.com/Schniz/fnm).
+
+Run `node --version` again: it must print `v24` or higher.
+
 ## Creating a project
 
-Run:
+In the folder where you keep your projects, run:
 
 ```bash
 npm create navette@latest
 ```
 
-The command asks for:
+`npm create navette` is npm's shortcut for running the `create-navette` package: npm downloads its latest version into a temporary cache, runs it, and installs nothing globally. `@latest` makes sure you get the newest generator even if an older one is in npm's cache. The same command written with `npx` is:
+
+```bash
+npx create-navette@latest
+```
+
+The generator asks for:
 
 | Question | Choices | Default |
 | --- | --- | --- |
@@ -69,6 +91,31 @@ npm create navette@latest my-app -- --template=blank --user-panel --teams --db=p
 | `--port=` | Port of the development server (`3000`) |
 
 The `--` after the project name passes the options to `create-navette` instead of npm.
+
+## Troubleshooting
+
+### `npm create navette` does nothing or prints "could not determine executable to run"
+
+npm ran an old or incomplete copy of `create-navette` from its cache. Ask for the latest version explicitly, with either command:
+
+```bash
+npm create navette@latest
+npx create-navette@latest
+```
+
+Check which version npm sees with `npm view create-navette version`: it must be a `1.x` version.
+
+### "Unsupported engine", or a syntax error on start-up
+
+Your Node.js is older than version 24. Run `node --version`, then [install Node.js 24 or later](#before-you-start-installing-nodejs) and open a new terminal.
+
+### On Windows: "running scripts is disabled on this system"
+
+PowerShell blocks the `npm.ps1` script. Use `npm.cmd create navette@latest` for this one command, or allow local scripts for your account with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+### `npm install` fails while building `better-sqlite3`
+
+`better-sqlite3` downloads a prebuilt binary for your Node version. When none exists — usually with a very new or an odd-numbered Node release — npm compiles it, which needs build tools. Use the current LTS release of Node.js, or install the build tools (`xcode-select --install` on macOS, `build-essential` and `python3` on Linux, "Desktop development with C++" from Visual Studio Build Tools on Windows).
 
 ## Next steps
 

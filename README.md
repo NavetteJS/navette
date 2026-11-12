@@ -24,10 +24,29 @@ Navette builds admin panels on Node.js and Express: resources with tables, forms
 
 ## Requirements
 
-- Node.js 24 or later
+- Node.js 24 or later (check with `node --version`; get it from [nodejs.org](https://nodejs.org))
 - A database supported by Knex (SQLite, PostgreSQL, MySQL…)
 
-## Installation
+## Getting started
+
+Nothing to install beforehand: `npm create` downloads the project generator and runs it.
+
+```bash
+npm create navette@latest my-app
+cd my-app
+npm run dev
+```
+
+The generator asks which template you want (starter or blank), whether to add a user panel with sign-up and teams, and which database to use, then creates the project, installs it and creates an admin account. Then generate screens from your tables:
+
+```bash
+npx navette make:migration create_posts_table
+npx navette make:resource Post --generate
+```
+
+## Installing manually
+
+To add Navette to an existing Express application:
 
 ```bash
 npm install @navette-js/panels@beta express

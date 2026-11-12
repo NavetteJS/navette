@@ -17,7 +17,7 @@ npm create navette@latest my-app
 cd my-app && npm run dev
 ```
 
-See [installation](/getting-started/installation) for the options of `npm create navette`.
+You only need Node.js 24 or later: `npm create` downloads the generator, nothing is installed beforehand. See [installation](/getting-started/installation) for setting up Node.js, the options of `npm create navette` and troubleshooting.
 
 <Aside variant="warning">
 Navette is in **beta**. Its API may still change between beta releases, and some features are not available yet. Each page of this documentation only describes what Navette really implements.
