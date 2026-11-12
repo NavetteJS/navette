@@ -1,0 +1,32 @@
+<%# Champ texte — port de TextInput::toEmbeddedHtml() + Field::wrapInputHtml() %>
+<div <%- wrapper %>>
+    <% if (prefix !== null) { %>
+        <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label">
+            <span class="fi-input-wrp-label">
+                <%= prefix %>
+            </span>
+        </div>
+    <% } %>
+    <div class="fi-input-wrp-content-ctn">
+        <input <%- input %> />
+    </div>
+    <% if (suffix !== null) { %>
+        <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-suffix fi-input-wrp-suffix-has-label">
+            <span class="fi-input-wrp-label">
+                <%= suffix %>
+            </span>
+        </div>
+    <% } %>
+    <% if (revealable) { %>
+        <div class="fi-input-wrp-suffix">
+            <div class="fi-input-wrp-actions">
+                <button title="<%= showLabel %>" aria-label="<%= showLabel %>" type="button" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-ref="showPasswordAction" x-show="! isPasswordRevealed" x-on:click="setPasswordRevealed(true)">
+                    <%- icon('m-eye') %>
+                </button>
+                <button title="<%= hideLabel %>" aria-label="<%= hideLabel %>" type="button" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-cloak="x-cloak" x-ref="hidePasswordAction" x-show="isPasswordRevealed" x-on:click="setPasswordRevealed(false)">
+                    <%- icon('m-eye-slash') %>
+                </button>
+            </div>
+        </div>
+    <% } %>
+</div>

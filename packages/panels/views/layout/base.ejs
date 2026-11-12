@@ -1,0 +1,129 @@
+<%# Document HTML d'un panel — port de filament-panels::components.layout.base %>
+<!DOCTYPE html>
+<html lang="en" dir="ltr" class="fi">
+    <head>
+        <%- renderHook('panels::head.start', renderHookScopes) %>
+        <meta charset="utf-8" />
+        <meta name="csrf-token" content="<%- csrf %>" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        <% if (locals.favicon) { %><link rel="icon" href="<%= favicon %>" /><% } %>
+
+        <title>
+            <%= title %>
+             -
+            <%= brandName %>
+        </title>
+
+        <%- renderHook('panels::styles.before', renderHookScopes) %>
+        <style>
+            [x-cloak=''],
+            [x-cloak='x-cloak'],
+            [x-cloak='1'] {
+                display: none !important;
+            }
+
+            [x-cloak='inline-flex'] {
+                display: inline-flex !important;
+            }
+
+            @media (max-width: 1023px) {
+                [x-cloak='-lg'] {
+                    display: none !important;
+                }
+            }
+
+            @media (min-width: 1024px) {
+                [x-cloak='lg'] {
+                    display: none !important;
+                }
+            }
+        </style>
+
+        <link href="<%- assetUrl('fonts/filament/filament/inter/index.css') %>" rel="stylesheet" data-navigate-track />
+
+        <%- colorVariables %>
+
+        <%# Thème compilé par l'application s'il existe, sinon la feuille par défaut de Filament %>
+        <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/filament/filament/app.css') %>" data-navigate-track="reload" />
+
+        <% if (font.url) { %>
+            <% if (font.preconnect) { %><link rel="preconnect" href="<%- font.preconnect %>"><% } %>
+            <link href="<%= font.url %>" rel="stylesheet" />
+        <% } %>
+
+        <style>
+            :root {
+                --font-family: '<%- font.family %>';
+                --font-family-mono: 'ui-monospace';
+                --font-family-serif: 'ui-serif';
+                --sidebar-width: 20rem;
+                --sidebar-collapsed-width: 4.5rem;
+                --default-theme-mode: system;
+            }
+
+            html.fi {
+                --livewire-progress-bar-color: var(--primary-500);
+            }
+        </style>
+
+        <%- renderHook('panels::styles.after', renderHookScopes) %>
+        <script>
+            const loadDarkMode = () => {
+                window.theme =
+                    localStorage.getItem('filament:theme:mode') ?? 'system'
+
+                if (
+                    window.theme === 'dark' ||
+                    (window.theme === 'system' &&
+                        window.matchMedia('(prefers-color-scheme: dark)')
+                            .matches)
+                ) {
+                    document.documentElement.classList.add('dark')
+                }
+            }
+
+            loadDarkMode()
+
+            document.addEventListener('livewire:navigated', loadDarkMode)
+        </script>
+
+        <% if (locals.themeCss) { %><style data-navette-theme><%- themeCss %></style><% } %>
+
+        <% if (locals.motion) { %><link rel="stylesheet" href="<%- assetUrl('navette/motion.css') %>" data-navigate-track /><% } %>
+        <link rel="stylesheet" href="<%- assetUrl('navette/calendar.css') %>" data-navigate-track />
+
+        <%- wireStyles %>
+        <%- renderHook('panels::head.end', renderHookScopes) %>
+    </head>
+
+    <body class="<%- cls(['fi-body', 'fi-panel-' + panelId, bodyClass]) %>">
+        <%- renderHook('panels::body.start', renderHookScopes) %>
+        <%- body %>
+
+        <%- notifications %>
+
+        <%- renderHook('panels::scripts.before', renderHookScopes) %>
+        <script>
+            window.filamentData = []
+        </script>
+
+        <% for (const src of ['js/filament/actions/actions.js', 'js/filament/notifications/notifications.js', 'js/filament/schemas/schemas.js', 'js/filament/support/support.js', 'js/filament/tables/tables.js', 'js/filament/filament/echo.js', 'js/filament/filament/app.js']) { %>
+            <script src="<%- assetUrl(src) %>"<% if (locals.spa !== false) { %> data-navigate-once data-navigate-track<% } %>></script>
+        <% } %>
+
+        <style>
+            :root {
+            }
+        </style>
+
+        <script>
+            loadDarkMode()
+        </script>
+
+        <%- wireScripts %>
+        <%- renderHook('panels::scripts.after', renderHookScopes) %>
+        <%- renderHook('panels::body.end', renderHookScopes) %>
+        <% if (locals.motion) { %><script src="<%- assetUrl('navette/motion.js') %>" data-navigate-once defer></script><% } %>
+    </body>
+</html>

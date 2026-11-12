@@ -1,0 +1,43 @@
+<%# Scènes « components/callout » — même page que docs-assets/app (callout.blade.php) %>
+<div id="calloutSimple" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-information-circle', color: 'info', heading: 'Important Notice', description: 'Please read this information carefully before proceeding.' }) %>
+</div>
+
+<div id="calloutColors" class="p-8 max-w-2xl space-y-4">
+    <%- ui.callout({ icon: 'heroicon-o-check-circle', color: 'success', heading: 'Success', description: 'Your changes have been saved.' }) %>
+    <%- ui.callout({ icon: 'heroicon-o-exclamation-circle', color: 'warning', heading: 'Warning', description: 'Please review the following items.' }) %>
+    <%- ui.callout({ icon: 'heroicon-o-x-circle', color: 'danger', heading: 'Error', description: 'Something went wrong. Please try again.' }) %>
+</div>
+
+<div id="calloutFooter" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-exclamation-circle', color: 'warning', heading: 'Subscription expiring', description: 'Your subscription will expire in 7 days. Renew now to avoid interruption.', footer: ui.button({ size: 'sm' }, 'Renew now') }) %>
+</div>
+
+<div id="calloutControls" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-information-circle', color: 'info', heading: 'Dismissible Callout', description: 'This callout can be dismissed using the control in the top-right corner.', controls: ui.iconButton({ icon: 'heroicon-m-x-mark', color: 'gray', label: 'Dismiss' }) }) %>
+</div>
+
+<div id="calloutNoIcon" class="p-8 max-w-2xl">
+    <%- ui.callout({ heading: 'No Icon', description: 'This callout has no icon.' }) %>
+</div>
+
+<div id="calloutHeadingOnly" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-information-circle', color: 'info', heading: 'Simple Notice' }) %>
+</div>
+
+<div id="calloutCustomIconBlade" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-sparkles', heading: 'Tip', description: 'You can use custom icons for your callouts.' }) %>
+</div>
+
+<div id="calloutIconColor" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-shield-check', iconColor: 'success', heading: 'Custom Icon Color', description: 'The icon color is independent of the background color.' }) %>
+</div>
+
+<div id="calloutIconSizes" class="p-8 max-w-2xl space-y-4">
+    <%- ui.callout({ icon: 'heroicon-m-information-circle', iconSize: 'sm', color: 'info', heading: 'Small Icon', description: 'This callout has a smaller icon.' }) %>
+    <%- ui.callout({ icon: 'heroicon-m-information-circle', iconSize: 'md', color: 'info', heading: 'Medium Icon', description: 'This callout has a medium icon.' }) %>
+</div>
+
+<div id="calloutPrimaryColor" class="p-8 max-w-2xl">
+    <%- ui.callout({ icon: 'heroicon-o-star', color: 'primary', heading: 'Announcement', description: 'A special announcement with a custom color.' }) %>
+</div>

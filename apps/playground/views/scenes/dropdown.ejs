@@ -1,0 +1,32 @@
+<%# Scènes « components/dropdown » — même page que docs-assets/app (dropdown.blade.php) %>
+<div id="dropdownSimple" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 280px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Options') }, ui.dropdownList([{ label: 'Edit', icon: 'heroicon-m-pencil-square' }, { label: 'Duplicate', icon: 'heroicon-m-document-duplicate' }, { label: 'Delete', icon: 'heroicon-m-trash', color: 'danger' }])) %>
+</div>
+
+<div id="dropdownColors" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 340px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Actions') }, ui.dropdownList([{ label: 'View details', color: 'primary', icon: 'heroicon-m-eye' }, { label: 'Edit record', color: 'info', icon: 'heroicon-m-pencil-square' }, { label: 'Approve', color: 'success', icon: 'heroicon-m-check-circle' }, { label: 'Archive', color: 'warning', icon: 'heroicon-m-exclamation-triangle' }, { label: 'Delete', color: 'danger', icon: 'heroicon-m-trash' }])) %>
+</div>
+
+<div id="dropdownIconColors" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 380px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Actions') }, ui.dropdownList([{ label: 'View', icon: 'heroicon-m-eye', iconColor: 'primary' }, { label: 'Edit', icon: 'heroicon-m-pencil-square', iconColor: 'info' }, { label: 'Duplicate', icon: 'heroicon-m-document-duplicate', iconColor: 'success' }, { label: 'Archive', icon: 'heroicon-m-archive-box', iconColor: 'warning' }, { label: 'Delete', icon: 'heroicon-m-trash', iconColor: 'danger' }])) %>
+</div>
+
+<div id="dropdownIcons" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 320px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Actions') }, ui.dropdownList([{ label: 'View', icon: 'heroicon-m-eye' }, { label: 'Edit', icon: 'heroicon-m-pencil-square' }, { label: 'Duplicate', icon: 'heroicon-m-document-duplicate' }, { label: 'Delete', icon: 'heroicon-m-trash', color: 'danger' }])) %>
+</div>
+
+<div id="dropdownBadge" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 280px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Menu') }, ui.dropdownList([{ label: 'Notifications', icon: 'heroicon-m-bell', badge: 5 }, { label: 'Messages', icon: 'heroicon-m-envelope', badge: 3, badgeColor: 'success' }, { label: 'Settings', icon: 'heroicon-m-cog-6-tooth' }])) %>
+</div>
+
+<div id="dropdownImage" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 300px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Team') }, ui.dropdownList([{ label: 'Dan Harrin', image: 'https://avatars.githubusercontent.com/u/41773797?v=4' }, { label: 'Ryan Chandler', image: 'https://avatars.githubusercontent.com/u/44533235?v=4' }, { label: 'Zep Fietje', image: 'https://avatars.githubusercontent.com/u/22632550?v=4' }])) %>
+</div>
+
+<div id="dropdownWidth" class="p-8 pt-4 flex items-start justify-center max-w-2xl" style="min-height: 340px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Manage'), width: 'lg' }, ui.dropdownList([{ label: 'Edit profile', icon: 'heroicon-m-pencil-square' }, { label: 'Account settings', icon: 'heroicon-m-cog-6-tooth' }, { label: 'Notification preferences', icon: 'heroicon-m-bell' }, { label: 'Sign out', icon: 'heroicon-m-arrow-right-on-rectangle', color: 'danger' }])) %>
+</div>
+
+<div id="dropdownMaxHeight" class="p-8 pt-4 flex items-start justify-center max-w-xl" style="min-height: 320px;">
+    <%- ui.dropdown({ trigger: ui.button({}, 'Select country'), maxHeight: '200px' }, ui.dropdownList(['Argentina', 'Australia', 'Brazil', 'Canada', 'France', 'Germany', 'India', 'Japan', 'Mexico', 'United Kingdom', 'United States'].map((label) => ({ label })))) %>
+</div>

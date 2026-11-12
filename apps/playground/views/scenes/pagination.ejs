@@ -1,0 +1,17 @@
+<%# Scènes « components/pagination » — même page que docs-assets/app (pagination-demo.blade.php) : 50 éléments, page 3, 10 par page %>
+<% const id = 'Navette0Scene0Demo12'; %>
+<div id="paginationSimple" class="p-8" style="min-width: 960px;">
+    <%- ui.pagination({ id, page: 3, perPage: 10, total: 50 }) %>
+</div>
+
+<div id="paginationSimplePaginator" class="p-8 max-w-xl">
+    <%- ui.pagination({ id, page: 2, perPage: 10, hasMore: true }) %>
+</div>
+
+<div id="paginationExtremeLinks" class="p-8" style="min-width: 960px;">
+    <%- ui.pagination({ id, page: 3, perPage: 10, total: 50, extremeLinks: true }) %>
+</div>
+
+<div id="paginationPageOptions" class="p-8" style="min-width: 960px;">
+    <%- ui.pagination({ id, page: 3, perPage: 10, total: 50, pageOptions: [5, 10, 20, 50, 100, 'all'], property: 'perPage' }) %>
+</div>

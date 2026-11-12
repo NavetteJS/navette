@@ -1,0 +1,32 @@
+<%# Page « simple » — port de filament-panels::components.page.simple + header.simple + logo %>
+<div class="fi-simple-page">
+    <%- renderHook('panels::simple-page.start', renderHookScopes) %>
+    <div class="fi-simple-page-content">
+        <% if (heading || locals.hasLogo !== false || locals.subheading) { %>
+        <header class="fi-simple-header">
+            <% if (locals.hasLogo !== false) { %>
+            <%- view('filament-panels::components.logo', { brand }) %>
+            <% } %>
+
+            <% if (heading) { %>
+            <h1 class="fi-simple-header-heading">
+                <%= heading %>
+            </h1>
+            <% } %>
+
+            <% if (locals.subheading) { %>
+            <p class="fi-simple-header-subheading">
+                <%- subheading %>
+            </p>
+            <% } %>
+        </header>
+        <% } %>
+
+        <%- content %>
+    </div>
+
+    <div wire:partial="action-modals" x-data="filamentActionModals({
+                    livewireId: <%- js(livewireId) %>,
+                })" style="height: 0"></div>
+    <%- renderHook('panels::simple-page.end', renderHookScopes) %>
+</div>

@@ -1,0 +1,19 @@
+<%# Mise en page « simple » — port de filament-panels::components.layout.simple %>
+<div class="fi-simple-layout">
+<% if (locals.header) { %>
+    <a href="#fi-main-content" class="fi-skip-link fi-sr-only">
+        <%= t('filament-panels::layout.skip_to_content.label') %>
+    </a>
+<% } %>
+    <%- renderHook('panels::simple-layout.start', renderHookScopes) %>
+<% if (locals.header) { %>
+    <div class="fi-simple-layout-header"><%- header %></div>
+<% } %>
+    <div class="fi-simple-main-ctn">
+        <main id="fi-main-content" tabindex="-1" class="fi-simple-main fi-width-<%- locals.maxContentWidth ?? 'lg' %>">
+            <%- slot %>
+        </main>
+    </div>
+    <%- renderHook('panels::footer', renderHookScopes) %>
+    <%- renderHook('panels::simple-layout.end', renderHookScopes) %>
+</div>

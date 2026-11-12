@@ -1,0 +1,26 @@
+<%# Scènes « components/empty-state » — même page que docs-assets/app (empty-state.blade.php) %>
+<% const create = ui.button({ icon: 'heroicon-m-plus' }, 'Create post'); %>
+<div id="emptyStateSimple" class="p-8 max-w-2xl">
+    <%- ui.emptyState({ icon: 'heroicon-o-document-text', heading: 'No posts yet', description: 'Get started by creating your first post.', footer: create }) %>
+</div>
+
+<div id="emptyStateActions" class="p-8 max-w-xl">
+    <%- ui.emptyState({ icon: 'heroicon-o-document-text', iconColor: 'primary', heading: 'No posts yet', description: 'Get started by creating your first blog post.', footer: create }) %>
+</div>
+
+<div id="emptyStateIconColor" class="p-8 max-w-2xl">
+    <%- ui.emptyState({ icon: 'heroicon-o-user', iconColor: 'info', heading: 'No users yet' }) %>
+</div>
+
+<div id="emptyStateIconSizes" class="p-8 max-w-2xl space-y-4">
+    <%- ui.emptyState({ icon: 'heroicon-m-user', iconSize: 'sm', heading: 'Small icon' }) %>
+    <%- ui.emptyState({ icon: 'heroicon-m-user', iconSize: 'md', heading: 'Medium icon' }) %>
+</div>
+
+<div id="emptyStateNotContained" class="p-8 max-w-2xl">
+    <%- ui.emptyState({ icon: 'heroicon-o-document-text', contained: false, heading: 'No posts yet', description: 'Get started by creating your first post.' }) %>
+</div>
+
+<div id="emptyStateDescription" class="p-8 max-w-2xl">
+    <%- ui.emptyState({ icon: 'heroicon-o-document-text', heading: 'No posts yet', description: 'Get started by creating your first post.' }) %>
+</div>

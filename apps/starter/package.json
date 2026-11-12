@@ -1,0 +1,19 @@
+{
+  "name": "@navette/starter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.ts" },
+  "dependencies": {
+    "@navette/panels": "*",
+    "@navette/database": "*",
+    "@navette/tables": "*",
+    "@navette/forms": "*",
+    "@navette/infolists": "*",
+    "@navette/schemas": "*",
+    "@navette/actions": "*",
+    "@navette/wire": "*",
+    "@navette/support": "*",
+    "express": "^5.1.0"
+  }
+}

@@ -1,0 +1,39 @@
+<%# Enveloppe de champ par défaut — port de Filament\Forms\Components\Field::wrapEmbeddedHtml() %>
+<div data-field-wrapper class="<%- cls([locals.wrapperClass, 'fi-fo-field']) %>"<% if (locals.focusable) { %> tabindex="-1"<% } %>>
+    <% if (locals.hiddenLabel) { %>
+        <% if (locals.labelAsDiv) { %>
+            <div id="<%= id %>-label" class="fi-fo-field-label fi-sr-only">
+                <%= label %>
+            </div>
+        <% } else { %>
+        <label for="<%= id %>" class="fi-fo-field-label fi-sr-only">
+            <%= label %>
+        </label>
+        <% } %>
+    <% } else { %>
+    <div class="fi-fo-field-label-col">
+        <div class="fi-fo-field-label-ctn">
+            <%# Groupe de boutons : le libellé est un <div> référencé par aria-labelledby, pas un <label> %>
+            <<%- locals.labelAsDiv ? 'div id="' + id + '-label"' : 'label for="' + id + '"' %> class="fi-fo-field-label">
+                <%- labelPrefix %>
+                <span class="fi-fo-field-label-content">
+                    <%= label %><% if (required) { %><sup class="fi-fo-field-label-required-mark">*</sup><% } %>
+                </span>
+            </<%- locals.labelAsDiv ? 'div' : 'label' %>>
+            <%# Après le libellé : indication (hint), icône et actions d'indication, en ligne et alignées à droite %>
+            <%- locals.afterLabel ?? '' %>
+        </div>
+    </div>
+    <% } %>
+    <% if (html !== '' || errorMessage !== null) { %>
+        <div class="fi-fo-field-content-col">
+            <%- html %>
+            <% if (errorMessage !== null) { %>
+                <p id="<%= id %>-error" data-validation-error class="fi-fo-field-wrp-error-message">
+                    <%= errorMessage %>
+                </p>
+            <% } %>
+        </div>
+    <% } %>
+    <%- locals.after ?? '' %>
+</div>

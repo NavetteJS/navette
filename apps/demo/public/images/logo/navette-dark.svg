@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 0 1090 182" role="img" aria-label="Navette">
+  <title>Navette</title>
+  <path fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" d="M-14,38 L164,16"/>
+  <path fill="none" stroke="#3b82f6" stroke-width="10" stroke-linecap="round" d="M75,30 V72"/>
+  <circle fill="#3b82f6" cx="75" cy="27" r="9"/>
+  <path fill="#3b82f6" fill-rule="evenodd" d="M38,72 H112 a20,20 0 0 1 20,20 V146 a20,20 0 0 1 -20,20 H38 a20,20 0 0 1 -20,-20 V92 a20,20 0 0 1 20,-20 Z M36,90 h30 v32 h-30 Z M84,90 h30 v32 h-30 Z"/>
+  <path fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" d="M210,60 V160 M210,110 a50,50 0 0 1 100,0 V160 M450,110 a50,50 0 1 0 -100,0 a50,50 0 1 0 100,0 M450,60 V160 M490,60 L540,160 L590,60 M630,110 H730 A50,50 0 1 0 715.4,145.4 M790,20 V130 a30,30 0 0 0 30,30 h10 M765,60 H825 M875,20 V130 a30,30 0 0 0 30,30 h10 M850,60 H910 M945,110 H1045 A50,50 0 1 0 1030.4,145.4"/>
+</svg>

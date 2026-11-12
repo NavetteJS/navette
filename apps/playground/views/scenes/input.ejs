@@ -1,0 +1,20 @@
+<%# Scènes « components/input » — même page que docs-assets/app (input.blade.php) %>
+<div id="inputSimple" class="p-8 max-w-md">
+    <%- ui.inputWrapper({}, ui.input({ type: 'text', placeholder: 'Enter your name' })) %>
+</div>
+
+<div id="inputPrefix" class="p-8 max-w-md">
+    <%- ui.inputWrapper({ prefix: 'https://' }, ui.input({ type: 'text', placeholder: 'example.com' })) %>
+</div>
+
+<div id="inputIcon" class="p-8 max-w-md">
+    <%- ui.inputWrapper({ prefixIcon: 'heroicon-m-magnifying-glass' }, ui.input({ type: 'text', placeholder: 'Search...' })) %>
+</div>
+
+<div id="inputDisabled" class="p-8 max-w-md">
+    <%- ui.inputWrapper({ disabled: true }, ui.input({ type: 'text', value: 'john@example.com', disabled: true })) %>
+</div>
+
+<div id="inputSuffixIconColor" class="p-8 max-w-md">
+    <%- ui.inputWrapper({ suffixIcon: 'heroicon-m-check-circle', suffixIconColor: 'success' }, ui.input({ type: 'text', value: 'https://filamentphp.com' })) %>
+</div>

@@ -1,0 +1,13 @@
+node_modules/
+.release/
+*.log
+.env
+.env.*
+
+# Démo : base de travail (créée à partir de seed.sqlite au premier lancement), fichiers envoyés, e-mails.
+apps/demo/database/database.sqlite
+apps/demo/database/*.sqlite-*
+apps/demo/storage/
+# Starter et site de documentation : fichiers produits.
+apps/starter/data.sqlite
+apps/docs/dist/

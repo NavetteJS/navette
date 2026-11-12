@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Navette — prototype du runtime</title>
+    <%- styles %>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; color: #18181b; }
+        .card { border: 1px solid #e4e4e7; border-radius: .75rem; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+        button { padding: .35rem .7rem; } input { padding: .35rem .5rem; } .error { color: #dc2626; }
+    </style>
+</head>
+<body>
+    <h1>Navette — prototype du runtime (jalon 0)</h1>
+    <p>Serveur Node, client <code>livewire.js</code> 4.4.8 d'origine, non modifié.</p>
+    <%- counter %>
+    <%- liveField %>
+    <%- scripts %>
+</body>
+</html>

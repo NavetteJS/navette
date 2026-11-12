@@ -1,0 +1,55 @@
+<%# Modale d'une action montée — port de filament-actions::action-modal et filament::components.modal (modale de confirmation, centrée, largeur md) %>
+<div wire:partial="action-modals.<%- index %>"<% if (description) { %> aria-describedby="<%= id %>.description"<% } %> aria-labelledby="<%= id %>.heading" aria-modal="true" id="<%= id %>" role="<%- confirmation ? 'alertdialog' : 'dialog' %>" tabindex="-1" x-data="filamentModal({
+                id: <%- js(id) %>,
+                isScrollLocked: true,
+                shouldRestoreFocus: false,
+            })" data-fi-modal-id="<%= id %>" x-on:close-modal.window="if (($event.detail.id === <%- js(id) %>) && isOpen) close()" x-on:close-modal-quietly.window="if (($event.detail.id === <%- js(id) %>) && isOpen) closeQuietly()" x-on:open-modal.window="if (($event.detail.id === <%- js(id) %>) && (! isOpen)) open()" x-bind:class="{
+        'fi-modal-open': isOpen,
+    }" x-cloak x-show="isOpen" class="<%- locals.slideOver ? 'fi-modal fi-modal-slide-over fi-absolute-positioning-context' : 'fi-modal fi-absolute-positioning-context' %>" wire:key="<%= livewireId %>.actions.<%= name %>.modal" x-on:modal-closed="if ($event.detail.id === <%= js(id) %>) $wire.unmountAction(false)">
+    <div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div>
+
+    <div tabindex="-1" x-on:click.self="$dispatch(<%= js('close-modal') %>, { id: <%= js(id) %> })" x-trap.noreturn="isTrapActive" class="fi-modal-window-ctn fi-clickable">
+        <form x-on:keydown.window.escape="if (isTopmost()) $dispatch(<%= js('close-modal') %>, { id: <%= js(id) %> })" x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:submit.prevent="callMountedAction" wire:key="<%= livewireId %>.modal.<%= id %>.window" class="<%- cls(['fi-modal-window', 'fi-modal-window-has-close-btn', { 'fi-modal-window-has-content': content !== null }, 'fi-modal-window-has-footer', { 'fi-modal-window-has-icon': iconName }, 'fi-align-' + alignment, 'fi-width-' + width]) %>">
+            <div wire:key="<%= livewireId %>.modal.<%= id %>.header" class="fi-modal-header">
+                <%- view('filament::components.icon-button', {
+                    iconName: 'o-x-mark', iconSize: 'lg', label: t('filament::components/modal.actions.close.label'), className: 'fi-modal-close-btn',
+                    extra: attrs({ tabindex: '-1' }), after: attrs({ 'x-on:click': "$dispatch('close-modal', { id: " + js(id) + ' })' }),
+                }) %>
+
+                <% if (iconName) { %>
+                    <div class="fi-modal-icon-ctn">
+                        <div class="<%- cls([...(color !== 'gray' ? ['fi-color', 'fi-color-' + color] : []), 'fi-modal-icon-bg']) %>">
+                            <%- icon(iconName, { size: 'lg' }) %>
+                        </div>
+                    </div>
+                <% } %>
+
+                <div>
+                    <h2 id="<%= id %>.heading" class="fi-modal-heading">
+                        <%= heading %>
+                    </h2>
+
+                    <% if (description) { %>
+                        <p id="<%= id %>.description" class="fi-modal-description">
+                            <%= description %>
+                        </p>
+                    <% } %>
+                </div>
+            </div>
+
+            <%# Les six emplacements de ActionsRenderHook sont assemblés dans `content` par Action.toModalHtml(). %>
+            <% if (content !== null) { %>
+                <div wire:key="<%= livewireId %>.modal.<%= id %>.content" class="fi-modal-content">
+                    <%- content %>
+                </div>
+            <% } %>
+
+            <div wire:key="<%= livewireId %>.modal.<%= id %>.footer" class="fi-modal-footer fi-align-<%- confirmation ? 'center' : 'start' %>">
+                <div class="fi-modal-footer-actions">
+                    <%# Confirmation : annuler puis confirmer ; formulaire : valider puis annuler (comme Filament) %>
+                    <%- confirmation ? cancel + submit : submit + cancel %>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

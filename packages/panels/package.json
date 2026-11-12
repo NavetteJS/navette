@@ -1,0 +1,21 @@
+{
+  "name": "@navette/panels",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme.css": "./theme.css"
+  },
+  "dependencies": {
+    "@navette/support": "*",
+    "@navette/schemas": "*",
+    "@navette/forms": "*",
+    "@navette/actions": "*",
+    "@navette/wire": "*",
+    "@navette/tables": "*",
+    "@navette/infolists": "*",
+    "@navette/database": "*",
+    "express": "^5.1.0"
+  }
+}

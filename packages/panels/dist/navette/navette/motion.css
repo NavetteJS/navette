@@ -1,0 +1,101 @@
+/*
+ * Navette — mouvement et indicateurs de chargement.
+ *
+ * Écart volontaire avec FilamentPHP (décision du 2026-11-12) : cette feuille n'ajoute que du mouvement et des indicateurs,
+ * sans toucher au balisage ni aux dimensions. Elle se désactive avec `Panel.motion(false)`, ce qui rend l'interface de Filament
+ * telle quelle. Les courbes reprennent l'esprit d'iOS : ressorts doux, sorties rapides, échelle légère à la pression.
+ * Tout est neutralisé pour les personnes qui demandent moins d'animations (`prefers-reduced-motion`).
+ */
+:root {
+    --nv-spring: cubic-bezier(0.32, 0.72, 0, 1);      /* glissement amorti, sans dépassement */
+    --nv-bounce: cubic-bezier(0.2, 0.9, 0.3, 1.25);   /* léger dépassement à l'arrivée */
+    --nv-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    /* --- arrivée de page : le contenu monte de quelques pixels en apparaissant */
+    @keyframes nv-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    /* `backwards` et non `both` : une animation de `transform` qui reste appliquée après sa fin fait de l'élément le bloc conteneur de ses descendants en `position: fixed` ; le fond d'une modale ne couvrait alors que la page, pas la fenêtre. */
+    .fi-page { animation: nv-rise 0.42s var(--nv-spring) backwards; }
+    .fi-simple-main { animation: nv-rise 0.5s var(--nv-spring) backwards; }
+
+    /* --- pression : boutons, liens d'action, éléments de navigation */
+    .fi-btn, .fi-icon-btn, .fi-link, .fi-tabs-item, .fi-sidebar-item-btn, .fi-dropdown-list-item, .fi-pagination-item-btn {
+        transition: transform 0.18s var(--nv-spring), background-color 0.2s var(--nv-out), color 0.2s var(--nv-out), box-shadow 0.2s var(--nv-out), opacity 0.2s var(--nv-out);
+    }
+    .fi-btn:active:not(.fi-disabled, [disabled]), .fi-icon-btn:active:not(.fi-disabled, [disabled]) { transform: scale(0.96); }
+    .fi-link:active, .fi-tabs-item:active, .fi-sidebar-item-btn:active, .fi-dropdown-list-item:active:not(.fi-disabled), .fi-pagination-item-btn:active { transform: scale(0.97); }
+
+    /* --- modales : la fenêtre arrive avec un ressort ; le fond reste celui de Filament (voile sombre, sans flou) */
+    .fi-modal-window { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.42s !important; }
+    .fi-modal-window.fi-transition-leave { transition-timing-function: var(--nv-out) !important; transition-duration: 0.2s !important; }
+
+    /* --- menus déroulants : ils s'ouvrent depuis leur déclencheur */
+    @keyframes nv-pop { from { opacity: 0; transform: scale(0.94) translateY(-4px); } to { opacity: 1; transform: none; } }
+    .fi-dropdown-panel:not([style*="display: none"]) { animation: nv-pop 0.26s var(--nv-bounce); transform-origin: top; }
+
+    /* --- notifications : entrée latérale amortie */
+    .fi-no-notification { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.45s !important; }
+
+    /* --- surfaces et champs */
+    .fi-ta-row { transition: background-color 0.2s var(--nv-out); }
+    .fi-input-wrp { transition: box-shadow 0.2s var(--nv-out), background-color 0.2s var(--nv-out); }
+    .fi-toggle > :first-child { transition-timing-function: var(--nv-bounce) !important; transition-duration: 0.3s !important; }
+    .fi-badge { transition: background-color 0.2s var(--nv-out), color 0.2s var(--nv-out); }
+    .fi-sidebar-group-items { transition: opacity 0.25s var(--nv-out); }
+
+    /* --- indicateur de chargement des zones différées : une roue, au lieu d'un cadre vide */
+    @keyframes nv-spin { to { transform: rotate(360deg); } }
+    @keyframes nv-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+    .fi-loading-section { position: relative; animation: nv-breathe 1.6s ease-in-out infinite; }
+    .fi-loading-section::after {
+        content: ''; position: absolute; inset: 0; margin: auto; width: 1.5rem; height: 1.5rem; border-radius: 9999px;
+        border: 2.5px solid color-mix(in oklab, currentColor 18%, transparent); border-top-color: var(--primary-500, currentColor);
+        animation: nv-spin 0.7s linear infinite;
+    }
+
+    /* --- éléments qui arrivent après l'affichage de la page : ils se déploient au lieu d'apparaître d'un coup */
+    /* compteur d'onglet (chargé après coup) : il s'élargit depuis zéro, l'onglet s'étire avec lui */
+    @keyframes nv-expand {
+        from { opacity: 0; max-width: 0; padding-inline: 0; margin-inline-start: -0.5rem; transform: scale(0.6); }
+        60% { opacity: 1; }
+        to { opacity: 1; max-width: 6rem; transform: none; }
+    }
+    .fi-tabs-item > .fi-badge { overflow: hidden; white-space: nowrap; transform-origin: left center; animation: nv-expand 0.5s var(--nv-spring) both; }
+    /* roue d'attente du compteur : elle s'efface en douceur */
+    .fi-tabs-item-badge-placeholder { transition: opacity 0.2s var(--nv-out); }
+    /* zone chargée à la demande (relation manager, widget) : son contenu monte en place quand il remplace la roue */
+    .fi-resource-relation-manager, .fi-wi-widget { animation: nv-rise 0.45s var(--nv-spring) backwards; }
+    /* lignes d'une table qui vient d'être rechargée, erreurs de validation, lignes ajoutées à un Repeater */
+    @keyframes nv-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes nv-unfold { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    .fi-fo-field-wrp-error-message { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
+    /* `backwards` et non `both` : une animation d'opacité qui reste appliquée garde la ligne en contexte d'empilement ; la liste d'un sélecteur de la ligne passait alors sous le bouton d'ajout du Repeater. */
+    .fi-fo-table-repeater tbody tr { animation: nv-fade-in 0.3s var(--nv-out) backwards; }
+    .fi-ta-summary-row, .fi-ta-summary-header-row { animation: nv-fade-in 0.35s var(--nv-out) backwards; }
+
+    /* --- contenu qui se recharge : il s'estompe légèrement pendant la requête */
+    .fi-ta-content-ctn { transition: opacity 0.2s var(--nv-out); }
+    html[data-nv-busy] .fi-ta-content-ctn { opacity: 0.6; }
+}
+
+/* --- pastille d'activité : visible quand une requête dure (posée par motion.js) */
+.nv-busy {
+    position: fixed; top: 0.75rem; left: 50%; z-index: 60; display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.8rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 500; pointer-events: none;
+    color: var(--gray-700); background: color-mix(in oklab, white 82%, transparent);
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.06);
+    backdrop-filter: blur(14px) saturate(1.6); -webkit-backdrop-filter: blur(14px) saturate(1.6);
+    opacity: 0; transform: translate(-50%, -150%); transition: transform 0.4s var(--nv-spring), opacity 0.25s var(--nv-out);
+}
+.dark .nv-busy { color: var(--gray-200); background: color-mix(in oklab, var(--gray-900) 78%, transparent); box-shadow: 0 6px 24px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.08); }
+html[data-nv-busy] .nv-busy { opacity: 1; transform: translate(-50%, 0); }
+.nv-busy::before {
+    content: ''; width: 0.875rem; height: 0.875rem; border-radius: 9999px; border: 2px solid color-mix(in oklab, currentColor 22%, transparent);
+    border-top-color: var(--primary-500, currentColor); animation: nv-spin-always 0.7s linear infinite;
+}
+@keyframes nv-spin-always { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .nv-busy { transition: opacity 0.2s linear; transform: translate(-50%, 0); }
+    .nv-busy::before { animation-duration: 1.6s; }
+}

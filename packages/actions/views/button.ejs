@@ -1,0 +1,13 @@
+<%# Bouton d'action — port de la vue Blade filament::components.button %>
+<button <%- keyBindings %><% if (isSubmit) { %>x-data="filamentFormButton" x-bind:class="{ 'fi-processing': isProcessing }" <% } %><%- attributes %>>
+    <% if (!iconAfter) { %><%- iconHtml %><% if (hasWireLoader) { %><%- wireLoader %><% } %><% if (isSubmit) { %><%- formLoader %><% } %><% } %>
+    <% if (isSubmit) { %>
+        <span x-show="! isProcessing">
+            <%= label %>
+        </span>
+        <span x-cloak x-show="isProcessing" x-text="processingMessage"></span>
+    <% } else { %>
+        <%= label %>
+    <% } %>
+    <% if (iconAfter) { %><%- iconHtml %><% if (hasWireLoader) { %><%- wireLoader %><% } %><% if (isSubmit) { %><%- formLoader %><% } %><% } %>
+</button>

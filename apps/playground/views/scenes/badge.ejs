@@ -1,0 +1,21 @@
+<%# Scènes « components/badge » — même page que docs-assets/app (badge.blade.php) %>
+<div id="badgeSimple" class="p-8 flex items-center justify-center" style="width: 180px">
+    <%- ui.badge({}, 'New') %>
+</div>
+
+<div id="badgeColors" class="p-8 flex items-center gap-4 max-w-2xl">
+    <% for (const [color, label] of [['primary', 'Primary'], ['success', 'Active'], ['info', 'Info'], ['warning', 'Pending'], ['danger', 'Failed'], ['gray', 'Draft']]) { %>
+        <%- ui.badge({ color }, label) %>
+    <% } %>
+</div>
+
+<div id="badgeIcon" class="p-8 flex items-center gap-4 max-w-xl">
+    <%- ui.badge({ icon: 'heroicon-m-sparkles' }, 'Featured') %>
+    <%- ui.badge({ icon: 'heroicon-m-check-circle', color: 'success' }, 'Verified') %>
+</div>
+
+<div id="badgeSizes" class="p-8 flex items-end gap-4 max-w-xl">
+    <% for (const [size, label] of [['xs', 'Extra small'], ['sm', 'Small'], ['md', 'Medium'], ['lg', 'Large'], ['xl', 'Extra large']]) { %>
+        <%- ui.badge({ size }, label) %>
+    <% } %>
+</div>

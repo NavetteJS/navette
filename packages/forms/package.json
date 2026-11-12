@@ -1,0 +1,25 @@
+{
+  "name": "@navette/forms",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./builder": "./src/builder.ts"
+  },
+  "dependencies": {
+    "@navette/actions": "*",
+    "@navette/schemas": "*",
+    "@navette/support": "*",
+    "@tiptap/core": "^3.33.1",
+    "@tiptap/extension-highlight": "^3.33.1",
+    "@tiptap/extension-image": "^3.33.1",
+    "@tiptap/extension-subscript": "^3.33.1",
+    "@tiptap/extension-superscript": "^3.33.1",
+    "@tiptap/extension-table": "^3.33.1",
+    "@tiptap/extension-text-align": "^3.33.1",
+    "@tiptap/html": "^3.33.1",
+    "@tiptap/pm": "^3.33.1",
+    "@tiptap/starter-kit": "^3.33.1"
+  }
+}

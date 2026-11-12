@@ -1,0 +1,82 @@
+<%# Menu utilisateur (sidebar ou barre du haut) — port de filament-panels::components.user-menu, theme-switcher et dropdown %>
+<% const topbar = locals.position === 'topbar'; const collapsible = locals.isSidebarCollapsibleOnDesktop === true; const before = locals.itemsBefore ?? []; const after = locals.itemsAfter ?? []; %>
+<%- renderHook('panels::user-menu.before') %>
+<div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-user-menu">
+    <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
+<% if (topbar) { %>
+        <button aria-label="<%= t('filament-panels::layout.actions.open_user_menu.label') %>" type="button" class="fi-user-menu-trigger">
+            <img alt="<%= t('filament-panels::layout.avatar.alt', { name: user.name }) %>" class="fi-avatar fi-circular fi-size-md fi-user-avatar" src="<%= avatarUrl %>" loading="lazy" />
+        </button>
+<% } else { %>
+        <button aria-label="<%= user.name %>" type="button" class="fi-user-menu-trigger">
+            <img alt="<%= t('filament-panels::layout.avatar.alt', { name: user.name }) %>" class="fi-avatar fi-circular fi-size-md fi-user-avatar" src="<%= avatarUrl %>" loading="lazy" />
+            <span<% if (collapsible) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-user-menu-trigger-text">
+                <%= user.name %>
+            </span>
+            <%- icon('m-chevron-up', collapsible ? { attributes: attrs({ 'x-show': '$store.sidebar.isOpen' }) } : {}) %>
+        </button>
+<% } %>
+    </div>
+
+    <div x-cloak x-float.placement.<%= topbar ? 'bottom-end' : 'top-end' %>.flip<% if (topbar) { %>.teleport<% } %>.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel " style="">
+<% if (!locals.profileUrl) { %>
+        <%- renderHook('panels::user-menu.profile.before') %>
+        <div class="fi-dropdown-header">
+            <%- icon('m-user-circle') %>
+            <span>
+                <%= user.name %>
+            </span>
+        </div>
+        <%- renderHook('panels::user-menu.profile.after') %>
+<% } %>
+<% if (before.length) { %>        <div class="fi-dropdown-list"><%- before.join('') %></div>
+<% } %>
+        <div class="fi-dropdown-list">
+            <div x-data="{ theme: null }" x-init="
+                    $watch('theme', () => {
+                        $dispatch('theme-changed', theme)
+                    })
+
+                    theme = localStorage.getItem('filament:theme:mode') || 'system'    " role="group" aria-label="<%= t('filament-panels::layout.actions.theme_switcher.label') %>" class="fi-theme-switcher">
+                <% for (const [theme, iconName] of [['light', 'm-sun'], ['dark', 'm-moon'], ['system', 'm-computer-desktop']]) { %>
+                    <% const label = t('filament-panels::layout.actions.theme_switcher.' + theme + '.label') %>
+                    <button aria-label="<%= label %>" role="menuitemradio" tabindex="-1" type="button" x-on:click="(theme = <%- js(theme) %>) && close()" x-tooltip="{
+                            content: <%- js(label) %>,
+                            theme: $store.theme,
+                        }" x-bind:aria-checked="theme === <%- js(theme) %> ? 'true' : 'false'" x-bind:class="{ 'fi-active': theme === <%- js(theme) %> }" class="fi-theme-switcher-btn">
+                        <%- icon(iconName) %>
+                    </button>
+                <% } %>
+            </div>
+        </div>
+
+        <% if (locals.themes && themes.length > 1) { %>
+            <%# Écart assumé avec Filament : choix d'un thème prédéfini du panel (Panel.themes()). %>
+            <div role="group" aria-label="Theme" class="fi-dropdown-list nv-theme-list">
+                <% for (const theme of themes) { %>
+                    <button role="menuitemradio" aria-checked="<%= theme.id === activeTheme ? 'true' : 'false' %>" tabindex="-1" type="button" wire:click="setTheme(<%= js(theme.id) %>)" data-theme="<%= theme.id %>" class="<%- cls(['fi-dropdown-list-item', theme.id === activeTheme && 'fi-active']) %>">
+                        <span aria-hidden="true" class="nv-theme-swatch" style="display: inline-block; flex-shrink: 0; width: 1.25rem; height: 1.25rem; border-radius: 9999px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1); background-color: <%= theme.swatch %>"></span>
+                        <span class="fi-dropdown-list-item-label">
+                            <%= theme.label %>
+                        </span>
+                        <% if (theme.id === activeTheme) { %><%- icon('m-check') %><% } %>
+                    </button>
+                <% } %>
+            </div>
+        <% } %>
+
+<% if (after.length) { %>        <div class="fi-dropdown-list"><%- after.join('') %></div>
+<% } %>
+        <div class="fi-dropdown-list">
+            <form action="<%= logoutUrl %>" method="post"><input type="hidden" name="_token" value="<%= csrf %>" autocomplete="off">
+                <button role="menuitem" tabindex="-1" type="submit" class="fi-dropdown-list-item">
+                    <%- icon('m-arrow-left-on-rectangle') %>
+                    <span class="fi-dropdown-list-item-label">
+                        <%= t('filament-panels::layout.actions.logout.label') %>
+                    </span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+<%- renderHook('panels::user-menu.after') %>

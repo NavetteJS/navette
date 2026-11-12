@@ -1,0 +1,13 @@
+<%# Scènes « components/avatar » — même page que docs-assets/app (avatar.blade.php) %>
+<% const people = [['https://avatars.githubusercontent.com/u/41773797?v=4', 'Dan Harrin'], ['https://avatars.githubusercontent.com/u/41837763?v=4', 'Ryan Chandler'], ['https://avatars.githubusercontent.com/u/44533235?v=4', 'Zep Fietje']]; %>
+<div id="avatarSimple" class="p-8 flex items-center gap-4" style="width: 230px">
+    <% for (const [src, alt] of people) { %><%- ui.avatar({ src, alt }) %><% } %>
+</div>
+
+<div id="avatarSquare" class="p-8 flex items-center gap-4" style="width: 230px">
+    <% for (const [src, alt] of people) { %><%- ui.avatar({ src, alt, circular: false }) %><% } %>
+</div>
+
+<div id="avatarSizes" class="p-8 flex items-end gap-4" style="width: 250px">
+    <% for (const size of ['sm', 'md', 'lg']) { %><%- ui.avatar({ src: people[0][0], alt: people[0][1], size }) %><% } %>
+</div>

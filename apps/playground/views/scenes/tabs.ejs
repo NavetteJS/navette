@@ -1,0 +1,21 @@
+<%# Scènes « components/tabs » — même page que docs-assets/app (tabs.blade.php) %>
+<div id="tabsSimple" class="p-8 max-w-2xl">
+    <%- ui.tabs({ label: 'Content tabs' }, [{ label: 'General', active: true }, { label: 'Notifications', icon: 'heroicon-m-bell' }, { label: 'Settings', icon: 'heroicon-m-cog-6-tooth' }]) %>
+</div>
+
+<div id="tabsBadge" class="p-8 max-w-2xl">
+    <%- ui.tabs({ label: 'Content tabs' }, [{ label: 'All', active: true }, { label: 'Published', badge: 5, badgeColor: 'success' }, { label: 'Draft', badge: 2, badgeColor: 'warning' }, { label: 'Trashed', badge: 1, badgeColor: 'danger' }]) %>
+</div>
+
+<div id="tabsVertical" class="p-8 max-w-2xl">
+    <%- ui.tabs({ label: 'Content tabs', vertical: true }, [{ label: 'General', active: true, icon: 'heroicon-m-user' }, { label: 'Notifications', icon: 'heroicon-m-bell' }, { label: 'Settings', icon: 'heroicon-m-cog-6-tooth' }]) %>
+</div>
+
+<% const four = [['Profile', 'heroicon-m-user'], ['Notifications', 'heroicon-m-bell'], ['Settings', 'heroicon-m-cog-6-tooth'], ['Security', 'heroicon-m-shield-check']]; %>
+<div id="tabsIconPositionAfter" class="p-8 max-w-2xl">
+    <%- ui.tabs({ label: 'Content tabs' }, four.map(([label, icon], index) => ({ label, icon, iconPosition: 'after', active: index === 0 }))) %>
+</div>
+
+<div id="tabsIcon" class="p-8 max-w-2xl">
+    <%- ui.tabs({ label: 'Content tabs' }, four.map(([label, icon], index) => ({ label, icon, active: index === 0 }))) %>
+</div>

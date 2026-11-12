@@ -1,0 +1,8 @@
+<%# Badge — port de la vue Blade filament::components.badge (sans icône ni bouton de suppression) %>
+<span class="<%- cls([...colorClasses, 'fi-badge', 'fi-size-' + (locals.size ?? 'md')]) %>">
+    <span class="fi-badge-label-ctn">
+        <span class="fi-badge-label">
+            <%= label %>
+        </span>
+    </span>
+</span>

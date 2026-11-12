@@ -1,0 +1,791 @@
+<%# Table — port partiel de filament-tables::index. Portés : recherche, tri, sélection de page, lignes cliquables, action de ligne « lien », pagination.
+    Pas encore portés : actions groupées, filtres, gestionnaire de colonnes, recherche par colonne, groupes, résumés, réordonnancement, état vide. %>
+<% const selectPageBinding = `
+                                const recordsOnPage = getRecordsOnPage()
+
+                                if (recordsOnPage.length && areRecordsSelected(recordsOnPage)) {
+                                    $el.checked = true
+                                    $el.indeterminate = false
+
+                                    return 'checked'
+                                }
+
+                                $el.checked = false
+                                $el.indeterminate =
+                                    recordsOnPage.length && areRecordsPartiallySelected(recordsOnPage)
+
+                                return null
+                            ` %>
+<div x-data="filamentTable({
+                areGroupsCollapsedByDefault: <%- grouping.collapsedByDefault ? 'true' : 'false' %>,
+                canTrackDeselectedRecords: true,
+                currentSelectionLivewireProperty: null,
+                maxSelectableRecords: null,
+                reorderMessage: <%- js(t('filament-tables::table.reordering.moved')) %>,
+                selectsCurrentPageOnly: false,
+            })" class="fi-ta">
+    <input type="hidden" value="<%- allCount %>" x-ref="allSelectableRecordsCount" />
+
+    <% if (reorder) { %><span wire:ignore x-ref="tableReorderStatus" role="status" aria-live="polite" aria-atomic="true" class="fi-sr-only"></span><% } %>
+
+    <div class="fi-ta-ctn<%- contentLayout ? ' fi-ta-ctn-with-content-layout' : '' %> fi-ta-ctn-with-footer fi-ta-ctn-with-header">
+        <div class="fi-ta-main">
+            <%# La barre d'outils n'est visible en permanence que si elle a un contenu (recherche, filtres, colonnes) ; sinon seulement pendant une sélection. %>
+            <% const filtersAbove = filtersForm !== null && filtersLayout === 'above-content-collapsible'; %>
+            <% const toolbarVisible = reorder !== null || groups.length > 0 || isSearchable || filtersForm !== null || hasColumnManager; %>
+            <div x-show="<%- heading !== null || headerActions.length || toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header.visible" class="fi-ta-header-ctn">
+                <%- hook('tables::header.before') %>
+                <% if (heading !== null || headerActions.length) { %>
+                    <div class="<%- cls(['fi-ta-header', { 'fi-ta-header-adaptive-actions-position': headerActions.length }]) %>">
+                        <% if (heading !== null) { %>
+                            <div>
+                                <h2 class="fi-ta-header-heading">
+                                    <%= heading %>
+                                </h2>
+                            </div>
+                        <% } %>
+                        <% if (headerActions.length) { %>
+                            <div class="fi-ta-actions fi-align-start fi-wrapped">
+                                <%- headerActions.join('') %>
+                            </div>
+                        <% } %>
+                    </div>
+                <% } %>
+                <%- hook('tables::header.after') %>
+                <% if (filtersAbove) { %>
+                    <%# Filtres au-dessus du contenu, repliables (FiltersLayout::AboveContentCollapsible) %>
+                    <div x-bind:class="{ 'fi-open': areFiltersOpen }" class="fi-ta-filters-above-content-ctn">
+                        <div class="fi-ta-filters" x-cloak="x-cloak" x-show="areFiltersOpen">
+                            <div class="fi-ta-filters-header">
+                                <h2 class="fi-ta-filters-heading">
+                                    <%= t('filament-tables::table.filters.heading') %>
+                                </h2>
+
+                                <div>
+                                    <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...dangerLinkClasses]) %>" data-table-filter-action="reset" wire:click="resetTableFiltersForm">
+                                        <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'resetTableFiltersForm' })) %>
+                                        <span class="fi-link-label">
+                                            <%= t('filament-tables::table.filters.actions.reset.label') %>
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <%- filtersForm %>
+
+                            <div class="fi-ta-filters-actions-ctn">
+                                <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...primaryButtonClasses]) %>" data-table-filter-action="apply" wire:click="applyTableFilters">
+                                    <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'applyTableFilters' })) %>
+                                    <%= t('filament-tables::table.filters.actions.apply.label') %>
+                                </button>
+                            </div>
+                        </div>
+
+                        <span x-on:click="areFiltersOpen = ! areFiltersOpen" class="fi-ta-filters-trigger-action-ctn">
+                            <button title="<%= t('filament-tables::table.actions.filter.label') %>" aria-label="<%= t('filament-tables::table.actions.filter.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
+                                <%- icon('m-funnel') %>
+                                <div class="fi-icon-btn-badge-ctn">
+                                    <span class="<%- cls([...badgeClasses, 'fi-badge', 'fi-size-xs']) %>">
+                                        <%- activeFiltersCount %>
+                                    </span>
+                                </div>
+                            </button>
+                        </span>
+                    </div>
+                <% } %>
+                <%- hook('tables::toolbar.before') %>
+                <div<% if (!toolbarVisible) { %> x-cloak<% } %> x-show="<%- toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header-toolbar.<%- toolbarVisible ? 'visible' : 'selection' %>" class="fi-ta-header-toolbar">
+                    <%- hook('tables::toolbar.start') %>
+                    <div class="fi-ta-actions fi-align-start fi-wrapped">
+                        <%- hook('tables::toolbar.reorder-trigger.before') %>
+                        <% if (reorder) { %>
+                            <% const reorderLabel = t(reorder.active ? 'filament-tables::table.actions.disable_reordering.label' : 'filament-tables::table.actions.enable_reordering.label') %>
+                            <button title="<%= reorderLabel %>" aria-label="<%= reorderLabel %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="toggleTableReordering" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
+                                <%- icon(reorder.active ? 'm-check' : 'm-arrows-up-down', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'toggleTableReordering' }) }) %>
+                                <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'toggleTableReordering' })) %>
+                            </button>
+                        <% } %>
+                        <%- hook('tables::toolbar.reorder-trigger.after') %>
+                        <% if (bulkActions.length) { %>
+                            <div x-data="filamentDropdown" x-cloak="x-cloak" x-show="getSelectedRecordsCount()" class="fi-dropdown">
+                                <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
+                                    <button title="<%= t('filament-tables::table.actions.open_bulk_actions.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-group fi-icon-btn fi-size-md">
+                                        <%- icon('m-ellipsis-vertical') %>
+                                    </button>
+                                    <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-group fi-btn fi-size-md fi-labeled-from-sm">
+                                        <%- icon('m-ellipsis-vertical') %>
+                                        <%= t('filament-tables::table.actions.open_bulk_actions.label') %>
+                                    </button>
+                                </div>
+
+                                <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel">
+                                    <div class="fi-dropdown-list" role="group">
+                                        <%- bulkActions.join('') %>
+                                    </div>
+                                </div>
+                            </div>
+                        <% } %>
+                        <%- hook('tables::toolbar.grouping-selector.before') %>
+                        <% if (groups.length) { %>
+                            <% const groupLabel = t('filament-tables::table.grouping.fields.group.label'); const directionLabel = t('filament-tables::table.grouping.fields.direction.label'); %>
+                            <div x-data="{
+                                    grouping: $wire.$entangle('tableGrouping', true),
+                                    group: null,
+                                    direction: null,
+                                }" x-init="
+                                    if (grouping) {
+                                        ;[group, direction] = grouping.split(':')
+                                        direction ??= 'asc'
+                                    }
+
+                                    $watch('grouping', function () {
+                                        if (! grouping) {
+                                            group = null
+                                            direction = null
+
+                                            return
+                                        }
+
+                                        ;[group, direction] = grouping.split(':')
+                                        direction ??= 'asc'
+                                    })
+
+                                    $watch('direction', function () {
+                                        grouping = group ? `${group}:${direction}` : null
+                                    })
+
+                                    $watch('group', function (newGroup, oldGroup) {
+                                        if (! newGroup) {
+                                            direction = null
+                                            grouping = group ? `${group}:${direction}` : null
+
+                                            return
+                                        }
+
+                                        if (oldGroup) {
+                                            grouping = group ? `${group}:${direction}` : null
+
+                                            return
+                                        }
+
+                                        direction ??= 'asc'
+                                        grouping = group ? `${group}:${direction}` : null
+                                    })
+                                " class="fi-ta-grouping-settings">
+                                <div x-data="filamentDropdown({ isMenu: false })" class="<%- cls(['fi-dropdown', { 'sm:fi-hidden': !grouping.inDropdownOnDesktop }]) %>" wire:key="<%= id %>.table.grouping">
+                                    <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
+                                        <button title="<%= t('filament-tables::table.actions.group.label') %>" aria-label="<%= t('filament-tables::table.actions.group.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
+                                            <%- icon('m-rectangle-stack') %>
+                                        </button>
+                                    </div>
+                                    <div x-cloak x-float.placement.bottom-start.flip.shift.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" wire:ignore.self wire:key="<%= id %>.table.grouping.panel" class="fi-dropdown-panel fi-width-xs" style="">
+                                        <div class="fi-ta-grouping-settings-fields">
+                                            <label>
+                                                <span><%= groupLabel %></span>
+                                                <div class="fi-input-wrp"><div class="fi-input-wrp-content-ctn"><select class="fi-select-input" x-model="group" x-on:change="resetCollapsedGroups()"><option value="">-</option><% for (const option of groups) { %><option value="<%= option.id %>"><%= option.label %></option><% } %></select></div></div>
+                                            </label>
+                                            <% if (!grouping.directionHidden) { %>
+                                            <label x-cloak x-show="group">
+                                                <span><%= directionLabel %></span>
+                                                <div class="fi-input-wrp"><div class="fi-input-wrp-content-ctn"><select class="fi-select-input" x-model="direction"><option value="asc"><%= t('filament-tables::table.grouping.fields.direction.options.asc') %></option><option value="desc"><%= t('filament-tables::table.grouping.fields.direction.options.desc') %></option></select></div></div>
+                                            </label>
+                                            <% } %>
+                                        </div>
+                                    </div>
+                                </div>
+                                <% if (!grouping.inDropdownOnDesktop) { %>
+                                <div class="fi-ta-grouping-settings-fields">
+                                    <label>
+                                        <div class="fi-input-wrp"><div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label"><span class="fi-input-wrp-label"><%= groupLabel %></span></div><div class="fi-input-wrp-content-ctn"><select class="fi-select-input" x-model="group" x-on:change="resetCollapsedGroups()"><option value="">-</option><% for (const option of groups) { %><option value="<%= option.id %>"><%= option.label %></option><% } %></select></div></div>
+                                    </label>
+                                    <% if (!grouping.directionHidden) { %>
+                                    <label x-cloak x-show="group">
+                                        <span class="fi-sr-only"><%= directionLabel %></span>
+                                        <div class="fi-input-wrp"><div class="fi-input-wrp-content-ctn"><select class="fi-select-input" x-model="direction"><option value="asc"><%= t('filament-tables::table.grouping.fields.direction.options.asc') %></option><option value="desc"><%= t('filament-tables::table.grouping.fields.direction.options.desc') %></option></select></div></div>
+                                    </label>
+                                    <% } %>
+                                </div>
+                                <% } %>
+                            </div>
+                        <% } %>
+                        <%- hook('tables::toolbar.grouping-selector.after') %>
+                    </div>
+
+                    <% if (toolbarVisible) { %><div>
+                        <%- hook('tables::toolbar.search.before') %>
+                        <% if (isSearchable) { %><div x-id="['input']" class="fi-ta-search-field">
+                            <label x-bind:for="$id('input')" class="fi-sr-only">
+                                <%= t('filament-tables::table.fields.search.label') %>
+                            </label>
+
+                            <div class="fi-input-wrp">
+                                <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">
+                                    <%- icon('m-magnifying-glass', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'tableSearch' }) }) %>
+                                    <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'tableSearch' })) %>
+                                </div>
+
+                                <div class="fi-input-wrp-content-ctn">
+                                    <input class="fi-input fi-input-has-inline-prefix" autocomplete="off" maxlength="1000" placeholder="<%= t('filament-tables::table.fields.search.placeholder') %>" type="search" wire:key="<%= id %>.table.tableSearch.field.input" wire:model.live.debounce.500ms="tableSearch" x-bind:id="$id('input')" x-on:keyup="if ($event.key === 'Enter') { $wire.$refresh() }" />
+                                </div>
+                            </div>
+                        </div><% } %>
+                        <%- hook('tables::toolbar.search.after') %>
+
+                        <% if (filtersForm !== null && !filtersAbove) { %>
+                            <div x-data="filamentDropdown({ isMenu: false })" class="fi-dropdown fi-ta-filters-dropdown" wire:key="<%= id %>.table.filters">
+                                <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
+                                    <button title="<%= t('filament-tables::table.actions.filter.label') %>" aria-label="<%= t('filament-tables::table.actions.filter.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
+                                        <%- icon('m-funnel') %>
+                                        <div class="fi-icon-btn-badge-ctn">
+                                            <span class="<%- cls([...badgeClasses, 'fi-badge', 'fi-size-xs']) %>">
+                                                <%- activeFiltersCount %>
+                                            </span>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                <div x-cloak x-float.placement.bottom-end.shift.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" wire:ignore.self wire:key="<%= id %>.table.filters.panel" class="fi-dropdown-panel fi-width-xs" style="">
+                                    <div class="fi-ta-filters" x-data="filamentTableFilters" x-on:click="handleActionClick($event)" tabindex="-1">
+                                        <div class="fi-ta-filters-header">
+                                            <h2 class="fi-ta-filters-heading">
+                                                <%= t('filament-tables::table.filters.heading') %>
+                                            </h2>
+
+                                            <div>
+                                                <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...dangerLinkClasses]) %>" data-table-filter-action="reset" wire:click="resetTableFiltersForm">
+                                                    <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'resetTableFiltersForm' })) %>
+                                                    <span class="fi-link-label">
+                                                        <%= t('filament-tables::table.filters.actions.reset.label') %>
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <%- filtersForm %>
+
+                                        <div class="fi-ta-filters-actions-ctn">
+                                            <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...primaryButtonClasses]) %>" data-table-filter-action="apply" wire:click="applyTableFilters">
+                                                <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'applyTableFilters' })) %>
+                                                <%= t('filament-tables::table.filters.actions.apply.label') %>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <% } %>
+
+                        <%# Comme Filament : ces deux emplacements n'existent que s'il y a un déclencheur de filtres ou un gestionnaire de colonnes. %>
+                        <% if ((filtersForm !== null && !filtersAbove) || hasColumnManager) { %><%- hook('tables::toolbar.toggle-column-trigger.before') %><% } %>
+                        <% if (hasColumnManager) { %>
+                            <%- view('filament-tables::column-manager', { id, dangerLinkClasses, primaryButtonClasses }) %>
+                        <% } %>
+                        <% if ((filtersForm !== null && !filtersAbove) || hasColumnManager) { %><%- hook('tables::toolbar.toggle-column-trigger.after') %><% } %>
+                    </div><% } %>
+                    <%- hook('tables::toolbar.end') %>
+                </div>
+                <%- hook('tables::toolbar.after') %>
+
+                </div>
+
+            <% if (reorder?.active) { %>
+                <div x-cloak role="status" aria-live="polite" wire:key="<%= id %>.table.reorder.indicator" class="fi-ta-reorder-indicator">
+                    <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'reorderTable,moveTableRecord' })) %>
+                    <%= t('filament-tables::table.reorder_indicator') %>
+                </div>
+            <% } %>
+            <% if (bulkActions.length) { %>
+                    <div x-cloak role="status" aria-live="polite" aria-atomic="true" x-bind:hidden="! getSelectedRecordsCount()" x-show="getSelectedRecordsCount()" wire:key="<%= id %>.table.selection.indicator" class="fi-ta-selection-indicator">
+                        <div>
+                            <%- loadingIndicator(attrs({ 'x-show': 'isLoading' })) %>
+
+                            <span x-text="
+                                    window.pluralize(<%= js(t('filament-tables::table.selection_indicator.selected_count')) %>, getSelectedRecordsCount(), {
+                                        count: new Intl.NumberFormat(<%= js('en') %>).format(getSelectedRecordsCount()),
+                                    })
+                                "></span>
+                        </div>
+
+                        <div>
+                            <%- hook('tables::selection.indicator.actions.before') %>
+                            <div class="fi-ta-selection-indicator-actions-ctn">
+                                <button class="<%- cls([...linkClasses, 'fi-link', 'fi-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="selectAllRecords" x-show="canSelectAllRecords()" wire:key="<%= id %>table.selection.indicator.actions.select-all.<%- allCount %>.<%- page.page %>">
+                                    <span class="fi-link-label">
+                                        <%= t('filament-tables::table.selection_indicator.actions.select_all.label', { count: number(allCount) }) %>
+                                    </span>
+                                </button>
+                                <button class="<%- cls([...dangerLinkClasses, 'fi-link', 'fi-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="deselectAllRecords">
+                                    <span class="fi-link-label">
+                                        <%= t('filament-tables::table.selection_indicator.actions.deselect_all.label') %>
+                                    </span>
+                                </button>
+                            </div>
+                            <%- hook('tables::selection.indicator.actions.after') %>
+                        </div>
+                    </div>
+                <% } %>
+
+            <%# Comme Filament : un hook `tables::filter.indicators` qui rend quelque chose remplace les indicateurs par défaut. %>
+            <% const filterIndicatorsView = filterIndicators.length ? hook('tables::filter.indicators', { filterIndicators }) : ''; %>
+            <% if (filterIndicatorsView.trim() !== '') { %><%- filterIndicatorsView %><% } else if (filterIndicators.length) { %>
+                <%# Indicateurs des filtres actifs — port de filament-tables::components.filters.indicators %>
+                <div class="fi-ta-filter-indicators">
+                    <div>
+                        <span class="fi-ta-filter-indicators-label">
+                            <%= t('filament-tables::table.filters.indicator') %>
+                        </span>
+
+                        <div class="fi-ta-filter-indicators-badges-ctn" role="list">
+                            <% for (const indicator of filterIndicators) { %>
+                                <% const removal = 'removeTableFilter(' + js(indicator.filter) + ', ' + js(indicator.field) + ')'; %>
+                                <span class="<%- cls([...indicatorBadgeClasses, 'fi-badge', 'fi-size-md']) %>" role="listitem">
+                                    <span class="fi-badge-label-ctn">
+                                        <span class="fi-badge-label">
+                                            <%= indicator.label %>
+                                        </span>
+                                    </span>
+
+                                    <button data-prevent-disabled-clicks type="button" class="fi-badge-delete-btn" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="removeTableFilter" wire:click="<%= removal %>">
+                                        <span aria-hidden="true" wire:loading.remove.delay.default="" wire:target="<%= removal %>" class="fi-badge-delete-btn-icon"></span>
+                                        <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': removal }), 'xs') %>
+                                        <span class="fi-sr-only">
+                                            <%= t('filament-tables::table.filters.actions.remove.label') %>
+                                        </span>
+                                    </button>
+                                </span>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <button x-tooltip="{
+                            content: <%= js(t('filament-tables::table.filters.actions.remove_all.tooltip')) %>,
+                            theme: $store.theme,
+                            allowHTML: false,
+                        }" aria-label="<%= t('filament-tables::table.filters.actions.remove_all.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="removeTableFilters,removeTableFilter" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" wire:click="removeTableFilters">
+                        <%- icon('m-x-mark', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'removeTableFilters' }) }) %>
+                        <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'removeTableFilters' })) %>
+                    </button>
+                </div>
+            <% } %>
+
+            <%- hook('tables::content.before', { table, records: page.records }) %>
+            <div wire:loading.attr="aria-busy" wire:target="<%- targets %>" class="fi-ta-content-ctn fi-fixed-positioning-context">
+                <div role="status" aria-live="polite" aria-atomic="true" class="fi-sr-only">
+                    <%= tc('filament-tables::table.result_count', resultsCount) %>
+                </div>
+
+                <div wire:loading.delay.default.block wire:target="<%- targets %>" role="status" aria-live="polite" data-testid="table-loading-state" class="fi-sr-only">
+                    <%= t('filament-tables::table.loading') %>
+                </div>
+
+                <% if (contentLayout) { %>
+                    <%# Mise en page des colonnes (Split / Stack) : une carte par enregistrement, tri par sélecteur %>
+                    <% if (rows.length) { %>
+                    <% if (selectable || columns.some((c) => c.sortable)) { %>
+                    <div class="fi-ta-content-header">
+                        <% if (selectable) { %>
+                        <input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" />
+                        <% } %>
+                        <% if (columns.some((c) => c.sortable)) { %>
+                                    <div x-data="{
+                                            sort: $wire.$entangle('tableSort', true),
+                                            column: null,
+                                            direction: null,
+                                        }" x-init="
+                                            if (sort) {
+                                                ;[column, direction] = sort.split(':')
+                                                direction ??= 'asc'
+                                            }
+
+                                            $watch('sort', function () {
+                                                if (! sort) {
+                                                    return
+                                                }
+
+                                                ;[column, direction] = sort.split(':')
+                                                direction ??= 'asc'
+                                            })
+
+                                            $watch('direction', function () {
+                                                sort = column ? `${column}:${direction}` : null
+                                            })
+
+                                            $watch('column', function (newColumn, oldColumn) {
+                                                if (! newColumn) {
+                                                    direction = null
+                                                    sort = column ? `${column}:${direction}` : null
+
+                                                    return
+                                                }
+
+                                                if (oldColumn) {
+                                                    sort = column ? `${column}:${direction}` : null
+
+                                                    return
+                                                }
+
+                                                direction = 'asc'
+                                                sort = column ? `${column}:${direction}` : null
+                                            })
+                                        " class="fi-ta-sorting-settings">
+                                        <label>
+                                            <div class="fi-input-wrp">
+                                                <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label">
+                                                    <span class="fi-input-wrp-label">
+                                                        <%= t('filament-tables::table.sorting.fields.column.label') %>
+                                                    </span>
+                                                </div>
+
+                                                <div class="fi-input-wrp-content-ctn">
+                                                    <select class="fi-select-input" x-model="column">
+                                                        <option value="">-</option>
+                                                        <% for (const column of columns.filter((c) => c.sortable)) { %>
+                                                            <option value="<%= column.name %>"><%= column.label %></option>
+                                                        <% } %>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        <label x-cloak x-show="column">
+                                            <span class="fi-sr-only">
+                                                <%= t('filament-tables::table.sorting.fields.direction.label') %>
+                                            </span>
+
+                                            <div class="fi-input-wrp">
+                                                <div class="fi-input-wrp-content-ctn">
+                                                    <select class="fi-select-input" x-model="direction">
+                                                        <option value="asc"><%= t('filament-tables::table.sorting.fields.direction.options.asc') %></option>
+                                                        <option value="desc"><%= t('filament-tables::table.sorting.fields.direction.options.desc') %></option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                        <% } %>
+                    </div>
+                    <% } %>
+                    <div aria-label="<%= heading ?? table.getPluralModelLabel() %>" role="list" class="fi-ta-content">
+                        <% for (const row of rows) { %>
+                        <div role="listitem" wire:key="<%= id %>.table.records.<%= row.key %>" class="<%- cls(['fi-ta-record', { 'fi-clickable': row.url || row.mountExpression, 'fi-ta-record-with-content-prefix': selectable }, row.classes]) %>" x-bind:class="{
+                                'fi-selected': <%- selectable ? 'true' : 'false' %> && isRecordSelected(<%= js(row.key) %>),
+                            }">
+                            <% if (selectable) { %>
+                            <input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox" value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" />
+                            <% } %>
+                            <div class="fi-ta-record-content-ctn">
+                                <div>
+                                    <% if (row.url) { %>
+                                    <a href="<%= row.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-record-content"><%- row.contentHtml %></a>
+                                    <% } else if (row.mountExpression) { %>
+                                    <button type="button" wire:click="<%= row.mountExpression %>" wire:loading.attr="disabled" wire:target="<%= row.mountExpression %>" class="fi-ta-record-content"><%- row.contentHtml %></button>
+                                    <% } else { %>
+                                    <div class="fi-ta-record-content"><%- row.contentHtml %></div>
+                                    <% } %>
+                                </div>
+                                <% if (hasRowActions) { %>
+                                <div class="fi-ta-actions fi-wrapped sm:fi-not-wrapped fi-align-start md:fi-align-end">
+                                    <%- row.actionsHtml ?? '' %>
+                                </div>
+                                <% } %>
+                            </div>
+                        </div>
+                        <% } %>
+                    </div>
+                    <% } %>
+                <% } else { %>
+                <table aria-label="<%= heading ?? table.getPluralModelLabel() %>" class="<%- cls(['fi-ta-table', { 'fi-ta-table-stacked-on-mobile': table.isStackedOnMobile() }]) %>">
+                    <thead>
+                        <% if (table.isStackedOnMobile()) { %>
+                            <tr class="fi-ta-table-stacked-header-row">
+                                <td colspan="100%" class="fi-ta-table-stacked-header-cell">
+                                    <%# Tri empilé : seulement s'il existe des colonnes triables (comme Filament) %>
+                                    <% if (columns.some((c) => c.sortable)) { %>
+                                    <div x-data="{
+                                            sort: $wire.$entangle('tableSort', true),
+                                            column: null,
+                                            direction: null,
+                                        }" x-init="
+                                            if (sort) {
+                                                ;[column, direction] = sort.split(':')
+                                                direction ??= 'asc'
+                                            }
+
+                                            $watch('sort', function () {
+                                                if (! sort) {
+                                                    return
+                                                }
+
+                                                ;[column, direction] = sort.split(':')
+                                                direction ??= 'asc'
+                                            })
+
+                                            $watch('direction', function () {
+                                                sort = column ? `${column}:${direction}` : null
+                                            })
+
+                                            $watch('column', function (newColumn, oldColumn) {
+                                                if (! newColumn) {
+                                                    direction = null
+                                                    sort = column ? `${column}:${direction}` : null
+
+                                                    return
+                                                }
+
+                                                if (oldColumn) {
+                                                    sort = column ? `${column}:${direction}` : null
+
+                                                    return
+                                                }
+
+                                                direction = 'asc'
+                                                sort = column ? `${column}:${direction}` : null
+                                            })
+                                        " class="fi-ta-table-stacked-sorting">
+                                        <label>
+                                            <div class="fi-input-wrp">
+                                                <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label">
+                                                    <span class="fi-input-wrp-label">
+                                                        <%= t('filament-tables::table.sorting.fields.column.label') %>
+                                                    </span>
+                                                </div>
+
+                                                <div class="fi-input-wrp-content-ctn">
+                                                    <select class="fi-select-input" x-model="column">
+                                                        <option value="">-</option>
+                                                        <% for (const column of columns.filter((c) => c.sortable)) { %>
+                                                            <option value="<%= column.name %>"><%= column.label %></option>
+                                                        <% } %>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        <label x-cloak x-show="column">
+                                            <span class="fi-sr-only">
+                                                <%= t('filament-tables::table.sorting.fields.direction.label') %>
+                                            </span>
+
+                                            <div class="fi-input-wrp">
+                                                <div class="fi-input-wrp-content-ctn">
+                                                    <select class="fi-select-input" x-model="direction">
+                                                        <option value="asc"><%= t('filament-tables::table.sorting.fields.direction.options.asc') %></option>
+                                                        <option value="desc"><%= t('filament-tables::table.sorting.fields.direction.options.desc') %></option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <% } %>
+
+                                    <input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.stacked.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" />
+                                </td>
+                            </tr>
+                        <% } %>
+
+                        <% if (headerGroups) { %>
+                            <tr class="fi-ta-table-head-groups-row">
+                                <% if (rows.length) { %><th></th><% } %>
+                                <% for (const group of headerGroups) { %>
+                                    <% if (group.label === null) { %><th></th><% } else { %><th colspan="<%- group.span %>" scope="colgroup" class="fi-ta-header-group-cell"><%= group.label %></th><% } %>
+                                <% } %>
+                                <% if (rows.length) { %><th></th><% } %>
+                            </tr>
+                        <% } %>
+
+                        <tr>
+                            <% if (rows.length && reorder?.active) { %><th></th><% } %>
+                            <% if (rows.length && !reorder?.active && selectable) { %>
+                            <th scope="col" class="fi-ta-cell fi-ta-selection-cell">
+                                <input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" />
+                            </th>
+                            <% } %>
+
+                            <%# Comme Filament : un hook `tables::header.cell` qui rend quelque chose remplace la cellule d'en-tête de la colonne. %>
+                            <% const hasHeaderCellHook = hasHook('tables::header.cell'); %>
+                            <% for (const [columnIndex, column] of columns.entries()) { %>
+                                <% const headerCellView = hasHeaderCellHook ? hook('tables::header.cell', { column: visibleColumns[columnIndex], isReordering }) : ''; %>
+                                <% if (headerCellView.trim() !== '') { %><%- headerCellView %><% continue; } %>
+                                <th<% if (column.sortable) { %> aria-sort="<%- column.sort %>"<% } %> scope="col" class="<%- cls(['fi-ta-header-cell', 'fi-ta-header-cell-' + column.cssName, { 'fi-grouped': column.grouped }, column.alignment && column.alignment !== 'start' ? 'fi-align-' + column.alignment : null]) %>">
+                                    <% if (column.sortable) { %>
+                                        <button type="button" data-prevent-disabled-clicks wire:click="sortTable(<%= js(column.name) %>)" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" class="fi-ta-header-cell-sort-btn">
+                                            <%= column.label %>
+                                            <%- icon(column.sort === 'ascending' ? 'm-chevron-up' : 'm-chevron-down', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'sortTable(' + js(column.name) + ')' }) }) %>
+                                            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'sortTable(' + js(column.name) + ')' })) %>
+                                        </button>
+                                    <% } else { %>
+                                        <%= column.label %>
+                                    <% } %>
+                                </th>
+                            <% } %>
+
+                            <% if (rows.length && !reorder?.active && hasRowActions) { %><th aria-label="<%= tc('filament-tables::table.columns.actions.label', 2) %>" scope="col" class="fi-ta-actions-header-cell fi-ta-empty-header-cell"></th><% } %>
+                        </tr>
+                    </thead>
+
+                    <% if (columns.some((c) => c.individuallySearchable)) { %>
+                        <tbody>
+                            <tr class="fi-ta-row fi-ta-row-not-reorderable fi-ta-individual-search-row">
+                                <% if (rows.length) { %><td></td><% } %>
+                                <% for (const column of columns) { %>
+                                    <td class="<%- cls(['fi-ta-cell', column.individuallySearchable ? 'fi-ta-individual-search-cell fi-ta-individual-search-cell-' + column.cssName : null]) %>">
+                                        <% if (column.individuallySearchable) { %>
+                                            <div x-id="['input']" class="fi-ta-search-field">
+                                                <label x-bind:for="$id('input')" class="fi-ta-cell-label">
+                                                    <%= column.label %>
+                                                </label>
+
+                                                <div class="fi-input-wrp">
+                                                    <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">
+                                                        <%- icon('m-magnifying-glass', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'tableColumnSearches.' + column.name }) }) %>
+                                                        <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'tableColumnSearches.' + column.name })) %>
+                                                    </div>
+
+                                                    <div class="fi-input-wrp-content-ctn">
+                                                        <input class="fi-input fi-input-has-inline-prefix" autocomplete="off" maxlength="1000" placeholder="<%= t('filament-tables::table.fields.search.placeholder') %>" type="search" wire:key="<%= id %>.table.tableColumnSearches.<%= column.name %>.field.input" wire:model.live.debounce.500ms="tableColumnSearches.<%= column.name %>" x-bind:id="$id('input')" x-on:keyup="if ($event.key === 'Enter') { $wire.$refresh() }" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <% } %>
+                                    </td>
+                                <% } %>
+                                <% if (rows.length) { %><td></td><% } %>
+                            </tr>
+                        </tbody>
+                    <% } %>
+
+                    <% if (rows.length) { %>
+                    <tbody<% if (reorder) { %> x-ref="tableReorderRecords" x-on:start.stop="startTableReorder($event)" x-on:end.stop="reorderTableRecords($event)" x-sortable data-sortable-animation-duration="300"<% } %> class="fi-ta-records">
+                        <% for (const row of rows) { %>
+                            <%- row.groupSummaryHtml %>
+                            <% if (grouping.groupsOnly) continue; %>
+                            <% if (row.groupHeader) { const group = row.groupHeader; const groupTag = heading ? 'h4' : 'h3'; %>
+                            <tr<% if (group.ariaHidden) { %> aria-hidden="true"<% } %> class="<%- cls(['fi-ta-row fi-ta-group-header-row', { 'fi-ta-group-header-row-with-selection': selectable }]) %>">
+                                <% if (selectable) { %>
+                                <td class="fi-ta-cell fi-ta-group-selection-cell">
+                                    <input aria-label="<%= t('filament-tables::table.fields.bulk_select_group.label', { title: group.title ?? '' }) %>" type="checkbox" data-group-selectable-record-keys="<%= JSON.stringify(group.keys) %>" x-on:click="toggleSelectRecords(JSON.parse($el.dataset.groupSelectableRecordKeys))" x-bind:checked="
+                                        const recordsInGroup = JSON.parse($el.dataset.groupSelectableRecordKeys)
+
+                                        if (recordsInGroup.length && areRecordsSelected(recordsInGroup)) {
+                                            $el.checked = true
+                                            $el.indeterminate = false
+
+                                            return 'checked'
+                                        }
+
+                                        $el.checked = false
+                                        $el.indeterminate =
+                                            recordsInGroup.length && areRecordsPartiallySelected(recordsInGroup)
+
+                                        return null
+                                    " wire:key="<%= id %>.table.bulk_select_group.checkbox.<%= page.page %>" wire:loading.attr="disabled" wire:target="<%= targets %>" class="fi-ta-group-checkbox fi-checkbox-input" />
+                                </td>
+                                <% } %>
+                                <td colspan="<%= visibleColumns.length + (hasRowActions ? 1 : 0) %>" class="fi-ta-group-header-cell">
+                                    <div<% if (group.collapsible) { %> x-on:click="toggleCollapseGroup(<%= js(group.title) %>)" x-bind:class="isGroupCollapsed(<%= js(group.title) %>) ? 'fi-collapsed' : null"<% } %> class="<%- cls(['fi-ta-group-header', { 'fi-collapsible': group.collapsible }]) %>">
+                                        <div>
+                                            <<%- groupTag %> class="fi-ta-group-heading"><% if (group.label) { %><%= group.label %>: <% } %><%= group.title ?? '' %></<%- groupTag %>>
+                                            <% if (group.description) { %><p class="fi-ta-group-description"><%= group.description %></p><% } %>
+                                        </div>
+                                        <% if (group.collapsible) { %>
+                                            <button aria-label="<%= (group.label ? group.label + ': ' : '') + (group.title ?? '') %>" x-bind:aria-expanded="! isGroupCollapsed(<%= js(group.title) %>)" type="button" class="fi-icon-btn fi-size-sm"><%- icon('m-chevron-up', { size: 'sm' }) %></button>
+                                        <% } %>
+                                    </div>
+                                </td>
+                            </tr>
+                            <% } %>
+                            <tr wire:key="<%= id %>.table.records.<%= row.key %>" x-bind:class="{
+<% if (row.collapsedExpression) { %>                                    'fi-collapsed': <%= row.collapsedExpression %>,
+<% } %>                                    'fi-selected': <%- selectable ? 'true' : 'false' %> && isRecordSelected(<%= js(row.key) %>),
+                                }"<% if (reorder?.active) { %> x-sortable-item="<%= row.key %>" x-sortable-handle<% } %> class="<%- cls(['fi-ta-row', { 'fi-clickable': row.url || row.mountExpression || row.wasClickable }, row.classes]) %>">
+                                <% if (reorder?.active) { %>
+                                <td class="fi-ta-cell">
+                                    <button aria-hidden="true" tabindex="-1" type="button" class="fi-ta-reorder-handle fi-icon-btn"><%- icon('m-bars-2') %></button>
+                                    <span id="<%= row.reorder.id %>" data-table-reorder-label="<%= row.reorder.label %>" class="fi-sr-only"><%= t('filament-tables::table.reordering.position', { label: row.reorder.label, position: row.reorder.position, count: rows.length }) %></span>
+                                    <div class="fi-sr-only">
+                                        <% for (const direction of ['up', 'down']) { %>
+                                            <button type="button" aria-describedby="<%= row.reorder.id %>"<% if ((direction === 'up' && row.reorder.position === 1) || (direction === 'down' && row.reorder.position === rows.length)) { %> disabled<% } %> tabindex="-1" data-table-reorder-direction="<%- direction %>" x-bind:aria-disabled="tableReorderOperation !== null || $el.disabled" x-on:click.stop="moveTableRecord($event, <%= js(row.key) %>, '<%- direction %>')"><%= t('filament-tables::table.actions.move_record_' + direction + '.label', { label: row.reorder.label }) %></button>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <% } else if (selectable) { %>
+                                <td class="fi-ta-cell fi-ta-selection-cell">
+                                    <input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox" value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" />
+                                </td>
+                                <% } %><%# fin cellule de sélection %>
+
+                                <% for (const cell of row.cells) { %>
+                                    <td wire:key="<%= id %>.table.record.<%= row.key %>.column.<%= cell.name %>" class="<%- cls(['fi-ta-cell', 'fi-ta-cell-' + cell.cssName, cell.alignment && cell.alignment !== 'start' ? 'fi-align-' + cell.alignment : null]) %>">
+                                        <% if (cell.url) { %>
+                                            <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
+                                            <a href="<%= cell.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-col fi-ta-col-has-column-url">
+                                                <%- cell.html %>
+                                            </a>
+                                            <% if (table.isStackedOnMobile()) { %></div><% } %>
+                                        <% } else if (row.mountExpression && !cell.plain) { %>
+                                            <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
+                                            <button type="button" wire:click.prevent.stop="<%= row.mountExpression %>" wire:loading.attr="disabled" wire:target="<%= row.mountExpression %>" class="fi-ta-col">
+                                                <%- cell.html %>
+                                            </button>
+                                            <% if (table.isStackedOnMobile()) { %></div><% } %>
+                                        <% } else { %>
+                                        <%# L'enveloppe de contenu n'existe qu'en mode empilé (comme Filament) %>
+                                        <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
+                                            <% if (row.url && !cell.plain) { %>
+                                                <a href="<%= row.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-col">
+                                                    <%- cell.html %>
+                                                </a>
+                                            <% } else { %>
+                                                <div class="fi-ta-col"><%- cell.html %></div>
+                                            <% } %>
+                                        <% if (table.isStackedOnMobile()) { %></div><% } %>
+                                        <% } %>
+                                    </td>
+                                <% } %>
+
+                                <% if (!reorder?.active && hasRowActions) { %>
+                                <td class="fi-ta-cell">
+                                    <div class="fi-ta-actions ">
+                                        <%- row.actionsHtml ?? '' %>
+                                        <% for (const action of row.actions) { %>
+                                            <a href="<%= action.url %>" wire:navigate wire:key="<%= id %>.actions.<%= action.key %>" class="<%- cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...linkClasses]) %>">
+                                                <%- icon(action.icon, { size: 'sm' }) %>
+                                                <span class="fi-link-label">
+                                                    <%= action.label %>
+                                                </span>
+                                            </a>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <% } %><%# fin cellule d'actions %>
+                            </tr>
+                        <% } %>
+                        <%# Résumés (lignes déjà rendues, échappées) : celui du dernier groupe, puis ceux de la table. %>
+                        <%- trailingGroupSummary %>
+                        <%- summaryHtml %>
+                    </tbody>
+                    <% } %>
+                </table>
+                <% } %><%# fin tableau / cartes %>
+            </div>
+
+            <%- hook('tables::content.after', { table, records: page.records }) %>
+            <% if (rows.length) { %>
+                <%- pagination %>
+            <% } else { %>
+                <div class="fi-ta-empty-state" role="status">
+                    <div class="fi-ta-empty-state-content">
+                        <div class="fi-ta-empty-state-icon-bg">
+                            <%- icon('o-x-mark', { size: 'lg', attributes: attrs({ 'wire:loading.remove.delay.default': '', 'wire:target': targets }) }) %>
+                            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': targets }), 'lg') %>
+                        </div>
+
+                        <h2 class="fi-ta-empty-state-heading">
+                            <%= t('filament-tables::table.empty.heading', { model: table.getPluralModelLabel() }) %>
+                        </h2>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+    <%- afterContainer %>
+</div>

@@ -1,0 +1,123 @@
+<%# Sidebar — port de filament-panels::livewire.sidebar, components.sidebar.group et components.sidebar.item %>
+<% const collapsible = isSidebarCollapsibleOnDesktop || isSidebarFullyCollapsibleOnDesktop; %>
+<div>
+    <div x-data="filamentSidebar({
+            hasTopNavigation: <%= hasTopNavigation ? 'true' : 'false' %>,
+            isSidebarCollapsibleOnDesktop: <%= isSidebarCollapsibleOnDesktop ? 'true' : 'false' %>,
+            isSidebarFullyCollapsibleOnDesktop: <%= isSidebarFullyCollapsibleOnDesktop ? 'true' : 'false' %>,
+        })" <% if (collapsible) { %>x-cloak<% } else { %>x-cloak="-lg"<% } %> x-bind:class="{ 'fi-sidebar-open': $store.sidebar.isOpen }" x-bind:inert="isHidden" x-effect="focusInitialNavigation()" x-on:keydown.tab="handleTab($event)" x-on:keydown.escape.document="handleEscape($event)" id="fi-main-sidebar" class="fi-sidebar fi-main-sidebar">
+        <%- renderHook('panels::sidebar.start') %>
+        <div class="fi-sidebar-header-ctn">
+            <header class="fi-sidebar-header">
+<% if (!hasTopbar && isSidebarCollapsibleOnDesktop) { %>
+                <%- view('filament::components.icon-button', {
+                    iconName: 'o-chevron-right', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-sidebar-open-collapse-sidebar-btn',
+                    extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.open()', 'x-show': '! $store.sidebar.isOpen' }),
+                }) %>
+<% } %>
+<% if (!hasTopbar && collapsible) { %>
+                <%- view('filament::components.icon-button', {
+                    iconName: 'o-chevron-left', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-sidebar-close-collapse-sidebar-btn',
+                    extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.close()', 'x-show': '$store.sidebar.isOpen' }),
+                }) %>
+<% } %>
+                <%- renderHook('panels::sidebar.logo.before') %>
+                <div<% if (collapsible) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-sidebar-header-logo-ctn">
+                    <a href="<%= homeUrl %>"<% if (spa) { %> wire:navigate<% } %>>
+                        <%- view('filament-panels::components.logo', { brand }) %>
+                    </a>
+                </div>
+                <%- renderHook('panels::sidebar.logo.after') %>
+            </header>
+        </div>
+<% if (tenantMenu || globalSearch) { %>
+        <div<% if (!tenantMenu && collapsible) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-sidebar-header-controls">
+<% if (tenantMenu) { %><%- tenantMenu %><% } %>
+<% if (globalSearch) { %>            <div<% if (collapsible) { %> x-show="$store.sidebar.isOpen"<% } %>><%- globalSearch %></div>
+<% } %>
+        </div>
+<% } %>
+
+        <nav aria-label="<%= t('filament-panels::layout.navigation.label') %>" class="fi-sidebar-nav">
+            <%- renderHook('panels::sidebar.nav.start') %>
+            <ul class="fi-sidebar-nav-groups">
+                <% for (const group of groups) { %>
+                    <li x-data="{ label: <%- js(group.label ?? '') %> }" data-group-label="<%= group.label ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': group.isActive }, 'fi-collapsible']) %>">
+                        <% if (group.label) { %>
+                            <div x-on:click="$store.sidebar.toggleCollapsedGroup(label)" class="fi-sidebar-group-btn">
+                                <span class="fi-sidebar-group-label">
+                                    <%= group.label %>
+                                </span>
+                                <%- view('filament::components.icon-button', {
+                                    iconName: 'm-chevron-up', label: group.label, className: 'fi-sidebar-group-collapse-btn',
+                                    extra: attrs({ 'aria-controls': group.itemsId, 'x-bind:aria-expanded': '! $store.sidebar.groupIsCollapsed(label)', 'x-on:click.stop': '$store.sidebar.toggleCollapsedGroup(label)' }),
+                                }) %>
+                            </div>
+                        <% } %>
+                        <ul<% if (group.label) { %> id="<%= group.itemsId %>" x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %> class="fi-sidebar-group-items">
+                            <% for (const item of group.items) { %>
+                                <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.isActive }, 'fi-sidebar-item-has-url']) %>">
+                                    <a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
+                                        <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon' }) }) %><% } %>
+                                        <span class="fi-sidebar-item-label">
+                                            <%= item.label %>
+                                        </span>
+                                        <% if (item.badge !== null) { %>
+                                            <span class="fi-sidebar-item-badge-ctn">
+                                                <%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %>
+                                            </span>
+                                        <% } %>
+                                    </a>
+                                </li>
+                            <% } %>
+                        </ul>
+                    </li>
+                <% } %>
+            </ul>
+
+            <script>
+                if (! window.Alpine?.store('sidebar')) {
+                    let collapsedGroups = JSON.parse(
+                        localStorage.getItem('filament:sidebar:collapsed_groups'),
+                    )
+
+                    if (collapsedGroups === null || collapsedGroups === 'null') {
+                        collapsedGroups = []
+
+                        localStorage.setItem(
+                            'filament:sidebar:collapsed_groups',
+                            JSON.stringify(collapsedGroups),
+                        )
+                    }
+
+                    document.currentScript
+                        .closest('nav')
+                        .querySelectorAll('.fi-sidebar-group')
+                        .forEach((group) => {
+                            if (! collapsedGroups.includes(group.dataset.groupLabel)) {
+                                return
+                            }
+
+                            // Hide collapsed groups before Alpine initializes to avoid a flash.
+                            group.querySelector('.fi-sidebar-group-items').style.display = 'none'
+                            group.classList.add('fi-collapsed')
+                        })
+                }
+            </script>
+            <%- renderHook('panels::sidebar.nav.end') %>
+        </nav>
+
+<% if (databaseNotifications || userMenu) { %>
+        <div class="fi-sidebar-footer">
+            <%- databaseNotifications ?? '' %>
+            <%- userMenu ?? '' %>
+        </div>
+<% } %>
+        <%# Comme Filament : après le pied de sidebar, pas dedans. %>
+        <%- renderHook('panels::sidebar.footer') %>
+    </div>
+
+    <div wire:partial="action-modals" x-data="filamentActionModals({
+                    livewireId: <%- js(livewireId) %>,
+                })" style="height: 0"></div>
+</div>

@@ -1,0 +1,43 @@
+<%# Scènes « components/section » — même page que docs-assets/app (section.blade.php) %>
+<% const p = (text) => '<p class="text-sm text-gray-500 dark:text-gray-400">' + text + '</p>'; %>
+<% const fields = `<div class="space-y-4">${ui.inputWrapper({}, ui.input({ type: 'text', placeholder: 'Dan Harrin' }))}${ui.inputWrapper({}, ui.input({ type: 'email', placeholder: 'dan@filamentphp.com' }))}</div>`; %>
+<div id="sectionSimple" class="p-8 max-w-2xl">
+    <%- ui.section({ heading: 'User details' }, p("This is the section content. Sections group related content together with an optional heading, description, and icon.")) %>
+</div>
+
+<div id="sectionDescription" class="p-8 max-w-2xl">
+    <%- ui.section({ icon: 'heroicon-o-user', heading: 'User details', description: 'This is all the information we hold about the user.' }, p("View and manage user profile information, including name, email address, and account settings.")) %>
+</div>
+
+<div id="sectionCollapsible" class="p-8 max-w-2xl">
+    <%- ui.section({ collapsible: true, heading: 'User details', description: "View and manage the user's profile information." }, p("View and manage user profile information, including name, email address, and account settings.")) %>
+</div>
+
+<div id="sectionCollapsed" class="p-8 max-w-2xl">
+    <%- ui.section({ collapsible: true, collapsed: true, heading: 'User details', description: "View and manage the user's profile information." }, p("This content is hidden when collapsed.")) %>
+</div>
+
+<div id="sectionAside" class="p-8 max-w-4xl">
+    <%- ui.section({ aside: true, heading: 'User details', description: 'This is all the information we hold about the user.' }, fields) %>
+</div>
+
+<div id="sectionIcon" class="p-8 max-w-2xl">
+    <%- ui.section({ icon: 'heroicon-o-user', heading: 'User details' }, p("View and manage user profile information, including name, email address, and account settings.")) %>
+</div>
+
+<div id="sectionIconColor" class="p-8 max-w-2xl">
+    <%- ui.section({ icon: 'heroicon-o-user', iconColor: 'info', heading: 'User details' }, p("View and manage user profile information, including name, email address, and account settings.")) %>
+</div>
+
+<div id="sectionAfterHeader" class="p-8 max-w-2xl">
+    <%- ui.section({ heading: 'User details', afterHeader: ui.inputWrapper({}, ui.select({}, '<option value="1">Dan Harrin</option><option value="2">Ryan Chandler</option><option value="3">Zep Fietje</option>')) }, p("View and manage user profile information, including name, email address, and account settings.")) %>
+</div>
+
+<div id="sectionContentBefore" class="p-8 max-w-4xl">
+    <%- ui.section({ aside: true, contentBefore: true, heading: 'User details', description: 'This is all the information we hold about the user.' }, fields) %>
+</div>
+
+<div id="sectionIconSizes" class="p-8 max-w-2xl space-y-4">
+    <%- ui.section({ icon: 'heroicon-m-user', iconSize: 'sm', heading: 'User details' }, p("This section has a small icon.")) %>
+    <%- ui.section({ icon: 'heroicon-m-user', iconSize: 'md', heading: 'User details' }, p("This section has a medium icon.")) %>
+</div>

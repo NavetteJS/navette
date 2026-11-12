@@ -1,0 +1,17 @@
+/* Thème de base de Navette : le thème de FilamentPHP (MIT), compilé par Tailwind avec les sources de l'application.
+   Une application l'importe depuis sa propre feuille de thème, puis déclare ses sources avec `@source`. */
+@import './resources/filament/packages/panels/resources/css/theme.css';
+
+/* Classes utilitaires écrites dans les vues et le code de Navette lui-même. */
+@source './views/**/*.ejs';
+@source './src/**/*.ts';
+@source '../forms/src/**/*.ts';
+@source '../forms/views/**/*.ejs';
+@source '../tables/src/**/*.ts';
+@source '../tables/views/**/*.ejs';
+@source '../actions/src/**/*.ts';
+@source '../actions/views/**/*.ejs';
+@source '../schemas/src/**/*.ts';
+@source '../support/src/**/*.ts';
+@source '../support/views/**/*.ejs';
+@source '../infolists/src/**/*.ts';

@@ -1,0 +1,12 @@
+{
+  "name": "@navette/playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@navette/wire": "*",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "@navette/support": "*"
+  }
+}

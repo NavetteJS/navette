@@ -1,0 +1,23 @@
+<%# Scènes « components/icon-button » — même page que docs-assets/app (icon-button.blade.php) %>
+<div id="iconButton" class="p-8 flex items-center gap-4" style="width: 260px">
+    <%- ui.iconButton({ icon: 'heroicon-m-pencil-square', label: 'Edit' }) %>
+    <%- ui.iconButton({ icon: 'heroicon-m-trash', color: 'danger', label: 'Delete' }) %>
+    <%- ui.iconButton({ icon: 'heroicon-m-arrow-path', color: 'gray', label: 'Refresh' }) %>
+</div>
+
+<div id="iconButtonSizes" class="p-8 flex items-end gap-4 max-w-xl">
+    <% for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) { %>
+        <%- ui.iconButton({ icon: 'heroicon-m-pencil-square', size, label: 'Edit' }) %>
+    <% } %>
+</div>
+
+<div id="iconButtonColors" class="p-8 flex items-center gap-4 max-w-xl">
+    <% for (const color of ['primary', 'success', 'info', 'warning', 'danger', 'gray']) { %>
+        <%- ui.iconButton({ icon: 'heroicon-m-pencil-square', color, label: color[0].toUpperCase() + color.slice(1) }) %>
+    <% } %>
+</div>
+
+<div id="iconButtonBadge" class="p-8 flex items-center gap-4 max-w-xl">
+    <%- ui.iconButton({ icon: 'heroicon-m-bell', label: 'Notifications', badge: 3 }) %>
+    <%- ui.iconButton({ icon: 'heroicon-m-bell', label: 'Notifications', badge: 5, badgeColor: 'danger' }) %>
+</div>

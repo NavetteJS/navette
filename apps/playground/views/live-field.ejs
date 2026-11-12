@@ -1,0 +1,20 @@
+<div class="card">
+    <h2>Champ live et liaison Alpine</h2>
+    <form wire:submit="add">
+        <input type="text" wire:model.live.debounce.150ms="name" placeholder="Nom" data-test="name" />
+        <button type="submit" data-test="add">Ajouter</button>
+    </form>
+    <% if (errors.name) { %><p class="error" data-test="error"><%= errors.name[0] %></p><% } %>
+    <p>Aperçu serveur : <strong data-test="preview"><%= name.toUpperCase() %></strong></p>
+    <ul>
+        <% items.forEach((item, i) => { %>
+            <li wire:key="item-<%= i %>-<%= item %>"><%= item %> <button type="button" wire:click="remove(<%= i %>)" data-test="remove">×</button></li>
+        <% }) %>
+    </ul>
+    <div x-data="{ open: $wire.entangle('open') }">
+        <button type="button" x-on:click="open = !open" data-test="toggle">Basculer (état Alpine lié au serveur)</button>
+        <span data-test="open-client" x-text="open ? 'ouvert' : 'fermé'"></span>
+        — vu par le serveur au dernier rendu : <span data-test="open-server"><%= open ? 'ouvert' : 'fermé' %></span>
+        <button type="button" wire:click="$refresh" data-test="refresh">Synchroniser</button>
+    </div>
+</div>

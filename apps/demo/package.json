@@ -1,0 +1,20 @@
+{
+  "name": "@navette/demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@navette/panels": "*",
+    "@navette/database": "*",
+    "@navette/tables": "*",
+    "@navette/infolists": "*",
+    "@navette/schemas": "*",
+    "@navette/forms": "*",
+    "@navette/wire": "*",
+    "@navette/support": "*",
+    "express": "^5.1.0"
+  },
+  "scripts": {
+    "build:theme": "tailwindcss -i resources/css/theme.css -o public/css/theme.css --minify"
+  }
+}

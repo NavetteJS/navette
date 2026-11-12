@@ -1,0 +1,26 @@
+<%# Scènes « components/link » — même page que docs-assets/app (link.blade.php) %>
+<div id="linkSimple" class="p-8 flex items-center justify-center" style="width: 220px">
+    <%- ui.link({ href: '#' }, 'View details') %>
+</div>
+
+<div id="linkColors" class="p-8 flex items-center gap-6 max-w-2xl">
+    <% for (const color of ['primary', 'success', 'danger', 'gray']) { %><%- ui.link({ href: '#', color }, color[0].toUpperCase() + color.slice(1)) %><% } %>
+</div>
+
+<div id="linkIcon" class="p-8 flex items-center gap-6 max-w-xl">
+    <%- ui.link({ href: '#', icon: 'heroicon-m-arrow-top-right-on-square' }, 'Open link') %>
+    <%- ui.link({ href: '#', icon: 'heroicon-m-arrow-down-tray', iconPosition: 'after' }, 'Download') %>
+</div>
+
+<div id="linkBadge" class="p-8 flex items-center gap-6 max-w-xl">
+    <%- ui.link({ href: '#', badge: 3 }, 'Notifications') %>
+    <%- ui.link({ href: '#', badge: 12, badgeColor: 'success' }, 'Completed') %>
+</div>
+
+<div id="linkWeights" class="p-8 flex items-center gap-6 max-w-2xl">
+    <% for (const weight of ['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'black']) { %><%- ui.link({ href: '#', weight }, weight[0].toUpperCase() + weight.slice(1)) %><% } %>
+</div>
+
+<div id="linkSizes" class="p-8 flex items-end gap-6 max-w-xl">
+    <% for (const [size, label] of [['sm', 'Small'], ['md', 'Medium'], ['lg', 'Large'], ['xl', 'Extra large']]) { %><%- ui.link({ href: '#', size }, label) %><% } %>
+</div>
