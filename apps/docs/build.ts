@@ -163,7 +163,7 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
             try {
                 const target = path.join(dist, 'previews', `${name}.html`);
                 mkdirSync(path.dirname(target), { recursive: true });
-                writeFileSync(target, previewDocument(await renderPreview({ code })));
+                writeFileSync(target, withBase(previewDocument(await renderPreview({ code }))));
                 frame = `<div class="preview"><div class="preview-label">Preview</div><iframe src="/previews/${name}.html" title="Preview" loading="lazy"></iframe></div>`;
             } catch (error) {
                 previewErrors.push(`${page.file} (preview ${index + 1}): ${(error as Error).message}`);
