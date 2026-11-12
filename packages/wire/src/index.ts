@@ -175,7 +175,10 @@ export class WireRuntime {
     private requestScope = new AsyncLocalStorage<{ childProps: Map<string, Record<string, unknown>> }>();
     passPropsToChild(childId: string, params: Record<string, unknown>): void { this.requestScope.getStore()?.childProps.set(childId, params); }
 
-    register(name: string, cls: ComponentClass): this { this.registry.set(name, cls); cls.componentName = name; return this; }
+    private names = new Map<ComponentClass, string>();
+    register(name: string, cls: ComponentClass): this { this.registry.set(name, cls); if (!this.names.has(cls)) this.names.set(cls, name); cls.componentName = name; return this; }
+    /** Name under which this runtime registered a class. A class shared by several runtimes (one per panel) keeps one name per runtime. */
+    nameOf(cls: ComponentClass): string { return this.names.get(cls) ?? cls.componentName ?? ''; }
 
     private make(name: string): Component {
         const cls = this.registry.get(name);

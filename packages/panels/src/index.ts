@@ -3,8 +3,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkVerificationUrl, consoleMailer, readToken, signToken, signVerificationUrl, type Mailer, type MailMessage } from './auth.ts';
 export { consoleMailer, fileMailer, hashPassword, knexAuthProvider, knexTenantProvider, mailText, verifyPassword, type Mailer, type MailMessage, type TableQuery } from './auth.ts';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
 import { Action, useColorManager, ActionGroup } from '@navette-js/actions';
 import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
@@ -704,8 +705,9 @@ export class Page extends BasePage {
     protected async renderWidgetsGrid(widgets: (typeof Widget)[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
         const items: string[] = [];
         for (const [index, widget] of widgets.entries()) {
-            const key = `${schemaKey}.${widget.componentName}-${index}`;
-            const child = await this.mountChild(widget.componentName, this.getWidgetData(), `${this.id}.${key}`, { lazy: widget.isLazy });
+            const componentName = (this as any)._runtime.nameOf(widget);
+            const key = `${schemaKey}.${componentName}-${index}`;
+            const child = await this.mountChild(componentName, this.getWidgetData(), `${this.id}.${key}`, { lazy: widget.isLazy });
             items.push(`<div class="fi-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
         }
         const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['fi-sc', 'fi-sc-has-gap']);
@@ -2027,8 +2029,9 @@ class RelationManagerTabs extends SchemaComponent {
         for (const [index, manager] of managers.entries()) {
             let content = '';
             if (index === active) {
-                const childKey = `${key}.${index}.${(manager as any).componentName}`;
-                const child = await page.mountChild((manager as any).componentName, { ownerRecord: page.recordKey }, `${id}.${childKey}`, { lazy: true });
+                const componentName = (page as any)._runtime.nameOf(manager);
+                const childKey = `${key}.${index}.${componentName}`;
+                const child = await page.mountChild(componentName, { ownerRecord: page.recordKey }, `${id}.${childKey}`, { lazy: true });
                 content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div wire:partial="schema-component::${e(childKey)}" x-data="filamentSchemaComponent(${e(js({ key: childKey, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${id}.${childKey}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${child}</div></div></div>`;
             }
             panels.push(`<div aria-labelledby="${tabId(index)}" id="${key}.${index}" role="tabpanel" tabindex="0" wire:key="${id}.${key}.${index}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected('${index}') }" x-on:expand="revealTab('${index}')" x-data="filamentSchemaComponent(${e(js({ key: `${key}.${index}`, exposedMethods: [], path: '', containerPath: '' }))})" class="fi-sc-tabs-tab">${content}</div>`);
@@ -3103,6 +3106,47 @@ export class SimpleUserMenu extends Component {
 }
 
 // ------------------------------------------------------------------ routage
+// ------------------------------------------------------------------ découverte (port de discoverResources / discoverPages / discoverWidgets)
+/** Modules `.ts`, `.mts`, `.js`, `.mjs` d'un dossier et de ses sous-dossiers, dans l'ordre alphabétique des chemins. */
+function moduleFiles(directory: string | URL): string[] {
+    const root = directory instanceof URL ? fileURLToPath(directory) : directory;
+    if (!existsSync(root)) return [];
+    const files: string[] = [];
+    const walk = (dir: string) => {
+        for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) walk(full);
+            else if (/\.(m?ts|m?js)$/.test(entry.name) && !/\.(d|test|spec)\.m?[tj]s$/.test(entry.name)) files.push(full);
+        }
+    };
+    walk(root);
+    return files;
+}
+/** Classes exportées par les modules d'un dossier qui héritent de `base` (la classe de base elle-même, abstraite ou importée, est ignorée). */
+async function discoverClasses<T extends abstract new (...args: any[]) => any>(directory: string | URL, base: T): Promise<T[]> {
+    const found: T[] = [];
+    for (const file of moduleFiles(directory)) {
+        const module = await import(pathToFileURL(file).href);
+        for (const value of Object.values(module)) if (typeof value === 'function' && value.prototype instanceof base && !found.includes(value as T)) found.push(value as T);
+    }
+    return found;
+}
+/** Resources définies dans un dossier : `.resources(await discoverResources(new URL('./resources/', import.meta.url)))`. Un fichier ajouté est pris en compte au démarrage suivant. */
+export const discoverResources = (directory: string | URL) => discoverClasses(directory, Resource as any) as Promise<(typeof Resource)[]>;
+/** Pages libres (et tableaux de bord) définies dans un dossier. Les pages de resource et d'authentification n'en font pas partie. */
+export const discoverPages = async (directory: string | URL) => (await discoverClasses(directory, Page as any)).filter((page: any) => !page.resource && !(page.prototype instanceof EditTenantProfile)) as (typeof Page)[];
+/** Widgets définis dans un dossier. */
+export const discoverWidgets = (directory: string | URL) => discoverClasses(directory, Widget as any) as Promise<(typeof Widget)[]>;
+/** Panels exportés par défaut (`export default Panel.make()…`) par les modules d'un dossier. */
+export async function discoverPanels(directory: string | URL): Promise<Panel[]> {
+    const panels: Panel[] = [];
+    for (const file of moduleFiles(directory)) {
+        const module = await import(pathToFileURL(file).href);
+        if (module.default instanceof Panel) panels.push(module.default);
+    }
+    return panels;
+}
+
 /** Un runtime ne sert qu'un panel : chaque panel a son endpoint Livewire et ses composants. */
 const runtimePanels = new WeakMap<WireRuntime, Panel>();
 /** Segments réservés juste après le chemin d'un panel à locataires (ils ne sont pas des clés de locataire). */

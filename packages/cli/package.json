@@ -1,0 +1,9 @@
+{
+  "name": "@navette-js/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "navette": "./src/cli.ts" },
+  "exports": { ".": "./src/generators.ts" },
+  "dependencies": { "@navette-js/panels": "*", "@navette-js/database": "*" }
+}
