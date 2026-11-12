@@ -1,13 +1,13 @@
 // Équivalent de App\Filament\Resources\HR\Projects (resource, formulaire à onglets avec plan en blocs, infolist, table, widget,
 // relation managers Tasks et Timesheets, pages List / Create / Edit / View) de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter, type DataAdapter } from '@navette/database';
-import { ColorPicker, DatePicker, RichEditor, Select, TagsInput, Textarea, TextInput, ToggleButtons } from '@navette/forms';
-import { Block, Builder } from '@navette/forms/builder';
-import { ColorEntry, TextEntry } from '@navette/infolists';
-import { CreateAction, DeleteAction, DeleteBulkAction, EditRecord, ForceDeleteAction, Notification, PageTableStatsWidget, RelationManager, Resource, RestoreAction, Stat, ViewAction, ViewRecord } from '@navette/panels';
-import { Tab, Tabs, type Schema } from '@navette/schemas';
-import { IconColumn, SelectFilter, Sum, TextColumn, TrashedFilter, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
+import { ColorPicker, DatePicker, RichEditor, Select, TagsInput, Textarea, TextInput, ToggleButtons } from '@navette-js/forms';
+import { Block, Builder } from '@navette-js/forms/builder';
+import { ColorEntry, TextEntry } from '@navette-js/infolists';
+import { CreateAction, DeleteAction, DeleteBulkAction, EditRecord, ForceDeleteAction, Notification, PageTableStatsWidget, RelationManager, Resource, RestoreAction, Stat, ViewAction, ViewRecord } from '@navette-js/panels';
+import { Tab, Tabs, type Schema } from '@navette-js/schemas';
+import { IconColumn, SelectFilter, Sum, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 import { PROJECT_STATUSES, TASK_PRIORITIES, TASK_STATUSES, type EnumCase } from './enums.ts';
 import { Tasks, tasksTable, type Task } from './TaskResource.ts';
 import { Timesheets, type Timesheet } from './TimesheetResource.ts';

@@ -1,1 +1,1 @@
-{ "name": "@navette/tables", "version": "0.0.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "dependencies": { "@navette/support": "*", "@navette/database": "*", "@navette/actions": "*", "@navette/forms": "*", "@navette/schemas": "*" } }
+{ "name": "@navette-js/tables", "version": "0.0.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "dependencies": { "@navette-js/support": "*", "@navette-js/database": "*", "@navette-js/actions": "*", "@navette-js/forms": "*", "@navette-js/schemas": "*" } }

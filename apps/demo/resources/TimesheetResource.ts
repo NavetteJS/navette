@@ -1,10 +1,10 @@
 // Équivalent de App\Filament\Resources\HR\Timesheets (resource, formulaire, table, widget, pages List / Create / Edit) de la démo Filament.
-import { Action } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { DatePicker, Select, Textarea, TextInput, Toggle } from '@navette/forms';
-import { DeleteBulkAction, Notification, PageTableStatsWidget, Resource, Stat } from '@navette/panels';
-import { Section, type Schema } from '@navette/schemas';
-import { Average, Count, Filter, Group, IconColumn, Range, SelectFilter, Sum, TernaryFilter, TextColumn, type Table } from '@navette/tables';
+import { Action } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { DatePicker, Select, Textarea, TextInput, Toggle } from '@navette-js/forms';
+import { DeleteBulkAction, Notification, PageTableStatsWidget, Resource, Stat } from '@navette-js/panels';
+import { Section, type Schema } from '@navette-js/schemas';
+import { Average, Count, Filter, Group, IconColumn, Range, SelectFilter, Sum, TernaryFilter, TextColumn, type Table } from '@navette-js/tables';
 
 export class Timesheet extends Model {
     static tableName = 'timesheets';

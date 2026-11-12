@@ -255,10 +255,10 @@ Vérifié par `e2e-brands.mjs` (8 étapes). Non vérifié : le glisser-déposer 
 
 Ce que cette tranche a apporté aux paquets :
 
-- **Widgets** (`@navette/panels`) — `Widget`, `StatsOverviewWidget`, `Stat` (description, icône, couleur, courbe), `PageTableStatsWidget` (port de `InteractsWithPageTable` : le widget agrège exactement ce que la table affiche). Une resource déclare `static widgets` et `static headerWidgets` ; ils sont chargés quand ils deviennent visibles.
-- **Propriétés réactives** (`@navette/wire`) — `static reactive = [...]` : le parent passe ses valeurs à l'enfant dans la même requête (équivalent de `#[Reactive]`), le navigateur ne peut pas les modifier. C'est ce qui fait suivre la recherche et les filtres aux statistiques.
+- **Widgets** (`@navette-js/panels`) — `Widget`, `StatsOverviewWidget`, `Stat` (description, icône, couleur, courbe), `PageTableStatsWidget` (port de `InteractsWithPageTable` : le widget agrège exactement ce que la table affiche). Une resource déclare `static widgets` et `static headerWidgets` ; ils sont chargés quand ils deviennent visibles.
+- **Propriétés réactives** (`@navette-js/wire`) — `static reactive = [...]` : le parent passe ses valeurs à l'enfant dans la même requête (équivalent de `#[Reactive]`), le navigateur ne peut pas les modifier. C'est ce qui fait suivre la recherche et les filtres aux statistiques.
 - **Téléversement de fichiers** — côté runtime : `UploadStore` (adresse d'envoi signée et limitée dans le temps, jeton CSRF, utilisateur connecté, taille bornée, type déterminé par le contenu du fichier, extension jamais reprise du nom envoyé) et les appels `_startUpload` / `_finishUpload` de Livewire. Côté formulaires : `FileUpload` (multiple, `maxFiles`, `maxSize`, `acceptedFileTypes`, `reorderable`, `directory`, `storeFiles(false)`), `LocalFileStorage`. Une clé de fichier déjà enregistré n'est acceptée que si l'enregistrement en cours la possède.
-- **Filtre QueryBuilder** (`@navette/tables/query-builder`) et champ **Builder** (`@navette/forms/builder`) — contraintes texte, nombre, booléen, date, bloc OR, filtres « au-dessus du contenu », filtres différés. Types de blocs, opérateurs et colonnes sont validés contre ce que le filtre déclare ; les valeurs sont toujours des paramètres liés.
+- **Filtre QueryBuilder** (`@navette-js/tables/query-builder`) et champ **Builder** (`@navette-js/forms/builder`) — contraintes texte, nombre, booléen, date, bloc OR, filtres « au-dessus du contenu », filtres différés. Types de blocs, opérateurs et colonnes sont validés contre ce que le filtre déclare ; les valeurs sont toujours des paramètres liés.
 - Colonnes `ImageColumn` et `TextColumn.numeric()` ; `Field.helperText()` ; `Section.collapsible()` ; `Select.multiple()` ; agrégats `adapter.aggregate()`.
 
 Vérifié par `e2e-products.mjs` (12 étapes : statistiques, recherche qui les met à jour, actions de ligne et groupées, création avec image téléversée, retrait d'une image, faux JPEG refusé, références forgées refusées), `e2e-query-builder.mjs` (29 étapes) et les tests unitaires de `packages/wire/test/uploads.test.ts` et `packages/tables/test/query-builder.test.ts`.
@@ -275,8 +275,8 @@ Vérifié par `e2e-products.mjs` (12 étapes : statistiques, recherche qui les m
 
 Deux niveaux, comme dans Filament, plus un écart assumé :
 
-- **Couleurs du panel** — `panel.setColors({ primary: Color.Blue, gray: '#57534e' })`. Une palette Tailwind (`Color.*`) ou une simple couleur (`#hex`, `rgb(…)`) : dans ce cas les onze nuances sont générées (port de `Color::generatePalette`, `generatePalette()` et `convertToOklch()` dans `@navette/support`).
-- **Feuille de thème compilée** — `panel.theme(url)`, équivalent de `->viteTheme()` (`npm run build:theme -w @navette/demo`).
+- **Couleurs du panel** — `panel.setColors({ primary: Color.Blue, gray: '#57534e' })`. Une palette Tailwind (`Color.*`) ou une simple couleur (`#hex`, `rgb(…)`) : dans ce cas les onze nuances sont générées (port de `Color::generatePalette`, `generatePalette()` et `convertToOklch()` dans `@navette-js/support`).
+- **Feuille de thème compilée** — `panel.theme(url)`, équivalent de `->viteTheme()` (`npm run build:theme -w @navette-js/demo`).
 - **Thèmes prédéfinis au choix de l'utilisateur** (écart : Filament n'a pas cela en standard) — `panel.themes([{ id, label, colors, font?, css? }, …])`. Avec plus d'un thème, le menu utilisateur liste les thèmes sous le sélecteur clair/sombre. Le choix (`Sidebar.setTheme`) est gardé dans le cookie `navette_<panel>_theme`, validé contre la liste déclarée ; un identifiant inconnu retombe sur le premier thème. Les couleurs du thème ne valent que pour la requête (`ColorManager.runWith`, `AsyncLocalStorage`) : deux utilisateurs avec deux thèmes ne se marchent pas dessus.
 
 La démo en déclare cinq (Navette, Alpage, Glacier, Crépuscule avec sa police, Cuivre généré depuis `#b45309`). Les comparaisons avec l'oracle tournent sans thèmes (`NAVETTE_NO_THEMES=1`), donc le menu reste conforme. Vérifié par `e2e-themes.mjs` (9 étapes) et `packages/support/test/themes.test.ts`.
@@ -284,7 +284,7 @@ La démo en déclare cinq (Navette, Alpage, Glacier, Crépuscule avec sa police,
 ### Jalon 1 fermé : les 87 scènes de composants sont vertes
 
 - **Second oracle** : l'application de documentation de Filament (`sources/filament/docs-assets/app`) tourne en local sur le port 8001 (entrée `filament-docs-oracle` du lanceur). Ses 87 scènes `components/*` (18 pages) sont capturées par `tools/oracle-capture/components.mjs`.
-- **`@navette/support/ui`** : les composants d'interface de base, utilisables seuls — `button`, `iconButton`, `badge`, `link`, `avatar`, `breadcrumbs`, `checkbox`, `input`, `inputWrapper`, `select`, `fieldset`, `callout`, `emptyState`, `section`, `tabs`, `dropdown`, `modal`, `pagination`, `spinner`. Chacun suit la vue Blade d'origine.
+- **`@navette-js/support/ui`** : les composants d'interface de base, utilisables seuls — `button`, `iconButton`, `badge`, `link`, `avatar`, `breadcrumbs`, `checkbox`, `input`, `inputWrapper`, `select`, `fieldset`, `callout`, `emptyState`, `section`, `tabs`, `dropdown`, `modal`, `pagination`, `spinner`. Chacun suit la vue Blade d'origine.
 - **Playground** : `apps/playground` sert les mêmes pages que la documentation (`/components/<famille>`, `/pagination`), avec les mêmes identifiants de scène.
 - `node tools/parity/run-scenes.mjs [--details] [famille…]` compare chaque scène à l'oracle : **87 scènes vertes sur 87**, 1 404 nœuds, 0 écart. `tools/parity/scene-source.mjs <famille>` affiche la vue Blade et le HTML de l'oracle pour porter une famille.
 
@@ -315,9 +315,9 @@ Décision du 2026-11-12 : Navette ajoute, par-dessus l'interface de Filament, de
 ### Thème Tailwind
 
 - Les sources CSS de Filament (131 feuilles, MIT) sont copiées telles quelles dans `packages/panels/resources/filament/` par `tools/vendor-filament-css.mjs`.
-- `@navette/panels/theme.css` : le thème de base ; une application l'importe dans sa propre feuille, déclare ses sources (`@source`) et compile avec Tailwind 4.
+- `@navette-js/panels/theme.css` : le thème de base ; une application l'importe dans sa propre feuille, déclare ses sources (`@source`) et compile avec Tailwind 4.
 - `Panel.theme(url)` (équivalent de `viteTheme()`) sert la feuille compilée à la place de la feuille par défaut.
-- Démo : `npm run build:theme -w @navette/demo` produit `apps/demo/public/css/theme.css` (à relancer quand on ajoute des classes utilitaires ; le fichier n'est pas recompilé automatiquement).
+- Démo : `npm run build:theme -w @navette-js/demo` produit `apps/demo/public/css/theme.css` (à relancer quand on ajoute des classes utilitaires ; le fichier n'est pas recompilé automatiquement).
 - Comparé au thème compilé de l'oracle (`node tools/parity/css-diff.mjs`) : 4 112 sélecteurs communs sur 4 340. Les autres diffèrent par l'outillage (l'oracle est compilé par Vite, qui réécrit `:dir(rtl)` en listes `:lang(…)` et déplie l'imbrication autrement) ; je n'ai pas vérifié un par un les 228 restants.
 - Effet visible : les classes utilitaires de l'application s'affichent enfin (fond rouge des services en dépassement d'effectif — testé dans `e2e-departments.mjs`).
 
@@ -328,7 +328,7 @@ Décision du 2026-11-12 : Navette ajoute, par-dessus l'interface de Filament, de
 - **Portées** (`getRenderHookScopes()`) : une page porte sa classe, une page de resource porte aussi sa resource ; `panel.renderHook(nom, fonction, portées)`. Ordre de Filament : hooks sans portée, puis portée par portée, chaque hook une seule fois.
 - **Données** : le hook reçoit `{ scopes, data }` (`data.action` dans une modale, `data.column` pour une cellule d'en-tête, `data.filterIndicators`).
 - **Emplacements de remplacement**, comme Filament : `tables::filter.indicators` et `tables::header.cell` remplacent le balisage par défaut quand ils rendent quelque chose.
-- **Registre par panel** : `panel.renderHook()` ne vaut plus que pour les requêtes de ce panel (auparavant un registre commun à tout le processus). `renderHooks` (`@navette/support`) reste disponible pour un hook commun.
+- **Registre par panel** : `panel.renderHook()` ne vaut plus que pour les requêtes de ce panel (auparavant un registre commun à tout le processus). `renderHooks` (`@navette-js/support`) reste disponible pour un hook commun.
 
 Écarts corrigés au passage, pour suivre Filament :
 
@@ -347,7 +347,7 @@ Vérifié : 5 tests unitaires (portées, ordre, données, isolation de deux pane
 
 Les trois tableaux de bord de la démo (Welcome `/`, Shop `/shop`, HR `/hr`) sont remplis, comme dans l'oracle. PHP est maintenant installé sur le poste : l'oracle tourne en local et a servi aux captures (`filament-kb/_captures/demo-local-raw` pour le HTML brut, `demo-local-rendered` pour les pages une fois les widgets « lazy » chargés).
 
-Briques ajoutées à `@navette/panels` :
+Briques ajoutées à `@navette-js/panels` :
 
 - **`ChartWidget`** : `getType()`, `getData()`, `getOptions()`, `getFilters()`, statiques `heading`, `description`, `color`, `maxHeight`, `pollingInterval`, `isCollapsible`. Le graphique est dessiné par le composant Chart.js de Filament ; `updateChartData()` ne renvoie des données au navigateur (événement `updateChartData`) que si leur empreinte a changé.
 - **`TableWidget`** : une table dans un widget (`table(table)`, `getDataAdapterForTable()`), tri, recherche, pagination. Rend les deux render hooks `widgets::table-widget.start` / `end`, retirés de `UNPLACED_RENDER_HOOKS`.
@@ -357,9 +357,9 @@ Briques ajoutées à `@navette/panels` :
 
 Ailleurs :
 
-- `@navette/forms` : `DatePicker.live()`, `minDate` / `maxDate` calculés (`({ get }) => get('endDate') || 'today'`).
-- `@navette/schemas` : `Schema.partialName()`.
-- `@navette/tables` : `sortable({ column, inverted })`, `paginationMode('simple')` (pas de total, pas de numéros de page), `defaultPaginationPageOption()`.
+- `@navette-js/forms` : `DatePicker.live()`, `minDate` / `maxDate` calculés (`({ get }) => get('endDate') || 'today'`).
+- `@navette-js/schemas` : `Schema.partialName()`.
+- `@navette-js/tables` : `sortable({ column, inverted })`, `paginationMode('simple')` (pas de total, pas de numéros de page), `defaultPaginationPageOption()`.
 
 Démo : `apps/demo/widgets/` — `hr.ts` (statistiques et 4 graphiques), `shop.ts` (statistiques à courbes, 6 graphiques, table « Flagged Orders »), `welcome.ts` (aperçu des 61 fonctionnalités, données extraites de l'oracle dans `fixtures/features.json`), `dates.ts` (arithmétique de dates de Carbon 3 reproduite en UTC : `diffInMonths` fractionnaire, débordement de `subMonths`, semaine commençant le lundi).
 

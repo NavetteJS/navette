@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { e } from '@navette/support';
-import { Schema } from '@navette/schemas';
+import { e } from '@navette-js/support';
+import { Schema } from '@navette-js/schemas';
 import { CodeEntry, KeyValueEntry, ViewEntry } from '../src/index.ts';
 
 const host = () => ({ id: 'lw', _errors: {} as Record<string, string[]>, getSchema() { return null as any; } });

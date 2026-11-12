@@ -1,11 +1,11 @@
 // Équivalent de App\Filament\Resources\Blog\Posts (resource, formulaire, infolist, table, pages List / Create / Edit / View) de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter, type DataAdapter } from '@navette/database';
-import { DatePicker, FileUpload, RichEditor, Select, TagsInput, TextInput, Toggle, type FileUploadEntry } from '@navette/forms';
-import { IconEntry, ImageEntry, TextEntry } from '@navette/infolists';
-import { CreateAction, DeleteAction, DeleteBulkAction, EditAction, EditRecord, ManageRelatedRecords, Notification, Resource, ViewAction, ViewRecord } from '@navette/panels';
-import { Flex, Grid, Group, Section, type Schema } from '@navette/schemas';
-import { Filter, IconColumn, ImageColumn, TextColumn, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
+import { DatePicker, FileUpload, RichEditor, Select, TagsInput, TextInput, Toggle, type FileUploadEntry } from '@navette-js/forms';
+import { IconEntry, ImageEntry, TextEntry } from '@navette-js/infolists';
+import { CreateAction, DeleteAction, DeleteBulkAction, EditAction, EditRecord, ManageRelatedRecords, Notification, Resource, ViewAction, ViewRecord } from '@navette-js/panels';
+import { Flex, Grid, Group, Section, type Schema } from '@navette-js/schemas';
+import { Filter, IconColumn, ImageColumn, TextColumn, type Table } from '@navette-js/tables';
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';

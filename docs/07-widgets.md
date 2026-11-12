@@ -5,7 +5,7 @@ Un widget est un bloc affiché en tête d'une page. Il est chargé quand il devi
 ## Rangée de statistiques
 
 ```ts
-import { Stat, StatsOverviewWidget } from '@navette/panels';
+import { Stat, StatsOverviewWidget } from '@navette-js/panels';
 
 class SalesStats extends StatsOverviewWidget {
     static pollingInterval = '30s';             // rafraîchissement ; null pour ne pas rafraîchir (défaut : '5s')
@@ -56,7 +56,7 @@ Un widget qui n'appartient à aucune resource s'enregistre sur le panel : `panel
 `PageTableStatsWidget` reçoit l'état de la table de la page de liste (recherche, filtres, onglet) et agrège exactement les lignes qu'elle affiche. Les chiffres suivent donc chaque recherche et chaque filtre.
 
 ```ts
-import { PageTableStatsWidget, Stat } from '@navette/panels';
+import { PageTableStatsWidget, Stat } from '@navette-js/panels';
 
 class TaskStats extends PageTableStatsWidget {
     static pollingInterval = null;
@@ -82,8 +82,8 @@ class TaskStats extends PageTableStatsWidget {
 Héritez de `Widget` et rendez votre HTML dans `render()`, enveloppé par `this.wrap(...)`.
 
 ```ts
-import { Widget } from '@navette/panels';
-import { e } from '@navette/support';
+import { Widget } from '@navette-js/panels';
+import { e } from '@navette-js/support';
 
 class Welcome extends Widget {
     static columnSpan = 'full' as const;

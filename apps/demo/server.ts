@@ -3,10 +3,10 @@ import express from 'express';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Dashboard, knexNotificationStore, Login, NavigationItem, Page, Panel, panelRouter, type User } from '@navette/panels';
-import { Color } from '@navette/support';
-import { UploadStore, WireRuntime } from '@navette/wire';
-import { sqlite } from '@navette/database';
+import { Dashboard, knexNotificationStore, Login, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
+import { Color } from '@navette-js/support';
+import { UploadStore, WireRuntime } from '@navette-js/wire';
+import { sqlite } from '@navette-js/database';
 import { CustomerResource } from './resources/CustomerResource.ts';
 import { DepartmentResource } from './resources/DepartmentResource.ts';
 import { OrderResource } from './resources/OrderResource.ts';
@@ -27,9 +27,9 @@ import { appPanel } from './app-panel.ts';
 import { shopWidgets } from './widgets/shop.ts';
 import { welcomeWidgets } from './widgets/welcome.ts';
 import { STATUSES } from './resources/OrderResource.ts';
-import { DatePicker, Select } from '@navette/forms';
-import { Section, type Schema } from '@navette/schemas';
-import { Model } from '@navette/database';
+import { DatePicker, Select } from '@navette-js/forms';
+import { Section, type Schema } from '@navette-js/schemas';
+import { Model } from '@navette-js/database';
 
 const file = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // Utilisateurs de test (fixture locale) : remplacés par l'adaptateur de données au jalon 2.
@@ -102,7 +102,7 @@ const panel = Panel.make()
     .brandLogo('/images/logo/navette-light.svg')
     .darkModeBrandLogo('/images/logo/navette-dark.svg')
     .favicon('/images/logo/navette-icon.svg')
-    // Thème Tailwind compilé par `npm run build:theme -w @navette/demo` ; sans le fichier, la feuille par défaut de Filament est servie.
+    // Thème Tailwind compilé par `npm run build:theme -w @navette-js/demo` ; sans le fichier, la feuille par défaut de Filament est servie.
     .theme(existsSync(file('./public/css/theme.css')) ? `/css/theme.css?v=${statSync(file('./public/css/theme.css')).mtimeMs.toFixed(0)}` : null)
     .setColors({ primary: Color.Blue })
     // Thèmes prédéfinis proposés dans le menu utilisateur (désactivés pour les comparaisons avec l'oracle).

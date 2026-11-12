@@ -1,6 +1,6 @@
 // Calendrier — composant propre à Navette (Filament n'en fournit pas) : dates, grille et rendu, sans dépendance au runtime.
 // Le widget `CalendarWidget` (index.ts) s'appuie sur ce module ; chaque morceau du rendu peut être remplacé.
-import { Attributes, e, icon } from '@navette/support';
+import { Attributes, e, icon } from '@navette-js/support';
 
 /** Un événement. `start` et `end` sont des dates `YYYY-MM-DD` ou des dates-heures ISO (`2026-11-12T09:30`) ; `end` est inclus. */
 export type CalendarEvent = {

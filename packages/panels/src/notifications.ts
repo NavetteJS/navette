@@ -1,9 +1,9 @@
 // Notifications flash — port de filament/notifications : Notification, boîte aux lettres, composant d'affichage.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Attributes, e, icon, js } from '@navette/support';
-import { t } from '@navette/support/i18n';
-import { Component, WireError } from '@navette/wire';
+import { Attributes, e, icon, js } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
+import { Component, WireError } from '@navette-js/wire';
 
 export type NotificationActionData = { label: string; url: string | null; openUrlInNewTab: boolean };
 export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionData[] };

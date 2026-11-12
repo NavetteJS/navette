@@ -1,7 +1,7 @@
 # 4. Tables
 
 ```ts
-import { ColorColumn, IconColumn, ImageColumn, SelectFilter, Sum, TernaryFilter, TextColumn, TrashedFilter, type Table } from '@navette/tables';
+import { ColorColumn, IconColumn, ImageColumn, SelectFilter, Sum, TernaryFilter, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 
 static table(table: Table<Order>): Table<Order> {
     return table
@@ -126,7 +126,7 @@ const overdue: TableFilter = {
 Laisse l'utilisateur composer ses propres règles, combinées en ET, avec des blocs OU.
 
 ```ts
-import { BooleanConstraint, DateConstraint, NumberConstraint, QueryBuilder, TextConstraint } from '@navette/tables';
+import { BooleanConstraint, DateConstraint, NumberConstraint, QueryBuilder, TextConstraint } from '@navette-js/tables';
 
 .filters([
     QueryBuilder.make()

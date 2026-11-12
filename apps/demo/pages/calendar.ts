@@ -1,8 +1,8 @@
 // Calendrier des congés — exemples des deux formes du composant calendrier de Navette (absent de la démo Filament) :
 // `LeaveCalendarPage` (page entière, clics ouvrant des modales à formulaire) et une page d'accueil du widget `LeaveCalendar`.
-import { Action } from '@navette/actions';
-import { DatePicker, Select, Textarea } from '@navette/forms';
-import { CalendarPage, Dashboard, Notification, type CalendarEvent } from '@navette/panels';
+import { Action } from '@navette-js/actions';
+import { DatePicker, Select, Textarea } from '@navette-js/forms';
+import { CalendarPage, Dashboard, Notification, type CalendarEvent } from '@navette-js/panels';
 import { LeaveRequestResource } from '../resources/LeaveRequestResource.ts';
 import { calendarWidgets } from '../widgets/hr.ts';
 import { knex } from '../widgets/dates.ts';

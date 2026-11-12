@@ -1,10 +1,10 @@
 // Équivalent de App\Filament\Resources\HR\Tasks (resource, formulaire, table, pages List / Create / Edit) de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { CheckboxList, DatePicker, DateTimePicker, Radio, RichEditor, Select, TextInput, ToggleButtons } from '@navette/forms';
-import { DeleteAction, DeleteBulkAction, EditRecord, Notification, ReplicateAction, Resource } from '@navette/panels';
-import { Section, type Schema } from '@navette/schemas';
-import { Group, SelectFilter, TextColumn, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { CheckboxList, DatePicker, DateTimePicker, Radio, RichEditor, Select, TextInput, ToggleButtons } from '@navette-js/forms';
+import { DeleteAction, DeleteBulkAction, EditRecord, Notification, ReplicateAction, Resource } from '@navette-js/panels';
+import { Section, type Schema } from '@navette-js/schemas';
+import { Group, SelectFilter, TextColumn, type Table } from '@navette-js/tables';
 import { TASK_PRIORITIES, TASK_STATUSES, type EnumCase } from './enums.ts';
 
 export class Task extends Model {

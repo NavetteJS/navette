@@ -30,7 +30,7 @@ Le fichier tient en quatre parties. Tout le reste de la documentation détaille 
 ### 1. Les données
 
 ```ts
-import { Model, ObjectionAdapter, sqlite } from '@navette/database';
+import { Model, ObjectionAdapter, sqlite } from '@navette-js/database';
 
 const knex = sqlite('./data.sqlite');          // ou createConnection({ client: 'pg', … })
 

@@ -18,7 +18,7 @@ Quand une option ne suffit pas, vous n'avez pas à modifier Navette : chaque ét
 Une resource génère ses pages à partir de `ListRecords`, `CreateRecord` et `EditRecord`. Remplacez celle que vous voulez par une sous-classe :
 
 ```ts
-import { CreateRecord, EditRecord, ListRecords } from '@navette/panels';
+import { CreateRecord, EditRecord, ListRecords } from '@navette-js/panels';
 
 class ListTasks extends ListRecords {
     getHeading(): string { return 'Mes tâches'; }
@@ -84,8 +84,8 @@ CreateAction.make()
 Héritez de `Field`. Rendez votre contrôle et confiez-le à `wrap()`, qui ajoute le libellé, le texte d'aide et le message d'erreur. Liez la valeur avec `wire:model`.
 
 ```ts
-import { Field } from '@navette/forms';
-import { e } from '@navette/support';
+import { Field } from '@navette-js/forms';
+import { e } from '@navette-js/support';
 
 export class EffortField extends Field {
     static make(name: string): EffortField { return new EffortField(name); }
@@ -124,7 +124,7 @@ Pour un champ interactif, écrivez un composant Alpine et liez-le à l'état : `
 ### Une colonne
 
 ```ts
-import { Column } from '@navette/tables';
+import { Column } from '@navette-js/tables';
 
 export class EffortColumn<R = any> extends Column<R> {
     static make<R = any>(name: string): EffortColumn<R> { return new EffortColumn<R>(name); }
@@ -139,14 +139,14 @@ La colonne hérite de `label`, `sortable`, `searchable`, `toggleable`, `alignEnd
 
 ### Un composant de mise en page ou une entrée
 
-Héritez de `Component` (de `@navette/schemas`) et implémentez `toHtml()`. Pour un simple bloc de HTML, `Html.make(...)` suffit.
+Héritez de `Component` (de `@navette-js/schemas`) et implémentez `toHtml()`. Pour un simple bloc de HTML, `Html.make(...)` suffit.
 
 ### Avec une vue EJS
 
 Dès que le HTML dépasse quelques lignes, sortez-le dans une vue :
 
 ```ts
-import { views } from '@navette/support';
+import { views } from '@navette-js/support';
 
 views.namespace('app', path.resolve('./views'));          // une fois, au démarrage
 
@@ -162,13 +162,13 @@ async toHtml() { return this.wrap(views.render('app::fields.effort', { id: this.
 Insèrent du HTML à un emplacement nommé, sans toucher aux vues.
 
 ```ts
-import { e } from '@navette/support';
+import { e } from '@navette-js/support';
 
 panel.renderHook('panels::content.end', () => `<p class="app-footer">${e(companyName)} — support : 01 23 45 67 89</p>`);
 panel.renderHook('panels::head.end', () => '<link rel="stylesheet" href="/css/app.css">');
 ```
 
-Les noms sont ceux de Filament, et chaque emplacement est au même endroit du balisage. Ils sont aussi disponibles en constantes : `PanelsRenderHook` et `WidgetsRenderHook` (`@navette/panels`), `TablesRenderHook` (`@navette/tables`), `ActionsRenderHook` (`@navette/actions`).
+Les noms sont ceux de Filament, et chaque emplacement est au même endroit du balisage. Ils sont aussi disponibles en constantes : `PanelsRenderHook` et `WidgetsRenderHook` (`@navette-js/panels`), `TablesRenderHook` (`@navette-js/tables`), `ActionsRenderHook` (`@navette-js/actions`).
 
 | Emplacement | Où |
 |---|---|
@@ -219,7 +219,7 @@ La fonction est appelée à chaque rendu et son résultat inséré tel quel. Ell
 panel.renderHook(PanelsRenderHook.PAGE_START, () => '<p class="notice">Import en cours</p>', OrderResource);
 ```
 
-**Un panel, ses hooks.** `panel.renderHook()` ne vaut que pour ce panel. Pour un hook commun à tous les panels du processus : `renderHooks.register(nom, fonction)` (`@navette/support`).
+**Un panel, ses hooks.** `panel.renderHook()` ne vaut que pour ce panel. Pour un hook commun à tous les panels du processus : `renderHooks.register(nom, fonction)` (`@navette-js/support`).
 
 ## Réglages globaux
 
@@ -235,7 +235,7 @@ Le réglage s'applique à chaque instance créée ensuite par `make()`, **avant*
 ## Remplacer une vue du framework
 
 ```ts
-import { views } from '@navette/support';
+import { views } from '@navette-js/support';
 views.overrideFrom(path.resolve('./views/vendor'));
 ```
 
@@ -248,7 +248,7 @@ C'est le point d'extension le plus fragile : une vue remplacée ne suit plus les
 Un plugin emballe une configuration pour la réutiliser d'un panel ou d'un projet à l'autre.
 
 ```ts
-import type { Plugin } from '@navette/panels';
+import type { Plugin } from '@navette-js/panels';
 
 export const auditPlugin = (options: { retentionDays: number }): Plugin => ({
     id: 'audit',

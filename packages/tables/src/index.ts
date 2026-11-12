@@ -1,7 +1,7 @@
-// @navette/tables — port de filament/tables : Table, TextColumn, filtres, état (recherche, tri, pagination, colonnes) et rendu.
-import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette/database';
-import { Attributes, cls, e, hasRenderHook, icon, js, renderHook, views, type ColorManager, configured, configureUsing } from '@navette/support';
-import { t } from '@navette/support/i18n';
+// @navette-js/tables — port de filament/tables : Table, TextColumn, filtres, état (recherche, tri, pagination, colonnes) et rendu.
+import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
+import { Attributes, cls, e, hasRenderHook, icon, js, renderHook, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 

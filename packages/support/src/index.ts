@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-// @navette/support — briques transverses portées de filament/support : échappement, sac d'attributs, sérialisation JS,
+// @navette-js/support — briques transverses portées de filament/support : échappement, sac d'attributs, sérialisation JS,
 // évaluation paresseuse, couleurs, icônes, vues EJS à espaces de noms.
 import ejs from 'ejs';
 import { existsSync, readFileSync } from 'node:fs';

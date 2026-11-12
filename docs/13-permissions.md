@@ -28,7 +28,7 @@ panel.auth({
 Une fonction par capacité. Les noms sont ceux de Laravel et Filament.
 
 ```ts
-import type { Policy } from '@navette/panels';
+import type { Policy } from '@navette-js/panels';
 
 class TaskResource extends Resource {
     static policy: Policy<Task> = {
@@ -65,7 +65,7 @@ Un relation manager a sa propre `static policy`, avec les mêmes capacités.
 Une action que vous écrivez ne sait pas quelle capacité elle exige : dites-le avec `authorize`.
 
 ```ts
-import { can } from '@navette/panels';
+import { can } from '@navette-js/panels';
 
 Action.make('publish')
     .authorize(({ livewire, record }) => can(livewire, 'update', record))     // une capacité de la politique

@@ -6,13 +6,13 @@
 // (`relationship(nom, attribut)`), opérateur « Is filled » (`nullable()`), bloc OR, indicateurs.
 // Non portés : agrégats de relation (somme, moyenne… d'une colonne liée), groupes de contraintes, recherche serveur dans les listes.
 // Le SQL de date et de recherche est écrit pour SQLite, MySQL / MariaDB, PostgreSQL et SQL Server, selon le client knex de la requête.
-import { Action } from '@navette/actions';
-import type { ListQuery } from '@navette/database';
-import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette/forms';
-import { Block, Builder, colorsOf, iconActionButton, isItemKey, shortKey, writeState } from '@navette/forms/builder';
-import { Component, Group, Schema } from '@navette/schemas';
-import { Attributes, e, js, views, configured } from '@navette/support';
-import { t } from '@navette/support/i18n';
+import { Action } from '@navette-js/actions';
+import type { ListQuery } from '@navette-js/database';
+import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette-js/forms';
+import { Block, Builder, colorsOf, iconActionButton, isItemKey, shortKey, writeState } from '@navette-js/forms/builder';
+import { Component, Group, Schema } from '@navette-js/schemas';
+import { Attributes, e, js, views, configured } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
 import { createHash } from 'node:crypto';
 import type { FilterIndicator, FilterState, TableFilter, TableHost } from './index.ts';
 

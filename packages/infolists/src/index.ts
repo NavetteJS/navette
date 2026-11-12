@@ -1,7 +1,7 @@
-// @navette/infolists — port de filament/infolists : entrées en lecture seule (TextEntry, IconEntry).
-import { Component, Schema, type ComponentContext } from '@navette/schemas';
-import { Attributes, e, icon, js, type ColorManager, configured } from '@navette/support';
-import { t } from '@navette/support/i18n';
+// @navette-js/infolists — port de filament/infolists : entrées en lecture seule (TextEntry, IconEntry).
+import { Component, Schema, type ComponentContext } from '@navette-js/schemas';
+import { Attributes, e, icon, js, type ColorManager, configured } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
 
 const headline = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
 /** Libellé par défaut : pour `department.name`, c'est « Department » (comme Filament). */
@@ -276,7 +276,7 @@ export class ViewEntry extends Entry {
     }
 }
 
-/** En-tête de colonne d'une entrée répétée en table (même forme que `TableColumn` de @navette/forms). */
+/** En-tête de colonne d'une entrée répétée en table (même forme que `TableColumn` de @navette-js/forms). */
 export type RepeatableColumn = { label: string; getWidth(): string | null };
 
 /**

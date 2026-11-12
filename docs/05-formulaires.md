@@ -3,8 +3,8 @@
 Un formulaire est un schéma : des champs, rangés par des composants de mise en page.
 
 ```ts
-import { Checkbox, CheckboxList, ColorPicker, DatePicker, FileUpload, KeyValue, Repeater, RichEditor, Select, TableColumn, Textarea, TextInput, Toggle, ToggleButtons } from '@navette/forms';
-import { Grid, Group, Section, Tab, Tabs, type Schema } from '@navette/schemas';
+import { Checkbox, CheckboxList, ColorPicker, DatePicker, FileUpload, KeyValue, Repeater, RichEditor, Select, TableColumn, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
+import { Grid, Group, Section, Tab, Tabs, type Schema } from '@navette-js/schemas';
 
 static form(schema: Schema): Schema {
     return schema
@@ -133,7 +133,7 @@ schema.components([
 
 `columns(n)` vaut à partir de l'écran `lg` ; pour régler par taille d'écran : `columns({ sm: 2, lg: 3 })`. `columnSpan('full')` occupe toute la largeur à partir de `lg`, `columnSpanFull()` à toutes les tailles.
 
-Dans un formulaire, `TextEntry` (de `@navette/infolists`) affiche une valeur en lecture seule :
+Dans un formulaire, `TextEntry` (de `@navette-js/infolists`) affiche une valeur en lecture seule :
 
 ```ts
 TextEntry.make('created_at').label('Créé').state(({ record }) => diffForHumans(record.created_at)),

@@ -1,11 +1,11 @@
 // Équivalent de App\Filament\Resources\HR\LeaveRequests (resource, formulaire, infolist, table, pages List / Create / Edit / View) de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { DatePicker, Select, Textarea, TextInput, TimePicker, ToggleButtons } from '@navette/forms';
-import { TextEntry } from '@navette/infolists';
-import { CreateRecord, DeleteAction, DeleteBulkAction, EditRecord, Notification, Resource, Tab, ViewAction, ViewRecord } from '@navette/panels';
-import { Section, type Schema } from '@navette/schemas';
-import { SelectColumn, Sum, TextColumn, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { DatePicker, Select, Textarea, TextInput, TimePicker, ToggleButtons } from '@navette-js/forms';
+import { TextEntry } from '@navette-js/infolists';
+import { CreateRecord, DeleteAction, DeleteBulkAction, EditRecord, Notification, Resource, Tab, ViewAction, ViewRecord } from '@navette-js/panels';
+import { Section, type Schema } from '@navette-js/schemas';
+import { SelectColumn, Sum, TextColumn, type Table } from '@navette-js/tables';
 import { LEAVE_STATUSES, LEAVE_TYPES, type EnumCase } from './enums.ts';
 
 export class LeaveRequest extends Model {

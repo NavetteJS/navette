@@ -10,15 +10,15 @@ Navette brings Filament's way of building admin panels to Node.js and Express: r
 
 | Package | Contents |
 |---|---|
-| `@navette/panels` | Panels, resources, pages, navigation, authentication, tenancy, widgets |
-| `@navette/forms` | Form fields and validation |
-| `@navette/tables` | Tables, columns, filters, query builder, summaries, grouping |
-| `@navette/infolists` | Read-only entries |
-| `@navette/schemas` | Layout components (sections, tabs, grids, wizards…) |
-| `@navette/actions` | Actions and modals |
-| `@navette/database` | Data adapters (Knex / Objection) |
-| `@navette/wire` | Server runtime compatible with the Livewire 3 client |
-| `@navette/support` | Colors, icons, views, translations, render hooks |
+| `@navette-js/panels` | Panels, resources, pages, navigation, authentication, tenancy, widgets |
+| `@navette-js/forms` | Form fields and validation |
+| `@navette-js/tables` | Tables, columns, filters, query builder, summaries, grouping |
+| `@navette-js/infolists` | Read-only entries |
+| `@navette-js/schemas` | Layout components (sections, tabs, grids, wizards…) |
+| `@navette-js/actions` | Actions and modals |
+| `@navette-js/database` | Data adapters (Knex / Objection) |
+| `@navette-js/wire` | Server runtime compatible with the Livewire 3 client |
+| `@navette-js/support` | Colors, icons, views, translations, render hooks |
 
 ## Requirements
 
@@ -28,14 +28,14 @@ Navette brings Filament's way of building admin panels to Node.js and Express: r
 ## Installation
 
 ```bash
-npm install @navette/panels@beta express
+npm install @navette-js/panels@beta express
 ```
 
 ```ts
 import express from 'express';
-import { sqlite } from '@navette/database';
-import { knexAuthProvider, Panel, panelRouter } from '@navette/panels';
-import { WireRuntime } from '@navette/wire';
+import { sqlite } from '@navette-js/database';
+import { knexAuthProvider, Panel, panelRouter } from '@navette-js/panels';
+import { WireRuntime } from '@navette-js/wire';
 
 // A Laravel-style `users` table (id, name, email, password, email_verified_at).
 const db = sqlite('database.sqlite');

@@ -4,7 +4,7 @@ The packages are developed as TypeScript sources (`packages/*/src`), which Node 
 
 ## Once
 
-1. Create the npm organization `navette` on npmjs.com (it owns the `@navette` scope) and add the maintainers.
+1. Create the npm organization `navette-js` on npmjs.com (it owns the `@navette-js` scope) and add the maintainers.
 2. Log in on the publishing machine: `npm login`.
 
 ## Each release
@@ -14,16 +14,16 @@ npm test
 node scripts/release.mjs 1.0.0-beta.1 --pack
 ```
 
-This writes `.release/<package>/` and one archive per package (`.release/navette-<package>-<version>.tgz`). Check an archive before publishing:
+This writes `.release/<package>/` and one archive per package (`.release/navette-js-<package>-<version>.tgz`). Check an archive before publishing:
 
 ```bash
-tar -tzf .release/navette-panels-1.0.0-beta.1.tgz
+tar -tzf .release/navette-js-panels-1.0.0-beta.1.tgz
 ```
 
-Publish in dependency order (a package must exist before the ones that depend on it). Pre-releases go to the `beta` tag, so `npm install @navette/panels` does not pick them up by default:
+Publish in dependency order (a package must exist before the ones that depend on it). Pre-releases go to the `beta` tag, so `npm install @navette-js/panels` does not pick them up by default:
 
 ```bash
-for p in support schemas actions database forms infolists wire tables panels; do npm publish .release/navette-$p-1.0.0-beta.1.tgz --access public --tag beta; done
+for p in support schemas actions database forms infolists wire tables panels; do npm publish .release/navette-js-$p-1.0.0-beta.1.tgz --access public --tag beta; done
 ```
 
 Then tag the repository: `git tag v1.0.0-beta.1 && git push origin v1.0.0-beta.1`.

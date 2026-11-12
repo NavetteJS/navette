@@ -3,8 +3,8 @@
 Une action est un bouton qui fait quelque chose : ouvrir une adresse, exécuter un traitement, demander une confirmation, ouvrir un formulaire en modale.
 
 ```ts
-import { Action, ActionGroup } from '@navette/actions';
-import { Notification } from '@navette/panels';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Notification } from '@navette-js/panels';
 
 Action.make('publish')
     .label('Publier').icon('m-rocket-launch').color('success')
@@ -114,7 +114,7 @@ Une action groupée peut aussi avoir un `schema` (choisir une valeur à applique
 
 ## Actions prêtes à l'emploi
 
-De `@navette/panels` : `CreateAction`, `EditAction`, `DeleteAction`, `DeleteBulkAction`, `RestoreAction`, `ForceDeleteAction` (suppression douce), `AttachAction`, `DetachAction`, `DetachBulkAction` (relations plusieurs-à-plusieurs). Chacune rend une `Action` que vous pouvez encore configurer :
+De `@navette-js/panels` : `CreateAction`, `EditAction`, `DeleteAction`, `DeleteBulkAction`, `RestoreAction`, `ForceDeleteAction` (suppression douce), `AttachAction`, `DetachAction`, `DetachBulkAction` (relations plusieurs-à-plusieurs). Chacune rend une `Action` que vous pouvez encore configurer :
 
 ```ts
 DeleteAction.make().visible(({ record }) => !record.is_locked),

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette/database';
-import { ColorManager, views } from '@navette/support';
-import { t, tc } from '@navette/support/i18n';
+import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database';
+import { ColorManager, views } from '@navette-js/support';
+import { t, tc } from '@navette-js/support/i18n';
 import { BadgeColumn, BooleanColumn, CheckboxColumn, SelectColumn, Table, TextColumn, TextInputColumn, ToggleColumn, ViewColumn, updateTableColumnState, useColorManager, type TableHost } from '../src/index.ts';
 
 views.share({ t, tc, assetUrl: (file: string) => `/${file}` });

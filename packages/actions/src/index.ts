@@ -1,7 +1,7 @@
-// @navette/actions — port de filament/actions : Action (bouton plein, soumission de formulaire) pour commencer.
-import { Attributes, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette/support';
-import { t } from '@navette/support/i18n';
-import type { ComponentContext, Renderable } from '@navette/schemas';
+// @navette-js/actions — port de filament/actions : Action (bouton plein, soumission de formulaire) pour commencer.
+import { Attributes, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
+import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
 
 views.namespace('filament-actions', fileURLToPath(new URL('../views', import.meta.url)));

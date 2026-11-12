@@ -2,8 +2,8 @@
 // (port de App\Filament\Widgets\FeaturesOverview et de sa vue Blade, classes Tailwind comprises).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { AccountWidget, NavetteInfoWidget, Widget } from '@navette/panels';
-import { e, icon } from '@navette/support';
+import { AccountWidget, NavetteInfoWidget, Widget } from '@navette-js/panels';
+import { e, icon } from '@navette-js/support';
 
 type Feature = { name: string; description: string; url: string; resource: string };
 type Category = { name: string; icon: string; color: string; features: Feature[] };

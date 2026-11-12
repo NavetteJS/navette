@@ -1,4 +1,4 @@
-// @navette/database — contrat d'accès aux données (ADR 0005) et premier adaptateur : Knex + Objection.
+// @navette-js/database — contrat d'accès aux données (ADR 0005) et premier adaptateur : Knex + Objection.
 import knexFactory, { type Knex } from 'knex';
 import { Model, type ModelClass, type QueryBuilder } from 'objection';
 

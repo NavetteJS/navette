@@ -1,10 +1,10 @@
 // Second panel de la démo, comme `AppPanelProvider` de filamentphp/demo : inscription, mot de passe oublié,
 // vérification de l'adresse, équipes (multi-locataire) et page « Settings » propre à chaque équipe.
 import path from 'node:path';
-import { EmailVerificationPrompt, fileMailer, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type User } from '@navette/panels';
-import { TextInput } from '@navette/forms';
-import type { Schema } from '@navette/schemas';
-import { Model } from '@navette/database';
+import { EmailVerificationPrompt, fileMailer, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type User } from '@navette-js/panels';
+import { TextInput } from '@navette-js/forms';
+import type { Schema } from '@navette-js/schemas';
+import { Model } from '@navette-js/database';
 
 /** Comme App\Filament\App\Pages\RegisterTeam : création d'une équipe, dont l'utilisateur devient membre. */
 export class RegisterTeam extends RegisterTenant {

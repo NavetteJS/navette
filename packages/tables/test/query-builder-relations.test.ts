@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import knexFactory from 'knex';
-import { Model, sqlite, type Knex } from '@navette/database';
+import { Model, sqlite, type Knex } from '@navette-js/database';
 import {
     BooleanConstraint, DateConstraint, IsRelatedToOperator, NumberConstraint, QueryBuilder, RelationshipConstraint, SelectConstraint, TextConstraint,
     applyConditions, compileRules, resolveRuleDate, sanitizeRules, sqlDialectOf, type Constraint, type ConditionNode,

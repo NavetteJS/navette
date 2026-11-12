@@ -5,7 +5,7 @@ Le framework ne parle pas à la base directement : chaque resource a un **adapta
 ## Connexion
 
 ```ts
-import { createConnection, sqlite } from '@navette/database';
+import { createConnection, sqlite } from '@navette-js/database';
 
 const knex = sqlite('./data.sqlite');                                   // développement
 const knex = createConnection({ client: 'pg', connection: process.env.DATABASE_URL });   // tout pilote Knex
@@ -18,7 +18,7 @@ const knex = createConnection({ client: 'pg', connection: process.env.DATABASE_U
 ## Modèle
 
 ```ts
-import { Model } from '@navette/database';
+import { Model } from '@navette-js/database';
 
 export class Task extends Model {
     static tableName = 'tasks';
@@ -121,7 +121,7 @@ Exemples complets dans la démo : `Orders` (adresse et lignes de commande), `Pro
 
 ## Écrire son propre adaptateur
 
-Pour une API distante ou un autre ORM, implémentez l'interface `DataAdapter` de `@navette/database` :
+Pour une API distante ou un autre ORM, implémentez l'interface `DataAdapter` de `@navette-js/database` :
 
 | Méthode | Rôle |
 |---|---|

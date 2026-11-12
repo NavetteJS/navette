@@ -1,9 +1,9 @@
 // Widgets du tableau de bord Shop — port de App\Filament\Widgets\{ShopKpisStats, OrdersYearOverYearChart, CustomerGrowthChart,
 // TopProductsByRevenueChart, CustomerSegmentsChart, OrderValueDistributionChart, ProductMarginAnalysisChart}.
 // Tous reçoivent les filtres de la page (`pageFilters`) : période, statuts de commande, catégorie de produit.
-import { ChartWidget, PAGE_FILTERS, Stat, StatsOverviewWidget, TableWidget, type ChartData } from '@navette/panels';
-import { ObjectionAdapter } from '@navette/database';
-import { TextColumn, type Table } from '@navette/tables';
+import { ChartWidget, PAGE_FILTERS, Stat, StatsOverviewWidget, TableWidget, type ChartData } from '@navette-js/panels';
+import { ObjectionAdapter } from '@navette-js/database';
+import { TextColumn, type Table } from '@navette-js/tables';
 import { Order, STATUSES } from '../resources/OrderResource.ts';
 import { addMonths, diffInDays, endOfMonth, knex, lastMonths, monthKey, monthLabel, now, parse, round, sql, startOfMonth, subDays, subMonths, truncate, usd } from './dates.ts';
 

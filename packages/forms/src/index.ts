@@ -1,10 +1,10 @@
-// @navette/forms — port de filament/forms : Field, TextInput, Checkbox, validation côté serveur.
-import { Attributes, HtmlString, e, evaluate, icon, js, views, type ColorManager, type Lazy, configured } from '@navette/support';
+// @navette-js/forms — port de filament/forms : Field, TextInput, Checkbox, validation côté serveur.
+import { Attributes, HtmlString, e, evaluate, icon, js, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
-import { t } from '@navette/support/i18n';
-import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, slug, type ComponentContext, type InlineItem } from '@navette/schemas';
-import { Action } from '@navette/actions';
-import { loadingIndicator } from '@navette/support';
+import { t } from '@navette-js/support/i18n';
+import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, slug, type ComponentContext, type InlineItem } from '@navette-js/schemas';
+import { Action } from '@navette-js/actions';
+import { loadingIndicator } from '@navette-js/support';
 import { randomUUID } from 'node:crypto';
 import { generateHTML, generateJSON } from '@tiptap/html/server';
 import StarterKit from '@tiptap/starter-kit';
@@ -70,7 +70,7 @@ export abstract class Field extends Component {
     protected _hintIconTooltip: Lazy<string | null, ComponentContext> = null;
     protected _hintActions: Action[] = [];
     /**
-     * Indication affichée à droite du libellé (un composant `Text`). Le texte est échappé ; une `HtmlString` de `@navette/support`
+     * Indication affichée à droite du libellé (un composant `Text`). Le texte est échappé ; une `HtmlString` de `@navette-js/support`
      * (`raw('<a href="…">…</a>')`) est insérée telle quelle : n'y placez que des valeurs échappées avec `e()`.
      */
     hint(hint: Lazy<string | HtmlString | null, ComponentContext>): this { this._hint = hint; return this; }
@@ -1687,7 +1687,7 @@ export class Wizard extends Component {
 }
 
 // ------------------------------------------------------------------ téléversement de fichiers
-/** Fichier temporaire reçu par le runtime (voir @navette/wire). */
+/** Fichier temporaire reçu par le runtime (voir @navette-js/wire). */
 export type TemporaryUpload = { id: string; path: string; name: string; type: string; size: number; extension: string };
 export type UploadedFileInfo = { name: string; size: number; type: string; url: string };
 /** Élément de l'état enregistré quand le champ ne stocke pas lui-même (`storeFiles(false)`) : fichier déjà enregistré, ou fichier temporaire à traiter. */

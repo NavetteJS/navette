@@ -1,11 +1,11 @@
 // Recherche globale et notifications en base — ports de Filament\Livewire\GlobalSearch et de
 // Filament\Notifications\Livewire\DatabaseNotifications. Les deux composants vivent dans la sidebar du panel.
-import { Attributes, e, icon, js, loadingIndicator, renderHook } from '@navette/support';
-import { t } from '@navette/support/i18n';
-import { Component, WireError } from '@navette/wire';
+import { Attributes, e, icon, js, loadingIndicator, renderHook } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
+import { Component, WireError } from '@navette-js/wire';
 import type { NotificationData } from './notifications.ts';
-import { richDocumentToHtml, richHtmlToDocument } from '@navette/forms';
-import { pagination } from '@navette/support/ui';
+import { richDocumentToHtml, richHtmlToDocument } from '@navette-js/forms';
+import { pagination } from '@navette-js/support/ui';
 
 /** Corps d'une notification : du HTML est nettoyé (balises de l'éditeur de texte enrichi seulement), un texte simple est échappé. */
 export const notificationBodyHtml = (body: string): string => (/<[a-z][\s\S]*>/i.test(body) ? (richDocumentToHtml(richHtmlToDocument(body)) ?? '') : e(body));

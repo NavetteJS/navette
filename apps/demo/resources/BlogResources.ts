@@ -1,12 +1,12 @@
 // Équivalent de App\Filament\Resources\Blog (Categories et Authors : resources « simples », une page et des modales) de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { CheckboxList, RichEditor, Textarea, TextInput, Toggle } from '@navette/forms';
-import { IconEntry, TextEntry } from '@navette/infolists';
-import { CreateAction, DeleteAction, DeleteBulkAction, EditAction, ListRecords, Notification, Resource, ViewAction } from '@navette/panels';
-import type { Schema } from '@navette/schemas';
-import { registerIcon } from '@navette/support';
-import { IconColumn, Split, Stack, TextColumn, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { CheckboxList, RichEditor, Textarea, TextInput, Toggle } from '@navette-js/forms';
+import { IconEntry, TextEntry } from '@navette-js/infolists';
+import { CreateAction, DeleteAction, DeleteBulkAction, EditAction, ListRecords, Notification, Resource, ViewAction } from '@navette-js/panels';
+import type { Schema } from '@navette-js/schemas';
+import { registerIcon } from '@navette-js/support';
+import { IconColumn, Split, Stack, TextColumn, type Table } from '@navette-js/tables';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

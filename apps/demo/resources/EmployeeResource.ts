@@ -1,12 +1,12 @@
 // Équivalent de App\Filament\Resources\HR\Employees\EmployeeResource + Tables\EmployeesTable + Pages\ListEmployees de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter, type DataAdapter } from '@navette/database';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
 import { LEAVE_STATUSES, LEAVE_TYPES, type EnumCase } from './enums.ts';
-import { CheckboxList, ColorPicker, DatePicker, KeyValue, Select, TextInput, Toggle, ToggleButtons } from '@navette/forms';
-import { Notification, PageTableStatsWidget, RelationManager, Resource, Stat, Tab } from '@navette/panels';
-import { Tab as FormTab, Tabs, type Schema } from '@navette/schemas';
-import { IconEntry, TextEntry } from '@navette/infolists';
-import { ColorColumn, IconColumn, SelectFilter, TernaryFilter, TextColumn, TrashedFilter, type Table } from '@navette/tables';
+import { CheckboxList, ColorPicker, DatePicker, KeyValue, Select, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
+import { Notification, PageTableStatsWidget, RelationManager, Resource, Stat, Tab } from '@navette-js/panels';
+import { Tab as FormTab, Tabs, type Schema } from '@navette-js/schemas';
+import { IconEntry, TextEntry } from '@navette-js/infolists';
+import { ColorColumn, IconColumn, SelectFilter, TernaryFilter, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 
 export class Employee extends Model {
     static tableName = 'employees';

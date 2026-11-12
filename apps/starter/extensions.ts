@@ -1,9 +1,9 @@
 // Points d'extension, illustrés : un champ et une colonne sur mesure, une page de création personnalisée, un plugin.
 // Voir docs/14-etendre.md.
-import { Field } from '@navette/forms';
-import { CreateRecord, type PanelContext, type Plugin } from '@navette/panels';
-import { e } from '@navette/support';
-import { Column } from '@navette/tables';
+import { Field } from '@navette-js/forms';
+import { CreateRecord, type PanelContext, type Plugin } from '@navette-js/panels';
+import { e } from '@navette-js/support';
+import { Column } from '@navette-js/tables';
 
 /** Champ sur mesure : un curseur de 1 à 5. Un champ rend son contrôle et le confie à `wrap()`, qui ajoute libellé, aide et erreur. */
 export class EffortField extends Field {

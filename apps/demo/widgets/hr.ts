@@ -1,5 +1,5 @@
 // Widgets du tableau de bord HR — port de App\Filament\Widgets\{WorkforceInsightsStats, DepartmentLeaveLoadChart, ProjectHealthChart, UtilizationRateChart, BudgetBurnRateChart}.
-import { CalendarWidget, ChartWidget, Notification, Stat, StatsOverviewWidget, type CalendarEvent, type ChartData } from '@navette/panels';
+import { CalendarWidget, ChartWidget, Notification, Stat, StatsOverviewWidget, type CalendarEvent, type ChartData } from '@navette-js/panels';
 import { dayLabel, diffInDays, diffInMonths, endOfWeek, knex, lastMonths, monthKey, monthLabel, now, parse, round, sql, startOfDay, startOfWeek, subDays, truncate } from './dates.ts';
 
 export class WorkforceInsightsStats extends StatsOverviewWidget {

@@ -1,13 +1,13 @@
 // Équivalent de App\Filament\Resources\Shop\Products\ProductResource + Tables\ProductsTable de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { Checkbox, DatePicker, FileUpload, RichEditor, Select, TextInput, Toggle, ToggleButtons, type FileUploadEntry } from '@navette/forms';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { Checkbox, DatePicker, FileUpload, RichEditor, Select, TextInput, Toggle, ToggleButtons, type FileUploadEntry } from '@navette-js/forms';
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { Notification, PageTableStatsWidget, Resource, Stat } from '@navette/panels';
-import { Group, Section, type Schema } from '@navette/schemas';
-import { BooleanConstraint, DateConstraint, IconColumn, ImageColumn, NumberConstraint, QueryBuilder, TextColumn, TextConstraint, type Table } from '@navette/tables';
+import { Notification, PageTableStatsWidget, Resource, Stat } from '@navette-js/panels';
+import { Group, Section, type Schema } from '@navette-js/schemas';
+import { BooleanConstraint, DateConstraint, IconColumn, ImageColumn, NumberConstraint, QueryBuilder, TextColumn, TextConstraint, type Table } from '@navette-js/tables';
 
 export class Product extends Model {
     static tableName = 'products';

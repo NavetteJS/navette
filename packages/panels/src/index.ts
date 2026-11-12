@@ -1,4 +1,4 @@
-// @navette/panels — port de filament/panels : Panel, mises en page, pages, navigation, connexion, session.
+// @navette-js/panels — port de filament/panels : Panel, mises en page, pages, navigation, connexion, session.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkVerificationUrl, consoleMailer, readToken, signToken, signVerificationUrl, type Mailer, type MailMessage } from './auth.ts';
@@ -6,28 +6,28 @@ export { consoleMailer, fileMailer, hashPassword, knexAuthProvider, knexTenantPr
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
-import { Action, useColorManager, ActionGroup } from '@navette/actions';
-import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, useColorManager as useFormsColorManager } from '@navette/forms';
-import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, StatefulGroup, type SchemaHost } from '@navette/schemas';
-import { WireError } from '@navette/wire';
-import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette/infolists';
+import { Action, useColorManager, ActionGroup } from '@navette-js/actions';
+import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
+import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
+import { WireError } from '@navette-js/wire';
+import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 export { Notification, Notifications } from './notifications.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
-import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette/support';
-import { t, tc } from '@navette/support/i18n';
-import { emptyState } from '@navette/support/ui';
-import type { DataAdapter } from '@navette/database';
-import { REORDER_LIMIT, Table, initializeTableGrouping, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette/tables';
-import { Component, type WireRuntime } from '@navette/wire';
-import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette/wire/express';
+import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
+import { t, tc } from '@navette-js/support/i18n';
+import { emptyState } from '@navette-js/support/ui';
+import type { DataAdapter } from '@navette-js/database';
+import { REORDER_LIMIT, Table, initializeTableGrouping, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
+import { Component, type WireRuntime } from '@navette-js/wire';
+import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 
 const dir = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 views.namespace('filament-panels', dir('../views'));
-views.namespace('filament', fileURLToPath(new URL('../views', import.meta.resolve('@navette/support'))));
+views.namespace('filament', fileURLToPath(new URL('../views', import.meta.resolve('@navette-js/support'))));
 views.share({ t, tc });
 export const ASSET_VERSION = '5.11.2.0';
 
@@ -157,7 +157,7 @@ export class Panel {
     getFavicon(): string | null { return this._favicon; }
     /**
      * Feuille de thème compilée par l'application (Tailwind) : elle remplace la feuille par défaut de Filament.
-     * Équivalent de `->viteTheme()` : le thème importe `@navette/panels/theme.css` et déclare ses propres sources.
+     * Équivalent de `->viteTheme()` : le thème importe `@navette-js/panels/theme.css` et déclare ses propres sources.
      */
     theme(url: string | null): this { this._theme = url; return this; }
     getTheme(): string | null { return this._theme; }

@@ -3,8 +3,8 @@
 Le panel est l'application d'administration : sa marque, sa navigation, ses pages, la façon de s'y connecter.
 
 ```ts
-import { Dashboard, NavigationItem, Panel, panelRouter } from '@navette/panels';
-import { Color } from '@navette/support';
+import { Dashboard, NavigationItem, Panel, panelRouter } from '@navette-js/panels';
+import { Color } from '@navette-js/support';
 
 const panel = Panel.make()
     .id('admin')
@@ -101,10 +101,10 @@ Pour qu'une page n'apparaisse pas dans le menu : `static shouldRegisterNavigatio
 Une page est une classe. Son contenu est un schéma (voir [Formulaires](05-formulaires.md) pour la mise en page).
 
 ```ts
-import { Page } from '@navette/panels';
-import { Html, Section, type Schema } from '@navette/schemas';
-import { TextEntry } from '@navette/infolists';
-import { e } from '@navette/support';
+import { Page } from '@navette-js/panels';
+import { Html, Section, type Schema } from '@navette-js/schemas';
+import { TextEntry } from '@navette-js/infolists';
+import { e } from '@navette-js/support';
 
 class StatusPage extends Page {
     static slug = 'status';
@@ -152,7 +152,7 @@ Sans cette liste, l'appel est refusé (et signalé dans la console en développe
 
 ```ts
 import express from 'express';
-import { WireRuntime } from '@navette/wire';
+import { WireRuntime } from '@navette-js/wire';
 
 const app = express();
 app.use(express.static('./public'));                    // vos fichiers statiques

@@ -27,15 +27,15 @@ Son API suit celle de Filament (PHP) ; l'interface est la même, rendue côté s
 
 | Paquet | Rôle |
 |---|---|
-| `@navette/panels` | Panel, pages, resources, relation managers, widgets, notifications, routeur Express |
-| `@navette/tables` | Table, colonnes, filtres, constructeur de requêtes |
-| `@navette/forms` | Champs de formulaire, validation, téléversement |
-| `@navette/schemas` | Mise en page : sections, grilles, onglets, groupes |
-| `@navette/actions` | Actions et groupes d'actions |
-| `@navette/infolists` | Entrées en lecture seule |
-| `@navette/database` | Adaptateur de données (Objection / Knex) |
-| `@navette/support` | Couleurs, icônes, traductions, composants d'interface de base |
-| `@navette/wire` | Runtime des composants à état (protocole Livewire), téléversements temporaires |
+| `@navette-js/panels` | Panel, pages, resources, relation managers, widgets, notifications, routeur Express |
+| `@navette-js/tables` | Table, colonnes, filtres, constructeur de requêtes |
+| `@navette-js/forms` | Champs de formulaire, validation, téléversement |
+| `@navette-js/schemas` | Mise en page : sections, grilles, onglets, groupes |
+| `@navette-js/actions` | Actions et groupes d'actions |
+| `@navette-js/infolists` | Entrées en lecture seule |
+| `@navette-js/database` | Adaptateur de données (Objection / Knex) |
+| `@navette-js/support` | Couleurs, icônes, traductions, composants d'interface de base |
+| `@navette-js/wire` | Runtime des composants à état (protocole Livewire), téléversements temporaires |
 
 ## Conventions
 

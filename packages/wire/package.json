@@ -1,5 +1,5 @@
 {
-  "name": "@navette/wire",
+  "name": "@navette-js/wire",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -1,1 +1,1 @@
-{ "name": "@navette/schemas", "version": "0.0.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "dependencies": { "@navette/support": "*" } }
+{ "name": "@navette-js/schemas", "version": "0.0.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "dependencies": { "@navette-js/support": "*" } }

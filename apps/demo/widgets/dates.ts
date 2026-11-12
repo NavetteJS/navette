@@ -1,5 +1,5 @@
 // Calculs de dates des widgets de la démo, alignés sur Carbon 3 (fuseau UTC, comme la démo Filament) pour donner les mêmes chiffres que l'oracle.
-import { Model } from '@navette/database';
+import { Model } from '@navette-js/database';
 
 export const knex = () => Model.knex();
 const pad = (n: number) => String(n).padStart(2, '0');

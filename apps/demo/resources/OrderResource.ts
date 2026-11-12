@@ -1,14 +1,14 @@
 // Équivalent de App\Filament\Resources\Shop\Orders\OrderResource + Tables\OrdersTable + Pages\ListOrders de la démo Filament.
 // Porté : la liste (colonnes, totaux, onglets, actions de ligne). À porter : widget de statistiques, regroupement, filtre par date,
 // panneau latéral de l'action « Ship », formulaire réel (assistant, lignes de commande).
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { Repeater, RichEditor, Select, Step, TableColumn, Textarea, TextInput, ToggleButtons } from '@navette/forms';
-import { TextEntry } from '@navette/infolists';
-import { diffForHumans } from '@navette/support/i18n';
-import { CreateRecord, Notification, PageTableStatsWidget, Resource, Stat, Tab } from '@navette/panels';
-import { Grid, Group, Section, StatefulGroup, type Component, type Schema } from '@navette/schemas';
-import { Sum, TextColumn, TrashedFilter, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { Repeater, RichEditor, Select, Step, TableColumn, Textarea, TextInput, ToggleButtons } from '@navette-js/forms';
+import { TextEntry } from '@navette-js/infolists';
+import { diffForHumans } from '@navette-js/support/i18n';
+import { CreateRecord, Notification, PageTableStatsWidget, Resource, Stat, Tab } from '@navette-js/panels';
+import { Grid, Group, Section, StatefulGroup, type Component, type Schema } from '@navette-js/schemas';
+import { Sum, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 
 export class Order extends Model {
     static tableName = 'orders';

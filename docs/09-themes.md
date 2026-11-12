@@ -5,7 +5,7 @@ Trois niveaux, du plus simple au plus poussé.
 ## 1. Couleurs du panel
 
 ```ts
-import { Color } from '@navette/support';
+import { Color } from '@navette-js/support';
 
 panel.setColors({
     primary: Color.Emerald,        // une palette Tailwind : Color.Blue, Color.Violet, Color.Amber…
@@ -49,7 +49,7 @@ Pour changer la forme (rayons, espacements, composants) ou utiliser vos propres 
 `resources/css/theme.css` :
 
 ```css
-@import '@navette/panels/theme.css';
+@import '@navette-js/panels/theme.css';
 
 /* Vos fichiers, pour que Tailwind y trouve les classes utilisées. */
 @source '../../resources/**/*.ts';

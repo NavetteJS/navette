@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette/database';
+import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database';
 import { hashPassword, knexAuthProvider, knexTenantProvider, Panel, verifyPassword } from '../src/index.ts';
 import { readToken, signToken } from '../src/auth.ts';
 

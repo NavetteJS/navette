@@ -1,8 +1,8 @@
 // Sonde de test : pose un marqueur invisible à chaque emplacement de render hook réellement rendu par Navette.
 // Activée seulement par NAVETTE_HOOK_PROBE (parcours tools/parity/e2e-render-hooks.mjs) ; jamais dans la démo normale.
-import { ActionsRenderHook } from '@navette/actions';
-import { PanelsRenderHook, UNPLACED_RENDER_HOOKS, type Plugin } from '@navette/panels';
-import { TablesRenderHook } from '@navette/tables';
+import { ActionsRenderHook } from '@navette-js/actions';
+import { PanelsRenderHook, UNPLACED_RENDER_HOOKS, type Plugin } from '@navette-js/panels';
+import { TablesRenderHook } from '@navette-js/tables';
 
 /** Dans `<head>`, seul un élément de métadonnées est valide. */
 const IN_HEAD: string[] = [PanelsRenderHook.HEAD_START, PanelsRenderHook.HEAD_END, PanelsRenderHook.STYLES_BEFORE, PanelsRenderHook.STYLES_AFTER];

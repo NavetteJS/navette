@@ -1,19 +1,19 @@
 {
-  "name": "@navette/starter",
+  "name": "@navette-js/starter",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": { "start": "node server.ts" },
   "dependencies": {
-    "@navette/panels": "*",
-    "@navette/database": "*",
-    "@navette/tables": "*",
-    "@navette/forms": "*",
-    "@navette/infolists": "*",
-    "@navette/schemas": "*",
-    "@navette/actions": "*",
-    "@navette/wire": "*",
-    "@navette/support": "*",
+    "@navette-js/panels": "*",
+    "@navette-js/database": "*",
+    "@navette-js/tables": "*",
+    "@navette-js/forms": "*",
+    "@navette-js/infolists": "*",
+    "@navette-js/schemas": "*",
+    "@navette-js/actions": "*",
+    "@navette-js/wire": "*",
+    "@navette-js/support": "*",
     "express": "^5.1.0"
   }
 }

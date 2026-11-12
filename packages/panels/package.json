@@ -1,5 +1,5 @@
 {
-  "name": "@navette/panels",
+  "name": "@navette-js/panels",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,14 +8,14 @@
     "./theme.css": "./theme.css"
   },
   "dependencies": {
-    "@navette/support": "*",
-    "@navette/schemas": "*",
-    "@navette/forms": "*",
-    "@navette/actions": "*",
-    "@navette/wire": "*",
-    "@navette/tables": "*",
-    "@navette/infolists": "*",
-    "@navette/database": "*",
+    "@navette-js/support": "*",
+    "@navette-js/schemas": "*",
+    "@navette-js/forms": "*",
+    "@navette-js/actions": "*",
+    "@navette-js/wire": "*",
+    "@navette-js/tables": "*",
+    "@navette-js/infolists": "*",
+    "@navette-js/database": "*",
     "express": "^5.1.0"
   }
 }

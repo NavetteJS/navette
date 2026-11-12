@@ -1,4 +1,4 @@
-// @navette/wire — runtime serveur de composants à état, compatible avec le protocole du client livewire.js 4.4.8.
+// @navette-js/wire — runtime serveur de composants à état, compatible avec le protocole du client livewire.js 4.4.8.
 // Prototype du jalon 0 (ADR 0001). Référence : sources/demo/vendor/livewire/livewire/src/Mechanisms/HandleComponents.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';

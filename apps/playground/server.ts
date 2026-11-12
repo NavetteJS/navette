@@ -1,11 +1,11 @@
 import express from 'express';
-import { WireRuntime } from '@navette/wire';
-import { wireRouter, wireScripts, wireStyles } from '@navette/wire/express';
+import { WireRuntime } from '@navette-js/wire';
+import { wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 import { Counter } from './components/Counter.ts';
 import { LiveField } from './components/LiveField.ts';
 import { view } from './view.ts';
-import { ColorManager, views } from '@navette/support';
-import { ui, useColorManager } from '@navette/support/ui';
+import { ColorManager, views } from '@navette-js/support';
+import { ui, useColorManager } from '@navette-js/support/ui';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

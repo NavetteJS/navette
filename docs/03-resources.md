@@ -3,10 +3,10 @@
 Une resource regroupe tout ce qui concerne une entité : ses pages (liste, création, édition), sa table, son formulaire.
 
 ```ts
-import { ObjectionAdapter } from '@navette/database';
-import { Resource } from '@navette/panels';
-import type { Schema } from '@navette/schemas';
-import type { Table } from '@navette/tables';
+import { ObjectionAdapter } from '@navette-js/database';
+import { Resource } from '@navette-js/panels';
+import type { Schema } from '@navette-js/schemas';
+import type { Table } from '@navette-js/tables';
 
 export class TaskResource extends Resource {
     static slug = 'tasks';
@@ -52,7 +52,7 @@ export class TagResource extends Resource {
 }
 ```
 
-Cliquer une ligne ouvre l'édition. `EditAction`, `DeleteAction`, `CreateAction`, `DeleteBulkAction`, `RestoreAction`, `ForceDeleteAction` viennent de `@navette/panels`.
+Cliquer une ligne ouvre l'édition. `EditAction`, `DeleteAction`, `CreateAction`, `DeleteBulkAction`, `RestoreAction`, `ForceDeleteAction` viennent de `@navette-js/panels`.
 
 ## Onglets de liste
 
@@ -88,7 +88,7 @@ TextInput.make('name').live({ onBlur: true })
 Un relation manager est une table d'enregistrements liés, affichée sous le formulaire d'édition, dans un onglet par relation.
 
 ```ts
-import { CreateAction, DeleteAction, EditAction, RelationManager } from '@navette/panels';
+import { CreateAction, DeleteAction, EditAction, RelationManager } from '@navette-js/panels';
 
 export class CommentsRelationManager extends RelationManager {
     static relationship = 'comments';            // sert au titre de l'onglet : « Comments »

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ColorManager, raw } from '@navette/support';
-import { Action, useColorManager as useActionsColorManager } from '@navette/actions';
+import { ColorManager, raw } from '@navette-js/support';
+import { Action, useColorManager as useActionsColorManager } from '@navette-js/actions';
 import { Callout, EmptyState, Fieldset, Html, Icon, Image, Schema, Text, UnorderedList, useColorManager } from '../src/index.ts';
 
 const colors = new ColorManager();

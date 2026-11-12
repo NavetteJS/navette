@@ -1,4 +1,4 @@
-import { Component } from '@navette/wire';
+import { Component } from '@navette-js/wire';
 import { view } from '../view.ts';
 
 /** Champ `live()` : validation à chaque frappe, propriété liée par Alpine ($wire.entangle), erreurs dans memo.errors. */

@@ -1,4 +1,4 @@
-// @navette/support/ui — les composants d'interface de base de Filament, utilisables seuls (équivalent des composants Blade
+// @navette-js/support/ui — les composants d'interface de base de Filament, utilisables seuls (équivalent des composants Blade
 // `<x-filament::button>`, `<x-filament::badge>`…). Chaque fonction rend le même balisage que la vue Blade d'origine
 // (sources/filament/packages/support/resources/views/components) ; elles sont vérifiées scène par scène contre l'application
 // de documentation de Filament (`node tools/parity/run-scenes.mjs`).

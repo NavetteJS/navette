@@ -1,4 +1,4 @@
-import { Component } from '@navette/wire';
+import { Component } from '@navette-js/wire';
 import { view } from '../view.ts';
 
 export class Counter extends Component {

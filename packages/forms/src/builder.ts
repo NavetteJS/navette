@@ -1,11 +1,11 @@
-// @navette/forms/builder — port (partiel) de Filament\Forms\Components\Builder : une liste d'éléments dont chacun est un « bloc »
+// @navette-js/forms/builder — port (partiel) de Filament\Forms\Components\Builder : une liste d'éléments dont chacun est un « bloc »
 // choisi dans un menu. L'état est une table `clé d'élément → { type, data }` ; l'ordre des clés est l'ordre d'affichage.
 // Portés : blocs, sélecteur de bloc, ajout / suppression / duplication / déplacement / réordonnancement, libellé entre éléments,
 // en-têtes de bloc (libellé et actions). Non portés : aperçus de bloc, repli, recherche dans le sélecteur, ajout entre éléments.
-import { Attributes, cls, e, icon, js, loadingIndicator, views, type ColorManager, configured } from '@navette/support';
-import { t } from '@navette/support/i18n';
-import { Action } from '@navette/actions';
-import { Schema, type Component } from '@navette/schemas';
+import { Attributes, cls, e, icon, js, loadingIndicator, views, type ColorManager, configured } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
+import { Action } from '@navette-js/actions';
+import { Schema, type Component } from '@navette-js/schemas';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Field, fillSchema } from './index.ts';
 

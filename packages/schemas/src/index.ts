@@ -1,7 +1,7 @@
-// @navette/schemas — port de filament/schemas : Schema, Component et premiers composants de mise en page.
+// @navette-js/schemas — port de filament/schemas : Schema, Component et premiers composants de mise en page.
 // Rendu en deux temps par composant : résolution asynchrone des propriétés, puis vue EJS synchrone (ADR 0003).
-import { Attributes, HtmlString, cls, e, evaluate, icon, js, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette/support';
-import { t } from '@navette/support/i18n';
+import { Attributes, HtmlString, cls, e, evaluate, icon, js, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
@@ -303,7 +303,7 @@ export class Section extends Component {
 
 /**
  * Balisage libre dans un schéma. Le contenu est inséré TEL QUEL : n'y placez jamais une valeur venue d'un utilisateur ou de la base
- * sans l'échapper avec `e()` de `@navette/support`.
+ * sans l'échapper avec `e()` de `@navette-js/support`.
  */
 export class Html extends Component {
     private content: string | ((ctx: ComponentContext) => string | Promise<string>);
@@ -544,7 +544,7 @@ export class Fieldset extends Component {
 
 /**
  * Texte dans un schéma (port de Text) : simple `<span>`, ou pastille avec `badge()`. Le contenu est échappé ;
- * une `HtmlString` (de `@navette/support`) est insérée telle quelle, à ne construire qu'avec des valeurs échappées.
+ * une `HtmlString` (de `@navette-js/support`) est insérée telle quelle, à ne construire qu'avec des valeurs échappées.
  */
 export class Text extends Component {
     private _content: Lazy<string | HtmlString | null, ComponentContext>;

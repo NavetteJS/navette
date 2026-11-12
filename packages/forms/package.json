@@ -1,5 +1,5 @@
 {
-  "name": "@navette/forms",
+  "name": "@navette-js/forms",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,9 +8,9 @@
     "./builder": "./src/builder.ts"
   },
   "dependencies": {
-    "@navette/actions": "*",
-    "@navette/schemas": "*",
-    "@navette/support": "*",
+    "@navette-js/actions": "*",
+    "@navette-js/schemas": "*",
+    "@navette-js/support": "*",
     "@tiptap/core": "^3.33.1",
     "@tiptap/extension-highlight": "^3.33.1",
     "@tiptap/extension-image": "^3.33.1",

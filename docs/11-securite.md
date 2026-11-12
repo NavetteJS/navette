@@ -54,7 +54,7 @@ S'y ajoutent les politiques de resource, `canAccess` des pages, `canView` des wi
 Les composants fournis échappent leurs valeurs. Ce que vous insérez vous-même ne l'est pas : `Html.make(...)`, `render()` d'un widget, `css` d'un thème. Échappez toute donnée avec `e()` :
 
 ```ts
-import { e } from '@navette/support';
+import { e } from '@navette-js/support';
 Html.make(({ record }) => `<p>${e(record.title)}</p>`)
 ```
 

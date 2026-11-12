@@ -1,12 +1,12 @@
 // Équivalent de App\Filament\Resources\Shop\Customers\CustomerResource + Tables\CustomersTable de la démo Filament.
-import { Model, ObjectionAdapter, type DataAdapter } from '@navette/database';
-import { Action } from '@navette/actions';
-import { DatePicker, RichEditor, Select, TextInput, ToggleButtons } from '@navette/forms';
-import { TextEntry } from '@navette/infolists';
-import { AttachAction, CreateAction, DeleteAction, DeleteBulkAction, DetachAction, DetachBulkAction, EditAction, Notification, RelationManager, Resource } from '@navette/panels';
-import { diffForHumans } from '@navette/support/i18n';
-import { Section, type Schema } from '@navette/schemas';
-import { ColumnGroup, TextColumn, TrashedFilter, type Table } from '@navette/tables';
+import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
+import { Action } from '@navette-js/actions';
+import { DatePicker, RichEditor, Select, TextInput, ToggleButtons } from '@navette-js/forms';
+import { TextEntry } from '@navette-js/infolists';
+import { AttachAction, CreateAction, DeleteAction, DeleteBulkAction, DetachAction, DetachBulkAction, EditAction, Notification, RelationManager, Resource } from '@navette-js/panels';
+import { diffForHumans } from '@navette-js/support/i18n';
+import { Section, type Schema } from '@navette-js/schemas';
+import { ColumnGroup, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 
 export class Customer extends Model {
     static tableName = 'customers';

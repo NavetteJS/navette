@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ColorManager, raw, views } from '@navette/support';
-import { Schema, FusedGroup, useColorManager as useSchemasColorManager } from '@navette/schemas';
-import { Action, useColorManager as useActionsColorManager } from '@navette/actions';
+import { ColorManager, raw, views } from '@navette-js/support';
+import { Schema, FusedGroup, useColorManager as useSchemasColorManager } from '@navette-js/schemas';
+import { Action, useColorManager as useActionsColorManager } from '@navette-js/actions';
 import { CodeEditor, Hidden, MarkdownEditor, OneTimeCodeInput, Placeholder, RawJs, Select, Slider, TextInput, getSchemaState, useColorManager, validateSchema } from '../src/index.ts';
 
 const colors = new ColorManager();

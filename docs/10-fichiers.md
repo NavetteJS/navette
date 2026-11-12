@@ -6,8 +6,8 @@ Un envoi de fichier se fait en deux temps : le navigateur dépose le fichier dan
 
 ```ts
 import path from 'node:path';
-import { FileUpload, LocalFileStorage } from '@navette/forms';
-import { UploadStore, WireRuntime } from '@navette/wire';
+import { FileUpload, LocalFileStorage } from '@navette-js/forms';
+import { UploadStore, WireRuntime } from '@navette-js/wire';
 
 const uploads = path.resolve('./storage');
 
@@ -51,7 +51,7 @@ Le nom du fichier stocké est aléatoire ; le nom d'origine est conservé à par
 Pour un stockage objet (S3…) ou une autre organisation, implémentez `FileStorage` :
 
 ```ts
-import type { FileStorage, TemporaryUpload, UploadedFileInfo } from '@navette/forms';
+import type { FileStorage, TemporaryUpload, UploadedFileInfo } from '@navette-js/forms';
 
 class BucketStorage implements FileStorage {
     async store(file: TemporaryUpload, directory: string | null): Promise<string> {
@@ -84,7 +84,7 @@ FileUpload.make('media').multiple().storeFiles(false)
 L'adaptateur reçoit alors une liste d'entrées, dans l'ordre du formulaire :
 
 ```ts
-import type { FileUploadEntry } from '@navette/forms';
+import type { FileUploadEntry } from '@navette-js/forms';
 
 for (const entry of data.media as FileUploadEntry[]) {
     if ('key' in entry) { /* fichier déjà enregistré, conservé */ }

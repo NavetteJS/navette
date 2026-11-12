@@ -1,12 +1,12 @@
 // Équivalent de App\Filament\Resources\HR\Departments\DepartmentResource de la démo Filament (resource « simple » : ManageDepartments).
-import { Model, ObjectionAdapter } from '@navette/database';
-import { Action, ActionGroup } from '@navette/actions';
-import { ColorPicker, Select, Textarea, TextInput, Toggle } from '@navette/forms';
-import { EditAction, Notification, Resource } from '@navette/panels';
-import { t } from '@navette/support/i18n';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { ColorPicker, Select, Textarea, TextInput, Toggle } from '@navette-js/forms';
+import { EditAction, Notification, Resource } from '@navette-js/panels';
+import { t } from '@navette-js/support/i18n';
 import { randomBytes } from 'node:crypto';
-import type { Schema } from '@navette/schemas';
-import { ColorColumn, IconColumn, TextColumn, type Table } from '@navette/tables';
+import type { Schema } from '@navette-js/schemas';
+import { ColorColumn, IconColumn, TextColumn, type Table } from '@navette-js/tables';
 
 export class Department extends Model {
     static tableName = 'departments';

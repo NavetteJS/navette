@@ -1,4 +1,4 @@
-// Prépare les paquets @navette/* pour npm, sans toucher au mode développement (où les paquets exportent leurs sources .ts) :
+// Prépare les paquets @navette-js/* pour npm, sans toucher au mode développement (où les paquets exportent leurs sources .ts) :
 // chaque paquet est compilé (JavaScript + déclarations .d.ts) dans `.release/<paquet>/`, avec un package.json de publication.
 // Node refuse d'exécuter du TypeScript placé dans node_modules : les paquets publiés ne contiennent donc que du JavaScript.
 //
@@ -63,7 +63,7 @@ for (const name of packages) {
         const match = /^\.\/src\/(.+)\.ts$/.exec(value);
         return [key, match ? { types: `./lib/${match[1]}.d.ts`, default: `./lib/${match[1]}.js` } : value];
     }));
-    const dependencies = Object.fromEntries(Object.entries(manifest.dependencies ?? {}).map(([dependency, range]) => [dependency, dependency.startsWith('@navette/') ? version : range]));
+    const dependencies = Object.fromEntries(Object.entries(manifest.dependencies ?? {}).map(([dependency, range]) => [dependency, dependency.startsWith('@navette-js/') ? version : range]));
     const published = {
         name: manifest.name, version, description: DESCRIPTIONS[name] ?? '', license: 'MIT', type: 'module',
         exports, types: exports['.']?.types,
@@ -77,7 +77,7 @@ for (const name of packages) {
         publishConfig: { access: 'public', tag: version.includes('-') ? 'beta' : 'latest' },
     };
     fs.writeFileSync(path.join(target, 'package.json'), JSON.stringify(published, null, 2) + '\n');
-    fs.writeFileSync(path.join(target, 'README.md'), `# ${manifest.name}\n\n${published.description}\n\nPart of [Navette](https://github.com/NavetteJS/navette), a Node.js port of [Filament](https://filamentphp.com). Install the whole framework with \`npm install @navette/panels\`.\n\n**Beta:** the API may still change between beta releases.\n\nLicense: MIT. Third-party notices: see \`THIRD-PARTY-NOTICES.md\` where present.\n`);
+    fs.writeFileSync(path.join(target, 'README.md'), `# ${manifest.name}\n\n${published.description}\n\nPart of [Navette](https://github.com/NavetteJS/navette), a Node.js port of [Filament](https://filamentphp.com). Install the whole framework with \`npm install @navette-js/panels\`.\n\n**Beta:** the API may still change between beta releases.\n\nLicense: MIT. Third-party notices: see \`THIRD-PARTY-NOTICES.md\` where present.\n`);
 
     // 4. Aucune source TypeScript ni test ne doit partir.
     const leaked = fs.readdirSync(path.join(target, 'lib')).filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts'));

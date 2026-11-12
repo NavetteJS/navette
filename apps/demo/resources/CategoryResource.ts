@@ -1,13 +1,13 @@
 // Équivalent de App\Filament\Resources\Shop\Categories\CategoryResource + Tables\CategoriesTable + Schemas\CategoryForm de la démo Filament.
 // Écart : l'action d'en-tête « Import » (imports en file d'attente) n'est pas portée.
-import { Action } from '@navette/actions';
-import { Model, ObjectionAdapter, type DataAdapter } from '@navette/database';
-import { RichEditor, Select, TextInput, Toggle } from '@navette/forms';
-import { TextEntry } from '@navette/infolists';
-import { CreateAction, DeleteAction, DeleteBulkAction, Notification, RelationManager, Resource } from '@navette/panels';
-import { Grid, Section, type Schema } from '@navette/schemas';
-import { diffForHumans } from '@navette/support/i18n';
-import { IconColumn, TextColumn, type Table } from '@navette/tables';
+import { Action } from '@navette-js/actions';
+import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
+import { RichEditor, Select, TextInput, Toggle } from '@navette-js/forms';
+import { TextEntry } from '@navette-js/infolists';
+import { CreateAction, DeleteAction, DeleteBulkAction, Notification, RelationManager, Resource } from '@navette-js/panels';
+import { Grid, Section, type Schema } from '@navette-js/schemas';
+import { diffForHumans } from '@navette-js/support/i18n';
+import { IconColumn, TextColumn, type Table } from '@navette-js/tables';
 import { ProductResource } from './ProductResource.ts';
 
 export class ProductCategory extends Model {

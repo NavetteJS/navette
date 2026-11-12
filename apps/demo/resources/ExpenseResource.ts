@@ -1,11 +1,11 @@
 // Équivalent de App\Filament\Resources\HR\Expenses (resource, formulaire, infolist, table, widget, pages List / Create en assistant / Edit / View) de la démo Filament.
-import { Action, ActionGroup } from '@navette/actions';
-import { Model, ObjectionAdapter } from '@navette/database';
-import { DatePicker, FileUpload, Repeater, Select, Step, TableColumn, Textarea, TextInput, ToggleButtons, type Field } from '@navette/forms';
-import { RepeatableEntry, TextEntry } from '@navette/infolists';
-import { CreateRecord, DeleteAction, DeleteBulkAction, EditRecord, Notification, PageTableStatsWidget, Resource, Stat, Tab, ViewAction, ViewRecord } from '@navette/panels';
-import { Section, type Component, type Schema } from '@navette/schemas';
-import { Sum, TextColumn, type Table } from '@navette/tables';
+import { Action, ActionGroup } from '@navette-js/actions';
+import { Model, ObjectionAdapter } from '@navette-js/database';
+import { DatePicker, FileUpload, Repeater, Select, Step, TableColumn, Textarea, TextInput, ToggleButtons, type Field } from '@navette-js/forms';
+import { RepeatableEntry, TextEntry } from '@navette-js/infolists';
+import { CreateRecord, DeleteAction, DeleteBulkAction, EditRecord, Notification, PageTableStatsWidget, Resource, Stat, Tab, ViewAction, ViewRecord } from '@navette-js/panels';
+import { Section, type Component, type Schema } from '@navette-js/schemas';
+import { Sum, TextColumn, type Table } from '@navette-js/tables';
 import { EXPENSE_CATEGORIES, EXPENSE_STATUSES, type EnumCase } from './enums.ts';
 
 export class Expense extends Model {
