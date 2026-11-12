@@ -735,7 +735,8 @@ export class Page extends BasePage {
         if (!mountedIndex && (!/^[A-Za-z]+$/.test(name) || typeof (this as any)[`${name}Schema`] !== 'function')) return [];
         const schema = mountedIndex ? await this.getMountedActionSchema(Number(mountedIndex[1])) : this.getSchema(name);
         if (!schema) return [];
-        const components = schema.getFlatComponents() as any[];
+        // Seuls les composants visibles exposent leurs actions : un composant masqué (section, callout…) n'en monte aucune.
+        const components = (await schema.getVisibleFlatComponents()) as any[];
         const exact = components.find((c) => c.getKey() === key && typeof c.getActions === 'function');
         if (exact) return exact.getActions();
         return key === schema.getKey() ? components.filter((c) => !c.hasStatePath() && typeof c.getActions === 'function').flatMap((c) => c.getActions()) : [];
@@ -784,7 +785,8 @@ export class Page extends BasePage {
         const name = componentKey.split('.')[0];
         const mountedIndex = /^mountedActionSchema(\d+)$/.exec(name);
         const schema = mountedIndex ? await this.getMountedActionSchema(Number(mountedIndex[1])) : typeof (this as any)[`${name}Schema`] === 'function' ? await this.getSchema(name) : null;
-        const component: any = schema?.getFlatComponents().find((c: any) => c.getKey() === componentKey);
+        // Un composant masqué n'expose aucune méthode, même si le navigateur en forge l'appel.
+        const component: any = schema ? (await schema.getVisibleFlatComponents()).find((c: any) => c.getKey() === componentKey) : undefined;
         // Seules les méthodes que le composant déclare exposées sont appelables depuis le navigateur.
         if (!component || !component.getExposedMethods().includes(method) || typeof component[method] !== 'function') { this.skipRender(); return null; }
         if (component.isRenderlessMethod(method)) this.skipRender();
