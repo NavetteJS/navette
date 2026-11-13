@@ -1017,7 +1017,7 @@ export class Repeater extends Field {
     }
     getChildSchemas(): Schema[] {
         const container = this.container;
-        return Object.keys(this.getItems()).map((key) => new Schema(container.livewire).key(`${this.getKey()}.${key}`).statePath(`${this.getStatePath()}.${key}`).operation(container.getOperation()).record(container.getRecord()).root(false).columns((this as any)._childColumns ?? 1).components(this.itemComponents()));
+        return Object.keys(this.getItems()).map((key) => new Schema(container.livewire).key(`${this.getKey()}.${key}`).statePath(`${this.getStatePath()}.${key}`).operation(container.getOperation()).record(container.getRecord()).root(false).parentComponent(this).columns((this as any)._childColumns ?? 1).components(this.itemComponents()));
     }
     private _childColumns: Record<string, number> | number | null = null;
     /** Grid columns inside each item. */

@@ -212,7 +212,7 @@ export class Builder extends Field {
     /** Item schema: key `<builder>.<item>.data`, state at the same path. */
     protected itemSchema(itemKey: string, item: Item): Schema {
         const container = this.container;
-        return new Schema(container.livewire).key(`${this.getKey()}.${itemKey}.data`).statePath(`${this.getStatePath()}.${itemKey}.data`).operation(container.getOperation()).record(container.getRecord()).root(false)
+        return new Schema(container.livewire).key(`${this.getKey()}.${itemKey}.data`).statePath(`${this.getStatePath()}.${itemKey}.data`).operation(container.getOperation()).record(container.getRecord()).root(false).parentComponent(this)
             .components(this.getBlock(item.type)!.getComponents({ builder: this, itemKey, data: item.data }));
     }
     getChildSchemas(): Schema[] { return Object.entries(this.getItems()).map(([key, item]) => this.itemSchema(key, item)); }
