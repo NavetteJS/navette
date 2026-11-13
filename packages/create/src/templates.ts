@@ -506,7 +506,7 @@ export class NoteResource extends Resource {
     files['src/server.ts'] = `// Entry point: runs the migrations, then serves every panel of src/panels.
 import express from 'express';
 import { mkdirSync } from 'node:fs';
-import { discoverPanels, panelRouter } from '@navette-js/panels';
+import { discoverPanels, panelNotFound, panelRouter } from '@navette-js/panels';
 import { views } from '@navette-js/support';
 ${o.locale === 'fr' ? "import { setLocale } from '@navette-js/support/i18n';\n" : ''}import { UploadStore, WireRuntime } from '@navette-js/wire';
 import { migrate } from './database.ts';
@@ -523,10 +523,13 @@ const app = express();
 // Uploaded files that are public (FileUpload with the public disk).
 app.use('/storage', express.static('storage/public', { dotfiles: 'deny', index: false }));
 // Each panel has its own runtime (its own Livewire endpoint and components).
-for (const panel of await discoverPanels(new URL('./panels/', import.meta.url))) {
+const panels = await discoverPanels(new URL('./panels/', import.meta.url));
+for (const panel of panels) {
     app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore('storage/tmp', key) })));
 }
 app.get('/', (_req, res) => res.redirect('/${o.userPanel ? 'app' : 'admin'}'));
+// Any other URL: the 404 page of the first panel.
+if (panels[0]) app.use(panelNotFound(panels[0]));
 
 const port = Number(process.env.PORT ?? ${o.port});
 app.listen(port, '127.0.0.1', () => {

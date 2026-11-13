@@ -3,7 +3,7 @@ import express from 'express';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AppAuthentication, Dashboard, EditProfile, EmailAuthentication, fileMailer, knexNotificationStore, Login, multiFactorAuthenticationSchema, SecurityKeyAuthentication, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
+import { AppAuthentication, Dashboard, panelNotFound, EditProfile, EmailAuthentication, fileMailer, knexNotificationStore, Login, multiFactorAuthenticationSchema, SecurityKeyAuthentication, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
 import { UploadStore, WireRuntime } from '@navette-js/wire';
 import { sqlite } from '@navette-js/database';
@@ -166,4 +166,6 @@ app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore
 // Third panel (`/lab`): recent features on the demo data, outside the pages compared with Filament. NAVETTE_NO_LAB turns it off.
 if (!process.env.NAVETTE_NO_LAB) app.use(panelRouter(labPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
+// The admin panel is at the root: URLs that nothing answered get its 404 page.
+app.use(panelNotFound(panel));
 app.listen(port, '127.0.0.1', () => console.log(`Navette demo: http://127.0.0.1:${port}/login`));

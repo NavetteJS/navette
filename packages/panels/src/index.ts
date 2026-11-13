@@ -31,8 +31,9 @@ export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, rend
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
-import { t, tc } from '@navette-js/support/i18n';
-import { badge as uiBadge, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
+import { getLocale, t, tc } from '@navette-js/support/i18n';
+import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
+import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import type { DataAdapter } from '@navette-js/database';
 import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
@@ -4230,6 +4231,42 @@ async function renderUserMenu(component: Component, position: 'topbar' | 'sideba
     });
 }
 /** Tenant menu: current tenant, other tenants, registration, profile. */
+/** Options of an error page: a description replacing the status's own, and the error (its stack is shown in development). */
+export type ErrorPageOptions = { description?: string; error?: unknown };
+/**
+ * Answers with the panel's error page for a status (404, 403, 500…): the cable car in trouble, in the request's theme.
+ * Requests that do not accept HTML get plain text. Use it in your own middleware, a maintenance mode answering 503 for example.
+ */
+export function renderErrorPage(panel: Panel, req: Request, res: Response, status: number, options: ErrorPageOptions = {}): void {
+    res.status(status);
+    if (!req.accepts('html')) return void res.type('text').send(`${status}`);
+    const scene = errorPageScene(status);
+    const text = (name: string) => t(`filament-panels::errors.${scene}.${name}`);
+    // Inside the request's theme: the buttons' color classes depend on its palette.
+    const html = panel.withTheme(req, () => {
+        const home = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: 'm-home', color: 'primary' }, t('filament-panels::errors.actions.home'));
+        const homeGray = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: 'm-home', color: 'gray' }, t('filament-panels::errors.actions.home'));
+        const back = uiButton({ icon: 'm-arrow-left', color: 'gray', attributes: { onclick: 'history.back()' } }, t('filament-panels::errors.actions.back'));
+        const retry = uiButton({ tag: 'a', href: req.method === 'GET' ? req.originalUrl : panel.getBaseUrl(), icon: 'm-arrow-path', color: 'primary' }, t('filament-panels::errors.actions.retry'));
+        const login = panel.getLoginPage() ? uiButton({ tag: 'a', href: panel.getLoginUrl(), icon: 'm-arrow-right-end-on-rectangle', color: 'primary' }, t('filament-panels::errors.actions.login')) : home;
+        const actions = scene === 401 ? (panel.getLoginPage() ? [login, homeGray] : [home]) : scene === 403 || scene === 404 ? [home, back] : scene === 503 ? [retry] : [retry, homeGray];
+        const badgeColor = scene >= 500 ? 'danger' : scene === 419 || scene === 429 ? 'warning' : 'gray';
+        const label = t('filament-panels::errors.label', { code: status });
+        const error = options.error instanceof Error ? options.error : null;
+        const theme = panel.resolveTheme(req);
+        return views.render('filament-panels::errors.page', {
+            status, locale: getLocale(), title: text('title'), heading: text('title'), description: options.description ?? text('description'),
+            illustration: errorIllustration(status, `${label}: ${text('title')}`), badge: uiBadge({ color: badgeColor, size: 'lg' }, e(label)), actions, css: ERROR_PAGE_CSS,
+            // The stack only helps while developing: never shown otherwise.
+            details: error && process.env.NODE_ENV === 'development' ? (error.stack ?? String(error)) : null,
+            brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), panelId: panel.getId(),
+            font: theme?.font ? { ...panel.getFont(), ...fontOf(theme.font) } : panel.getFont(), themeCss: theme?.css ?? '', colorVariables: panel.colors.renderCssVariables(),
+            darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
+        });
+    });
+    res.type('html').send(html);
+}
+
 async function renderTenantMenu(component: Component, options: { teleport: boolean }): Promise<string> {
     const { panel, user } = component._ctx as PanelContext;
     const tenant = panel.getTenant();
@@ -4434,7 +4471,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const denied = user !== null && !(await panel.userCanAccess(user));
         return { req, res, panel, user: denied ? null : user, denied, mailbox: csrfToken(req, res), tenant: null };
     };
-    const forbidden = (res: Response) => void res.status(403).send('Forbidden');
+    const forbidden = (req: Request, res: Response) => renderErrorPage(panel, req, res, 403);
 
     /** Tenant designated by a panel URL (or its host, with `tenantDomain()`), if the user is a member. */
     const tenantFromPath = async (path: string, user: User | null, hostname = ''): Promise<unknown> => {
@@ -4567,8 +4604,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     /** Page access errors: 404 and 403 are answered directly, anything else is rethrown. */
     const guarded = async (res: Response, render: () => Promise<void>) => {
         try { await render(); } catch (error) {
-            if (error instanceof WireError && error.status === 404) return void res.status(404).send('Not Found');
-            if (error instanceof WireError && error.status === 403) return void res.status(403).send('Forbidden');
+            if (error instanceof WireError && (error.status === 404 || error.status === 403)) return renderErrorPage(panel, res.req, res, error.status);
             throw error;
         }
     };
@@ -4576,7 +4612,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const guestPage = (path: string, component: string, title: string, params: (req: Request) => Record<string, unknown> = () => ({})) => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
-            if (ctx.denied) return forbidden(res);
+            if (ctx.denied) return forbidden(req, res);
             if (ctx.user) return res.redirect((await homeUrl(ctx.user)) ?? panel.getBaseUrl());
             await guarded(res, () => document(req, res, ctx, { title, component, layout: 'simple', params: params(req) }));
         });
@@ -4585,7 +4621,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const userPage = (path: string, component: string, title: string, layout: 'simple' | 'index' = 'simple', options: { beforeMultiFactorSetUp?: boolean } = {}) => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
-            if (ctx.denied) return forbidden(res);
+            if (ctx.denied) return forbidden(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             // Required multi-factor authentication: nothing but its setup page (and email verification) until it is set up.
             if (!options.beforeMultiFactorSetUp && (await panel.mustSetUpMultiFactorAuthentication(ctx.user))) return res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl());
@@ -4598,9 +4634,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // Files offered to the signed-in user (exports, failed import rows): only the user who created them can download them.
     router.get(panel.getBaseUrl('downloads/:token'), async (req, res) => {
         const ctx = await context(req, res);
-        if (!ctx.user || ctx.denied) return forbidden(res);
+        if (!ctx.user || ctx.denied) return forbidden(req, res);
         const file = panel.getDownloads().get(String(req.params.token), ctx.user.id);
-        if (!file) return void res.status(404).send('Not Found');
+        if (!file) return renderErrorPage(panel, req, res, 404);
         res.setHeader('Content-Type', file.type);
         res.setHeader('Content-Disposition', `attachment; filename="${file.name.replace(/[^A-Za-z0-9._-]/g, '_')}"`);
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -4611,7 +4647,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (LoginPage) {
         guestPage(panel.getAuthPaths().login, name('auth.login'), t('filament-panels::auth/pages/login.title'));
         router.post(panel.getLogoutUrl(), express.urlencoded({ extended: false }), (req, res) => {
-            if (!verifyCsrf(req, req.body?._token)) return res.status(419).send('Invalid CSRF token.');
+            if (!verifyCsrf(req, req.body?._token)) return renderErrorPage(panel, req, res, 419);
             panel.logOut(res);
             res.redirect(panel.getLoginUrl());
         });
@@ -4626,11 +4662,11 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         // Emailed link: signed, time-limited, and only valid for the signed-in user it designates.
         router.get(panel.getBaseUrl(`${panel.getAuthPaths().emailVerification}/:id/:hash`), async (req, res) => {
             const ctx = await context(req, res);
-            if (ctx.denied) return forbidden(res);
+            if (ctx.denied) return forbidden(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             const id = String(req.params.id), hash = String(req.params.hash);
             const expected = createHash('sha1').update(ctx.user.email).digest('hex');
-            if (String(ctx.user.id) !== id || hash !== expected || !panel.checkVerifyEmailUrl(id, hash, req.query.expires, req.query.signature)) return void res.status(403).send('Invalid signature.');
+            if (String(ctx.user.id) !== id || hash !== expected || !panel.checkVerifyEmailUrl(id, hash, req.query.expires, req.query.signature)) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
             await panel.getAuth().markEmailAsVerified?.(ctx.user);
             res.redirect((await homeUrl(ctx.user)) ?? panel.getBaseUrl());
         });
@@ -4642,12 +4678,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         // Link sent to the new address: only for the signed-in user who asked, while the old address is still theirs.
         router.get(panel.getBaseUrl(panel.getAuthPaths().emailChangeVerification), async (req, res) => {
             const ctx = await context(req, res);
-            if (ctx.denied) return forbidden(res);
+            if (ctx.denied) return forbidden(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             const payload = panel.readEmailChangeToken('verify', req.query.token);
-            if (!payload || String(payload.uid) !== String(ctx.user.id) || payload.from !== fingerprint(ctx.user.email)) return void res.status(403).send('Invalid signature.');
+            if (!payload || String(payload.uid) !== String(ctx.user.id) || payload.from !== fingerprint(ctx.user.email)) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
             const store = getDefaultCacheStore();
-            if (await store.get(`navette:email-change:blocked:${payload.nonce}`)) return void res.status(403).send('This email change was blocked.');
+            if (await store.get(`navette:email-change:blocked:${payload.nonce}`)) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.email_change_blocked') });
             const auth = panel.getAuth();
             const other = await auth.findByEmail?.(payload.email);
             if (other && String(other.id) !== String(ctx.user.id)) {
@@ -4664,9 +4700,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         router.get(panel.getBaseUrl(panel.getAuthPaths().blockEmailChange), async (req, res) => {
             const ctx = await context(req, res);
             const payload = panel.readEmailChangeToken('block', req.query.token);
-            if (!payload) return void res.status(403).send('Invalid signature.');
+            if (!payload) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
             const user = await panel.getAuth().find(payload.uid);
-            if (!user) return void res.status(403).send('Invalid signature.');
+            if (!user) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
             const changed = user.email === payload.email;
             if (!changed) await getDefaultCacheStore().put(`navette:email-change:blocked:${payload.nonce}`, true, 60 * 60 + 60);
             await flash(ctx, () => (changed
@@ -4681,13 +4717,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     /** Context of a protected page: login, email verification, tenant. Returns `null` after responding. */
     const pageContext = async (req: Request, res: Response): Promise<PanelContext | null> => {
         const ctx = await context(req, res);
-        if (ctx.denied) { forbidden(res); return null; }
+        if (ctx.denied) { forbidden(req, res); return null; }
         if (!ctx.user) { if (panel.allowsGuests()) return ctx; res.redirect(panel.getLoginUrl()); return null; }
         if (await panel.mustVerifyEmail(ctx.user)) { res.redirect(panel.getEmailVerificationPromptUrl()); return null; }
         if (await panel.mustSetUpMultiFactorAuthentication(ctx.user)) { res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl()); return null; }
         if (panel.hasTenancy()) {
             ctx.tenant = await tenantFromPath(req.path, ctx.user, req.hostname);
-            if (!ctx.tenant) { res.status(404).send('Not Found'); return null; }
+            if (!ctx.tenant) { renderErrorPage(panel, req, res, 404); return null; }
         }
         return ctx;
     };
@@ -4705,7 +4741,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             const ctx = await pageContext(req, res);
             if (!ctx) return;
             const url = panel.getNavigation(req.path, new Map(), await panel.resolveInaccessiblePages(ctx.user))[0]?.items[0]?.url ?? null;
-            if (!url) return void res.status(404).send('Not Found');
+            if (!url) return renderErrorPage(panel, req, res, 404);
             res.redirect(url);
         });
     }
@@ -4714,12 +4750,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         router.get(panel.getBaseUrl(), async (req, res, next) => {
             if (panel.getTenantDomain() && panel.getTenantKeyFromRequest(req.path, req.hostname) !== null) return next();
             const ctx = await context(req, res);
-            if (ctx.denied) return forbidden(res);
+            if (ctx.denied) return forbidden(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             if (await panel.mustVerifyEmail(ctx.user)) return res.redirect(panel.getEmailVerificationPromptUrl());
             if (await panel.mustSetUpMultiFactorAuthentication(ctx.user)) return res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl());
             const url = await homeUrl(ctx.user);
-            if (!url) return void res.status(404).send('Not Found');
+            if (!url) return renderErrorPage(panel, req, res, 404);
             res.redirect(url);
         });
         // Tenant root without a dashboard: the first menu page.
@@ -4729,7 +4765,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
                 const ctx = await pageContext(req, res);
                 if (!ctx) return;
                 const url = await panel.withTenant(ctx.tenant, async () => panel.getNavigation(req.path, new Map(), await panel.resolveInaccessiblePages(ctx.user))[0]?.items[0]?.url ?? null);
-                if (!url) return void res.status(404).send('Not Found');
+                if (!url) return renderErrorPage(panel, req, res, 404);
                 res.redirect(url);
             });
         }
@@ -4758,7 +4794,21 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             await guarded(res, () => document(req, res, ctx, { title: PageClass.getTitle(), component, layout: 'index', params }));
         });
     }
+    // Any other URL of a panel with a path is unknown. A panel at the root leaves them to the application (`panelNotFound()`).
+    if (panelBase !== '/') router.get([panelBase, `${panelBase}/*path`], (req, res) => renderErrorPage(panel, req, res, 404));
+    // An error thrown while rendering a page of the panel: the 500 page. Component updates keep Livewire's error handling.
+    router.use((error: unknown, req: Request, res: Response, next: (error?: unknown) => void) => {
+        if (res.headersSent || req.method !== 'GET' || !belongsToPanel(req.path) || req.path.startsWith(`${livewire}/`)) return next(error);
+        console.error(error);
+        const status = typeof (error as { status?: unknown })?.status === 'number' && (error as { status: number }).status >= 400 ? (error as { status: number }).status : 500;
+        renderErrorPage(panel, req, res, status, { error });
+    });
     return router;
+}
+
+/** The panel's 404 page for URLs nothing else answered: mount it after your routes, for a panel served at the root. */
+export function panelNotFound(panel: Panel): (req: Request, res: Response) => void {
+    return (req, res) => renderErrorPage(panel, req, res, 404);
 }
 
 /** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */

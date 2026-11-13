@@ -1275,6 +1275,30 @@
     "messages.cancelled": "The operation was cancelled or timed out.",
     "messages.unsupported": "This browser does not support security keys.",
     "messages.failed": "The security key could not be used. Try again."
+   },
+   "errors": {
+    "label": "Error :code",
+    "actions.home": "Back to home",
+    "actions.back": "Go back",
+    "actions.retry": "Try again",
+    "actions.login": "Sign in",
+    "details": "Error details",
+    "401.title": "Sign in to board",
+    "401.description": "You need to be signed in to open this page.",
+    "403.title": "This line is closed to you",
+    "403.description": "You don’t have permission to open this page. If you think you should, ask an administrator.",
+    "403.invalid_link": "This link is invalid or has expired.",
+    "403.email_change_blocked": "This email address change was blocked.",
+    "404.title": "Lost in the clouds",
+    "404.description": "The page you are looking for doesn’t exist or has been moved.",
+    "419.title": "Your cabin has left",
+    "419.description": "This page expired after a long time without activity. Reload it and try again.",
+    "429.title": "Rush hour",
+    "429.description": "Too many requests in a short time. Wait a moment before trying again.",
+    "500.title": "The cable snapped",
+    "500.description": "Something went wrong on our side. Try again in a few moments.",
+    "503.title": "Line under maintenance",
+    "503.description": "We’re servicing the line. We’ll be back very soon."
    }
   },
   "fr": {
@@ -1619,6 +1643,30 @@
     "messages.cancelled": "L'opération a été annulée ou a expiré.",
     "messages.unsupported": "Ce navigateur ne prend pas en charge les clés de sécurité.",
     "messages.failed": "La clé de sécurité n'a pas pu être utilisée. Réessayez."
+   },
+   "errors": {
+    "label": "Erreur :code",
+    "actions.home": "Retour à l’accueil",
+    "actions.back": "Page précédente",
+    "actions.retry": "Réessayer",
+    "actions.login": "Se connecter",
+    "details": "Détails de l’erreur",
+    "401.title": "Connectez-vous pour embarquer",
+    "401.description": "Vous devez être connecté pour ouvrir cette page.",
+    "403.title": "Cette ligne vous est fermée",
+    "403.description": "Vous n’avez pas l’autorisation d’ouvrir cette page. Si vous pensez que c’est une erreur, contactez un administrateur.",
+    "403.invalid_link": "Ce lien est invalide ou a expiré.",
+    "403.email_change_blocked": "Ce changement d’adresse e-mail a été bloqué.",
+    "404.title": "Perdu dans les nuages",
+    "404.description": "La page que vous cherchez n’existe pas ou a été déplacée.",
+    "419.title": "Votre cabine est partie",
+    "419.description": "Cette page a expiré après une longue inactivité. Rechargez-la puis réessayez.",
+    "429.title": "Heure de pointe",
+    "429.description": "Trop de requêtes en peu de temps. Patientez un instant avant de réessayer.",
+    "500.title": "Le câble a lâché",
+    "500.description": "Une erreur est survenue de notre côté. Réessayez dans quelques instants.",
+    "503.title": "Ligne en maintenance",
+    "503.description": "Nous entretenons la ligne. Nous revenons très vite."
    }
   }
  },

@@ -1,0 +1,87 @@
+<%# Error page (404, 403, 500…): a standalone document, so that it renders even when components cannot %>
+<!DOCTYPE html>
+<html lang="<%= locale %>" dir="ltr" class="fi">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex" />
+        <% if (locals.favicon) { %><link rel="icon" href="<%= favicon %>" /><% } %>
+
+        <title>
+            <%= title %>
+             -
+            <%= brandName %>
+        </title>
+
+        <link href="<%- assetUrl('fonts/filament/filament/inter/index.css') %>" rel="stylesheet" />
+
+        <%- colorVariables %>
+
+        <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/filament/filament/app.css') %>" />
+
+        <% if (font.url) { %><link href="<%= font.url %>" rel="stylesheet" /><% } %>
+
+        <style>
+            :root {
+                --font-family: '<%- font.family %>';
+                --font-family-mono: 'ui-monospace';
+                --font-family-serif: 'ui-serif';
+                --default-theme-mode: system;
+            }
+<%- css %>
+        </style>
+
+        <% if (locals.darkMode === false) { %><% } else if (locals.darkModeForced) { %>
+        <script>
+            document.documentElement.classList.add('dark')
+        </script>
+        <% } else { %>
+        <script>
+            const theme = localStorage.getItem('filament:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
+
+            if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark')
+            }
+        </script>
+        <% } %>
+
+        <% if (locals.themeCss) { %><style data-navette-theme><%- themeCss %></style><% } %>
+    </head>
+
+    <body class="<%- cls(['fi-body', 'fi-panel-' + panelId, 'fi-error-body', 'fi-error-' + status]) %>">
+        <div class="fi-simple-layout">
+            <div class="fi-simple-main-ctn">
+                <main id="fi-main-content" class="fi-simple-main fi-width-lg fi-error-page">
+                    <div class="fi-error-illustration">
+                        <%- illustration %>
+                    </div>
+
+                    <div class="fi-error-badge-ctn">
+                        <%- badge %>
+                    </div>
+
+                    <header class="fi-simple-header">
+                        <h1 class="fi-simple-header-heading">
+                            <%= heading %>
+                        </h1>
+
+                        <p class="fi-simple-header-subheading">
+                            <%= description %>
+                        </p>
+                    </header>
+
+                    <div class="fi-error-actions">
+                        <%- actions.join('') %>
+                    </div>
+
+                    <% if (locals.details) { %>
+                        <details class="fi-error-details">
+                            <summary><%= t('filament-panels::errors.details') %></summary>
+                            <pre><%= details %></pre>
+                        </details>
+                    <% } %>
+                </main>
+            </div>
+        </div>
+    </body>
+</html>

@@ -252,6 +252,53 @@ app.use(panelRouter(panel, runtime));
 
 A middleware mounted before the panel can also fill an `AsyncLocalStorage` with request data (the logged-in user, a locale) for your adapters to read. To know the user, call `await panel.user(req)`, which reads the session cookie of the panel.
 
+## Customizing error pages
+
+The errors of a panel are answered with its own error pages, in its colors, light and dark: the Navette cable car in trouble, with the status code painted on its cabin. Each common status has its scene, title and description, in English and French:
+
+| Status | Page |
+|---|---|
+| 401 | A padlock on the line: sign in first. |
+| 403 | A no-entry sign stops the cabin. |
+| 404 | The cable disappears into the clouds. |
+| 419 | The cabin left the station without you. |
+| 429 | Rush hour: the cabins queue on the line. |
+| 500 | The cable snapped and the cabin dangles. |
+| 503 | The line is under maintenance. |
+
+Other client errors use the 404 scene, other server errors the 500 one. Requests that do not accept HTML, such as `fetch()` calls asking for JSON, get the status in plain text.
+
+The pages answer the URLs of a panel that match nothing (when the panel has a path), the pages a user may not open, invalid links, and the errors thrown while rendering a page, which are also logged with `console.error()`. With `NODE_ENV=development`, the 500 page shows the stack of the error; it is never shown otherwise. Component updates keep Livewire's own error handling.
+
+### Answering unknown URLs at the root
+
+A panel served at the root leaves the URLs it does not know to the rest of your application. Mount `panelNotFound()` after your routes to answer them with its 404 page:
+
+```ts
+import { panelNotFound, panelRouter } from '@navette-js/panels';
+
+app.use(panelRouter(panel, runtime));
+app.get('/api/health', (req, res) => res.send('ok'));
+app.use(panelNotFound(panel));
+```
+
+### Using the error pages in your middleware
+
+`renderErrorPage()` answers a request with the error page of a status. A maintenance mode, for example:
+
+```ts
+import { renderErrorPage } from '@navette-js/panels';
+
+app.use((req, res, next) => {
+    if (!isUnderMaintenance()) return next();
+    renderErrorPage(panel, req, res, 503);
+});
+```
+
+The `description` option replaces the text of the status: `renderErrorPage(panel, req, res, 403, { description: 'Your trial has ended.' })`.
+
+The page is the `filament-panels::errors.page` view: [override it](/styling/css-hooks#overriding-views) to change its layout. Its elements have `fi-error-*` CSS hook classes, and its `<body>` has the `fi-error-<status>` class.
+
 ## Running multiple panels in one application
 
 An application may serve several panels, for example an admin panel for staff and an app panel for customers. Give each panel its own `id`, its own `path`, and its own `WireRuntime`:
