@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
-import { generateField, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateColumn, generateComponent, generateEntry, generateField, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
 if (existsSync(join(cwd, '.env'))) process.loadEnvFile(join(cwd, '.env'));
@@ -118,6 +118,30 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
         async run() {
             const name = studly(positional[0] ?? fail('Give the field a name, e.g. RatingInput'));
             write(join(cwd, 'src', 'fields', `${name}.ts`), generateField(name));
+        },
+    },
+    'make:entry': {
+        usage: 'navette make:entry <Name>                        Create a custom infolist entry (src/entries)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the entry a name, e.g. AudioPlayerEntry'));
+            write(join(cwd, 'src', 'entries', `${name}.ts`), generateEntry(name));
+        },
+    },
+    'make:column': {
+        usage: 'navette make:column <Name>                       Create a custom table column (src/columns)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the column a name, e.g. ProgressColumn'));
+            write(join(cwd, 'src', 'columns', `${name}.ts`), generateColumn(name));
+        },
+    },
+    'make:component': {
+        usage: 'navette make:component <name>                    Create a view component, used as <x-name> (src/components)',
+        async run() {
+            const raw = positional[0] ?? fail('Give the component a name, e.g. stat-card or forms.hint');
+            const name = raw.split('.').map((part) => part.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[^A-Za-z0-9-]+/g, '-').toLowerCase().replace(/^-|-$/g, '')).filter(Boolean).join('.');
+            if (!name) fail(`Invalid component name: ${raw}`);
+            write(join(cwd, 'src', 'components', ...name.split('.')) + '.ejs', generateComponent(name));
+            say(`\n  Use it in any view as <x-${name}>…</x-${name}>.`);
         },
     },
     'make:widget': {

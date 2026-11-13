@@ -214,3 +214,59 @@ export class ${name} extends Field {
 }
 `;
 }
+
+export function generateEntry(name: string): string {
+    return `import { ViewEntry } from '@navette-js/infolists';
+import { configured, e } from '@navette-js/support';
+
+/** ${headline(snake(name))} infolist entry: \`${name}.make('field')\`. */
+export class ${name} extends ViewEntry {
+    static make(name: string): ${name} {
+        return configured(new ${name}(name));
+    }
+
+    async toHtml(): Promise<string> {
+        const state = await this.getState();
+
+        // \`wrap()\` adds the label and the entry wrapper. Escape every value you print with \`e()\`.
+        return this.wrap(\`<span>\${e(state ?? '')}</span>\`);
+    }
+}
+`;
+}
+
+export function generateColumn(name: string): string {
+    return `import { configured, e } from '@navette-js/support';
+import { Column } from '@navette-js/tables';
+
+/** ${headline(snake(name))} table column: \`${name}.make('field')\`. */
+export class ${name}<R = any> extends Column<R> {
+    static make<R = any>(name: string): ${name}<R> {
+        return configured(new ${name}<R>(name));
+    }
+
+    // Returns the HTML of the cell. Escape every value you print with \`e()\`.
+    async toHtml(record: R): Promise<string> {
+        const state = await this.getState(record);
+
+        return \`<div class="fi-ta-text"><span>\${e(state ?? '')}</span></div>\`;
+    }
+}
+`;
+}
+
+/** Component view: `<x-name>` in any view, after `views.components(directory)` (done by the generated server). */
+export function generateComponent(name: string): string {
+    return `<%#
+    <x-${name} title="…">content</x-${name}>
+    Variables: the tag's props (camelCased), \`slot\` (the content, already rendered), \`slots\` (named slots: <x-slot name="footer">),
+    \`attributes\` (class, id, data-*, x-*, wire:* attributes given on the tag).
+    Output tags: the escaping one (percent sign and equals) for values, the raw one (percent sign and dash) only for slots and trusted markup.
+%>
+<div <%- attributes.class(['${name}']) %>>
+    <% if (locals.title) { %><h3><%= title %></h3><% } %>
+    <%- slot %>
+    <% if (slots.footer) { %><footer><%- slots.footer %></footer><% } %>
+</div>
+`;
+}

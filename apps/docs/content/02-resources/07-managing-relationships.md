@@ -195,6 +195,56 @@ const attachedTo = (ownerKey: string) => Category.knex()('category_product').sel
 
 The attach modal contains a searchable select. Its options come from `searchAttachable()`, and the chosen key is checked again with `attachableLabel()` before `attach()` is called: a key sent by the browser that is not attachable is rejected by validation. `DetachBulkAction` only receives keys that belong to the owner, since the selection is reduced to the records of the manager's adapter.
 
+### Saving pivot attributes
+
+A pivot table can hold values of its own, such as the role of a member in a team. Return their fields from `pivotForm()`: they are added to the attach modal, after the record select, and to the edit form of each row. Their values reach `attach()` as its third argument, and `updatePivot()` when a row is edited; the other fields of the edit form are still saved on the related record. Select the pivot columns in the manager's query, so that the table can display them and the edit form can read them:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { AttachAction, DetachAction, EditAction, RelationManager } from '@navette-js/panels';
+import type { Schema } from '@navette-js/schemas';
+import { TextColumn, type Table } from '@navette-js/tables';
+
+export class MembersRelationManager extends RelationManager {
+    static relationship = 'members';
+    static modelLabel = 'member';
+
+    static adapterFor(ownerKey: string) {
+        return new ObjectionAdapter(User, {
+            modify: (query) => {
+                query.select('users.*', 'team_user.role')
+                    .join('team_user', 'team_user.user_id', 'users.id')
+                    .where('team_user.team_id', ownerKey);
+            },
+        });
+    }
+
+    static pivotForm(schema: Schema) {
+        return [TextInput.make('role').required().maxLength(50)];
+    }
+
+    static async attach(ownerKey: string, recordKey: string, pivot: Record<string, unknown> = {}): Promise<void> {
+        if (!(await this.attachableLabel(ownerKey, recordKey))) return;
+        await User.knex()('team_user').insert({ team_id: ownerKey, user_id: recordKey, role: pivot.role });
+    }
+
+    static async updatePivot(ownerKey: string, recordKey: string, pivot: Record<string, unknown>): Promise<void> {
+        await User.knex()('team_user').where({ team_id: ownerKey, user_id: recordKey }).update({ role: pivot.role });
+    }
+
+    static table(table: Table): Table {
+        return table
+            .columns([TextColumn.make('name'), TextColumn.make('role')])
+            .headerActions([AttachAction.make()])
+            .recordActions([EditAction.make(), DetachAction.make()]);
+    }
+
+    // searchAttachable(), attachableLabel() and detach(), as above.
+}
+```
+
+Only the fields declared in `pivotForm()` reach `attach()` and `updatePivot()`, after validation: a value the browser adds for another column is dropped. `updatePivot()` receives the owner key and the row key, so update the pivot row of this owner only, as above.
+
 ### Scoping the options to attach
 
 `searchAttachable()` decides which records may be attached: filter them as you need, and keep `attachableLabel()` consistent with it, since it is the server-side check.
@@ -375,5 +425,5 @@ static recordSubNavigation = ['view', 'edit', 'comments'];
 ```
 
 <Aside variant="warning">
-Pivot attributes, grouping relation managers, combining them with the form in tabs, and tab badges are not available yet.
+Grouping relation managers, combining them with the form in tabs, and tab badges are not available yet.
 </Aside>

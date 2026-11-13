@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { camel, compileComponentTags, isHtmlAttribute } from './components.ts';
 // @navette-js/support — shared building blocks: escaping, attribute bags, JS serialization, lazy evaluation, colors, icons,
 // namespaced EJS views.
 import ejs from 'ejs';
@@ -395,12 +396,57 @@ export function loadingIndicator(attributes: Attributes = new Attributes(), size
 }
 
 // ------------------------------------------------------------------ namespaced, overridable EJS views
-/** View registry: `filament-forms::components.text-input` resolves to an EJS file; override directories are checked first. */
+/** Renders a component from its props (camelCased, named slots included), its attribute bag and its default slot (HTML). */
+export type ComponentRenderer = (props: Record<string, any> & { attributes: Record<string, any> }, slot: string) => string;
+
+/**
+ * View registry: `filament-forms::components.text-input` resolves to an EJS file; override directories are checked first.
+ * Views may use component tags (`<x-section heading="Orders">…</x-section>`): built-in components, components registered with
+ * `component()`, and EJS files of the directories given to `components()`.
+ */
 export class ViewRegistry {
     private namespaces = new Map<string, string>();
     private overrides: string[] = [];
     private compiled = new Map<string, ejs.TemplateFunction>();
     private shared: Record<string, unknown> = {};
+    private componentRenderers = new Map<string, ComponentRenderer>();
+    private componentDirectories: string[] = [];
+
+    /** Registers a component rendered by a function: `<x-name>` in any view. Registering an existing name replaces it. */
+    component(name: string, renderer: ComponentRenderer): this {
+        if (!/^[A-Za-z0-9_.-]+$/.test(name)) throw new Error(`Invalid component name: ${name}`);
+        this.componentRenderers.set(name, renderer);
+        return this;
+    }
+    /**
+     * Directory of EJS components: `<x-card>` renders `<dir>/card.ejs`, `<x-forms.field>` renders `<dir>/forms/field.ejs`.
+     * The view receives its props, `slot` (the content, already rendered), `slots` (named slots) and `attributes` (HTML attributes).
+     * Directories registered later win, and files win over components registered with `component()`.
+     */
+    components(directory: string | URL): this {
+        this.componentDirectories.unshift(directory instanceof URL ? fileURLToPath(directory) : directory);
+        return this;
+    }
+    hasComponent(name: string): boolean { return this.componentRenderers.has(name) || this.componentFile(name) !== null; }
+    private componentFile(name: string): string | null {
+        if (!/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/.test(name)) return null;
+        for (const dir of this.componentDirectories) { const file = path.join(dir, ...name.split('.')) + '.ejs'; if (existsSync(file)) return file; }
+        return null;
+    }
+    /** Renders a component tag. HTML, Alpine and Livewire attributes go to the attribute bag; the others become camelCased props. */
+    renderComponent(name: string, raw: Record<string, unknown>, slot = '', slots: Record<string, string> = {}): string {
+        const props: Record<string, any> = {};
+        const attributes: Record<string, any> = {};
+        for (const [key, value] of Object.entries(raw)) { if (isHtmlAttribute(key)) attributes[key] = value; else props[camel(key)] = value; }
+        // A slot made of whitespace only (line breaks around named slots) counts as empty.
+        for (const [key, value] of Object.entries(slots)) props[camel(key)] = value.trim() === '' ? '' : value;
+        if (slot.trim() === '') slot = '';
+        const file = this.componentFile(name);
+        if (file) return this.renderFile(file, { ...props, slot, slots, attributes: new Attributes(attributes) });
+        const renderer = this.componentRenderers.get(name);
+        if (!renderer) throw new Error(`Unknown component <x-${name}>: register it with views.component() or views.components(directory).`);
+        return renderer({ ...props, attributes }, slot);
+    }
 
     namespace(name: string, dir: string): this { this.namespaces.set(name, dir); return this; }
     /** Application override directory: `<dir>/<namespace>/<path>.ejs` replaces the package view. */
@@ -415,14 +461,15 @@ export class ViewRegistry {
         if (!base) throw new Error(`Unknown view namespace: ${ns}`);
         return path.join(base, rel);
     }
-    render(view: string, data: Record<string, unknown> = {}): string {
-        let fn = this.compiled.get(view);
+    render(view: string, data: Record<string, unknown> = {}): string { return this.renderFile(this.resolve(view), data, view); }
+    /** Renders an EJS file directly (component files, page views given by path). */
+    renderFile(file: string, data: Record<string, unknown> = {}, cacheKey = file): string {
+        let fn = this.compiled.get(cacheKey);
         if (!fn) {
-            const file = this.resolve(view);
-            fn = ejs.compile(readFileSync(file, 'utf8'), { filename: file });
-            this.compiled.set(view, fn);
+            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file });
+            this.compiled.set(cacheKey, fn);
         }
-        return fn({ e, js, cls, attrs, icon, loadingIndicator, view: (v: string, d?: Record<string, unknown>) => this.render(v, d), ...this.shared, ...data });
+        return fn({ e, js, cls, attrs, icon, loadingIndicator, view: (v: string, d?: Record<string, unknown>) => this.render(v, d), __component: (name: string, props: Record<string, unknown>, slot: string, slots: Record<string, string>) => this.renderComponent(name, props, slot, slots), ...this.shared, ...data });
     }
 }
 export const views = new ViewRegistry();

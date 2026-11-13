@@ -24,7 +24,7 @@ import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNot
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
-import { emptyState } from '@navette-js/support/ui';
+import { emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import type { DataAdapter } from '@navette-js/database';
 import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
@@ -794,7 +794,20 @@ export class Page extends BasePage {
         return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
     }
     /** Page content: its `content` schema by default. */
-    protected async renderContent(): Promise<string> { return (await this.getSchema('content')).toHtml(); }
+    /**
+     * Content rendered from an EJS view instead of the `content` schema: a namespaced view (`'app::pages.report'`), or a file
+     * (path or `new URL('./report.ejs', import.meta.url)`). The view receives `page` (this page) and `getViewData()`, and may use
+     * component tags (`<x-section>`, `<x-button>`…). Elements calling the server use `wire:click` on a method listed in `static callable`.
+     */
+    static view: string | URL | null = null;
+    /** Extra variables for the page view. */
+    getViewData(): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
+    protected async renderContent(): Promise<string> {
+        const view = (this.constructor as typeof Page).view;
+        if (view === null) return (await this.getSchema('content')).toHtml();
+        const data = { page: this, livewireId: this.id, ...(await this.getViewData()) };
+        return typeof view === 'string' && view.includes('::') ? views.render(view, data) : views.renderFile(view instanceof URL ? fileURLToPath(view) : view, data);
+    }
 
     // --- mounted actions: the stack lives in the component state, modals are rendered server-side
     mountedActions: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }[] = [];
@@ -2529,7 +2542,11 @@ export class ListRecords extends Page implements TableHost {
         return {};
     }
     protected async resolveActionRecord(context: Record<string, unknown>): Promise<unknown> {
-        return typeof context.recordKey === 'string' ? ((await this.resource.adapter.find(context.recordKey)) ?? null) : null;
+        if (typeof context.recordKey !== 'string') return null;
+        const adapter = this.resource.adapter;
+        // The trashed filter shows deleted records: their row actions must find them, no other key is reachable this way.
+        if (trashedFilterValue(this) !== null && adapter.findWithTrashed) return (await adapter.findWithTrashed(context.recordKey)) ?? null;
+        return (await adapter.find(context.recordKey)) ?? null;
     }
     /**
      * Writes an editable cell. Everything comes from the browser: the column must exist and be editable and visible, the record
@@ -2698,7 +2715,13 @@ export class RelationManager extends ListRecords {
             getPluralModelLabel: () => manager.pluralModelLabel ?? plural(manager.modelLabel),
             getTitleCasePluralModelLabel: () => (manager.pluralModelLabel ?? plural(manager.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (manager.recordTitleAttribute ? String(record?.[manager.recordTitleAttribute] ?? '') : manager.modelLabel),
-            table: (table: Table) => manager.table(table), form: (schema: Schema) => manager.form(schema.columns(2)), getUrl: () => '',
+            table: (table: Table) => manager.table(table), getUrl: () => '',
+            form: (schema: Schema) => {
+                const form = manager.form(schema.columns(2));
+                const pivot = manager.pivotForm(form);
+                return pivot.length ? form.components([...form.getComponents(), ...pivot]) : form;
+            },
+            pivotFieldNames: () => manager.pivotForm(Schema.make(this)).filter((component): component is Field => component instanceof Field).map((field) => field.getName()),
         });
     }
     getTable(): Table {
@@ -2709,8 +2732,16 @@ export class RelationManager extends ListRecords {
         return hasEdit ? table.recordAction('edit') : table;
     }
     // --- many-to-many: to be defined by managers offering Attach / Detach
-    /** Attaches an existing record to the owner. */
-    static attach(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('RelationManager.attach() must be defined.'); }
+    /** Attaches an existing record to the owner; `pivot` holds the values of the `pivotForm()` fields. */
+    static attach(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown> = {}): Promise<void> { throw new Error('RelationManager.attach() must be defined.'); }
+    /**
+     * Fields stored on the pivot table (a role, a quantity…): added to the attach modal and to the edit form of a row.
+     * Their values go to `attach()` and `updatePivot()`, never to the related record. List the pivot columns in the
+     * relation's query (`adapterFor()`) so that the table and the edit form can read them.
+     */
+    static pivotForm(_schema: Schema): SchemaComponent[] { return []; }
+    /** Saves the pivot fields of an attached record (edit form of a row). */
+    static updatePivot(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown>): Promise<void> { throw new Error('RelationManager.updatePivot() must be defined when pivotForm() returns fields.'); }
     /** Detaches records from the owner without deleting them. */
     static detach(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('RelationManager.detach() must be defined.'); }
     /** Attachable records matching the search: [key, label]. */
@@ -3075,7 +3106,14 @@ export class EditAction {
             .fillForm(({ record }) => ({ ...record }))
             .action(async (ctx) => {
                 const adapter = of(ctx.livewire).adapter;
-                const saved = await adapter.update(adapter.getKey(ctx.record), ctx.data);
+                const pivotNames: string[] = of(ctx.livewire).pivotFieldNames?.() ?? [];
+                let data = ctx.data;
+                if (pivotNames.length) {
+                    const pivot = Object.fromEntries(Object.entries(data ?? {}).filter(([name]) => pivotNames.includes(name)));
+                    data = Object.fromEntries(Object.entries(data ?? {}).filter(([name]) => !pivotNames.includes(name)));
+                    await managerOf(ctx.livewire).updatePivot(ctx.livewire.ownerRecord, adapter.getKey(ctx.record), pivot);
+                }
+                const saved = Object.keys(data ?? {}).length ? await adapter.update(adapter.getKey(ctx.record), data) : ctx.record;
                 await saveSchemaRelationships(ctx.schema, saved ?? ctx.record);
                 await finishAction(ctx.action!, ctx, t('filament-actions::edit.single.notifications.saved.title'));
             });
@@ -3109,10 +3147,12 @@ export class AttachAction {
                 const livewire = schema.livewire as any;
                 return [Select.make('recordId').label(t('filament-actions::attach.single.modal.fields.record_id.label')).hiddenLabel().required()
                     .getSearchResultsUsing((search) => managerOf(livewire).searchAttachable(livewire.ownerRecord, search))
-                    .getOptionLabelUsing((value) => managerOf(livewire).attachableLabel(livewire.ownerRecord, value))];
+                    .getOptionLabelUsing((value) => managerOf(livewire).attachableLabel(livewire.ownerRecord, value)),
+                    ...managerOf(livewire).pivotForm(schema)];
             })
             .action(async ({ livewire, data }) => {
-                await managerOf(livewire).attach(livewire.ownerRecord, String(data.recordId));
+                const { recordId, ...pivot } = data ?? {};
+                await managerOf(livewire).attach(livewire.ownerRecord, String(recordId), pivot);
                 Notification.make().success().title(t('filament-actions::attach.single.notifications.attached.title')).send();
             });
     }
@@ -3200,17 +3240,24 @@ export class DissociateBulkAction {
 }
 
 /** Restores a soft-deleted record. Only visible when the record is deleted. */
+/** Restores a soft-deleted record: the page's record, or a table row. Only visible when the record is deleted. */
 export class RestoreAction {
     static make(): Action {
-        return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restore', record))
-            .label(t('filament-actions::restore.single.label')).color('gray')
+        return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restore', record ?? (livewire as any)._record))
+            .label(t('filament-actions::restore.single.label')).color('gray').tableIcon('c-arrow-uturn-left').groupedIcon('m-arrow-uturn-left')
             .requiresConfirmation().modalIcon('o-arrow-uturn-left')
-            .hidden(({ livewire }) => !(livewire as any).getDataAdapter().isTrashed((livewire as any)._record))
-            .modalHeading(({ livewire }) => t('filament-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(livewire._record) }))
+            .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
+            .modalHeading(({ livewire, record }) => t('filament-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::restore.single.modal.actions.restore.label'))
             .action(async (ctx) => {
-                await ctx.livewire.getDataAdapter().restore(ctx.livewire.recordKey);
-                await ctx.livewire.hydrate();
+                const { livewire, record } = ctx;
+                const adapter = livewire.getDataAdapter();
+                if (typeof livewire.getTable === 'function') {
+                    await adapter.restore(adapter.getKey(record));
+                } else {
+                    await adapter.restore(livewire.recordKey);
+                    await livewire.hydrate();
+                }
                 await finishAction(ctx.action!, ctx, t('filament-actions::restore.single.notifications.restored.title'));
             });
     }
@@ -3218,15 +3265,18 @@ export class RestoreAction {
 /** Permanently deletes a soft-deleted record. Only visible when the record is deleted. */
 export class ForceDeleteAction {
     static make(): Action {
-        return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDelete', record))
-            .label(t('filament-actions::force-delete.single.label')).color('danger')
+        return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDelete', record ?? (livewire as any)._record))
+            .label(t('filament-actions::force-delete.single.label')).color('danger').tableIcon('c-trash').groupedIcon('m-trash')
             .requiresConfirmation().modalIcon('o-trash')
-            .hidden(({ livewire }) => !(livewire as any).getDataAdapter().isTrashed((livewire as any)._record))
-            .modalHeading(({ livewire }) => t('filament-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(livewire._record) }))
+            .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
+            .modalHeading(({ livewire, record }) => t('filament-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::force-delete.single.modal.actions.delete.label'))
             .action(async (ctx) => {
-                await ctx.livewire.getDataAdapter().forceDelete(ctx.livewire.recordKey);
-                await finishAction(ctx.action!, ctx, t('filament-actions::force-delete.single.notifications.deleted.title'), ctx.livewire.resource.getUrl());
+                const { livewire, record } = ctx;
+                const adapter = livewire.getDataAdapter();
+                const inTable = typeof livewire.getTable === 'function';
+                await adapter.forceDelete(inTable ? adapter.getKey(record) : livewire.recordKey);
+                await finishAction(ctx.action!, ctx, t('filament-actions::force-delete.single.notifications.deleted.title'), inTable ? null : livewire.resource.getUrl());
             });
     }
 }
@@ -3650,6 +3700,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     useFormsColorManager(sharedColors);
     useTableColorManager(sharedColors);
     useInfolistsColorManager(sharedColors);
+    // View components (<x-badge>, <x-button>…) use the same colors.
+    useUiColorManager(sharedColors);
     // HTML rendered by an infolist entry is sanitized through the rich editor schema, which only keeps its own tags.
     useHtmlSanitizer((html) => richDocumentToHtml(richHtmlToDocument(html)) ?? '');
     views.share({ assetUrl: (file: string) => panel.assetUrl(file) });

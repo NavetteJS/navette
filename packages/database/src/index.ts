@@ -41,6 +41,8 @@ export interface DataAdapter<T = any> {
     count(): Promise<number>;
     paginate(query: ListQuery): Promise<Page<T>>;
     find(key: string | number): Promise<T | null>;
+    /** Like `find()`, soft-deleted records included (tables that show deleted records). Optional. */
+    findWithTrashed?(key: string | number): Promise<T | null>;
     create(data: Record<string, unknown>): Promise<T>;
     update(key: string | number, data: Record<string, unknown>): Promise<T | null>;
     delete(key: string | number): Promise<boolean>;
@@ -210,6 +212,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     }
 
     async find(key: string | number): Promise<M | null> { return ((await this.base(this.findsTrashed ? 'with' : 'without').findById(key)) as M | undefined) ?? null; }
+    async findWithTrashed(key: string | number): Promise<M | null> { return ((await this.base('with').findById(key)) as M | undefined) ?? null; }
     async create(data: Record<string, unknown>): Promise<M> {
         const tenantKey = this.tenantScope?.key() ?? null;
         return (await this.model.query().insertAndFetch((tenantKey !== null ? { ...data, [this.tenantScope!.column]: tenantKey } : data) as any)) as unknown as M;

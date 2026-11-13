@@ -109,6 +109,8 @@ async toHtml(): Promise<string> {
 }
 ```
 
+The view may use [UI components](/components/overview) (`<x-section>`, `<x-badge>`…). You may also render a [view component](/components/creating-components) directly, with its attributes and, optionally, its slot as third argument: `views.renderComponent('chart', { heading: 'Sales' })`.
+
 ### Adding a configuration method to a custom component class
 
 You may add a public method to the custom component class that accepts a configuration value, stores it in a property, and returns the component:
@@ -339,5 +341,5 @@ export class Chart extends Component {
 ```
 
 <Aside variant="warning">
-Rendering components with JavaScript frameworks (`JsComponent`), inserting a nested Livewire component, and a command that generates a custom component are not available yet.
+Rendering components with JavaScript frameworks (`JsComponent`) and inserting a nested Livewire component are not available yet. There is no command that generates a component class, but `npx navette make:component` generates a [view component](/components/creating-components) that your class can render.
 </Aside>

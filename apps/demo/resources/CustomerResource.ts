@@ -3,7 +3,7 @@ import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database'
 import { Action } from '@navette-js/actions';
 import { DatePicker, RichEditor, Select, TextInput, ToggleButtons } from '@navette-js/forms';
 import { TextEntry } from '@navette-js/infolists';
-import { AttachAction, CreateAction, DeleteAction, DeleteBulkAction, DetachAction, DetachBulkAction, EditAction, Notification, RelationManager, Resource } from '@navette-js/panels';
+import { AttachAction, CreateAction, DeleteAction, DeleteBulkAction, DetachAction, DetachBulkAction, EditAction, ForceDeleteAction, Notification, RelationManager, Resource, RestoreAction } from '@navette-js/panels';
 import { diffForHumans } from '@navette-js/support/i18n';
 import { Section, type Schema } from '@navette-js/schemas';
 import { ColumnGroup, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
@@ -258,6 +258,9 @@ export class CustomerResource extends Resource {
             .recordActions([
                 sendEmail(),
                 Action.make('edit').label('Edit').tableIcon('c-pencil-square').url(({ record }) => CustomerResource.getUrl('edit', (record as Customer).id)),
+                // Shown only on deleted customers ("With deleted records" filter).
+                RestoreAction.make(),
+                ForceDeleteAction.make(),
             ])
             .filters([TrashedFilter.make()]);
     }

@@ -71,3 +71,89 @@ Properties whose name starts with `_` stay on the server; `locked` keeps the bro
 <Aside variant="warning">
 A free page cannot appear in the record sub-navigation of a resource (`recordSubNavigation` only accepts the View, Edit and related-records pages).
 </Aside>
+
+## Rendering a page with a view
+
+The content of a page is a [schema](/schemas/overview) by default. For a screen that schemas do not describe well, such as a report, a dashboard of your own or a guided tour, render the content with an EJS view instead. Set the static `view` property to the file of the view, and return its variables from `getViewData()`:
+
+```ts
+import { Page } from '@navette-js/panels';
+
+export class SalesReport extends Page {
+    static slug = 'sales-report';
+    static title = 'Sales report';
+    static navigationIcon = 'o-chart-bar';
+    static view = new URL('./sales-report.ejs', import.meta.url);
+    static callable = ['setPeriod'];
+
+    period = 'week';
+
+    setPeriod(period: unknown): void {
+        // The argument comes from the browser.
+        if (period === 'week' || period === 'month') this.period = period;
+    }
+
+    async getViewData() {
+        // `period` is a public property: the browser may send any value.
+        const days = this.period === 'month' ? 30 : 7;
+        const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+
+        return { days, orders: await Order.query().where('created_at', '>=', since).orderBy('created_at', 'desc') };
+    }
+}
+```
+
+The view sits next to the class, in `src/admin/pages/sales-report.ejs`. It may use the [UI components](/components/overview) of Navette and your own:
+
+```html
+<x-section heading="Orders" :description="'Placed in the last ' + days + ' days'">
+    <x-slot name="after-header">
+        <x-button size="sm" :color="page.period === 'week' ? 'primary' : 'gray'" wire:click="setPeriod('week')">Week</x-button>
+        <x-button size="sm" :color="page.period === 'month' ? 'primary' : 'gray'" wire:click="setPeriod('month')">Month</x-button>
+    </x-slot>
+
+    <% if (orders.length === 0) { %>
+        <x-empty-state heading="No orders" icon="o-shopping-bag" :contained="false" />
+    <% } else { %>
+        <ul>
+            <% for (const order of orders) { %>
+                <li>
+                    <%= order.number %>
+                    <x-badge :color="order.paid ? 'success' : 'warning'"><%= order.paid ? 'Paid' : 'Unpaid' %></x-badge>
+                </li>
+            <% } %>
+        </ul>
+    <% } %>
+</x-section>
+```
+
+The view receives:
+
+| Variable | Content |
+| --- | --- |
+| `page` | The page instance: its public properties and its methods (`page.period`, `page.getTitle()`) |
+| `livewireId` | The id of the page component, for the [`livewire-id` of a modal](/components/modal#using-a-modal-in-a-page) or the `id` of a [pagination](/components/other#pagination) |
+| The keys of `getViewData()` | Your variables. `getViewData()` may be asynchronous |
+
+The view replaces the content schema only: the heading, breadcrumbs, header actions and widgets of the page are rendered as usual. The view is rendered again after every request of the page, so it always shows the current state. A `Dashboard` renders its widgets: `view` has no effect on it.
+
+`view` may also be a path, or the name of a namespaced view. Register the namespace once when your application starts, then give the name:
+
+```ts
+import { fileURLToPath } from 'node:url';
+import { views } from '@navette-js/support';
+
+views.namespace('app', fileURLToPath(new URL('./views', import.meta.url)));
+
+class SalesReport extends Page {
+    static view = 'app::pages.sales-report'; // views/pages/sales-report.ejs
+}
+```
+
+### Calling the page from the view
+
+Elements of the view call methods of the page with `wire:click`, like in the example above. Only the methods named in `callable` can be called; the arguments come from the browser, so check them in the method. A method that changes a public property makes the page render again with the new value. See [security](/advanced/security#restricting-the-methods-callable-from-the-browser).
+
+<Aside variant="danger">
+Print values with `<%= %>`, which escapes them. `<%- %>` prints HTML as it is: use it only for HTML that you built and escaped yourself. See [escaping and security](/components/overview#escaping-and-security).
+</Aside>

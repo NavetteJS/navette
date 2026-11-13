@@ -43,9 +43,21 @@ class EditProject extends EditRecord {
 }
 ```
 
-<Aside variant="warning">
-`ForceDeleteAction` works in the header of an edit or view page only, not in table rows, and there is no `ForceDeleteBulkAction` yet.
-</Aside>
+## Using ForceDeleteAction in a table
+
+In a table that shows deleted records — with a [`TrashedFilter`](/tables/filters/ternary) — add it to the row actions: it is only shown on the deleted rows. To act on several records at once, use its bulk version:
+
+```ts
+import { ForceDeleteAction, ForceDeleteBulkAction } from '@navette-js/panels';
+import { TrashedFilter } from '@navette-js/tables';
+
+table
+    .filters([TrashedFilter.make()])
+    .recordActions([ForceDeleteAction.make()])
+    .groupedBulkActions([ForceDeleteBulkAction.make()])
+```
+
+A row action finds deleted records only while the trashed filter shows them: a key sent by the browser for any other record is refused. The bulk action checks the `forceDelete` ability on each selected record.
 
 ## Lifecycle hooks
 

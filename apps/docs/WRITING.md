@@ -53,7 +53,8 @@ TextInput.make('name').label('Full name').required()
 
 - When several packages export the same name, the schema component keeps it (`Group`, `Grid`, `Tab`…) and the `@navette-js/tables` export gets a `Table` prefix: `TableGroup` for table grouping, and likewise for any other tables class whose name is taken (`TableGrid`, `TablePanel`…). The list tab of `@navette-js/panels` is `ListTab`. Do not redeclare a name that is already in scope (`const { Block } = …` fails).
 - The code is plain **JavaScript** (no type annotations, no generics, no `import`): every export of the `@navette-js/*` packages is in scope (`TextInput`, `Section`, `TextEntry`, `TextColumn`, `Action`, `Table`…).
-- It is one expression — a component, an array of components, an action, an array of actions, a table, or an array of `Stat` (stats overview) — or a function body ending with `return …`.
+- It is one expression — a component, an array of components, an action, an array of actions, a table, an array of `Stat` (stats overview), or HTML returned by `template()` — or a function body ending with `return …`.
+- `template(source, data)` renders an EJS view, written to a file and rendered by `views.renderFile()` like a view of the application: [component tags](content/13-components/01-overview.md) (`<x-button>`, `<x-section>`…) work, and `data` gives the view its variables. Use it to preview UI components: ``template(`<x-badge color="success">Published</x-badge>`)``. The source is a JavaScript template literal: do not use `${` or backticks in it.
 - Optional directives, as the first lines:
   - `// state: {...}` — values shown in the form fields (JSON).
   - `// record: {...}` — the record displayed by infolist entries (JSON). Without it, components are rendered as a form.

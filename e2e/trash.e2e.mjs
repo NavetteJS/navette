@@ -81,6 +81,55 @@ await step('"Delete" then "Force delete": the record is gone from the database',
     await page.locator('.fi-no-notification-title', { hasText: 'Deleted' }).waitFor({ timeout: 5000 });
     assert.equal(row(trashed), undefined);
 });
+const rowTrashed = insert.run('Navette Row Binned', 'navette.test.rowbinned@example.test', '2026-01-02 00:00:00').lastInsertRowid;
+const filters = page.locator('.fi-ta-filters');
+const showDeleted = async () => {
+    await page.goto(`${BASE}/shop/customers`);
+    await page.waitForTimeout(500);
+    if (!(await filters.isVisible())) await page.locator('.fi-ta-filters-dropdown .fi-dropdown-trigger button').click();
+    await filters.waitFor({ state: 'visible', timeout: 3000 });
+    await filters.locator('select').selectOption({ label: 'Only deleted records' });
+    await page.waitForTimeout(200);
+    await filters.locator('button', { hasText: 'Apply filters' }).click();
+    await page.locator('tr', { hasText: 'Navette Row Binned' }).waitFor({ timeout: 10000 });
+};
+const rowAction = async (label) => {
+    await page.locator('tr', { hasText: 'Navette Row Binned' }).locator('.fi-ac-link-action', { hasText: label }).click();
+    const modal = page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+    await modal.waitFor({ state: 'visible', timeout: 5000 });
+    const heading = (await modal.locator('.fi-modal-heading').innerText()).trim();
+    await modal.locator('.fi-modal-footer button[type=submit]').click();
+    return heading;
+};
+await step('table row: "Restore" and "Force delete" only on deleted customers', async () => {
+    await page.goto(`${BASE}/shop/customers`);
+    assert.equal(await page.locator('.fi-ta-row .fi-ac-link-action', { hasText: 'Restore' }).count(), 0);
+    await showDeleted();
+    const actions = await page.locator('tr', { hasText: 'Navette Row Binned' }).locator('.fi-ac-link-action').allInnerTexts();
+    assert.ok(actions.map((a) => a.trim()).includes('Restore') && actions.map((a) => a.trim()).includes('Force delete'), actions.join(', '));
+});
+await step('table row "Restore": confirmation, notification, the customer is back', async () => {
+    assert.equal(await rowAction('Restore'), 'Restore Navette Row Binned');
+    await page.locator('.fi-no-notification-title', { hasText: 'Restored' }).waitFor({ timeout: 5000 });
+    assert.equal(row(rowTrashed).deleted_at, null);
+});
+await step('a forged row call cannot restore or force-delete a live customer', async () => {
+    await page.goto(`${BASE}/shop/customers`);
+    const status = await page.evaluate(async (key) => {
+        const component = Livewire.all().find((c) => c.name.includes('customers') || c.el.querySelector('.fi-ta'));
+        const response = await fetch('/livewire/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ _token: document.querySelector('[data-csrf]').dataset.csrf, components: [{ snapshot: component.snapshotEncoded, updates: {}, calls: [{ method: 'mountAction', params: ['forceDelete', {}, { table: true, recordKey: String(key) }], metadata: {} }] }] }) });
+        return response.status;
+    }, rowTrashed);
+    assert.equal(status, 403);
+    assert.ok(row(rowTrashed), 'the live customer must still exist');
+});
+await step('table row "Force delete": the deleted customer is gone from the database', async () => {
+    db.prepare("update customers set deleted_at = '2026-01-03 00:00:00' where id = ?").run(rowTrashed);
+    await showDeleted();
+    assert.equal(await rowAction('Force delete'), 'Force delete Navette Row Binned');
+    await page.locator('.fi-no-notification-title', { hasText: 'Deleted' }).waitFor({ timeout: 5000 });
+    assert.equal(row(rowTrashed), undefined);
+});
 await browser.close();
 db.close();
 process.exit(exitCode(errors));

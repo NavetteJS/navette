@@ -58,7 +58,7 @@ ViewColumn.make<Project>('progress')
     .view('app::columns.progress', { unit: 'done' })
 ```
 
-The second argument of `view()` is extra data passed to the view.
+The second argument of `view()` is extra data passed to the view. The view may use [UI components](/components/overview), such as `<x-badge>`.
 
 ### Accessing the state of the column in the view
 
@@ -114,6 +114,12 @@ export class ProgressColumn<R = any> extends Column<R> {
 `getState()` returns the state of the column, taking [`getStateUsing()`](/tables/columns/overview#setting-the-state-of-a-column) into account. Wrapping the new instance in `configured()` applies the [global settings](/tables/columns/overview#global-settings) registered with `ProgressColumn.configureUsing()`.
 
 The same escaping rules apply: `toHtml()` returns raw HTML.
+
+The CLI generates such a class in `src/columns`, with a `toHtml()` that prints the state escaped. The command never overwrites an existing file, unless you pass `--force`:
+
+```bash
+npx navette make:column ProgressColumn
+```
 
 ### Adding a configuration method to a custom column class
 

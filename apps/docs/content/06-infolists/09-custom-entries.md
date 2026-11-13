@@ -110,6 +110,14 @@ import { AudioPlayerEntry } from './entries/AudioPlayerEntry.ts';
 AudioPlayerEntry.make('recording')
 ```
 
+The CLI generates such a class in `src/entries`, ready to edit, with a `toHtml()` that prints the state escaped:
+
+```bash
+npx navette make:entry AudioPlayerEntry
+```
+
+The command never overwrites an existing file, unless you pass `--force`.
+
 Your entry inherits the features shared by all entries: `label()`, `hiddenLabel()`, `inlineLabel()`, `state()`, `default()`, `url()`, `alignment()`, the [extra content slots](/infolists/overview#adding-extra-content-to-an-entry), `hidden()`, `visible()`, `hiddenJs()`, `columnSpan()`… `this.wrap()` renders the label, the slots and the link around your content. `configured()` applies the [global settings](/infolists/overview#global-settings) registered with `AudioPlayerEntry.configureUsing()`.
 
 <Aside variant="info">

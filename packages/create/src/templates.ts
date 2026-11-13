@@ -493,6 +493,7 @@ export class NoteResource extends Resource {
 import express from 'express';
 import { mkdirSync } from 'node:fs';
 import { discoverPanels, panelRouter } from '@navette-js/panels';
+import { views } from '@navette-js/support';
 ${o.locale === 'fr' ? "import { setLocale } from '@navette-js/support/i18n';\n" : ''}import { UploadStore, WireRuntime } from '@navette-js/wire';
 import { migrate } from './database.ts';
 
@@ -501,6 +502,8 @@ if (!key) throw new Error('APP_KEY is missing: start the server with \`npm run d
 ${o.locale === 'fr' ? "setLocale('fr');\n" : ''}mkdirSync('storage/public', { recursive: true });
 
 for (const name of await migrate()) console.log(\`Migrated \${name}\`);
+// View components: <x-name> in any view renders src/components/name.ejs (\`npx navette make:component name\`).
+views.components(new URL('./components/', import.meta.url));
 
 const app = express();
 // Uploaded files that are public (FileUpload with the public disk).

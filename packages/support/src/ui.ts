@@ -256,6 +256,8 @@ export function tabs(props: { label?: string | null; vertical?: boolean; contain
 export type DropdownItem = {
     label: string; icon?: string | null; color?: string; iconColor?: string | null; image?: string | null; badge?: string | number | null; badgeColor?: string;
     tag?: 'button' | 'a'; href?: string | null; disabled?: boolean; attributes?: Attrs;
+    /** Label as HTML already escaped (the content of a `<x-dropdown-item>` tag), used instead of `label`. */
+    labelHtml?: string | null;
 };
 /** Dropdown menu item. */
 export function dropdownItem(item: DropdownItem): string {
@@ -270,7 +272,7 @@ export function dropdownItem(item: DropdownItem): string {
     const iconColor = item.iconColor ?? (color !== 'gray' ? color : null);
     const lead = item.icon ? icon(item.icon, { attributes: new Attributes().class(colorMark(iconColor)) }) : item.image ? `<div class="fi-dropdown-list-item-image" style="background-image: url('${e(item.image)}')"></div>` : '';
     const badgeHtml = item.badge !== null && item.badge !== undefined ? `<span class="${cls([...colorsOf('badge', item.badgeColor ?? 'primary'), 'fi-badge'])}">${e(String(item.badge))}</span>` : '';
-    return `<${tag} ${attributes.toHtml()}>${lead}<span class="fi-dropdown-list-item-label">${e(item.label)}</span>${badgeHtml}</${tag}>`;
+    return `<${tag} ${attributes.toHtml()}>${lead}<span class="fi-dropdown-list-item-label">${item.labelHtml ?? e(item.label)}</span>${badgeHtml}</${tag}>`;
 }
 /** List of dropdown menu items. */
 export function dropdownList(items: DropdownItem[]): string { return `<div class="fi-dropdown-list">${items.map(dropdownItem).join('')}</div>`; }
@@ -320,6 +322,38 @@ export function modal(props: ModalProps, slot = ''): string {
         .class(['fi-modal', { 'fi-absolute-positioning-context': !props.slideOver, 'fi-modal-slide-over': props.slideOver === true, 'fi-modal-has-sticky-header': props.stickyHeader === true, 'fi-modal-has-sticky-footer': props.stickyFooter === true }]);
     return `<div ${outer.toHtml()}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div><div${trapOnWindow ? '' : ' tabindex="-1"'}${closeByClickingAway ? ` x-on:click.self="${e(close)}"` : ''}${trapOnWindow ? '' : ' x-trap.noreturn="isTrapActive"'} class="${cls(['fi-modal-window-ctn', { 'fi-clickable': closeByClickingAway }])}"><div${closeByEscaping ? ` x-on:keydown.window.escape="if (isTopmost()) ${e(close)}"` : ''} x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:key="${e(key('window'))}"${trapOnWindow ? ' x-trap.noreturn="isTrapActive" tabindex="0"' : ''} class="${windowClasses}">${header}${content}${footer}</div></div></div>`;
 }
+
+// ------------------------------------------------------------------ component tags
+// Built-in components for EJS views: `<x-button color="danger">Delete</x-button>`, `<x-section heading="Orders">…</x-section>`.
+// The default slot is HTML already rendered by the template; props from `name="text"` are plain strings and are escaped by the components.
+const withSlot = (render: (props: any, slot: string) => string) => (props: any, slot: string) => render(props, slot);
+views
+    .component('avatar', (props) => avatar(props as any))
+    // A badge rendered as a link takes its `href` from the tag.
+    .component('badge', (props, slot) => badge({ ...props, attributes: { ...props.attributes, href: props.href ?? props.attributes?.href } }, slot))
+    .component('breadcrumbs', (props) => breadcrumbs(props.items ?? [], props.label))
+    .component('button', withSlot(button))
+    .component('callout', (props, slot) => callout({ ...props, footer: props.footer ?? (slot || null) }))
+    // Every prop other than `checked` and `valid` is an attribute of the input (`name`, `value`, `disabled`…).
+    .component('checkbox', ({ checked, valid, attributes, ...rest }) => checkbox({ checked, valid, attributes: { ...rest, ...attributes } }))
+    .component('dropdown', withSlot(dropdown))
+    .component('dropdown-list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="fi-dropdown-list">${slot}</div>`))
+    .component('dropdown-item', (props, slot) => dropdownItem({ ...props, label: props.label ?? '', labelHtml: props.label === undefined ? slot.trim() : null } as DropdownItem))
+    .component('empty-state', (props, slot) => emptyState({ ...props, footer: props.footer ?? (slot || null) } as EmptyStateProps))
+    .component('fieldset', withSlot(fieldset))
+    .component('icon', (props) => icon(props.name ?? props.icon, { size: props.size, attributes: new Attributes(props.attributes) }))
+    .component('icon-button', (props) => iconButton(props as IconButtonProps))
+    .component('input', (props) => input({ ...props.attributes, ...Object.fromEntries(Object.entries(props).filter(([key]) => key !== 'attributes')) }))
+    .component('input-wrapper', withSlot(inputWrapper))
+    .component('link', withSlot(link))
+    .component('loading-indicator', (props) => loadingIndicator(new Attributes(props.attributes), props.size))
+    // `id` is an HTML attribute name, so it lands in the attribute bag: these two components need it as a prop.
+    .component('modal', (props, slot) => modal({ ...props, id: props.id ?? props.attributes?.id } as ModalProps, slot))
+    .component('pagination', (props) => pagination({ ...props, id: props.id ?? props.attributes?.id } as PaginationProps))
+    .component('section', withSlot(section))
+    .component('select', (props, slot) => select({ ...props.attributes, ...Object.fromEntries(Object.entries(props).filter(([key]) => key !== 'attributes')) }, slot))
+    .component('spinner', (props) => spinner(props.attributes))
+    .component('tabs', (props) => tabs(props as any, props.items ?? []));
 
 export const ui = { avatar, badge, breadcrumbs, button, callout, checkbox, dropdown, dropdownItem, dropdownList, emptyState, fieldset, iconButton, input, inputWrapper, link, modal, pagination, section, select, spinner, tabs };
 export { cls, e, js, loadingIndicator };

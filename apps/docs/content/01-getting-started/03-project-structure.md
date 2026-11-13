@@ -19,6 +19,10 @@ my-app/
     ├── database.ts           database connection and migration runner
     ├── migrations/           one file per database change, run at start-up
     ├── models/               Objection.js models (Task.ts, User.ts…)
+    ├── components/           view components: <x-name> renders components/name.ejs
+    ├── fields/               custom form fields (npx navette make:field)
+    ├── entries/              custom infolist entries (npx navette make:entry)
+    ├── columns/              custom table columns (npx navette make:column)
     ├── panels/
     │   ├── admin.ts          the admin panel (/admin)
     │   └── app.ts            the user panel (/app), if you chose it
@@ -35,6 +39,8 @@ my-app/
 
 The blank template has the same layout with only the admin panel: a users resource, a dashboard and no widgets yet.
 
+The `components`, `fields`, `entries` and `columns` folders are created by the [generators](/getting-started/cli) the first time you use them. Fields, entries and columns are classes that you import where you use them; components are EJS files used as tags in your views (see [creating components](/components/creating-components)).
+
 ## The server
 
 `src/server.ts` runs the pending migrations, then mounts every panel found in `src/panels`:
@@ -49,6 +55,14 @@ for (const panel of await discoverPanels(new URL('./panels/', import.meta.url)))
 ```
 
 `discoverPanels()` imports every module of the folder and keeps the panels they export (as their default export). Each panel gets its own `WireRuntime`.
+
+Before that, the server registers `src/components` as the directory of the view components, so that `<x-card>` in a view renders `src/components/card.ejs`:
+
+```ts
+import { views } from '@navette-js/support';
+
+views.components(new URL('./components/', import.meta.url));
+```
 
 The `package.json` scripts start it:
 

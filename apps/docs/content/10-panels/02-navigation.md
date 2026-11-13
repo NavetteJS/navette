@@ -43,6 +43,8 @@ import { Dashboard } from '@navette-js/panels';
 panel.pages([Dashboard, StatusPage]);
 ```
 
+Instead of a schema, the content may be an EJS view with [UI components](/components/overview): see [rendering a page with a view](/resources/custom-pages#rendering-a-page-with-a-view). Run `npx navette make:page Settings` to generate a page class.
+
 You may also override `getHeading()`, `getBreadcrumbs()`, `getHeaderActions()`, `getHeaderWidgets()` and `getFooterWidgets()` on a page.
 
 A page is a stateful component: its public properties (those whose name does not start with `_`) travel between the browser and the server. Its methods can only be called from the browser if you name them in `callable`:

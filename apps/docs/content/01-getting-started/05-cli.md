@@ -4,7 +4,7 @@ title: CLI reference
 
 ## Introduction
 
-Projects created with `npm create navette` include the `navette` command (package `@navette-js/cli`). It runs migrations, creates users, and generates resources, pages, widgets and migrations. Run it from the root of the project:
+Projects created with `npm create navette` include the `navette` command (package `@navette-js/cli`). It runs migrations, creates users, and generates resources, pages, widgets, migrations, custom fields, entries and columns, and view components. Run it from the root of the project:
 
 ```bash
 npx navette make:resource Post --generate
@@ -25,6 +25,9 @@ Generators never overwrite an existing file: they stop with an error. Add `--for
 | `navette make:page <Name>` | Creates a custom page |
 | `navette make:widget <Name>` | Creates a dashboard widget |
 | `navette make:field <Name>` | Creates a custom form field in `src/fields` |
+| `navette make:entry <Name>` | Creates a custom infolist entry in `src/entries` |
+| `navette make:column <Name>` | Creates a custom table column in `src/columns` |
+| `navette make:component <name>` | Creates a view component in `src/components`, used as `<x-name>` |
 
 ## Running migrations
 
@@ -128,3 +131,27 @@ Creates `src/admin/widgets/SalesChart.ts`. The dashboard of the panel displays i
 | `table` | A table widget. See [table widgets](/widgets/table-widgets) |
 
 Use `--panel=app` for the user panel.
+
+## Generating a custom field, entry or column
+
+```bash
+npx navette make:field RatingInput
+npx navette make:entry AudioPlayerEntry
+npx navette make:column ProgressColumn
+```
+
+| Command | File | Class |
+| --- | --- | --- |
+| `make:field` | `src/fields/<Name>.ts` | A form field that extends `Field`, with an Alpine.js control bound to its state and a validation rule. See [custom fields](/forms/custom-fields) |
+| `make:entry` | `src/entries/<Name>.ts` | An infolist entry that extends `ViewEntry` and prints its state, escaped. See [custom entries](/infolists/custom-entries) |
+| `make:column` | `src/columns/<Name>.ts` | A table column that extends `Column` and prints its state, escaped. See [custom columns](/tables/columns/custom-columns) |
+
+The name is converted to PascalCase. These classes are not discovered: import them where you use them, `ProgressColumn.make('progress')`.
+
+## Generating a view component
+
+```bash
+npx navette make:component stat-card
+```
+
+Creates `src/components/stat-card.ejs`, a component that you can use in any view as `<x-stat-card>`. The generated server registers `src/components` with `views.components()`. A dot in the name is a folder: `make:component forms.hint` creates `src/components/forms/hint.ejs`, used as `<x-forms.hint>`. The name is converted to lowercase words separated by hyphens (`StatCard` becomes `stat-card`). See [creating components](/components/creating-components).

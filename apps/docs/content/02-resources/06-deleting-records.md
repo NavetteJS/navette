@@ -85,9 +85,7 @@ table
     ])
 ```
 
-<Aside variant="warning">
-`RestoreAction` and `ForceDeleteAction` only work in the header of a record page. Row versions are not available yet.
-</Aside>
+`RestoreAction` and `ForceDeleteAction` also work as row actions: they are only shown on deleted rows, when the trashed filter displays them.
 
 ## Deleting records on the List page
 

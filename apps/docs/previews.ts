@@ -2,7 +2,8 @@
 // is shown in an isolated page (iframe) with the panel CSS. Previews therefore always match the current components.
 //
 // The code is a JavaScript expression, or a function body ending with `return`, that evaluates to schema components,
-// actions, a table or an array of `Stat`. See README.md for what a preview can show. Optional directives, as the first lines of the block:
+// actions, a table, an array of `Stat`, or HTML: `template(source, data)` renders an EJS view, component tags (`<x-button>`)
+// included, like a view of the application. See README.md for what a preview can show. Optional directives, as the first lines of the block:
 //   // state: {"name": "Ada"}          form state
 //   // record: {"name": "Ada"}         record shown by infolist entries
 //   // records: [{"name": "Ada"}]      table rows
@@ -23,6 +24,9 @@ import * as tables from '@navette-js/tables';
 import { t, tc } from '@navette-js/support/i18n';
 import { useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import { wireStyles } from '@navette-js/wire/express';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 export type Preview = { code: string };
 export type RenderedPreview = { html: string; width: string | null; viewport: number | null; state: Record<string, unknown>; selected?: string[] };
@@ -43,6 +47,15 @@ for (const module of [support, schemas, forms, builder, infolists, actions, tabl
 // the tables export gets a `Table` prefix (`TableGroup`), and the panels list tab is `ListTab`.
 for (const [name, value] of Object.entries(tables)) if (scope[name] !== value && !name.startsWith('use') && !name.startsWith('Table') && /^[A-Z]/.test(name)) scope[`Table${name}`] ??= value;
 scope.ListTab = panels.Tab;
+// `template(source, data)`: renders an EJS view from a file, as the application does (component tags included), and returns its HTML.
+let templateDir: string | null = null;
+let templateCount = 0;
+scope.template = (source: string, data: Record<string, unknown> = {}) => {
+    templateDir ??= mkdtempSync(path.join(tmpdir(), 'navette-docs-'));
+    const file = path.join(templateDir, `preview-${++templateCount}.ejs`);
+    writeFileSync(file, source);
+    return new support.HtmlString(support.views.renderFile(file, data));
+};
 const names = Object.keys(scope);
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...values: unknown[]) => Promise<unknown>;
 
@@ -145,6 +158,9 @@ export async function renderPreview(preview: Preview): Promise<RenderedPreview> 
         const columns = items.length < 3 ? 3 : items.length % 3 !== 1 ? 3 : 4;
         const cells = (items as panels.Stat[]).map((stat, index) => `<div class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(panel, `stat-${index}`)}</div></div>`).join('');
         html = `<div class="fi-wi-widget fi-wi-stats-overview"><div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div class="fi-grid-col"><div class="fi-sc-component fi-grid-ctn"><div class="fi-sc-section"><section class="fi-section fi-section-not-contained"><div class="fi-section-content-ctn"><div class="fi-section-content fi-grid @xl:fi-grid-cols !@lg:fi-grid-cols fi-sc fi-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div></div>`;
+    } else if (items.length && items.every((item) => typeof item === 'string' || item instanceof support.HtmlString)) {
+        // HTML, from template(): shown as is.
+        html = items.map(String).join('');
     } else if (items.length && items.every((item) => item instanceof schemas.Component)) {
         const record = json('record', null);
         const schema = schemas.Schema.make(host).key(record ? 'infolist' : 'form');
@@ -158,7 +174,7 @@ export async function renderPreview(preview: Preview): Promise<RenderedPreview> 
         }
         html = await schema.toHtml();
     } else {
-        throw new Error(`the code must evaluate to schema components, actions, a table or stats (got: ${items.map((item) => item?.constructor?.name ?? typeof item).join(', ') || 'nothing'})`);
+        throw new Error(`the code must evaluate to schema components, actions, a table, stats or HTML (got: ${items.map((item) => item?.constructor?.name ?? typeof item).join(', ') || 'nothing'})`);
     }
     const viewport = Number(values.viewport);
     return { html, width: values.width ?? null, viewport: Number.isFinite(viewport) && viewport >= 320 && viewport <= 2000 ? viewport : null, state: { ...host.data, tableRecordsPerPage: host.tableRecordsPerPage ?? 10, tableFilters: host.tableFilters, tableDeferredFilters: host.tableDeferredFilters }, selected: (json('selected', []) as unknown[]).map(String) };
@@ -276,4 +292,9 @@ html, body { margin: 0; background: transparent; }
 `;
 }
 
-export async function closePreviews(): Promise<void> { await knex?.destroy(); knex = null; }
+export async function closePreviews(): Promise<void> {
+    await knex?.destroy();
+    knex = null;
+    if (templateDir) rmSync(templateDir, { recursive: true, force: true });
+    templateDir = null;
+}
