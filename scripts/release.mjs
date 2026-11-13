@@ -30,7 +30,7 @@ const DESCRIPTIONS = {
     support: 'Shared utilities, colors, icons, views and translations for Navette.',
     tables: 'Interactive tables for Navette admin panels.',
     wire: 'Server-side runtime compatible with Livewire 3 for Node.js and Express.',
-    cli: 'Command-line tools for Navette projects: migrations, users, and generators for resources, pages and widgets (npx navette).',
+    cli: 'Command-line tools for Navette projects: migrations, users, and generators for resources, pages, widgets and form fields (npx navette).',
     create: 'Create a Navette project: npm create navette@latest',
 };
 const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
