@@ -177,3 +177,40 @@ export class ${name} extends StatsOverviewWidget {
 }
 `;
 }
+
+/** A custom form field: an Alpine.js control entangled with the field's state, validated on the server. */
+export function generateField(name: string): string {
+    return `import { Field, type Rule } from '@navette-js/forms';
+import { configured, e, js } from '@navette-js/support';
+
+/**
+ * ${headline(snake(name))} field. Use it like any field: \`${name}.make('name').required()\`.
+ * The state comes from the browser: check its shape in getValidationRules() before it is saved.
+ */
+export class ${name} extends Field {
+    static make(name: string): ${name} {
+        return configured(new ${name}(name));
+    }
+
+    async getValidationRules(): Promise<Rule[]> {
+        return [
+            ...(await super.getValidationRules()),
+            { name: 'string', passes: (value) => typeof value === 'string', message: (attribute) => \`The \${attribute} field must be a string.\` },
+        ];
+    }
+
+    async toHtml(): Promise<string> {
+        const id = this.getId();
+        const disabled = await this.isDisabled();
+
+        return this.wrap(
+            \`<div class="fi-input-wrp\${this.hasError() ? ' fi-invalid' : ''}" x-data="{ state: $wire.$entangle(\${e(js(this.getStatePath()))}) }">
+                <div class="fi-input-wrp-content-ctn">
+                    <input id="\${e(id)}" type="text" class="fi-input" x-model="state"\${disabled ? ' disabled' : ''}\${this.hasError() ? \` aria-invalid="true" aria-describedby="\${e(id)}-error"\` : ''} />
+                </div>
+            </div>\`,
+        );
+    }
+}
+`;
+}

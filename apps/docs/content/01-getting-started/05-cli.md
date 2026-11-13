@@ -24,6 +24,7 @@ Generators never overwrite an existing file: they stop with an error. Add `--for
 | `navette make:resource <Name>` | Creates a resource and its model |
 | `navette make:page <Name>` | Creates a custom page |
 | `navette make:widget <Name>` | Creates a dashboard widget |
+| `navette make:field <Name>` | Creates a custom form field in `src/fields` |
 
 ## Running migrations
 

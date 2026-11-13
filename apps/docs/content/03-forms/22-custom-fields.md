@@ -53,6 +53,16 @@ return LocationPicker.make('location')
 
 Your field inherits all the [shared field methods](/forms/overview): `label()`, `required()`, `disabled()`, `default()`, `helperText()`, `hint()`, `visible()`, `afterStateUpdated()`, `rule()`…
 
+## Generating a field class
+
+The CLI creates a field class in `src/fields`, with an Alpine.js control entangled with the state and a validation rule to adapt:
+
+```bash
+npx navette make:field RatingInput
+```
+
+Import it in your resource like any field: `RatingInput.make('rating').required()`. The command never overwrites an existing file, unless you pass `--force`.
+
 ## Custom field classes
 
 ### Creating instances with configured()
@@ -261,5 +271,5 @@ An exposed method is an endpoint: anyone who can open the page can call it with 
 - Validate the state on the server, in `getValidationRules()`. Attributes such as `min`, `max` or `required` on your input only guide the browser.
 
 <Aside variant="warning">
-Generating fields with a command and rendering fields with JavaScript frameworks (React, Vue, Svelte) are not available yet. Write the control with Alpine.js, or mount your framework component yourself from an Alpine `x-init`.
+Rendering fields with JavaScript frameworks (React, Vue, Svelte) is not available yet. Write the control with Alpine.js, or mount your framework component yourself from an Alpine `x-init`.
 </Aside>

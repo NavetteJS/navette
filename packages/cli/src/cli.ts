@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Project CLI (`npx navette …`): migrations, users, and generators for resources, pages and widgets.
+// Project CLI (`npx navette …`): migrations, users, and generators for resources, pages, widgets and form fields.
 // Run it at the root of a project created with `npm create navette`.
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
-import { generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateField, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
 if (existsSync(join(cwd, '.env'))) process.loadEnvFile(join(cwd, '.env'));
@@ -111,6 +111,13 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
         async run() {
             const name = studly(positional[0] ?? fail('Give the page a name, e.g. Settings'));
             write(join(cwd, 'src', panelOf(), 'pages', `${name}.ts`), generatePage(name));
+        },
+    },
+    'make:field': {
+        usage: 'navette make:field <Name>                        Create a custom form field (src/fields)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the field a name, e.g. RatingInput'));
+            write(join(cwd, 'src', 'fields', `${name}.ts`), generateField(name));
         },
     },
     'make:widget': {
