@@ -11,3 +11,5 @@ apps/demo/storage/
 # Starter et site de documentation : fichiers produits.
 apps/starter/data.sqlite
 apps/docs/dist/
+# End-to-end runs: disposable database copies and uploads.
+e2e/.tmp/
