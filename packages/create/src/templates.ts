@@ -240,7 +240,7 @@ ${timestamps}
 
     // ------------------------------------------------------------------ admin panel
     files['src/panels/admin.ts'] = `// The admin panel (/admin): only users with the \`admin\` role can sign in.
-import { AccountWidget, AppAuthentication, discoverPages, EmailAuthentication, discoverResources, discoverWidgets, fileMailer, ${sqlite ? 'knexNotificationStore, ' : ''}Panel, SecurityKeyAuthentication } from '@navette-js/panels';
+import { AccountWidget, AppAuthentication, discoverPages, EditProfile, EmailAuthentication, discoverResources, discoverWidgets, fileMailer, ${sqlite ? 'knexNotificationStore, ' : ''}Panel, SecurityKeyAuthentication } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
 import { db } from '../database.ts';
 import { users } from '../users.ts';
@@ -254,7 +254,8 @@ export default Panel.make()
     .setColors({ primary: Color.Amber })
     .login()
     .passwordReset()
-    .profile()
+    // Profile page in the full layout (sections, with the navigation).
+    .profile(EditProfile, false)
     // Two-factor authentication, set up by each user on their profile: an authenticator app (with recovery codes), a code by email or a security key.
     .multiFactorAuthentication([AppAuthentication.make().recoverable(), EmailAuthentication.make(), SecurityKeyAuthentication.make()])
     .mailer(fileMailer(process.env.MAIL_LOG ?? 'storage/mail.log'))
@@ -412,7 +413,7 @@ export class TaskStats extends StatsOverviewWidget {
     // ------------------------------------------------------------------ user panel
     if (o.userPanel) {
         files['src/panels/app.ts'] = `// The user panel (/app): anyone can sign up${teams ? ', then create or join teams' : ''}.
-import { AccountWidget, AppAuthentication, discoverPages, EmailAuthentication, discoverResources, discoverWidgets, fileMailer, ${teams ? 'knexTenantProvider, ' : ''}Panel, SecurityKeyAuthentication } from '@navette-js/panels';
+import { AccountWidget, AppAuthentication, discoverPages, EditProfile, EmailAuthentication, discoverResources, discoverWidgets, fileMailer, ${teams ? 'knexTenantProvider, ' : ''}Panel, SecurityKeyAuthentication } from '@navette-js/panels';
 import { db } from '../database.ts';
 import { users } from '../users.ts';
 ${teams ? "import { EditTeamProfile, RegisterTeam } from '../app/tenancy.ts';\n" : ''}
@@ -426,7 +427,8 @@ export default Panel.make()
     .registration()
     .passwordReset()
     .emailVerification()
-    .profile()
+    // Profile page in the full layout (sections, with the navigation).
+    .profile(EditProfile, false)
     // Two-factor authentication, set up by each user on their profile: an authenticator app (with recovery codes), a code by email or a security key.
     .multiFactorAuthentication([AppAuthentication.make().recoverable(), EmailAuthentication.make(), SecurityKeyAuthentication.make()])
     .mailer(fileMailer(process.env.MAIL_LOG ?? 'storage/mail.log'))

@@ -450,6 +450,8 @@ export class Panel {
     profile(page: typeof EditProfile = EditProfile, isSimple = true): this { this._profile = { page, isSimple }; return this; }
     hasProfile(): boolean { return this._profile !== null; }
     getProfile() { return this._profile; }
+    /** Whether the profile page uses the simple layout (`profile(page, false)`: the full layout, with the navigation). */
+    isProfileSimple(): boolean { return this._profile?.isSimple !== false; }
     private _multiFactor: { providers: MultiFactorAuthenticationProvider[]; isRequired: boolean; setUpPage: typeof SetUpRequiredMultiFactorAuthentication } | null = null;
     /**
      * Multi-factor authentication: after the password, users with a provider set up must pass its challenge. They set providers
@@ -1374,10 +1376,30 @@ export class EditProfile extends SimplePage {
     async boot(): Promise<void> { if (!(this._ctx as PanelContext | null)?.user) throw new WireError(401, 'Unauthenticated.'); }
     getTitle(): string { return (this.constructor as typeof EditProfile).getLabel(); }
     hasLogo(): boolean { return false; }
+    /** Whether the page uses the full layout (`panel.profile(EditProfile, false)`): its form is then split into sections. */
+    usesFullLayout(): boolean { return !this.panel.isProfileSimple(); }
+    async render(): Promise<string> {
+        if (!this.usesFullLayout()) return super.render();
+        return views.render('filament-panels::pages.page', {
+            heading: this.getTitle(), headerWidgets: '', content: await this.getSchema('content').toHtml(), footerWidgets: '', livewireId: this.id, renderHookScopes: this.getRenderHookScopes(),
+            subNavigation: [], subNavigationPosition: 'top', breadcrumbs: [], headerActions: [], pageClasses: ['fi-auth-edit-profile-page'], actionModals: await this.renderActionModals(), headerActionsKey: '',
+        });
+    }
     formSchema(schema: Schema): Schema {
+        const fields = this.getFormComponents();
+        if (!this.usesFullLayout()) return schema.operation('edit').components(fields);
+        const [name, email, ...password] = fields;
+        const group = 'filament-panels::auth/pages/edit-profile.sections';
+        return schema.operation('edit').components([
+            Section.make(t(`${group}.information.heading`)).description(t(`${group}.information.description`)).schema([name, email]),
+            Section.make(t(`${group}.password.heading`)).description(t(`${group}.password.description`)).schema(password),
+        ]);
+    }
+    /** Fields of the form: name, email, new password, its confirmation, current password. */
+    protected getFormComponents(): SchemaComponent[] {
         const { panel, user } = this._ctx as PanelContext;
         const auth = panel.getAuth();
-        return schema.operation('edit').components([
+        return [
             TextInput.make('name').label(t('filament-panels::auth/pages/edit-profile.form.name.label')).required().maxLength(255).autofocus(),
             TextInput.make('email').label(t('filament-panels::auth/pages/edit-profile.form.email.label')).email().required().maxLength(255).live()
                 .rule({ name: 'unique', passes: async (value) => { const other = await auth.findByEmail?.(String(value)); return !other || String(other.id) === String(user?.id); }, message: (attribute) => `The ${attribute} has already been taken.` }),
@@ -1388,7 +1410,7 @@ export class EditProfile extends SimplePage {
                 .password().autocomplete('current-password').revealable().required()
                 .rule({ name: 'current_password', passes: async (value) => Boolean(user && (await auth.attempt(user.email, String(value)))), message: () => 'The password is incorrect.' })
                 .visible(({ get }) => !blankValue(get('password')) || get('email') !== user?.email).dehydrated(false),
-        ]);
+        ];
     }
     contentSchema(schema: Schema): Schema {
         const { panel, user } = this._ctx as PanelContext;
@@ -1401,7 +1423,12 @@ export class EditProfile extends SimplePage {
         ]);
     }
     /** Multi-factor authentication settings: each provider's status and actions (set up, turn off…). */
-    protected multiFactorAuthenticationSection(panel: Panel, user: User): SchemaComponent { return multiFactorManagementSection(panel, user); }
+    protected multiFactorAuthenticationSection(panel: Panel, user: User): SchemaComponent {
+        if (!this.usesFullLayout()) return multiFactorManagementSection(panel, user);
+        const group = 'filament-panels::auth/pages/edit-profile.multi_factor_authentication';
+        return Section.make(t(`${group}.label`)).description(t(`${group}.description`)).divided()
+            .schema(panel.getMultiFactorAuthenticationProviders().map((provider) => Group.make(provider.getManagementSchemaComponents(user, panel)).statePath(provider.getId())));
+    }
     async save(): Promise<void> {
         const { panel, user } = this._ctx as PanelContext;
         if (!user) throw new WireError(401, 'Unauthenticated.');
@@ -1633,7 +1660,7 @@ export class SetUpRequiredMultiFactorAuthentication extends SimplePage {
     }
 }
 /** Profile section listing the providers: each one's status and actions, under its id. */
-function multiFactorManagementSection(panel: Panel, user: User): SchemaComponent {
+function multiFactorManagementSection(panel: Panel, user: User): Section {
     return Section.make().compact().divided().secondary().key('multi-factor-authentication')
         .schema(panel.getMultiFactorAuthenticationProviders().map((provider) => Group.make(provider.getManagementSchemaComponents(user, panel)).statePath(provider.getId())));
 }
@@ -4034,6 +4061,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             // Required multi-factor authentication: nothing but its setup page (and email verification) until it is set up.
             if (!options.beforeMultiFactorSetUp && (await panel.mustSetUpMultiFactorAuthentication(ctx.user))) return res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl());
+            // Full layout in a multi-tenant panel: the navigation links to the user's first tenant.
+            if (layout === 'index' && panel.hasTenancy()) ctx.tenant = (await panel.getTenantProvider().getTenants(ctx.user))[0] ?? null;
             await guarded(res, () => document(req, res, ctx, { title, component, layout }));
         });
     };
@@ -4078,7 +4107,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             res.redirect((await homeUrl(ctx.user)) ?? panel.getBaseUrl());
         });
     }
-    if (profile) userPage(profile.page.slug, name('auth.profile'), profile.page.getLabel(), profile.isSimple || panel.hasTenancy() ? 'simple' : 'index');
+    if (profile) userPage(profile.page.slug, name('auth.profile'), profile.page.getLabel(), profile.isSimple ? 'simple' : 'index');
     if (TenantRegistration) userPage(TenantRegistration.slug, name('tenancy.registration'), TenantRegistration.getLabel());
     if (MultiFactorSetUpPage) userPage('multi-factor-authentication/set-up', name('auth.multi-factor-authentication.set-up-required'), t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'), 'simple', { beforeMultiFactorSetUp: true });
 

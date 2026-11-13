@@ -157,7 +157,7 @@ panel.emailVerification(EmailVerificationPrompt, false);
 
 ### Editing the profile
 
-`profile()` adds a "Profile" item to the user menu, leading to a page where the user changes their name, email address and password. The current password is required to change the email address or the password. The page uses the simple layout by default; pass `false` as the second argument to use the full layout, with the navigation:
+`profile()` adds a "Profile" item to the user menu, leading to a page where the user changes their name, email address and password. The current password is required to change the email address or the password. The page uses the simple layout by default; pass `false` as the second argument to use the full layout, with the navigation. The form is then split into sections (profile information, password), like the pages of a resource, and [multi-factor authentication](/panels/multi-factor-authentication) gets a section of its own. In a multi-tenant panel, the navigation is the one of the user's first tenant:
 
 ```ts
 import { EditProfile } from '@navette-js/panels';

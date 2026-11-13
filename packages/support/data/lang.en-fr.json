@@ -1073,7 +1073,12 @@
     "notifications.saved.title": "Saved",
     "notifications.throttled.title": "Too many requests. Please try again in :seconds seconds.",
     "notifications.throttled.body": "Please try again in :seconds seconds.",
-    "actions.cancel.label": "Cancel"
+    "actions.cancel.label": "Cancel",
+    "sections.information.heading": "Profile information",
+    "sections.information.description": "Your name and the email address you sign in with.",
+    "sections.password.heading": "Password",
+    "sections.password.description": "Use a long, random password to keep your account secure.",
+    "multi_factor_authentication.description": "A second step after your password: a code from an app, a code by email or a security key."
    },
    "auth/pages/email-verification/email-verification-prompt": {
     "title": "Verify your email address",
@@ -1425,7 +1430,12 @@
     "notifications.email_change_verification_sent.title": "Demande de modification de l'adresse email envoyée",
     "notifications.email_change_verification_sent.body": "Une demande de modification de votre adresse email a été envoyée à :email. Veuillez vérifier votre email pour vérifier la modification.",
     "notifications.saved.title": "Sauvegardé",
-    "actions.cancel.label": "Annuler"
+    "actions.cancel.label": "Annuler",
+    "sections.information.heading": "Informations du profil",
+    "sections.information.description": "Votre nom et l'adresse e-mail avec laquelle vous vous connectez.",
+    "sections.password.heading": "Mot de passe",
+    "sections.password.description": "Utilisez un mot de passe long et aléatoire pour sécuriser votre compte.",
+    "multi_factor_authentication.description": "Une seconde étape après le mot de passe : un code d'application, un code par e-mail ou une clé de sécurité."
    },
    "auth/pages/email-verification/email-verification-prompt": {
     "title": "Vérifier votre adresse email",

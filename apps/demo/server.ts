@@ -3,7 +3,7 @@ import express from 'express';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Dashboard, knexNotificationStore, Login, multiFactorAuthenticationSchema, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
+import { AppAuthentication, Dashboard, EditProfile, EmailAuthentication, fileMailer, knexNotificationStore, Login, multiFactorAuthenticationSchema, SecurityKeyAuthentication, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
 import { UploadStore, WireRuntime } from '@navette-js/wire';
 import { sqlite } from '@navette-js/database';
@@ -155,6 +155,8 @@ await PostResource.loadTagNames();
 const port = Number(process.env.PORT ?? 3200);
 // Second panel (`/app`): its own runtime, hence its own Livewire endpoint. Mounted before the main panel, whose routes have parameters.
 const mailLog = process.env.NAVETTE_MAIL_LOG ?? path.join(uploads, 'mail.log');
+// Profile page in the full layout, with two-factor authentication (left out for screenshot comparisons).
+if (!process.env.NAVETTE_NO_THEMES) panel.profile(EditProfile, false).mailer(fileMailer(mailLog)).multiFactorAuthentication([AppAuthentication.make().recoverable(), EmailAuthentication.make(), SecurityKeyAuthentication.make()]);
 const secondPanel = appPanel({ key, login: DemoLogin, auth: accounts, mailLog, appUrl: `http://127.0.0.1:${port}`, profile: !process.env.NAVETTE_NO_THEMES });
 if (process.env.NAVETTE_HOOK_PROBE) secondPanel.plugin((await import('./hook-probe.ts')).hookProbe(CustomerResource));
 app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
