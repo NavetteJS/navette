@@ -1,6 +1,6 @@
 // Minimal XLSX writer: one worksheet of text cells (inline strings), zipped with Node's zlib. Cells are never formulas, so
 // spreadsheet software does not evaluate them; numbers stay text, as in Filament's export.
-import { crc32, deflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib';
 
 /** Escapes a value for XML; characters not allowed in XML 1.0 are dropped. */
 const xml = (value: string) => value.replace(/[^\x09\x0A\x0D\x20-퟿-�\u{10000}-\u{10FFFF}]/gu, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -49,4 +49,83 @@ function zip(entries: [string, Buffer][]): Buffer {
     const end = Buffer.alloc(22);
     end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(centralSize, 12); end.writeUInt32LE(offset, 16);
     return Buffer.concat([...locals, ...centrals, end]);
+}
+
+// ------------------------------------------------------------------ reading
+
+/** Files of a ZIP archive (stored or deflated entries), read from its central directory. Each entry is limited in size. */
+function unzip(archive: Buffer, maxEntryBytes: number): Map<string, Buffer> {
+    const files = new Map<string, Buffer>();
+    let end = -1;
+    for (let i = archive.length - 22; i >= Math.max(0, archive.length - 65557); i--) if (archive.readUInt32LE(i) === 0x06054b50) { end = i; break; }
+    if (end < 0) throw new Error('Not a ZIP archive.');
+    const count = archive.readUInt16LE(end + 10);
+    let pointer = archive.readUInt32LE(end + 16);
+    for (let index = 0; index < count && index < 10_000; index++) {
+        if (archive.readUInt32LE(pointer) !== 0x02014b50) throw new Error('Damaged ZIP archive.');
+        const method = archive.readUInt16LE(pointer + 10), compressedSize = archive.readUInt32LE(pointer + 20), size = archive.readUInt32LE(pointer + 24);
+        const nameLength = archive.readUInt16LE(pointer + 28), extraLength = archive.readUInt16LE(pointer + 30), commentLength = archive.readUInt16LE(pointer + 32);
+        const localOffset = archive.readUInt32LE(pointer + 42);
+        const name = archive.subarray(pointer + 46, pointer + 46 + nameLength).toString('utf8');
+        pointer += 46 + nameLength + extraLength + commentLength;
+        if (archive.readUInt32LE(localOffset) !== 0x04034b50) throw new Error('Damaged ZIP archive.');
+        const dataStart = localOffset + 30 + archive.readUInt16LE(localOffset + 26) + archive.readUInt16LE(localOffset + 28);
+        const data = archive.subarray(dataStart, dataStart + compressedSize);
+        if (size > maxEntryBytes) throw new Error('XLSX file too large.');
+        if (method === 0) files.set(name, Buffer.from(data));
+        else if (method === 8) files.set(name, inflateRawSync(data, { maxOutputLength: maxEntryBytes }));
+    }
+    return files;
+}
+const unescapeXml = (text: string) => text.replace(/&(lt|gt|quot|apos|amp|#\d+|#x[0-9a-f]+);/gi, (_match, entity: string) => {
+    const lower = entity.toLowerCase();
+    if (lower === 'lt') return '<'; if (lower === 'gt') return '>'; if (lower === 'quot') return '"'; if (lower === 'apos') return "'"; if (lower === 'amp') return '&';
+    const code = lower.startsWith('#x') ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10);
+    return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+});
+/** Text of the `<t>` elements of a shared or inline string (rich text runs joined, phonetic runs skipped). */
+const stringOf = (xmlText: string) => [...xmlText.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>|<t(?:\s[^>]*)?\/>/g)].map((match) => unescapeXml(match[1] ?? '')).join('');
+const columnIndex = (reference: string) => { let index = 0; for (const char of reference.replace(/\d+$/, '').toUpperCase()) index = index * 26 + (char.charCodeAt(0) - 64); return index - 1; };
+
+/**
+ * Rows of the first worksheet of an XLSX file, as text (numbers as written, booleans as `1`/`0`, formulas as their cached
+ * value). Stops after `maxRows` rows. Throws on a file that is not a valid workbook.
+ */
+export function readXlsx(archive: Buffer, maxRows = Infinity, maxEntryBytes = 100 * 1024 * 1024): string[][] {
+    const files = unzip(archive, maxEntryBytes);
+    const text = (name: string) => files.get(name)?.toString('utf8') ?? null;
+    const workbook = text('xl/workbook.xml');
+    if (!workbook) throw new Error('Not an XLSX workbook.');
+    const firstSheet = /<sheet\b[^>]*\br:id="([^"]+)"/.exec(workbook)?.[1];
+    const relations = text('xl/_rels/workbook.xml.rels') ?? '';
+    // The relationship of the first sheet, whatever the order of its attributes.
+    const relation = firstSheet ? [...relations.matchAll(/<Relationship\s([^>]*)>/g)].map((match) => match[1]).find((attributes) => /\bId="([^"]+)"/.exec(attributes)?.[1] === firstSheet) : undefined;
+    let target = relation ? /\bTarget="([^"]+)"/.exec(relation)?.[1] ?? null : null;
+    target ??= 'worksheets/sheet1.xml';
+    const sheetPath = target.startsWith('/') ? target.slice(1) : `xl/${target.replace(/^\.\//, '')}`;
+    const sheet = text(sheetPath);
+    if (!sheet) throw new Error('The workbook has no worksheet.');
+    const shared = [...(text('xl/sharedStrings.xml') ?? '').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((match) => stringOf(match[1]));
+    const rows: string[][] = [];
+    for (const rowMatch of sheet.matchAll(/<row\b[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+        if (rows.length >= maxRows) break;
+        const row: string[] = [];
+        let next = 0;
+        for (const cell of (rowMatch[1] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+            const attributes = cell[1], body = cell[2] ?? '';
+            const reference = /\br="([A-Z]+\d+)"/i.exec(attributes)?.[1];
+            const index = reference ? columnIndex(reference) : next;
+            if (index > 16384) continue;
+            const type = /\bt="([^"]+)"/.exec(attributes)?.[1] ?? 'n';
+            const raw = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1];
+            const value = type === 's' ? (shared[Number(raw)] ?? '') : type === 'inlineStr' ? stringOf(body) : type === 'b' ? (raw === '1' ? '1' : '0') : unescapeXml(raw ?? '');
+            while (row.length < index) row.push('');
+            row[index] = value;
+            next = index + 1;
+        }
+        rows.push(row);
+    }
+    // Trailing empty rows are dropped.
+    while (rows.length && rows[rows.length - 1].every((cell) => cell === '')) rows.pop();
+    return rows;
 }

@@ -4,7 +4,7 @@ title: Import action
 
 ## Introduction
 
-Navette includes an action that imports records from a CSV file. The user uploads the file in a modal; each row is validated, then creates or updates a record:
+Navette includes an action that imports records from a CSV or XLSX file. The user uploads the file in a modal and chooses which column of the file goes into each field; each row is validated, then creates or updates a record:
 
 ```ts
 import { ImportAction } from '@navette-js/panels';
@@ -20,7 +20,9 @@ static table(table: Table<Product>): Table<Product> {
 }
 ```
 
-The file is read during the request: there is no queue. A notification gives the number of imported and failed rows, with a link to download the failed rows and their errors.
+The file is read during the request, or [in the background](#running-imports-in-the-background). A notification gives the number of imported and failed rows, with a link to download the failed rows and their errors.
+
+The type of the file is detected from its content: an XLSX file is read from its first worksheet, every cell as text (numbers as written, formulas as their last computed value).
 
 ## Creating an importer
 
@@ -58,6 +60,18 @@ ImportColumn.make('price')
 ```
 
 When a column marked `requiredMapping()` is missing from the file, nothing is imported.
+
+### Choosing the columns of the file
+
+Once the file is uploaded, the modal lists the importer's columns, each with a select of the file's headers, already set to the header it matches. The user may change them; a column left empty is not imported. A column with `requiredMapping()` must be chosen.
+
+To skip this step and only match the headers automatically, disable it:
+
+```ts
+ImportAction.make()
+    .importer(ProductImporter)
+    .columnMapping(false)
+```
 
 ### Validating the data
 
@@ -132,12 +146,48 @@ ImportAction.make()
     .maxFileSize(10240)
 ```
 
+## Running imports in the background
+
+By default, the import runs during the request, and its notification appears when it ends. With `queued()`, the user is told the import started, the work runs after the response, and the completion notification arrives in the [database notifications](/notifications/database-notifications) (the bell):
+
+```ts
+ImportAction.make()
+    .importer(ProductImporter)
+    .queued()
+```
+
+The panel must have database notifications (`databaseNotifications()`): without them, the import runs during the request. A queued import accepts up to 100,000 rows (`maxRows()`).
+
+Queued work runs one task at a time in the Node process, after the response. It is lost if the process stops. To run it elsewhere (BullMQ, a worker process…), give Navette your own runner: each task is a function to run.
+
+```ts
+import { useBackgroundRunner } from '@navette-js/panels';
+
+useBackgroundRunner((task) => {
+    queue.add(task); // run `await task()` in your worker
+});
+```
+
+## Keeping a history of imports
+
+The panel can record each import and export: who ran it, which file, how many rows succeeded, and the failed rows with their errors. Create the tables with `importExportSchema()` in a migration, and give the panel the history store:
+
+```ts
+import { importExportSchema, knexImportExportHistory, Panel } from '@navette-js/panels';
+
+// In a migration:
+await importExportSchema(db); // imports, failed_import_rows and exports tables
+
+Panel.make()
+    .importExportHistory(knexImportExportHistory((table) => db(table)))
+```
+
+You can then list the runs in a resource of your own. To store them elsewhere, implement the `ImportExportHistory` interface: `startImport()`, `finishImport()`, `recordFailedImportRow()`, `startExport()`, `finishExport()`.
+
 ## Security
 
 - The action is authorized with the `create` ability of the resource's policy. `resolveRecord()` decides which records a row may update: only return records the user is allowed to change.
 - Only the uploaded file of the request is read, never a path sent by the browser.
 - Values are validated with your rules, then written through the data adapter, which only writes declared attributes as bound parameters.
 
-<Aside variant="warning">
-Choosing the file columns manually, queued imports, import history and XLSX files are not available yet.
-</Aside>
+- The chosen columns can only be headers of the uploaded file.

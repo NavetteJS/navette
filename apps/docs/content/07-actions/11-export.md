@@ -141,12 +141,47 @@ ExportAction.make()
 
 In the XLSX file, every cell is text: a value starting with `=` is never evaluated as a formula.
 
+## Running exports in the background
+
+By default, the export runs during the request, and its notification appears when it ends. With `queued()`, the user is told the export started, the work runs after the response, and the completion notification, with the download links, arrives in the [database notifications](/notifications/database-notifications) (the bell):
+
+```ts
+ExportAction.make()
+    .exporter(ProductExporter)
+    .queued()
+```
+
+The panel must have database notifications (`databaseNotifications()`): without them, the export runs during the request. 
+
+Queued work runs one task at a time in the Node process, after the response. It is lost if the process stops. To run it elsewhere (BullMQ, a worker process…), give Navette your own runner: each task is a function to run.
+
+```ts
+import { useBackgroundRunner } from '@navette-js/panels';
+
+useBackgroundRunner((task) => {
+    queue.add(task); // run `await task()` in your worker
+});
+```
+
+## Keeping a history of exports
+
+The panel can record each import and export: who ran it, which file, how many rows succeeded. Create the tables with `importExportSchema()` in a migration, and give the panel the history store:
+
+```ts
+import { importExportSchema, knexImportExportHistory, Panel } from '@navette-js/panels';
+
+// In a migration:
+await importExportSchema(db); // imports, failed_import_rows and exports tables
+
+Panel.make()
+    .importExportHistory(knexImportExportHistory((table) => db(table)))
+```
+
+You can then list the runs in a resource of your own. To store them elsewhere, implement the `ImportExportHistory` interface: `startImport()`, `finishImport()`, `recordFailedImportRow()`, `startExport()`, `finishExport()`.
+
 ## Security
 
 - The action is authorized with the `viewAny` ability of the resource's policy. Only the records of the table's query are exported: [scope your data adapter](/tables/filters/overview#security) to restrict what a user can see.
 - Only the declared columns can be exported, whatever the browser sends.
 - Cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return (except numbers) are prefixed with `'`, so that spreadsheet software does not run them as formulas.
 
-<Aside variant="warning">
-Queued exports and export history are not available yet.
-</Aside>

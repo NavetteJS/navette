@@ -132,3 +132,72 @@ test('XLSX writer: valid archive, header row, text cells (formulas never evaluat
     assert.match(sheet, /<t xml:space="preserve">=1\+1 &lt;b&gt;&amp;<\/t>/);
     assert.doesNotMatch(sheet, /<f>/);
 });
+
+test('import: XLSX files (shared strings, numbers, gaps), chosen columns override the guesses', async () => {
+    const { buildXlsx, readXlsx } = await import('../src/xlsx.ts');
+    const { deflateRawSync } = await import('node:zlib');
+    assert.deepEqual(readXlsx(buildXlsx([['a', 'b'], ['1', '<&>']])), [['a', 'b'], ['1', '<&>']]);
+    // A workbook as spreadsheet software writes it: shared strings, a numeric cell, an empty cell.
+    const entries: [string, string][] = [
+        ['xl/workbook.xml', '<workbook xmlns:r="r"><sheets><sheet name="Data" sheetId="1" r:id="rId7"/></sheets></workbook>'],
+        ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId7" Type="worksheet" Target="worksheets/data.xml"/></Relationships>'],
+        ['xl/sharedStrings.xml', '<sst><si><t>Name</t></si><si><t>sku</t></si><si><r><t>Ar</t></r><r><t>mchair</t></r></si><si><t>A-1</t></si><si><t>Price</t></si></sst>'],
+        ['xl/worksheets/data.xml', '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>4</v></c><c r="C1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>99.5</v></c><c r="C2" t="s"><v>3</v></c></row><row r="3"><c r="C3" t="inlineStr"><is><t>B-2</t></is></c></row></sheetData></worksheet>'],
+    ];
+    const local: Buffer[] = [], central: Buffer[] = [];
+    let offset = 0;
+    for (const [name, content] of entries) {
+        const data = Buffer.from(content), packed = deflateRawSync(data), nameBuffer = Buffer.from(name);
+        const head = Buffer.alloc(30); head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(8, 8); head.writeUInt32LE(packed.length, 18); head.writeUInt32LE(data.length, 22); head.writeUInt16LE(nameBuffer.length, 26);
+        const entry = Buffer.alloc(46); entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE(8, 10); entry.writeUInt32LE(packed.length, 20); entry.writeUInt32LE(data.length, 24); entry.writeUInt16LE(nameBuffer.length, 28); entry.writeUInt32LE(offset, 42);
+        local.push(head, nameBuffer, packed); central.push(entry, nameBuffer); offset += 30 + nameBuffer.length + packed.length;
+    }
+    const size = central.reduce((total, part) => total + part.length, 0);
+    const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(size, 12); end.writeUInt32LE(offset, 16);
+    const workbook = Buffer.concat([...local, ...central, end]);
+    assert.deepEqual(readXlsx(workbook), [['Name', 'Price', 'sku'], ['Armchair', '99.5', 'A-1'], ['', '', 'B-2']]);
+    const dir = mkdtempSync(path.join(tmpdir(), 'navette-xlsx-'));
+    const file = path.join(dir, 'products.xlsx');
+    writeFileSync(file, workbook);
+    await db('products').delete();
+    const list = await page();
+    const action = list.getTable().getHeaderActions()[1];
+    // "Price" is not a guess of the price column: the user maps it.
+    await run(() => action.call({ livewire: list, record: null, arguments: {}, data: { file: { file: { path: file } }, columnMap: { name: 'Name', price: 'Price', sku: 'sku' } } }));
+    assert.deepEqual((await db('products').orderBy('id')).map((row: any) => [row.name, row.price, row.sku]), [['Armchair', 99.5, 'A-1']]);
+    // A column mapped to a header the file does not have is not imported.
+    await db('products').delete();
+    await run(() => action.call({ livewire: list, record: null, arguments: {}, data: { file: { file: { path: file } }, columnMap: { name: 'Name', price: 'Forged', sku: 'sku' } } }));
+    assert.deepEqual((await db('products').orderBy('id')).map((row: any) => [row.name, row.price]), [['Armchair', null]]);
+});
+
+test('queued export: started notice now, files and history later, completion in the database notifications', async () => {
+    const { importExportSchema, knexImportExportHistory, useBackgroundRunner } = await import('../src/index.ts');
+    await importExportSchema(db);
+    const sent: { user: string | number; notification: any }[] = [];
+    const store = { send: async (target: string | number, notification: any) => { sent.push({ user: target, notification }); }, list: async () => [], count: async () => 0, unreadCount: async () => 0, delete: async () => {}, markAsRead: async () => {}, markAllAsRead: async () => {}, deleteAll: async () => {} } as any;
+    const queuedPanel = Panel.make().id('ie-queued').key('k').resources([Products]).databaseNotifications(store).importExportHistory(knexImportExportHistory((table) => db(table)));
+    const tasks: (() => Promise<void>)[] = [];
+    useBackgroundRunner((task) => tasks.push(task));
+    try {
+        await db('products').delete();
+        await db('products').insert([{ name: 'Lamp', price: 12.5, sku: 'L-1', category: 'a' }]);
+        const list = await page();
+        list._ctx.panel = queuedPanel;
+        const action = list.getTable().getHeaderActions()[0].queued();
+        const { pending } = await run(() => action.call({ livewire: list, record: null, arguments: {}, data: { columns: ['name'] } }));
+        assert.equal(pending[0].title, 'Export started');
+        assert.equal(sent.length, 0, 'nothing is done before the background task runs');
+        assert.equal(tasks.length, 1);
+        await tasks[0]();
+        assert.equal(sent[0].user, 7);
+        assert.equal(sent[0].notification.title, 'Export completed');
+        assert.equal(sent[0].notification.actions.length, 2);
+        const [history] = await db('exports');
+        assert.equal(history.user_id, 7);
+        assert.equal(history.successful_rows, 1);
+        assert.ok(history.completed_at);
+    } finally {
+        useBackgroundRunner((task) => { setImmediate(() => { void task(); }); });
+    }
+});

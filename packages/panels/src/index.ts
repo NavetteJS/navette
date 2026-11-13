@@ -22,8 +22,9 @@ export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTim
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
 export { authenticationOptions, decodeCbor, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type AuthenticationResponseJSON, type RegistrationResponseJSON, type StoredCredential, type UserVerification } from './webauthn.ts';
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
-export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, parseCsv, type ExportActionInstance, type ImportActionInstance } from './import-export.ts';
-import { DownloadStore } from './import-export.ts';
+export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, importExportSchema, knexImportExportHistory, parseCsv, readSpreadsheet, runInBackground, useBackgroundRunner, type BackgroundTask, type ExportActionInstance, type ImportActionInstance, type ImportExportHistory } from './import-export.ts';
+export { buildXlsx, readXlsx } from './xlsx.ts';
+import { DownloadStore, type ImportExportHistory } from './import-export.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
@@ -189,6 +190,10 @@ export class Panel {
     private _downloads: DownloadStore | null = null;
     /** Where files offered for download (exports, failed import rows) are kept: in memory by default. */
     downloads(store: DownloadStore): this { this._downloads = store; return this; }
+    private _importExportHistory: ImportExportHistory | null = null;
+    /** Records each import and export run (`knexImportExportHistory(db)`): who, which file, how many rows, failed import rows. */
+    importExportHistory(store: ImportExportHistory | null): this { this._importExportHistory = store; return this; }
+    getImportExportHistory(): ImportExportHistory | null { return this._importExportHistory; }
     getDownloads(): DownloadStore { return (this._downloads ??= new DownloadStore()); }
     getDownloadUrl(token: string): string { return this.getBaseUrl(`downloads/${encodeURIComponent(token)}`); }
     private _pages: (typeof Page)[] = [];
@@ -897,7 +902,8 @@ abstract class BasePage extends Component implements SchemaHost {
         if (!m) return;
         const index = Number(m[1]);
         const schema = await this.getMountedActionSchema(index);
-        const field = schema?.getFlatComponents().find((c) => c instanceof Field && c.getStatePath() === `mountedActions.${index}.data.${m[2]}`) as Field | undefined;
+        const path = `mountedActions.${index}.data.${m[2]}`;
+        const field = schema?.getFlatComponents().find((c) => c instanceof Field && (c.getStatePath() === path || path.startsWith(`${c.getStatePath()}.`))) as Field | undefined;
         if (!field?.hasAfterStateUpdated()) return;
         const data = (this.mountedActions[index].data ??= {});
         await field.callAfterStateUpdated((name, value) => { data[name] = value; });

@@ -118,6 +118,16 @@ async function detect(file: string, filename: string): Promise<{ type: string; e
         const { buffer, bytesRead } = await handle.read(Buffer.alloc(512), 0, 512, 0);
         const head = buffer.subarray(0, bytesRead);
         const known = SIGNATURES.find((signature) => signature.test(head));
+        if (known?.extension === 'zip') {
+            // Office documents are ZIP archives: their central directory (at the end) names their main part.
+            const { size } = await handle.stat();
+            const length = Math.min(size, 66 * 1024);
+            const { buffer: tail } = await handle.read(Buffer.alloc(length), 0, length, size - length);
+            const names = tail.toString('latin1');
+            if (names.includes('xl/workbook.xml')) return { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', extension: 'xlsx' };
+            if (names.includes('word/document.xml')) return { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', extension: 'docx' };
+            if (names.includes('ppt/presentation.xml')) return { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', extension: 'pptx' };
+        }
         if (known) return { type: known.type, extension: known.extension };
         const extension = path.extname(String(filename ?? '')).slice(1).toLowerCase();
         if (TEXT[extension] && !head.includes(0)) return { type: TEXT[extension], extension };
