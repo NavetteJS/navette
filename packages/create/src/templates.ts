@@ -232,12 +232,10 @@ ${timestamps}
 
     // ------------------------------------------------------------------ admin panel
     files['src/panels/admin.ts'] = `// The admin panel (/admin): only users with the \`admin\` role can sign in.
-import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, knexAuthProvider, ${sqlite ? 'knexNotificationStore, ' : ''}Panel } from '@navette-js/panels';
+import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, ${sqlite ? 'knexNotificationStore, ' : ''}Panel } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
 import { db } from '../database.ts';
-
-const users = knexAuthProvider((table) => db(table));
-const isAdmin = async (id: string | number) => (await db('users').where('id', id).first())?.role === 'admin';
+import { users } from '../users.ts';
 
 export default Panel.make()
     .id('admin')
@@ -255,14 +253,16 @@ ${sqlite ? '    .databaseNotifications(knexNotificationStore((table: string) => 
     .resources(await discoverResources(new URL('../admin/resources/', import.meta.url)))
     .pages(await discoverPages(new URL('../admin/pages/', import.meta.url)))
     .widgets([AccountWidget, ...(await discoverWidgets(new URL('../admin/widgets/', import.meta.url)))])
-    .auth({
-        ...users,
-        attempt: async (email, password) => {
-            const user = await users.attempt(email, password);
-            return user && (await isAdmin(user.id)) ? user : null;
-        },
-        find: async (id) => ((await isAdmin(id)) ? users.find(id) : null),
-    });
+    .auth(users)
+    // Only users with the \`admin\` role may sign in here; others are refused at login and get a 403 page.
+    .canAccess(async (user) => (await db('users').where('id', user.id).first())?.role === 'admin');
+`;
+    files['src/users.ts'] = `// Users of every panel. Panels share one session (signing into one signs into the others), so they share this provider;
+// each panel's \`canAccess()\` decides who may enter it.
+import { knexAuthProvider } from '@navette-js/panels';
+import { db } from './database.ts';
+
+export const users = knexAuthProvider((table) => db(table));
 `;
     files['src/admin/pages/Dashboard.ts'] = `import { Dashboard as BaseDashboard } from '@navette-js/panels';
 
@@ -402,8 +402,9 @@ export class TaskStats extends StatsOverviewWidget {
     // ------------------------------------------------------------------ user panel
     if (o.userPanel) {
         files['src/panels/app.ts'] = `// The user panel (/app): anyone can sign up${teams ? ', then create or join teams' : ''}.
-import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, knexAuthProvider, ${teams ? 'knexTenantProvider, ' : ''}Panel } from '@navette-js/panels';
+import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, ${teams ? 'knexTenantProvider, ' : ''}Panel } from '@navette-js/panels';
 import { db } from '../database.ts';
+import { users } from '../users.ts';
 ${teams ? "import { EditTeamProfile, RegisterTeam } from '../app/tenancy.ts';\n" : ''}
 export default Panel.make()
     .id('app')
@@ -424,7 +425,7 @@ ${teams ? `    // Every page lives under /app/<team>; records with a \`team_id\`
 ` : ''}    .resources(await discoverResources(new URL('../app/resources/', import.meta.url)))
     .pages(await discoverPages(new URL('../app/pages/', import.meta.url)))
     .widgets([AccountWidget, ...(await discoverWidgets(new URL('../app/widgets/', import.meta.url)))])
-    .auth(knexAuthProvider((table) => db(table)));
+    .auth(users);
 `;
         files['src/app/pages/Dashboard.ts'] = `import { Dashboard as BaseDashboard } from '@navette-js/panels';
 
