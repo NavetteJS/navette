@@ -37,6 +37,20 @@ Action.make('delete')
     .action(async ({ record }) => { await PostResource.adapter.delete((record as Post).id); })
 ```
 
+```preview
+// records: [{"title": "Introducing Navette", "status": "published"}, {"title": "Building your first panel", "status": "published"}, {"title": "Ten tips for faster tables", "status": "draft"}]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('status').badge(),
+    ])
+    .recordActions([
+        Action.make('edit').icon('m-pencil-square').url(({ record }) => `/admin/posts/${record.id}/edit`),
+        Action.make('delete').icon('m-trash').color('danger').requiresConfirmation().action(() => {}),
+    ])
+```
+
 The functions you pass to an action receive an object with the current table `record` that was clicked, and the `livewire` component of the page. The `action()` function also receives the `data` of the action's form, if it has one.
 
 The record is loaded again from the data adapter when the action runs, using the key sent by the browser: a key outside the adapter's scope finds no record.
@@ -101,6 +115,24 @@ Action.make('toggle_billable')
     .action(async ({ record }) => { /* ... */ })
 ```
 
+```preview
+// records: [{"description": "Design review", "hours": 2.5, "is_billable": true}, {"description": "Team meeting", "hours": 1, "is_billable": false}, {"description": "Bug fixing", "hours": 4.25, "is_billable": true}]
+new Table()
+    .pluralModelLabel('timesheets')
+    .columns([
+        TextColumn.make('description'),
+        TextColumn.make('hours').numeric(2),
+    ])
+    .recordActions([
+        Action.make('toggle_billable')
+            .label(({ record }) => (record.is_billable ? 'Billable' : 'Not billable'))
+            .iconButton()
+            .icon(({ record }) => (record.is_billable ? 'm-currency-dollar' : 'm-no-symbol'))
+            .color(({ record }) => (record.is_billable ? 'success' : 'gray'))
+            .action(() => {}),
+    ])
+```
+
 `tableIcon()` sets the icon used when the action is displayed in a table row, and `groupedIcon()` the icon used in an [action group](#grouping-actions), when they should differ from `icon()`.
 
 ### Opening a record action when a row is clicked
@@ -143,6 +175,24 @@ Action.make('approve')
 
         livewire.deselectAllTableRecords();
     })
+```
+
+Once records are selected, the "Bulk actions" button and the number of selected records appear above the table:
+
+```preview
+// records: [{"employee": "Ada Lovelace", "dates": "Dec 22 - Dec 26", "status": "pending"}, {"employee": "Grace Hopper", "dates": "Jan 5 - Jan 9", "status": "pending"}, {"employee": "Alan Turing", "dates": "Jan 12", "status": "approved"}, {"employee": "Katherine Johnson", "dates": "Feb 2 - Feb 6", "status": "pending"}]
+// selected: [1, 2]
+new Table()
+    .pluralModelLabel('leave requests')
+    .columns([
+        TextColumn.make('employee'),
+        TextColumn.make('dates'),
+        TextColumn.make('status').badge().color((state) => (state === 'approved' ? 'success' : 'warning')),
+    ])
+    .groupedBulkActions([
+        Action.make('approve').icon('m-check').color('success').requiresConfirmation().action(() => {}),
+        Action.make('reject').icon('m-x-mark').color('danger').requiresConfirmation().action(() => {}),
+    ])
 ```
 
 `getSelectedRecordKeys()` returns the keys the user selected, reduced to the records that the data adapter can see. When the user chose to select all records, it returns the keys of every record matching the current search, filters and tab, except those they deselected.
@@ -251,6 +301,25 @@ static table(table: Table<Post>): Table<Post> {
 }
 ```
 
+With a limit of 2, the other checkboxes are disabled once two leave requests are selected, and "Select all" is not offered:
+
+```preview
+// records: [{"employee": "Ada Lovelace", "dates": "Dec 22 - Dec 26", "status": "pending"}, {"employee": "Grace Hopper", "dates": "Jan 5 - Jan 9", "status": "pending"}, {"employee": "Alan Turing", "dates": "Jan 12", "status": "approved"}, {"employee": "Katherine Johnson", "dates": "Feb 2 - Feb 6", "status": "pending"}]
+// selected: [1, 2]
+new Table()
+    .pluralModelLabel('leave requests')
+    .columns([
+        TextColumn.make('employee'),
+        TextColumn.make('dates'),
+        TextColumn.make('status').badge().color((state) => (state === 'approved' ? 'success' : 'warning')),
+    ])
+    .groupedBulkActions([
+        Action.make('approve').icon('m-check').color('success').requiresConfirmation().action(() => {}),
+        Action.make('reject').icon('m-x-mark').color('danger').requiresConfirmation().action(() => {}),
+    ])
+    .maxSelectableRecords(2)
+```
+
 `selectCurrentPageOnly()` makes "select all" select the records of the current page only.
 
 ## Header actions
@@ -267,6 +336,21 @@ static table(table: Table<Payment>): Table<Payment> {
             CreateAction.make(),
         ]);
 }
+```
+
+```preview
+// records: [{"reference": "PAY-2041", "customer": "Acme Corporation", "amount": 1250}, {"reference": "PAY-2042", "customer": "Globex", "amount": 480.5}]
+new Table()
+    .pluralModelLabel('payments')
+    .heading('Payments')
+    .columns([
+        TextColumn.make('reference'),
+        TextColumn.make('customer'),
+        TextColumn.make('amount').money('usd'),
+    ])
+    .headerActions([
+        Action.make('create').label('New payment').action(() => {}),
+    ])
 ```
 
 `CreateAction` opens the resource's form in a modal and creates a record. Header actions are typically used in relation managers; on a resource's list page, the "New" button is already in the page header.
@@ -290,6 +374,23 @@ static table(table: Table<Post>): Table<Post> {
             ]),
         ]);
 }
+```
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published"}, {"title": "Building your first panel", "status": "published"}, {"title": "Ten tips for faster tables", "status": "draft"}]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('status').badge(),
+    ])
+    .recordActions([
+        ActionGroup.make([
+            Action.make('view').icon('m-eye').url(({ record }) => `/admin/posts/${record.id}`),
+            Action.make('edit').icon('m-pencil-square').url(({ record }) => `/admin/posts/${record.id}/edit`),
+            Action.make('delete').icon('m-trash').color('danger').requiresConfirmation().action(() => {}),
+        ]),
+    ])
 ```
 
 Actions that are hidden for a record are left out of its dropdown.

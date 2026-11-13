@@ -51,17 +51,21 @@ TextInput.make('name').label('Full name').required()
 ```
 ````
 
-- `Group` and `Tab` are the schema components; the table grouping class is available as `TableGroup` and the list tab as `ListTab`. Do not redeclare a name that is already in scope (`const { Block } = …` fails).
+- When several packages export the same name, the schema component keeps it (`Group`, `Grid`, `Tab`…) and the `@navette-js/tables` export gets a `Table` prefix: `TableGroup` for table grouping, and likewise for any other tables class whose name is taken (`TableGrid`, `TablePanel`…). The list tab of `@navette-js/panels` is `ListTab`. Do not redeclare a name that is already in scope (`const { Block } = …` fails).
 - The code is plain **JavaScript** (no type annotations, no generics, no `import`): every export of the `@navette-js/*` packages is in scope (`TextInput`, `Section`, `TextEntry`, `TextColumn`, `Action`, `Table`…).
 - It is one expression — a component, an array of components, an action, an array of actions, a table, or an array of `Stat` (stats overview) — or a function body ending with `return …`.
 - Optional directives, as the first lines:
   - `// state: {...}` — values shown in the form fields (JSON).
   - `// record: {...}` — the record displayed by infolist entries (JSON). Without it, components are rendered as a form.
-  - `// records: [...]` — the rows of a table (JSON); a table is built with `new Table().columns([...])`.
+  - `// records: [...]` — the rows of a table (JSON); a table is built with `new Table().columns([...])`. Rows get the keys `1`, `2`… in order, unless they have an `id`. Arrays and objects are kept as such (stacked images, color palettes, `author.name`).
+  - `// filters: {"status": {"value": "published"}}` — the applied state of the table's filters, by filter name: rows are filtered and "Active filters" lists them.
+  - `// selected: [1, 2]` — keys of the selected rows. Needs bulk actions (`groupedBulkActions()`): the checkboxes are checked, the "Bulk actions" button and the selection indicator appear, and `maxSelectableRecords()` disables the other checkboxes once the limit is reached.
   - `// errors: {"data.name": ["The name field is required."]}` — validation messages to display.
-  - `// viewport: 1100` — render at a desktop width, then scale down: needed to see multi-column grids (`columns(2)` applies from the `lg` breakpoint, 1024px).
+  - `// viewport: 1100` — render at a desktop width, then scale down: needed to see multi-column grids (`columns(2)` applies from the `lg` breakpoint, 1024px) and the `before-content` / `after-content` filter layouts.
   - `// width: 28rem` — maximum width of the preview content.
-- Interactive behaviour (dropdowns opening, modals, live updates) is not available: a preview shows the initial state. Choose examples whose initial state is meaningful.
+- A table is rendered like on a resource list page, with what it declares: filters form, header, record, bulk and empty-state actions. There is no default "Edit" link or delete bulk action, and the built-in actions of `@navette-js/panels` (`EditAction`, `DeleteBulkAction`, `CreateAction`…) need a resource: use `Action.make()` with an `icon()`, a `url()` or an empty `action()` instead.
+- Interactive behaviour is not available: the page has the panel CSS but no JavaScript (no Alpine, no Livewire). Dropdowns, modals and collapsible sections stay closed, search and sorting do not respond, and charts are empty. The preview script only reproduces what Alpine shows on load: the first tab or wizard step, toggles, filters always open above, below or beside the table, and the `selected` directive. Choose examples whose initial state is meaningful: the `'above-content'` filter layout rather than the dropdown, for instance.
+- Images must be absolute `https://` URLs (the previews use `ui-avatars.com` and `picsum.photos`): the site has no `/storage` directory.
 - `npm run build -w @navette-js/docs` lists every preview that fails, with its page and number. A failing preview is a bug in the example (or in Navette): fix it, do not remove it silently.
 
 ## Content rules

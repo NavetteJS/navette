@@ -62,6 +62,22 @@ The first column in a table may not use summarizers. That column is used to rend
 
 The totals for all data are computed by the data adapter, with SQL aggregates over the table's query: the current search, filters and tab apply, but not pagination. The totals for the current page are computed from the records displayed.
 
+With 5 records per page and 7 products, both lines are displayed:
+
+```preview
+// records: [{"name": "Wireless keyboard", "price": 79}, {"name": "USB-C hub", "price": 39.9}, {"name": "27-inch monitor", "price": 1249.99}, {"name": "Laptop stand", "price": 45}, {"name": "Webcam", "price": 89}, {"name": "Noise-cancelling headphones", "price": 299}, {"name": "Desk lamp", "price": 34.5}]
+new Table()
+    .pluralModelLabel('products')
+    .columns([
+        TextColumn.make('name'),
+        TextColumn.make('price')
+            .money('usd')
+            .summarize(Sum.make().money('usd')),
+    ])
+    .paginationPageOptions([5, 10, 25])
+    .defaultPaginationPageOption(5)
+```
+
 ## Available summarizers
 
 Navette ships with four types of summarizer:
@@ -366,6 +382,17 @@ TextColumn.make<Order>('items_count')
 ## Summarising groups of rows
 
 You can use summaries with [groups](/tables/grouping) to display a summary of the records inside a group. This works automatically if you choose to add a summarizer column to your grouped table. Each group's summary covers all the records of the group, not only those on the current page.
+
+```preview
+// records: [{"project_name": "Website redesign", "description": "Wireframes", "hours": 6.5}, {"project_name": "Website redesign", "description": "Design review", "hours": 3}, {"project_name": "Mobile app", "description": "Push notifications", "hours": 8}, {"project_name": "Mobile app", "description": "Bug fixing", "hours": 2.5}]
+new Table()
+    .pluralModelLabel('timesheets')
+    .columns([
+        TextColumn.make('description'),
+        TextColumn.make('hours').numeric(1).summarize(Sum.make()),
+    ])
+    .defaultGroup('project_name')
+```
 
 ### Hiding the grouped rows and showing the summary only
 

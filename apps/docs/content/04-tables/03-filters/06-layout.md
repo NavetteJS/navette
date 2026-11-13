@@ -33,6 +33,23 @@ static table(table: Table<Post>): Table<Post> {
 }
 ```
 
+The filters are closed until the user clicks the filter button, displayed above the table:
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published", "category": "News", "author": "Ada Lovelace"}, {"title": "Building your first panel", "status": "published", "category": "Tutorials", "author": "Grace Hopper"}, {"title": "Ten tips for faster tables", "status": "draft", "category": "Tutorials", "author": "Alan Turing"}, {"title": "Migrating an existing app", "status": "reviewing", "category": "Guides", "author": "Ada Lovelace"}]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('category'),
+        TextColumn.make('status').badge(),
+    ])
+    .filters([
+        SelectFilter.make('status').options({ draft: 'Draft', reviewing: 'Reviewing', published: 'Published' }),
+        SelectFilter.make('category').options({ News: 'News', Tutorials: 'Tutorials', Guides: 'Guides' }),
+    ], { layout: 'above-content-collapsible' })
+```
+
 This layout gives the filters more room, which is useful for the [query builder](/tables/filters/query-builder).
 
 ## Positioning filters into grid columns
@@ -55,6 +72,24 @@ static table(table: Table<Post>): Table<Post> {
         ])
         .filtersFormColumns(3);
 }
+```
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published", "category": "News", "author": "Ada Lovelace"}, {"title": "Building your first panel", "status": "published", "category": "Tutorials", "author": "Grace Hopper"}, {"title": "Ten tips for faster tables", "status": "draft", "category": "Tutorials", "author": "Alan Turing"}, {"title": "Migrating an existing app", "status": "reviewing", "category": "Guides", "author": "Ada Lovelace"}]
+// viewport: 1100
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('category'),
+        TextColumn.make('status').badge(),
+    ])
+    .filters([
+        SelectFilter.make('status').options({ draft: 'Draft', reviewing: 'Reviewing', published: 'Published' }),
+        SelectFilter.make('category').options({ News: 'News', Tutorials: 'Tutorials', Guides: 'Guides' }),
+        SelectFilter.make('author').options({ 'Ada Lovelace': 'Ada Lovelace', 'Grace Hopper': 'Grace Hopper', 'Alan Turing': 'Alan Turing' }),
+    ], { layout: 'above-content' })
+    .filtersFormColumns(3)
 ```
 
 ## Controlling the width of the filters dropdown
@@ -107,6 +142,22 @@ static table(table: Table<Post>): Table<Post> {
 }
 ```
 
+```preview
+// records: [{"title": "Introducing Navette", "status": "published", "category": "News", "author": "Ada Lovelace"}, {"title": "Building your first panel", "status": "published", "category": "Tutorials", "author": "Grace Hopper"}, {"title": "Ten tips for faster tables", "status": "draft", "category": "Tutorials", "author": "Alan Turing"}, {"title": "Migrating an existing app", "status": "reviewing", "category": "Guides", "author": "Ada Lovelace"}]
+// filters: {"status": {"value": "published"}}
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('category'),
+        TextColumn.make('status').badge(),
+    ])
+    .filters([
+        SelectFilter.make('status').options({ draft: 'Draft', reviewing: 'Reviewing', published: 'Published' }),
+        SelectFilter.make('category').options({ News: 'News', Tutorials: 'Tutorials', Guides: 'Guides' }),
+    ], { layout: 'below-content' })
+```
+
 ## Displaying filters beside the table content
 
 The `'before-content'` and `'after-content'` layouts display the filters in a column to the left or to the right of the table on large screens; on small screens, the filter button opens them. The `'before-content-collapsible'` and `'after-content-collapsible'` variants are closed until the user clicks the filter button:
@@ -120,7 +171,41 @@ static table(table: Table<Post>): Table<Post> {
 }
 ```
 
-`'above-content'` displays the filters above the table, always open.
+With `'before-content'`, on a large screen:
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published", "category": "News", "author": "Ada Lovelace"}, {"title": "Building your first panel", "status": "published", "category": "Tutorials", "author": "Grace Hopper"}, {"title": "Ten tips for faster tables", "status": "draft", "category": "Tutorials", "author": "Alan Turing"}, {"title": "Migrating an existing app", "status": "reviewing", "category": "Guides", "author": "Ada Lovelace"}]
+// viewport: 1100
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('category'),
+        TextColumn.make('status').badge(),
+    ])
+    .filters([
+        SelectFilter.make('status').options({ draft: 'Draft', reviewing: 'Reviewing', published: 'Published' }),
+        SelectFilter.make('category').options({ News: 'News', Tutorials: 'Tutorials', Guides: 'Guides' }),
+    ], { layout: 'before-content' })
+```
+
+`'above-content'` displays the filters above the table, always open. Here, the "Published" status filter is applied, and listed under "Active filters":
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published", "category": "News", "author": "Ada Lovelace"}, {"title": "Building your first panel", "status": "published", "category": "Tutorials", "author": "Grace Hopper"}, {"title": "Ten tips for faster tables", "status": "draft", "category": "Tutorials", "author": "Alan Turing"}, {"title": "Migrating an existing app", "status": "reviewing", "category": "Guides", "author": "Ada Lovelace"}]
+// filters: {"status": {"value": "published"}}
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('category'),
+        TextColumn.make('status').badge(),
+    ])
+    .filters([
+        SelectFilter.make('status').options({ draft: 'Draft', reviewing: 'Reviewing', published: 'Published' }),
+        SelectFilter.make('category').options({ News: 'News', Tutorials: 'Tutorials', Guides: 'Guides' }),
+    ], { layout: 'above-content' })
+```
 
 ## Customizing the filter form schema
 

@@ -169,7 +169,8 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
             } catch (error) {
                 previewErrors.push(`${page.file} (preview ${index + 1}): ${(error as Error).message}`);
             }
-            page.html = page.html.replace(`<!--preview:${index}-->`, () => withBase(frame));
+            // No withBase() here: shell() prefixes every link of the page, frames included.
+            page.html = page.html.replace(`<!--preview:${index}-->`, () => frame);
         }
     }
     await closePreviews();
