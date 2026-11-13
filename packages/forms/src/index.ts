@@ -1901,3 +1901,6 @@ export class FileUpload extends Field {
         return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="fi-fo-file-upload fi-align-start"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div></div>`, { labelAsDiv: true });
     }
 }
+
+// Modal wizards of actions (`Action.steps()`): the wizard is not contained, the last step submits the action.
+Action.stepsRenderer = (steps, submit, cancel) => Wizard.make(steps as Step[]).contained(false).submitAction(submit).cancelAction(cancel);

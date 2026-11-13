@@ -295,7 +295,7 @@ static table(table: Table<Post>): Table<Post> {
 Actions that are hidden for a record are left out of its dropdown.
 
 <Aside variant="warning">
-Action groups are only supported in `recordActions()`.
+Action groups may be used in `recordActions()`, `headerActions()` and `toolbarActions()`.
 </Aside>
 
 ## Toolbar actions

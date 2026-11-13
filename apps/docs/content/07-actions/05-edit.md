@@ -110,6 +110,53 @@ EditAction.make()
     })
 ```
 
-<Aside variant="warning">
-Customizing the success notification and redirect URL with dedicated methods, and halting the saving process, are not available yet.
-</Aside>
+## Customizing the saved notification
+
+When the record is saved, a notification is sent. To change its title, use `successNotificationTitle()`:
+
+```ts
+import { EditAction } from '@navette-js/panels';
+
+EditAction.make()
+    .successNotificationTitle('Address updated')
+```
+
+To change the whole notification, pass a function to `successNotification()`. It receives the notification and returns it, or `null` to send none:
+
+```ts
+import { EditAction } from '@navette-js/panels';
+
+EditAction.make()
+    .successNotification((notification) => notification
+        .title('Address updated')
+        .body('The change is visible to everyone.'))
+```
+
+## Redirecting after success
+
+`successRedirectUrl()` sets the page opened after the action. It takes a URL, or a function receiving the context with the `record`:
+
+```ts
+import { EditAction } from '@navette-js/panels';
+
+EditAction.make()
+    .successRedirectUrl('/admin/posts')
+```
+
+Only URLs starting with a single `/`, `http://` or `https://` are followed.
+
+## Halting the process
+
+At any time, you may call `action.halt()` from a hook (such as `before()`) to stop the action: the modal stays open. `action.cancel()` stops it and closes the modal:
+
+```ts
+import { EditAction, Notification } from '@navette-js/panels';
+
+EditAction.make()
+    .before(({ action, data }) => {
+        if (!userHasCredits()) {
+            Notification.make().warning().title('You have no credits left').send();
+            action!.halt();
+        }
+    })
+```

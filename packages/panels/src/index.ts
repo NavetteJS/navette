@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
-import { Action, useColorManager, ActionGroup } from '@navette-js/actions';
+import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
 import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
 import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
@@ -15,6 +15,8 @@ import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 export { Notification, Notifications } from './notifications.ts';
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
+export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, parseCsv, type ExportActionInstance, type ImportActionInstance } from './import-export.ts';
+import { DownloadStore } from './import-export.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
@@ -145,6 +147,11 @@ export class Panel {
     /** Where per-browser data is kept (persisted table filters, search and sort): in memory by default. */
     sessionStore(store: SessionStore): this { this._sessionStore = store; return this; }
     getSessionStore(): SessionStore { return (this._sessionStore ??= new MemorySessionStore()); }
+    private _downloads: DownloadStore | null = null;
+    /** Where files offered for download (exports, failed import rows) are kept: in memory by default. */
+    downloads(store: DownloadStore): this { this._downloads = store; return this; }
+    getDownloads(): DownloadStore { return (this._downloads ??= new DownloadStore()); }
+    getDownloadUrl(token: string): string { return this.getBaseUrl(`downloads/${encodeURIComponent(token)}`); }
     private _pages: (typeof Page)[] = [];
     private _resources: (typeof Resource)[] = [];
     private _navigationItems: NavigationItem[] = [];
@@ -749,7 +756,7 @@ export class Page extends BasePage {
     protected async resolveActionRecord(_context: Record<string, unknown>): Promise<unknown> { return this.getActionRecord(); }
     /** Actions that can be mounted in a given context (page header by default). */
     protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
-        return typeof context.schemaComponent === 'string' ? this.getSchemaComponentActions(context.schemaComponent) : this.getHeaderActions();
+        return typeof context.schemaComponent === 'string' ? this.getSchemaComponentActions(context.schemaComponent) : flattenActions(this.getHeaderActions());
     }
     /**
      * Actions owned by a schema component (Repeater: add, delete, move; Section: header actions).
@@ -774,11 +781,24 @@ export class Page extends BasePage {
         return typeof component === 'string' && component.length <= 200 ? { ...this.getActionMountContext(), schemaComponent: component } : this.getActionMountContext();
     }
     private async findMountableAction(name: unknown, context: Record<string, unknown> = this.getActionMountContext()): Promise<Action> {
+        // An action of a modal footer: found among the extra footer actions of its (mounted) parent action.
+        if (typeof context.parentAction === 'number') {
+            const parent = this.mountedActions[context.parentAction];
+            const owner = parent ? await this.findMountableAction(parent.name, parent.context) : null;
+            const child = owner?.getExtraModalFooterActions().find((a) => a.getName() === name && a.isMountable());
+            if (!child) throw new WireError(404, `Action not found: ${String(name)}`);
+            return child;
+        }
         const action = (await this.getMountableActions(context)).find((a) => a.getName() === name && a.isMountable());
         if (!action) throw new WireError(404, `Action not found: ${String(name)}`);
         return action;
     }
-    private async actionContext(mounted: { arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }) { return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}) }; }
+    private async actionContext(mounted: { arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }) {
+        const parentIndex = mounted.context.parentAction;
+        const parent = typeof parentIndex === 'number' ? this.mountedActions[parentIndex] : undefined;
+        const parentData = parent ? (parent.data ??= {}) : undefined;
+        return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}), ...(parentData ? { parentData } : {}) };
+    }
     /** Form schema of a mounted action: key `mountedActionSchema<n>`, state under `mountedActions.<n>.data`. */
     async getMountedActionSchema(index: number): Promise<Schema | null> {
         const mounted = this.mountedActions[index];
@@ -788,7 +808,7 @@ export class Page extends BasePage {
     }
     private async renderActionModal(index: number): Promise<string> {
         const mounted = this.mountedActions[index];
-        return (await this.findMountableAction(mounted.name, mounted.context)).toModalHtml(await this.actionContext(mounted), index, (await (await this.getMountedActionSchema(index))?.toHtml()) ?? null);
+        return (await this.findMountableAction(mounted.name, mounted.context)).toModalHtml(await this.actionContext(mounted), index, (await (await this.getMountedActionSchema(index))?.toHtml()) ?? null, mounted.context);
     }
     /** Cancels a partial modal render prepared by a live field when the same request then runs an action. */
     private cancelModalPartialRender(): void {
@@ -844,11 +864,19 @@ export class Page extends BasePage {
     /** Mounts an action: without a modal it runs immediately; with one, only the modals fragment is returned. */
     async mountAction(name: unknown, args: unknown = {}, _context: unknown = {}): Promise<void> {
         this.cancelModalPartialRender();
-        const context = this.resolveMountContext(_context);
+        // A modal footer action: its context is its parent's (kept by the server), plus the parent's index.
+        const parentIndex = (_context as any)?.parentAction;
+        const context = Number.isInteger(parentIndex) && parentIndex >= 0 && parentIndex < this.mountedActions.length
+            ? { ...this.mountedActions[parentIndex].context, parentAction: parentIndex as number }
+            : this.resolveMountContext(_context);
         const action = await this.findMountableAction(name, context);
         await this.assertActionVisible(action, context);
         const mounted = { name: String(name), arguments: args && typeof args === 'object' ? (args as Record<string, unknown>) : {}, context };
-        if (!action.hasModal()) { await action.call(await this.actionContext(mounted)); return; }
+        if (!action.hasModal() || (await action.isModalHidden(await this.actionContext(mounted)))) {
+            // Without a modal, `halt()` and `cancel()` simply stop the action.
+            try { await action.call(await this.actionContext(mounted)); } catch (error) { if (!(error instanceof ActionHalt)) throw error; }
+            return;
+        }
         this.mountedActions.push(mounted);
         const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
         if (schema) {
@@ -859,6 +887,7 @@ export class Page extends BasePage {
             const fill = await action.getFormFill(await this.actionContext(mounted));
             if (fill) fillSchemaFromRecord(schema, data, fill);
         }
+        await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
         this.renderPartial('action-modals', await this.renderActionModals());
         this.syncActionModals();
     }
@@ -881,12 +910,21 @@ export class Page extends BasePage {
         }
         const callContext = await this.actionContext(mounted);
         if (schema) callContext.data = await getSchemaState(schema);
-        await action.call(callContext);
-        // "… & create another": the modal stays open with a reset form.
+        try {
+            await action.call(callContext);
+        } catch (error) {
+            // `action.halt()`: the modal stays open; `action.cancel()`: it closes.
+            if (!(error instanceof ActionHalt)) throw error;
+            if (error.closesModal) { this.mountedActions.pop(); this.syncActionModals(); }
+            return;
+        }
+        // "… & create another": the modal stays open with a reset form (except the preserved fields).
         if (schema && _args && typeof _args === 'object' && (_args as any).another === true) {
+            const preserved = JSON.parse(JSON.stringify(action.getDataPreservedForAnother(callContext.data ?? {})));
             const data: Record<string, unknown> = {};
             mounted.data = data;
             fillSchema(schema, data);
+            Object.assign(data, preserved);
             return;
         }
         this.mountedActions.pop();
@@ -2373,8 +2411,8 @@ export class ListRecords extends Page implements TableHost {
         if (typeof context.schemaComponent === 'string') return this.getSchemaComponentActions(context.schemaComponent);
         if (context.table === true && context.bulk === true) return this.getBulkActions();
         if (context.table === true && typeof context.recordKey === 'string') return this.getRecordActions();
-        if (context.table === true) return [...this.getTable().getHeaderActions(), ...this.getTable().getToolbarActions(), ...this.getTable().getEmptyStateActions()];
-        return this.getHeaderActions();
+        if (context.table === true) return flattenActions([...this.getTable().getHeaderActions(), ...this.getTable().getToolbarActions(), ...this.getTable().getEmptyStateActions()]);
+        return flattenActions(this.getHeaderActions());
     }
     /** Only known context shapes are kept; the record key is checked again in the database on mount. */
     protected resolveMountContext(clientContext: unknown): Record<string, unknown> {
@@ -2813,36 +2851,69 @@ export class DeleteAction {
             .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return target ? (livewire as any).getDataAdapter().isTrashed(target) : false; })
             .modalHeading(({ livewire, record }) => t('filament-actions::delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::delete.single.modal.actions.delete.label'))
-            .action(async ({ livewire, record }) => {
+            .action(async (ctx) => {
+                const { livewire, record } = ctx;
                 const adapter = livewire.getDataAdapter();
                 const inTable = typeof livewire.getTable === 'function';
                 await adapter.delete(inTable ? adapter.getKey(record) : livewire.recordKey);
-                Notification.make().success().title(t('filament-actions::delete.single.notifications.deleted.title')).send();
-                if (!inTable) livewire.redirect(livewire.resource.getUrl(), true);
+                await finishAction(ctx.action!, ctx, t('filament-actions::delete.single.notifications.deleted.title'), inTable ? null : livewire.resource.getUrl());
             });
     }
 }
 
-/** Replicate action: an `Action` with a list of attributes not to copy. */
-export type ReplicateActionInstance = Action & { excludeAttributes(attributes: string[]): ReplicateActionInstance };
+/**
+ * Success outcome of a prebuilt action: its notification (`successNotificationTitle()`, `successNotification()`), then the
+ * redirect (`successRedirectUrl()`, or `fallbackUrl`). Only local or http(s) URLs are followed.
+ */
+async function finishAction(action: Action, ctx: any, defaultTitle: string, fallbackUrl: string | null = null): Promise<void> {
+    let notification: any = Notification.make().success().title(action.getSuccessNotificationTitle() ?? defaultTitle);
+    const customize = action.getSuccessNotificationCustomizer();
+    if (customize) notification = customize(notification, ctx);
+    notification?.send();
+    const url = (await action.getSuccessRedirectUrl(ctx)) ?? fallbackUrl;
+    if (url && /^(\/(?!\/)|https?:\/\/)/.test(url)) ctx.livewire.redirect(url, true);
+}
+
+/** Replicate action: an `Action` with a list of attributes not to copy, and hooks around the saving of the copy. */
+export type ReplicateActionInstance = Action & {
+    excludeAttributes(attributes: string[]): ReplicateActionInstance;
+    /** Runs before the copy is saved, with its attributes (`replica`, changeable) and the modal form's data. */
+    beforeReplicaSaved(callback: (ctx: { replica: Record<string, unknown>; data: Record<string, unknown>; record: unknown }) => unknown): ReplicateActionInstance;
+    /** Runs after the copy is saved, with the saved record. */
+    afterReplicaSaved(callback: (ctx: { replica: unknown; data: Record<string, unknown>; record: unknown }) => unknown): ReplicateActionInstance;
+};
 
 /** Duplicates a table row: the copy takes the record's attributes, except its key, timestamps and excluded ones. */
 export class ReplicateAction {
     static make(): ReplicateActionInstance {
         let excluded: string[] = [];
+        let beforeSaved: ((ctx: any) => unknown) | null = null, afterSaved: ((ctx: any) => unknown) | null = null;
         const action = Action.make('replicate').authorize(({ livewire, record }) => canOn(livewire, 'replicate', record))
             .label(t('filament-actions::replicate.single.label')).tableIcon('c-square-2-stack').groupedIcon('m-square-2-stack')
             .modalHeading(({ livewire, record }) => t('filament-actions::replicate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::replicate.single.modal.actions.replicate.label'))
-            .action(async ({ livewire, record }) => {
+            // With a modal form (`schema()`), it is filled with the record's attributes; its data overrides them in the copy.
+            .fillForm(({ record }) => {
+                const source = typeof (record as any)?.toJSON === 'function' ? (record as any).toJSON() : { ...(record as any) };
+                for (const attribute of ['id', 'created_at', 'updated_at', ...excluded]) delete source[attribute];
+                return source;
+            })
+            .action(async (ctx) => {
+                const { livewire, record } = ctx;
                 const adapter = livewire.getDataAdapter();
                 const source = typeof (record as any)?.toJSON === 'function' ? (record as any).toJSON() : { ...(record as any) };
                 // No primary key, no created/updated timestamps.
                 for (const attribute of ['id', 'created_at', 'updated_at', ...excluded]) delete source[attribute];
-                await adapter.create(source);
-                Notification.make().success().title(t('filament-actions::replicate.single.notifications.replicated.title')).send();
+                const data = ctx.data ?? {};
+                const replica: Record<string, unknown> = { ...source, ...data };
+                await beforeSaved?.({ replica, data, record });
+                const saved = await adapter.create(replica);
+                await afterSaved?.({ replica: saved, data, record });
+                await finishAction(ctx.action!, { ...ctx, replica: saved }, t('filament-actions::replicate.single.notifications.replicated.title'));
             }) as ReplicateActionInstance;
         action.excludeAttributes = (attributes: string[]) => { excluded = attributes; return action; };
+        action.beforeReplicaSaved = (callback) => { beforeSaved = callback; return action; };
+        action.afterReplicaSaved = (callback) => { afterSaved = callback; return action; };
         return action;
     }
 }
@@ -2858,9 +2929,9 @@ export class CreateAction {
             .modalSubmitActionLabel(t('filament-actions::create.single.modal.actions.create.label'))
             .extraModalFooterActions([Action.make('createAnother').label(t('filament-actions::create.single.modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
             .schema((schema: Schema) => of(schema.livewire).form(schema))
-            .action(async ({ livewire, data }) => {
-                await of(livewire).adapter.create(data);
-                Notification.make().success().title(t('filament-actions::create.single.notifications.created.title')).send();
+            .action(async (ctx) => {
+                const record = await of(ctx.livewire).adapter.create(ctx.data);
+                await finishAction(ctx.action!, { ...ctx, record }, t('filament-actions::create.single.notifications.created.title'));
             });
     }
 }
@@ -2876,10 +2947,10 @@ export class EditAction {
             .modalSubmitActionLabel(t('filament-actions::edit.single.modal.actions.save.label'))
             .schema((schema: Schema) => of(schema.livewire).form(schema))
             .fillForm(({ record }) => ({ ...record }))
-            .action(async ({ livewire, record, data }) => {
-                const adapter = of(livewire).adapter;
-                await adapter.update(adapter.getKey(record), data);
-                Notification.make().success().title(t('filament-actions::edit.single.notifications.saved.title')).send();
+            .action(async (ctx) => {
+                const adapter = of(ctx.livewire).adapter;
+                await adapter.update(adapter.getKey(ctx.record), ctx.data);
+                await finishAction(ctx.action!, ctx, t('filament-actions::edit.single.notifications.saved.title'));
             });
     }
 }
@@ -2959,10 +3030,10 @@ export class RestoreAction {
             .hidden(({ livewire }) => !(livewire as any).getDataAdapter().isTrashed((livewire as any)._record))
             .modalHeading(({ livewire }) => t('filament-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::restore.single.modal.actions.restore.label'))
-            .action(async ({ livewire }) => {
-                await livewire.getDataAdapter().restore(livewire.recordKey);
-                await livewire.hydrate();
-                Notification.make().success().title(t('filament-actions::restore.single.notifications.restored.title')).send();
+            .action(async (ctx) => {
+                await ctx.livewire.getDataAdapter().restore(ctx.livewire.recordKey);
+                await ctx.livewire.hydrate();
+                await finishAction(ctx.action!, ctx, t('filament-actions::restore.single.notifications.restored.title'));
             });
     }
 }
@@ -2975,13 +3046,15 @@ export class ForceDeleteAction {
             .hidden(({ livewire }) => !(livewire as any).getDataAdapter().isTrashed((livewire as any)._record))
             .modalHeading(({ livewire }) => t('filament-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::force-delete.single.modal.actions.delete.label'))
-            .action(async ({ livewire }) => {
-                await livewire.getDataAdapter().forceDelete(livewire.recordKey);
-                Notification.make().success().title(t('filament-actions::force-delete.single.notifications.deleted.title')).send();
-                livewire.redirect(livewire.resource.getUrl(), true);
+            .action(async (ctx) => {
+                await ctx.livewire.getDataAdapter().forceDelete(ctx.livewire.recordKey);
+                await finishAction(ctx.action!, ctx, t('filament-actions::force-delete.single.notifications.deleted.title'), ctx.livewire.resource.getUrl());
             });
     }
 }
+
+/** Actions of a list that may contain action groups: the groups' actions are mounted, never the groups. */
+const flattenActions = (actions: (Action | ActionGroup)[]): Action[] => actions.flatMap((action) => (action instanceof ActionGroup ? action.getActions() : [action]));
 
 /** Value of the table's trashed filter: `'1'` with deleted records, `'0'` only deleted records, `null` without. */
 const trashedFilterValue = (livewire: any): string | null => {
@@ -3554,6 +3627,19 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             await guarded(res, () => document(req, res, ctx, { title, component, layout }));
         });
     };
+
+    // Files offered to the signed-in user (exports, failed import rows): only the user who created them can download them.
+    router.get(panel.getBaseUrl('downloads/:token'), async (req, res) => {
+        const ctx = await context(req, res);
+        if (!ctx.user || ctx.denied) return forbidden(res);
+        const file = panel.getDownloads().get(String(req.params.token), ctx.user.id);
+        if (!file) return void res.status(404).send('Not Found');
+        res.setHeader('Content-Type', file.type);
+        res.setHeader('Content-Disposition', `attachment; filename="${file.name.replace(/[^A-Za-z0-9._-]/g, '_')}"`);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.send(file.content);
+    });
 
     if (LoginPage) {
         guestPage('login', name('auth.login'), t('filament-panels::auth/pages/login.title'));

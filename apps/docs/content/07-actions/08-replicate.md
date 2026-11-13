@@ -90,6 +90,84 @@ ReplicateAction.make()
     })
 ```
 
-<Aside variant="warning">
-Editing the copy in a modal form before it is saved, customizing the success notification and redirect URL with dedicated methods, accessing the replica in hooks, and halting the replication process are not available yet.
-</Aside>
+## Editing the copy before it is saved
+
+Give the action a form with `schema()`: it opens filled with the record's attributes (without the excluded ones), and the values entered replace them in the copy:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .schema([
+        TextInput.make('title').required(),
+    ])
+```
+
+## Running code around the saving of the copy
+
+`beforeReplicaSaved()` receives the attributes of the copy (`replica`, which you may change), the form data and the original `record`. `afterReplicaSaved()` receives the saved copy:
+
+```ts
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .beforeReplicaSaved(({ replica }) => {
+        replica.title = `${replica.title} (copy)`;
+        replica.is_published = 0;
+    })
+    .afterReplicaSaved(({ replica }) => {
+        // Copy the related records...
+    })
+```
+
+## Customizing the replicated notification
+
+When the record is replicated, a notification is sent. To change its title, use `successNotificationTitle()`:
+
+```ts
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .successNotificationTitle('Post duplicated')
+```
+
+To change the whole notification, pass a function to `successNotification()`. It receives the notification and returns it, or `null` to send none:
+
+```ts
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .successNotification((notification) => notification
+        .title('Post duplicated')
+        .body('The change is visible to everyone.'))
+```
+
+## Redirecting after success
+
+`successRedirectUrl()` sets the page opened after the action. It takes a URL, or a function receiving the context with the saved copy as `replica`: `successRedirectUrl(({ replica }) => '/admin/posts/' + replica.id + '/edit')`:
+
+```ts
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .successRedirectUrl('/admin/posts')
+```
+
+Only URLs starting with a single `/`, `http://` or `https://` are followed.
+
+## Halting the process
+
+At any time, you may call `action.halt()` from a hook (such as `before()`) to stop the action: the modal stays open. `action.cancel()` stops it and closes the modal:
+
+```ts
+import { ReplicateAction, Notification } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .before(({ action, record }) => {
+        if (!userHasCredits()) {
+            Notification.make().warning().title('You have no credits left').send();
+            action!.halt();
+        }
+    })
+```

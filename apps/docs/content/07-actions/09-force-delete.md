@@ -79,6 +79,37 @@ ForceDeleteAction.make()
     })
 ```
 
-<Aside variant="warning">
-Customizing the success notification and redirect URL with dedicated methods is not available yet.
-</Aside>
+## Customizing the deleted notification
+
+When the record is deleted, a notification is sent. To change its title, use `successNotificationTitle()`:
+
+```ts
+import { ForceDeleteAction } from '@navette-js/panels';
+
+ForceDeleteAction.make()
+    .successNotificationTitle('Post deleted for good')
+```
+
+To change the whole notification, pass a function to `successNotification()`. It receives the notification and returns it, or `null` to send none:
+
+```ts
+import { ForceDeleteAction } from '@navette-js/panels';
+
+ForceDeleteAction.make()
+    .successNotification((notification) => notification
+        .title('Post deleted for good')
+        .body('The change is visible to everyone.'))
+```
+
+## Redirecting after success
+
+`successRedirectUrl()` sets the page opened after the action. It takes a URL, or a function receiving the context:
+
+```ts
+import { ForceDeleteAction } from '@navette-js/panels';
+
+ForceDeleteAction.make()
+    .successRedirectUrl('/admin/posts')
+```
+
+Only URLs starting with a single `/`, `http://` or `https://` are followed. By default, the action returns to the list.

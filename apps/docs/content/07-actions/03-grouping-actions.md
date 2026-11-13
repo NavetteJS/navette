@@ -27,7 +27,7 @@ ActionGroup.make([
 ])
 ```
 
-Action groups are available in the row actions of a table (`recordActions()`). A group can sit next to ungrouped actions in the same row.
+Action groups are available in the row actions of a table (`recordActions()`), in its header and toolbar actions, and in page headers. A group can sit next to ungrouped actions.
 
 Each action in the group is displayed as a menu item, with its label and icon. You may set an icon used only in menus with `groupedIcon()`. A menu item uses the color of the action, and the color and icon may be calculated from the record:
 
@@ -76,6 +76,77 @@ table.groupedBulkActions([
 
 When a resource table does not call `groupedBulkActions()`, its list page offers `DeleteBulkAction` by default. Pass an empty array to remove bulk actions and the selection checkboxes.
 
+## Customizing the group trigger
+
+The trigger is an icon button labelled "Actions". You may change its label, icon, color, size and tooltip, and turn it into a labeled button or a link:
+
+```ts
+import { ActionGroup } from '@navette-js/actions';
+
+ActionGroup.make([
+    // ...
+])
+    .label('More actions')
+    .icon('m-ellipsis-horizontal')
+    .size('sm')
+    .color('gray')
+    .button()
+    .tooltip('More actions')
+```
+
+## Setting the placement of the dropdown
+
+The dropdown opens below the trigger, aligned to its end. `dropdownPlacement()` takes `top-start`, `top-end`, `bottom-start`, `bottom-end`, `left`, `right`... :
+
+```ts
+import { ActionGroup } from '@navette-js/actions';
+
+ActionGroup.make([
+    // ...
+])
+    .dropdownPlacement('top-start')
+```
+
+## Changing the width, offset and maximum height of the dropdown
+
+```ts
+import { ActionGroup } from '@navette-js/actions';
+
+ActionGroup.make([
+    // ...
+])
+    .dropdownWidth('xs')
+    .dropdownOffset(16)
+    .maxHeight('400px')
+```
+
+With a maximum height, the menu scrolls beyond it.
+
+## Adding dividers between actions
+
+A nested group with `dropdown(false)` becomes a section of the menu, separated from the others by a divider:
+
+```ts
+import { ActionGroup } from '@navette-js/actions';
+import { DeleteAction, EditAction, ViewAction } from '@navette-js/panels';
+
+ActionGroup.make([
+    ActionGroup.make([
+        ViewAction.make(),
+        EditAction.make(),
+    ]).dropdown(false),
+    DeleteAction.make(),
+])
+```
+
+## Displaying actions as a group of buttons
+
+`buttonGroup()` shows the actions side by side, as joined buttons, instead of a dropdown.
+
+## Grouping actions in page headers
+
+Action groups may also be used in the header actions of a page, and in the header and toolbar actions of a table. The actions of a group are mounted and authorized like any other action.
+
 <Aside variant="warning">
-Customizing the group trigger (label, icon, button style, tooltip), the dropdown placement, width, offset and maximum height, dividers between actions, and action groups in page headers are not available yet.
+Bulk action groups other than the default "Bulk actions" menu are not available yet.
 </Aside>

@@ -106,6 +106,53 @@ DeleteAction.make()
 
 In a table, `record` is the row's record. In a page header, `record` is the page's record.
 
-<Aside variant="warning">
-Customizing the success notification and redirect URL with dedicated methods is not available yet.
-</Aside>
+## Customizing the deleted notification
+
+When the record is deleted, a notification is sent. To change its title, use `successNotificationTitle()`:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .successNotificationTitle('Post deleted')
+```
+
+To change the whole notification, pass a function to `successNotification()`. It receives the notification and returns it, or `null` to send none:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .successNotification((notification) => notification
+        .title('Post deleted')
+        .body('The change is visible to everyone.'))
+```
+
+## Redirecting after success
+
+`successRedirectUrl()` sets the page opened after the action. It takes a URL, or a function receiving the context:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .successRedirectUrl('/admin/posts')
+```
+
+Only URLs starting with a single `/`, `http://` or `https://` are followed. On an edit page, the action returns to the list by default.
+
+## Halting the process
+
+At any time, you may call `action.halt()` from a hook (such as `before()`) to stop the action: the modal stays open. `action.cancel()` stops it and closes the modal:
+
+```ts
+import { DeleteAction, Notification } from '@navette-js/panels';
+
+DeleteAction.make()
+    .before(({ action, record }) => {
+        if (!userHasCredits()) {
+            Notification.make().warning().title('You have no credits left').send();
+            action!.halt();
+        }
+    })
+```

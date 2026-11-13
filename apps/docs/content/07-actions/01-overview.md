@@ -110,9 +110,7 @@ Navette includes several actions for the most common record operations. They are
 
 Each of them returns an ordinary `Action`, so every method on this page and on the [modals](/actions/modals) page can still be chained on it. You can also create your own actions to do anything; these are just common ones included out of the box.
 
-<Aside variant="warning">
-Import and export actions are not available yet. The Navette demo implements simple CSV import and export screens with plain `Action` instances (a pasted CSV in a `Textarea`, a `CheckboxList` of columns), which you may use as a starting point.
-</Aside>
+[`ExportAction`](/actions/export) and [`ImportAction`](/actions/import) export records to a CSV file and import them from one.
 
 ## Placing actions
 
@@ -202,9 +200,31 @@ Action.make('send_email')
     .tableIcon('c-envelope')
 ```
 
-<Aside variant="warning">
-The `button()`, `link()` and `badge()` trigger styles, `labeledFrom()` and `outlined()` are not available yet: the style is chosen by the location of the action.
-</Aside>
+You may also choose the style yourself, wherever the action is placed:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('edit').button()
+
+Action.make('edit').link()
+
+Action.make('edit').iconButton()
+
+Action.make('edit').badge()
+```
+
+`outlined()` gives a button a border instead of a background. `labeledFrom()` shows an icon button on small screens and a labeled button from a breakpoint up:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('edit')
+    .icon('m-pencil-square')
+    .labeledFrom('md')
+```
+
+`badge()` without argument is the badge style; `badge(3)` adds a counter to the button.
 
 ## Setting a label
 

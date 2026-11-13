@@ -74,6 +74,37 @@ RestoreAction.make()
     .after(({ livewire }) => livewire.redirect(ProjectResource.getUrl(), true))
 ```
 
-<Aside variant="warning">
-Customizing the success notification with dedicated methods is not available yet.
-</Aside>
+## Customizing the restored notification
+
+When the record is restored, a notification is sent. To change its title, use `successNotificationTitle()`:
+
+```ts
+import { RestoreAction } from '@navette-js/panels';
+
+RestoreAction.make()
+    .successNotificationTitle('Post restored')
+```
+
+To change the whole notification, pass a function to `successNotification()`. It receives the notification and returns it, or `null` to send none:
+
+```ts
+import { RestoreAction } from '@navette-js/panels';
+
+RestoreAction.make()
+    .successNotification((notification) => notification
+        .title('Post restored')
+        .body('The change is visible to everyone.'))
+```
+
+## Redirecting after success
+
+`successRedirectUrl()` sets the page opened after the action. It takes a URL, or a function receiving the context:
+
+```ts
+import { RestoreAction } from '@navette-js/panels';
+
+RestoreAction.make()
+    .successRedirectUrl('/admin/posts')
+```
+
+Only URLs starting with a single `/`, `http://` or `https://` are followed.

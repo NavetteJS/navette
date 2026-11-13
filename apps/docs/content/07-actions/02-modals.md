@@ -242,13 +242,38 @@ Action.make('edit_page')
     ])
 ```
 
-Extra footer actions are rendered as buttons, but they are not mounted like the main action: give them a `url()`, or a string `action()` naming a method of the host component, which is called with `wire:click`. That method must be listed in the component's `static callable`.
+An extra footer action may have a `url()`, a string `action()` naming a method of the host component (called with `wire:click`, and listed in the component's `static callable`), or an `action()` function.
 
 The prebuilt create and attach actions use this to add a "Create & create another" button: `action('callMountedAction({ another: true })')` submits the modal, runs the action and keeps the modal open with a reset form.
 
-<Aside variant="warning">
-Extra footer actions with an `action()` function, nested modals, and access to the data of a parent action are not available yet.
-</Aside>
+### Running an action on top of the modal
+
+An extra footer action with an `action()` function runs on top of the open modal, with the same record. If it has a modal of its own (a confirmation or a form), it opens over the first one, and the first modal stays open when it closes. Its `parentData` is the form state of the parent action; changes made to it are kept:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { TextInput } from '@navette-js/forms';
+
+Action.make('send')
+    .schema([
+        TextInput.make('subject'),
+        TextInput.make('body'),
+    ])
+    .extraModalFooterActions([
+        Action.make('useTemplate')
+            .label('Use the template')
+            .color('gray')
+            .action(({ parentData }) => {
+                parentData!.subject = 'Your order has shipped';
+                parentData!.body = 'Hello, ...';
+            }),
+    ])
+    .action(async ({ data }) => {
+        // ...
+    })
+```
+
+The footer action is checked like any action when it is mounted: its visibility and authorization.
 
 ## Modifying data and running code around the action
 
@@ -291,12 +316,116 @@ Action.make('approve')
     })
 ```
 
-An error thrown by `before()` stops the action, but the request fails and the browser displays an error. To stop an action with a message instead, check the condition in the `action()` function, send a [notification](/notifications/overview) and return.
+An error thrown by `before()` stops the action, but the request fails and the browser displays an error. To stop an action cleanly, call `action.halt()`: the modal stays open, for example after sending a [notification](/notifications/overview). `action.cancel()` stops it and closes the modal:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Notification } from '@navette-js/panels';
+
+Action.make('publish')
+    .before(({ action, record }) => {
+        if (!record.title) {
+            Notification.make().warning().title('Add a title before publishing').send();
+            action!.halt();
+        }
+    })
+    .action(async ({ record }) => {
+        // ...
+    })
+```
 
 ## Closing the modal
 
 The modal closes once the action has run successfully. The user may also close it with the close button, the cancel button, the Escape key or a click outside the modal; nothing is run in that case.
 
-<Aside variant="warning">
-Disabling closing by clicking away or by pressing Escape, sticky headers and footers, modal wizards, `mountUsing()` and `modalHidden()` are not available yet.
-</Aside>
+### Disabling closing the modal
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('updateAuthor')
+    .closeModalByClickingAway(false)
+    .closeModalByEscaping(false)
+    .modalCloseButton(false)
+```
+
+`modalCloseButton(false)` removes the close button of the header; the cancel button stays.
+
+## Making the modal header and footer sticky
+
+For a long form, `stickyModalHeader()` and `stickyModalFooter()` keep the header and the footer visible while the content scrolls:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('updateAuthor')
+    .schema([
+        // ...
+    ])
+    .stickyModalHeader()
+    .stickyModalFooter()
+```
+
+## Changing the alignment
+
+`modalAlignment()` aligns the header (`'start'` or `'center'`), and `modalFooterActionsAlignment()` the footer buttons (`'start'`, `'center'` or `'end'`).
+
+## Running code when the modal opens
+
+`mountUsing()` runs when the action is mounted, after the form is filled. `data` is the form state, which you may change:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('updateAuthor')
+    .schema([
+        // ...
+    ])
+    .mountUsing(({ data, record }) => {
+        data.author_id = record.author_id ?? currentUserId();
+    })
+```
+
+## Hiding the modal
+
+`modalHidden()` runs the action at once, without its modal. It accepts a function of the context, to skip the confirmation for some records:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('archive')
+    .requiresConfirmation()
+    .modalHidden(({ record }) => record.is_draft)
+```
+
+## Using a wizard as a modal
+
+You may transform the form of the modal into a multistep process with `steps()`. Each step is validated before the next one, and the last step submits the action; the modal then has no footer:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Step, Textarea, TextInput, Toggle } from '@navette-js/forms';
+
+Action.make('create')
+    .steps([
+        Step.make('Name')
+            .description('Give the category a unique name')
+            .schema([
+                TextInput.make('name').required(),
+                TextInput.make('slug').required(),
+            ]),
+        Step.make('Description')
+            .schema([
+                Textarea.make('description'),
+            ]),
+        Step.make('Visibility')
+            .schema([
+                Toggle.make('is_visible'),
+            ]),
+    ])
+    .action(async ({ data }) => {
+        // ...
+    })
+```
+
+The data of every step is validated again when the action is submitted.

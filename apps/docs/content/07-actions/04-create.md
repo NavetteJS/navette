@@ -116,6 +116,79 @@ CreateAction.make()
     .extraModalFooterActions([])
 ```
 
-<Aside variant="warning">
-Customizing the success notification and redirect URL with dedicated methods, halting the creation process, using a wizard, and preserving data when creating another record are not available yet.
-</Aside>
+## Customizing the created notification
+
+When the record is created, a notification is sent. To change its title, use `successNotificationTitle()`:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .successNotificationTitle('Address created')
+```
+
+To change the whole notification, pass a function to `successNotification()`. It receives the notification and returns it, or `null` to send none:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .successNotification((notification) => notification
+        .title('Address created')
+        .body('The change is visible to everyone.'))
+```
+
+## Redirecting after success
+
+`successRedirectUrl()` sets the page opened after the action. It takes a URL, or a function receiving the context with the created `record`: `successRedirectUrl(({ record }) => '/admin/addresses/' + record.id + '/edit')`:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .successRedirectUrl('/admin/posts')
+```
+
+Only URLs starting with a single `/`, `http://` or `https://` are followed.
+
+## Halting the process
+
+At any time, you may call `action.halt()` from a hook (such as `before()`) to stop the action: the modal stays open. `action.cancel()` stops it and closes the modal:
+
+```ts
+import { CreateAction, Notification } from '@navette-js/panels';
+
+CreateAction.make()
+    .before(({ action, data }) => {
+        if (!userHasCredits()) {
+            Notification.make().warning().title('You have no credits left').send();
+            action!.halt();
+        }
+    })
+```
+
+## Preserving data when creating another
+
+"Create & create another" empties the form. To keep some fields, pass their names to `preserveFormDataWhenCreatingAnother()`, or a function returning the data to keep:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .preserveFormDataWhenCreatingAnother(['country', 'city'])
+```
+
+## Using a wizard
+
+You may transform the creation process into a multistep wizard with [`steps()`](/actions/modals#using-a-wizard-as-a-modal), instead of the resource form:
+
+```ts
+import { Step, TextInput } from '@navette-js/forms';
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .steps([
+        Step.make('Address').schema([TextInput.make('street').required(), TextInput.make('city').required()]),
+        Step.make('Contact').schema([TextInput.make('phone')]),
+    ])
+```

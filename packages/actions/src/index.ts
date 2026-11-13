@@ -1,5 +1,5 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, cls, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +19,18 @@ let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 
 /** Execution context of a mounted action. */
-export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action };
+export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action; /** Form data of the parent action, for an action of its modal footer (changes are kept). */ parentData?: Record<string, unknown> };
 /** Message of a bulk notification, from the number of records concerned and the number of selected records. */
 export type BulkMessage = string | ((count: number, total: number) => string);
+
+/**
+ * Thrown by `action.halt()` (the modal stays open) and `action.cancel()` (the modal closes) to stop an action from one of
+ * its hooks. The host component catches it.
+ */
+export class ActionHalt extends Error {
+    readonly closesModal: boolean;
+    constructor(closesModal: boolean) { super(closesModal ? 'Action cancelled.' : 'Action halted.'); this.closesModal = closesModal; }
+}
 
 export class Action implements Renderable {
     /** Default setup for every instance created afterwards by `make()`, e.g. `Action.configureUsing((action) => action.size('sm'))`. */
@@ -76,8 +85,6 @@ export class Action implements Renderable {
     /** Icon used when the action is a table row link. */
     tableIcon(name: string | null): this { this._tableIcon = name; return this; }
     private _iconButton = false;
-    /** Icon-only row action; the label becomes the tooltip and accessible name. */
-    iconButton(condition = true): this { this._iconButton = condition; return this; }
     /** Icon used when the action is a menu item (ActionGroup). */
     groupedIcon(name: string | null): this { this._groupedIcon = name; return this; }
     requiresConfirmation(condition = true): this { this._requiresConfirmation = condition; return this; }
@@ -87,8 +94,7 @@ export class Action implements Renderable {
     modalIcon(name: string | null): this { this._modalIcon = name; return this; }
     private _badge: string | number | null | (() => string | number | null | Promise<string | number | null>) = null;
     private _badgeColor = 'primary';
-    /** Badge (counter) shown on the button. */
-    badge(badge: string | number | null | (() => string | number | null | Promise<string | number | null>)): this { this._badge = badge; return this; }
+    /** Color of the counter set with `badge(value)`. */
     badgeColor(color: string): this { this._badgeColor = color; return this; }
     private _slideOver = false;
     private _hasSubmit = true;
@@ -149,8 +155,59 @@ export class Action implements Renderable {
         const result = this._schema(schema);
         return Array.isArray(result) ? schema.columns(this._schemaColumns).components(result) : result;
     }
-    /** Extra buttons in the modal footer, after the submit button. */
+    /**
+     * Extra buttons in the modal footer, after the submit button. An action with an `action()` function runs on top of this
+     * one (with its own modal, if it has one), and gets this action's form data as `parentData`.
+     */
     extraModalFooterActions(actions: Action[]): this { this._extraModalFooterActions = actions; return this; }
+    getExtraModalFooterActions(): Action[] { return this._extraModalFooterActions; }
+    // --- modal behavior
+    private _closeByClickingAway = true;
+    private _closeByEscaping = true;
+    private _closeButton = true;
+    private _stickyHeader = false;
+    private _stickyFooter = false;
+    private _modalAlignment: 'start' | 'center' | null = null;
+    private _footerAlignment: 'start' | 'center' | 'end' | null = null;
+    private _modalHidden: Lazy<boolean, ActionCallContext> = false;
+    private _mountUsing: ((ctx: ActionCallContext) => unknown) | null = null;
+    /** `false`: clicking outside the modal does not close it. */
+    closeModalByClickingAway(condition = true): this { this._closeByClickingAway = condition; return this; }
+    /** `false`: the Escape key does not close the modal. */
+    closeModalByEscaping(condition = true): this { this._closeByEscaping = condition; return this; }
+    /** `false`: no close button in the modal header. */
+    modalCloseButton(condition = true): this { this._closeButton = condition; return this; }
+    /** Keeps the modal header visible while its content scrolls. */
+    stickyModalHeader(condition = true): this { this._stickyHeader = condition; return this; }
+    /** Keeps the modal footer visible while its content scrolls. */
+    stickyModalFooter(condition = true): this { this._stickyFooter = condition; return this; }
+    modalAlignment(alignment: 'start' | 'center' | null): this { this._modalAlignment = alignment; return this; }
+    modalFooterActionsAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._footerAlignment = alignment; return this; }
+    private _steps: any[] | null = null;
+    /** Builds the wizard of `steps()`: registered by `@navette-js/forms`, which owns the `Wizard` component. */
+    static stepsRenderer: ((steps: any[], submit: Action, cancel: Action) => any) | null = null;
+    /**
+     * Turns the modal form into a wizard: each step is validated before the next one, and the last step submits the action.
+     * `steps` are `Step` components of `@navette-js/forms`.
+     */
+    steps(steps: any[] | null): this {
+        this._steps = steps;
+        this._schema = steps === null ? null : (schema: any) => {
+            if (!Action.stepsRenderer) throw new Error('Action.steps() needs @navette-js/forms to be loaded.');
+            const submitLabel = this._modalSubmitActionLabel ?? t('filament-actions::modal.actions.submit.label');
+            const submit = Action.make('submit').label(submitLabel).color(this._color === 'gray' ? 'primary' : this._color).submit('callMountedAction');
+            const cancel = Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
+            return schema.components([Action.stepsRenderer(steps, submit, cancel)]);
+        };
+        return this;
+    }
+    isWizard(): boolean { return this._steps !== null; }
+    /** Runs the action without its modal (e.g. no confirmation for some records). */
+    modalHidden(condition: Lazy<boolean, ActionCallContext> = true): this { this._modalHidden = condition; return this; }
+    async isModalHidden(ctx: ActionCallContext): Promise<boolean> { return Boolean(await evaluate(this._modalHidden, ctx)); }
+    /** Runs when the action is mounted, after the form is filled: `ctx.data` is the form state, which you may change. */
+    mountUsing(callback: ((ctx: ActionCallContext) => unknown) | null): this { this._mountUsing = callback; return this; }
+    async runMountUsing(ctx: ActionCallContext): Promise<void> { await this._mountUsing?.(ctx); }
     /** Initial form state (e.g. from the record). */
     fillForm(resolver: (ctx: ActionCallContext) => Record<string, unknown> | Promise<Record<string, unknown>>): this { this._fillForm = resolver; return this; }
     /** Modal width (`xs` … `7xl`). Defaults to `md` for a confirmation and `4xl` for a form. */
@@ -199,6 +256,31 @@ export class Action implements Renderable {
     /** Body line for records whose processing failed: receives their number and the number selected. */
     missingBulkProcessingFailureNotificationMessage(message: BulkMessage | null): this { this._missingProcessingMessage = message; return this; }
     getMissingBulkProcessingFailureNotificationMessage(count: number, total: number): string | null { const message = this._missingProcessingMessage; return typeof message === 'function' ? message(count, total) : message; }
+
+    // --- outcome of single actions
+    private _successNotification: ((notification: any, ctx: ActionCallContext) => any) | null = null;
+    private _successRedirectUrl: string | ((ctx: ActionCallContext & Record<string, unknown>) => string | null | Promise<string | null>) | null = null;
+    private _preserveData: string[] | ((data: Record<string, unknown>) => Record<string, unknown>) | null = null;
+    /**
+     * Customizes the success notification of a prebuilt action: the function receives the notification and returns it (changed)
+     * or `null` to send nothing.
+     */
+    successNotification(customize: ((notification: any, ctx: ActionCallContext) => any) | null): this { this._successNotification = customize; return this; }
+    getSuccessNotificationCustomizer(): ((notification: any, ctx: ActionCallContext) => any) | null { return this._successNotification; }
+    /** Where a prebuilt action redirects after success: a URL, or a function of the context (record, replica...). */
+    successRedirectUrl(url: string | ((ctx: ActionCallContext & Record<string, unknown>) => string | null | Promise<string | null>) | null): this { this._successRedirectUrl = url; return this; }
+    async getSuccessRedirectUrl(ctx: ActionCallContext & Record<string, unknown>): Promise<string | null> { return typeof this._successRedirectUrl === 'function' ? this._successRedirectUrl(ctx) : this._successRedirectUrl; }
+    /** "Create & create another": fields kept in the new form (names, or a function returning the data to keep). */
+    preserveFormDataWhenCreatingAnother(fields: string[] | ((data: Record<string, unknown>) => Record<string, unknown>) | null): this { this._preserveData = fields; return this; }
+    getDataPreservedForAnother(data: Record<string, unknown>): Record<string, unknown> {
+        if (!this._preserveData) return {};
+        if (typeof this._preserveData === 'function') return this._preserveData(data) ?? {};
+        return Object.fromEntries(this._preserveData.filter((field) => Object.hasOwn(data, field)).map((field) => [field, data[field]]));
+    }
+    /** Stops the action from one of its hooks; the modal stays open. */
+    halt(): never { throw new ActionHalt(false); }
+    /** Stops the action from one of its hooks and closes the modal. */
+    cancel(): never { throw new ActionHalt(true); }
 
     async call(ctx: ActionCallContext): Promise<unknown> {
         if (!this._handler) return null;
@@ -257,6 +339,8 @@ export class Action implements Renderable {
     /** Small link (or icon button) for a table row action. */
     async toLinkHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
+        // `button()`, `badge()`, `outlined()` or `labeledFrom()` in a table row: rendered like a header action.
+        if (this._view === 'button' || this._view === 'badge' || this._outlined || this._labeledFrom) return this.toHtml(ctx, context);
         const color = this._lazyColor ? await this._lazyColor(ctx) : this._color;
         const iconName = this._lazyIcon ? await this._lazyIcon(ctx) : (this._tableIcon ?? this._icon);
         const raw = `mountAction(${js(this.name)}, {}, ${js(context)})`;
@@ -278,7 +362,7 @@ export class Action implements Renderable {
     }
 
     /** Modal of a mounted action; `content` is the rendered form, if any. */
-    async toModalHtml(ctx: ActionCallContext, index: number, content: string | null = null): Promise<string> {
+    async toModalHtml(ctx: ActionCallContext, index: number, content: string | null = null, mountContext: Record<string, unknown> = {}): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const schemaCtx = { livewire: ctx.livewire, component: null as any, operation: null, record: ctx.record, get: () => undefined, state: undefined };
         const label = (await evaluate(this._label, schemaCtx)) ?? this.getDefaultLabel();
@@ -294,15 +378,21 @@ export class Action implements Renderable {
             + (content !== null ? hook(ActionsRenderHook.MODAL_SCHEMA_BEFORE) + content + hook(ActionsRenderHook.MODAL_SCHEMA_AFTER) : '')
             + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_BEFORE) + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_AFTER);
         if (content !== null || hooked !== '') content = hooked;
+        // Footer actions with a handler are mounted on top of this one, with its context.
+        const footerActions = await Promise.all(this._extraModalFooterActions.map((a) => (a.isMountable() ? a.toHtml(schemaCtx, { ...mountContext, parentAction: index }) : a.toHtml(schemaCtx))));
         return views.render('filament-actions::modal', {
-            slideOver: this._slideOver, content, confirmation, width, alignment: confirmation || ['xs', 'sm'].includes(width) ? 'center' : 'start',
+            // A wizard has its own buttons (back, next, submit): the modal has no footer.
+            hasFooter: !this.isWizard(),
+            closeByClickingAway: this._closeByClickingAway, closeByEscaping: this._closeByEscaping, closeButton: this._closeButton, stickyHeader: this._stickyHeader, stickyFooter: this._stickyFooter,
+            footerAlignment: this._footerAlignment ?? (confirmation ? 'center' : 'start'),
+            slideOver: this._slideOver, content, confirmation, width, alignment: this._modalAlignment ?? (confirmation || ['xs', 'sm'].includes(width) ? 'center' : 'start'),
             livewireId: ctx.livewire.id, id: `fi-${ctx.livewire.id}-action-${index}`, index, name: this.name,
             heading: (await evaluate(this._modalHeading, ctx)) ?? label,
             description: (await evaluate(this._modalDescription, ctx)) ?? (this._requiresConfirmation ? t('filament-actions::modal.confirmation') : null),
             iconName: this._modalIcon ?? (this._requiresConfirmation ? 'o-exclamation-triangle' : null), color,
             cancel: await Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()').toHtml(schemaCtx),
             // The submit button of a gray action uses the primary color.
-            submit: !this._hasSubmit ? '' : (await Action.make('submit').label(submitLabel).color(color === 'gray' ? 'primary' : color).submit('callMountedAction').toHtml(schemaCtx)) + (await Promise.all(this._extraModalFooterActions.map((a) => a.toHtml(schemaCtx)))).join(''),
+            submit: !this._hasSubmit ? '' : (await Action.make('submit').label(submitLabel).color(color === 'gray' ? 'primary' : color).submit('callMountedAction').toHtml(schemaCtx)) + footerActions.join(''),
         });
     }
     alpineClickHandler(handler: string | null): this { this._alpineClick = handler; return this; }
@@ -324,10 +414,62 @@ export class Action implements Renderable {
     disabled(condition: Lazy<boolean, ComponentContext> = true): this { this._disabled = condition; return this; }
     async isDisabled(ctx: ComponentContext): Promise<boolean> { return evaluate(this._disabled, ctx); }
 
+    private _view: 'button' | 'link' | 'icon-button' | 'badge' | null = null;
+    private _labeledFrom: string | null = null;
+    private _outlined = false;
+    /** Trigger style, instead of the one chosen by the location of the action. */
+    button(): this { this._view = 'button'; return this; }
+    link(): this { this._view = 'link'; return this; }
+    /** Icon only: the label becomes the tooltip and accessible name. */
+    iconButton(condition = true): this { this._iconButton = condition; this._view = condition ? 'icon-button' : null; return this; }
+    badge(badge?: string | number | null | (() => string | number | null | Promise<string | number | null>)): this {
+        // `badge()` without argument: badge trigger style; with a value: a counter on the button.
+        if (arguments.length === 0) { this._view = 'badge'; return this; }
+        this._badge = badge ?? null;
+        return this;
+    }
+    /** Icon button on small screens, labeled button from this breakpoint up (`sm`, `md`, `lg`, `xl`, `2xl`). */
+    labeledFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._labeledFrom = breakpoint !== null && ['sm', 'md', 'lg', 'xl', '2xl'].includes(breakpoint) ? breakpoint : null; return this; }
+    /** Outlined button. */
+    outlined(condition = true): this { this._outlined = condition; return this; }
+    getView(): 'button' | 'link' | 'icon-button' | 'badge' | null { return this._view; }
+    /** Markup of a link, icon button or badge trigger; `attributes` carries the click (or href) behavior. */
+    private async styledTriggerHtml(ctx: ComponentContext, view: 'link' | 'icon-button' | 'badge', attributes: string, tag: 'button' | 'a', wireTarget: string | null): Promise<string> {
+        const label = (await evaluate(this._label, ctx)) ?? this.getDefaultLabel();
+        const iconName = this._lazyIcon ? await this._lazyIcon(ctx) : this._icon;
+        const color = this._lazyColor ? await this._lazyColor(ctx) : this._color;
+        const colors = (component: 'link' | 'icon-button' | 'badge') => (color !== 'gray' ? colorManager!.getComponentClasses(component, color) : []);
+        const loader = tag === 'button' && wireTarget ? loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': wireTarget })) : '';
+        const glyph = iconName ? icon(iconName, { attributes: tag === 'button' && wireTarget ? new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': wireTarget }) : undefined }) : '';
+        const tooltip = await this.tooltipAttribute(ctx);
+        if (view === 'icon-button') return `<${tag} title="${e(label)}" aria-label="${e(label)}" ${tooltip}${attributes} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', `fi-size-${this._size}`, ...colors('icon-button')])}">${glyph}${loader}</${tag}>`;
+        if (view === 'badge') return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-badge-action', 'fi-badge', `fi-size-${this._size}`, ...colors('badge')])}">${glyph}${loader}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(label)}</span></span></${tag}>`;
+        return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-link-action', 'fi-link', `fi-size-${this._size}`, ...colors('link')])}">${glyph}${loader}<span class="fi-link-label">${e(label)}</span></${tag}>`;
+    }
+
     /** Renders the action as a button (or as a link when it has a URL). */
     async toHtml(ctx: ComponentContext, explicitMountContext: Record<string, unknown> | null = null): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const linkUrl = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
+        // Explicit trigger styles (link, icon button, badge), and the icon button / labeled button pair of `labeledFrom()`.
+        if (this._submit === null && (this._view === 'link' || this._view === 'icon-button' || this._view === 'badge' || this._labeledFrom)) {
+            const safeUrl = linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl) ? linkUrl : null;
+            const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
+            const mountExpression = this._handler ? (Object.keys(mountContext).length ? `mountAction(${js(this.name)}, {}, ${js(mountContext)})` : `mountAction(${js(this.name)})`) : null;
+            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${this._alpineClick ? `x-on:click="${e(this._alpineClick)}" ` : ''}${(mountExpression ?? this._action) ? `wire:click="${e(mountExpression ?? this._action!)}" ` : ''}`;
+            const tag = safeUrl ? 'a' : 'button';
+            const target = this._livewireTarget ?? mountExpression ?? this._action;
+            if (this._labeledFrom) {
+                const iconButton = (await this.styledTriggerHtml(ctx, 'icon-button', click.trim(), tag, target)).replace('class="fi-ac-icon-btn-action', `class="${this._labeledFrom}:fi-hidden fi-ac-icon-btn-action`);
+                const previousView = this._view, previousLabeled = this._labeledFrom;
+                this._view = null; this._labeledFrom = null;
+                try {
+                    const labeled = (await this.toHtml(ctx, explicitMountContext)).replace(/class="([^"]*\bfi-btn\b[^"]*)"/, (_match, classes: string) => `class="${classes} fi-hidden ${previousLabeled}:fi-inline-grid"`);
+                    return iconButton + labeled;
+                } finally { this._view = previousView; this._labeledFrom = previousLabeled; }
+            }
+            return this.styledTriggerHtml(ctx, this._view as 'link' | 'icon-button' | 'badge', click.trim(), tag, target);
+        }
         if (linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl)) {
             const link = new Attributes().class(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
             const linkIcon = this._icon ? icon(this._icon) : '';
@@ -348,7 +490,7 @@ export class Action implements Renderable {
                 'wire:target': this._livewireTarget ?? this._submit,
                 'x-bind:disabled': isSubmit ? 'isProcessing' : null,
             })
-            .class(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...colorManager.getComponentClasses('button', this._color)])
+            .class(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : colorManager.getComponentClasses('button', this._color))])
             .when(this._action, (a) => a.set('wire:click', this._action!))
             .when(mountExpression, (a) => a.set('wire:click', mountExpression!))
             .when(this._alpineClick, (a) => a.set('x-on:click', this._alpineClick!));
@@ -365,18 +507,101 @@ export class Action implements Renderable {
 }
 
 /** Group of actions collapsed into a dropdown behind a "⋮" icon button. */
+/**
+ * Actions in a dropdown menu ("⋮" icon button by default). A nested group with `dropdown(false)` is shown as a section of
+ * the menu, separated by a divider. `buttonGroup()` shows the actions side by side instead.
+ */
 export class ActionGroup {
-    private actions: Action[];
-    constructor(actions: Action[]) { this.actions = actions; }
-    static make(actions: Action[]): ActionGroup { return configured(new ActionGroup(actions)); }
-    getActions(): Action[] { return this.actions; }
-    /** `keyOf` returns each action's `wire:key` (it depends on the record). */
-    async toHtml(ctx: ComponentContext, context: Record<string, unknown>, keyOf: (action: Action) => string): Promise<string> {
+    private actions: (Action | ActionGroup)[];
+    private _label: string | null = null;
+    private _icon = 'm-ellipsis-vertical';
+    private _color = 'primary';
+    private _size = 'md';
+    private _tooltip: string | null = null;
+    private _view: 'icon-button' | 'button' | 'link' = 'icon-button';
+    private _dropdown = true;
+    private _buttonGroup = false;
+    private _placement: string | null = null;
+    private _width: string | null = null;
+    private _offset: number | null = null;
+    private _maxHeight: string | null = null;
+    private _hidden: Lazy<boolean, ComponentContext> = false;
+    constructor(actions: (Action | ActionGroup)[]) { this.actions = actions; }
+    static make(actions: (Action | ActionGroup)[]): ActionGroup { return configured(new ActionGroup(actions)); }
+    /** Every action of the group, nested groups included. */
+    getActions(): Action[] { return this.actions.flatMap((action) => (action instanceof ActionGroup ? action.getActions() : [action])); }
+    getName(): string { return 'group'; }
+    /** A group is never mounted: its actions are. */
+    isMountable(): boolean { return false; }
+    label(label: string | null): this { this._label = label; return this; }
+    icon(icon: string): this { this._icon = icon; return this; }
+    color(color: string): this { this._color = color; return this; }
+    size(size: string): this { this._size = size; return this; }
+    tooltip(tooltip: string | null): this { this._tooltip = tooltip; return this; }
+    /** Labeled button trigger. */
+    button(): this { this._view = 'button'; return this; }
+    link(): this { this._view = 'link'; return this; }
+    iconButton(): this { this._view = 'icon-button'; return this; }
+    /** `false`: inside another group, the actions form a section of its menu (with a divider). */
+    dropdown(condition = true): this { this._dropdown = condition; return this; }
+    hasDropdown(): boolean { return this._dropdown; }
+    /** The actions side by side, as a group of buttons. */
+    buttonGroup(condition = true): this { this._buttonGroup = condition; return this; }
+    /** Menu placement: `bottom-start`, `bottom-end`, `top-start`... (`bottom-end` in tables). */
+    dropdownPlacement(placement: string | null): this { this._placement = placement !== null && /^(top|bottom|left|right)(-(start|end))?$/.test(placement) ? placement : null; return this; }
+    /** Menu width: `xs` to `7xl`. */
+    dropdownWidth(width: string | null): this { this._width = width !== null && /^(xs|sm|md|lg|xl|[2-7]xl)$/.test(width) ? width : null; return this; }
+    /** Distance between the trigger and the menu, in pixels (8 by default). */
+    dropdownOffset(offset: number | null): this { this._offset = offset !== null && Number.isFinite(offset) ? Math.max(0, Math.round(offset)) : null; return this; }
+    /** Maximum height of the menu, as a CSS length; it scrolls beyond. */
+    maxHeight(height: string | null): this { this._maxHeight = height !== null && /^[0-9.]+(px|rem|em|vh|%)$/.test(height) ? height : null; return this; }
+    hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
+    visible(condition: Lazy<boolean, ComponentContext> = true): this { return this.hidden(typeof condition === 'function' ? async (ctx) => !(await condition(ctx)) : !condition); }
+    async isVisible(ctx: ComponentContext): Promise<boolean> {
+        if (await evaluate(this._hidden, ctx)) return false;
+        for (const action of this.actions) if (await action.isVisible(ctx)) return true;
+        return false;
+    }
+    private triggerHtml(): string {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
-        const items: string[] = [];
-        for (const action of this.actions) if (await action.isVisible(ctx)) items.push(await action.toRecordGroupedHtml(ctx, context, keyOf(action)));
-        if (!items.length) return '';
-        const label = e(t('filament-actions::group.trigger.label'));
-        return `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger"><button title="${label}" aria-label="${label}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-icon-btn-group', 'fi-icon-btn', 'fi-size-md', ...colorManager.getComponentClasses('icon-button', 'primary')].join(' ')}">${icon('m-ellipsis-vertical')}</button></div><div x-cloak x-float.placement.bottom-end.flip.teleport.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel"><div class="fi-dropdown-list" role="group">${items.join(' ')}</div></div></div>`;
+        const label = this._label ?? t('filament-actions::group.trigger.label');
+        const tooltip = this._tooltip ? ` x-tooltip="${e(`{ content: ${js(this._tooltip)}, theme: $store.theme, allowHTML: false }`)}"` : '';
+        const colors = (component: 'icon-button' | 'button' | 'link') => (this._color !== 'gray' || component === 'icon-button' ? colorManager!.getComponentClasses(component, this._color) : []);
+        if (this._view === 'button') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-group', 'fi-btn', `fi-size-${this._size}`, ...colors('button')])}">${icon(this._icon)}${e(label)}</button>`;
+        if (this._view === 'link') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-link-group', 'fi-link', `fi-size-${this._size}`, ...colors('link')])}">${icon(this._icon)}<span class="fi-link-label">${e(label)}</span></button>`;
+        return `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-icon-btn-group', 'fi-icon-btn', `fi-size-${this._size}`, ...colors('icon-button')].join(' ')}">${icon(this._icon)}</button>`;
+    }
+    /** Menu items of the visible actions, one list per section (nested groups without dropdown). */
+    private async itemLists(ctx: ComponentContext, context: Record<string, unknown>, keyOf: (action: Action) => string): Promise<string[][]> {
+        const lists: string[][] = [];
+        let current: string[] = [];
+        for (const action of this.actions) {
+            if (action instanceof ActionGroup && !action.hasDropdown()) {
+                if (!(await action.isVisible(ctx))) continue;
+                if (current.length) { lists.push(current); current = []; }
+                lists.push(...(await action.itemLists(ctx, context, keyOf)));
+                continue;
+            }
+            if (!(await action.isVisible(ctx))) continue;
+            current.push(action instanceof ActionGroup ? await action.toHtml(ctx, context, keyOf) : await action.toRecordGroupedHtml(ctx, context, keyOf(action)));
+        }
+        if (current.length) lists.push(current);
+        return lists.filter((list) => list.length);
+    }
+    /** `keyOf` returns each action's `wire:key` (it depends on the record in a table). */
+    async toHtml(ctx: ComponentContext, explicitContext: Record<string, unknown> | null = null, keyOf: (action: Action) => string = (action) => `actions.${action.getName()}`): Promise<string> {
+        if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
+        if (await evaluate(this._hidden, ctx)) return '';
+        const context = explicitContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
+        if (this._buttonGroup) {
+            const buttons: string[] = [];
+            for (const action of this.getActions()) if (await action.isVisible(ctx)) buttons.push(await action.toHtml(ctx, explicitContext));
+            return buttons.length ? `<div class="fi-btn-group">${buttons.join('')}</div>` : '';
+        }
+        const lists = await this.itemLists(ctx, context, keyOf);
+        if (!lists.length) return '';
+        const panelClasses = cls(['fi-dropdown-panel', this._width ? `fi-width-${this._width}` : null, { 'fi-scrollable': this._maxHeight !== null }]);
+        const style = this._maxHeight ? ` style="max-height: ${this._maxHeight}"` : '';
+        return `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${this.triggerHtml()}</div><div x-cloak x-float.placement.${this._placement ?? 'bottom-end'}.flip.teleport.offset="{ offset: ${this._offset ?? 8} }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="fi-dropdown-list" role="group">${items.join(' ')}</div>`).join('')}</div></div>`;
     }
 }
