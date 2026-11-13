@@ -30,8 +30,8 @@ const phpNumber = (n: number | null): string | number | null => {
     return `${mantissa.replace(/\.?0+$/, '')}E${exponent}`;
 };
 
-type Rule = { name: string; passes: (value: unknown, ctx: ComponentContext) => boolean | Promise<boolean>; message: (attribute: string) => string };
-const blank = (v: unknown) => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
+import { isBlank as blank, stringRule, parseRegex, type Rule } from './rules.ts';
+export type { Rule } from './rules.ts';
 const headline = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ (.)/g, (_, c) => ' ' + c.toLowerCase());
 
 export abstract class Field extends Component {
@@ -46,6 +46,9 @@ export abstract class Field extends Component {
     protected _hiddenLabel = false;
     protected _helperText: string | null = null;
     protected _liveMode: 'live' | 'blur' | null = null;
+    protected _validationAttribute: string | null = null;
+    protected _validationMessages: Record<string, string | ((attribute: string) => string)> = {};
+    protected _markedAsRequired: boolean | null = null;
 
     constructor(name: string) { super(); this._name = name; }
     /** Sends the state to the server as soon as it changes (`onBlur`: when the field loses focus). `false` turns it off. */
@@ -119,7 +122,102 @@ export abstract class Field extends Component {
     getDefaultState(): unknown { return typeof this._default === 'function' ? this._default() : this._default; }
     /** Shapes a record value as it enters the form (hydration). */
     hydrateState(value: unknown): unknown { return value; }
-    rule(rule: Rule): this { this._rules.push(rule); return this; }
+    /** Adds a rule: an object `{ name, passes, message }`, or a Laravel-style string (`'max:255'`, `'regex:/^[a-z]+$/'`). */
+    rule(rule: Rule | string, condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this {
+        if (typeof rule === 'string') {
+            const spec = rule;
+            // Built now, so that an unknown or malformed rule fails when the form is declared.
+            const probe = stringRule(spec, { numeric: false, name: this._name ?? '' });
+            if (!probe) return this;
+            const build = () => stringRule(spec, { numeric: this.hasNumericValidation(), name: this._name ?? '' })!;
+            rule = { name: probe.name, implicit: probe.implicit, passes: (value, ctx) => build().passes(value, ctx), message: (attribute) => build().message(attribute) };
+        }
+        if (condition === false) return this;
+        if (condition === true) { this._rules.push(rule); return this; }
+        const inner = rule;
+        this._rules.push({ ...inner, passes: async (value, ctx) => !(await condition(ctx)) || inner.passes(value, ctx) });
+        return this;
+    }
+    /** Several rules at once: `rules(['required', 'max:255'])` or `rules('required|max:255')`. */
+    rules(rules: (Rule | string)[] | string, condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this {
+        for (const rule of typeof rules === 'string' ? rules.split('|').filter((item) => item.trim() !== '') : rules) this.rule(rule, condition);
+        return this;
+    }
+    /** Sizes (`min`, `max`, `size`, `between`) compare the number, not the text length. */
+    protected hasNumericValidation(): boolean { return false; }
+    /** Name of the field in validation messages (the lowercased label by default). */
+    validationAttribute(name: string | null): this { this._validationAttribute = name; return this; }
+    /** Custom messages by rule name (`{ required: 'Tell us your name.', max: 'Too long.' }`); `:attribute` is replaced by the field name. */
+    validationMessages(messages: Record<string, string | ((attribute: string) => string)>): this { this._validationMessages = { ...this._validationMessages, ...messages }; return this; }
+    /** Shows (or hides, with `false`) the required asterisk, regardless of `required()`. */
+    markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
+    async isMarkedAsRequired(): Promise<boolean> { return this._markedAsRequired ?? (await this.isRequired()); }
+    private stringRuleWith(name: string, parameters: unknown[] = []): this { return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name); }
+    /** The value must match the pattern (a RegExp, or a `/pattern/flags` string). */
+    regex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'regex', passes: (v) => { re.lastIndex = 0; return re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
+    notRegex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'not_regex', passes: (v) => { re.lastIndex = 0; return !re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
+    alpha(): this { return this.stringRuleWith('alpha'); }
+    alphaDash(): this { return this.stringRuleWith('alpha_dash'); }
+    alphaNum(): this { return this.stringRuleWith('alpha_num'); }
+    ascii(): this { return this.stringRuleWith('ascii'); }
+    uuid(): this { return this.stringRuleWith('uuid'); }
+    ulid(): this { return this.stringRuleWith('ulid'); }
+    json(): this { return this.stringRuleWith('json'); }
+    ip(): this { return this.stringRuleWith('ip'); }
+    ipv4(): this { return this.stringRuleWith('ipv4'); }
+    ipv6(): this { return this.stringRuleWith('ipv6'); }
+    macAddress(): this { return this.stringRuleWith('mac_address'); }
+    hexColor(): this { return this.stringRuleWith('hex_color'); }
+    multipleOf(value: number): this { return this.stringRuleWith('multiple_of', [value]); }
+    /** The value must be one of these (a list, or the values of an enum-like object). */
+    in(values: readonly (string | number)[] | Record<string, string | number>): this { const allowed = (Array.isArray(values) ? values : Object.values(values)).map(String); return this.rule({ name: 'in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
+    notIn(values: readonly (string | number)[]): this { const denied = values.map(String); return this.rule({ name: 'not_in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => !denied.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
+    /** `in()` with the values of an enum-like object. */
+    enum(values: Record<string, string | number>): this { return this.in(values); }
+    startsWith(prefixes: string | string[]): this { return this.stringRuleWith('starts_with', [prefixes].flat()); }
+    endsWith(suffixes: string | string[]): this { return this.stringRuleWith('ends_with', [suffixes].flat()); }
+    doesntStartWith(prefixes: string | string[]): this { return this.stringRuleWith('doesnt_start_with', [prefixes].flat()); }
+    doesntEndWith(suffixes: string | string[]): this { return this.stringRuleWith('doesnt_end_with', [suffixes].flat()); }
+    /** The field must equal `<name>_confirmation` (or the given field) of the same form. */
+    confirmed(field: string | null = null): this { return this.rule(field ? `confirmed:${field}` : 'confirmed'); }
+    same(field: string): this { return this.stringRuleWith('same', [field]); }
+    different(field: string): this { return this.stringRuleWith('different', [field]); }
+    /** Compares with a number or another field of the same form. */
+    gt(fieldOrValue: string | number): this { return this.stringRuleWith('gt', [fieldOrValue]); }
+    gte(fieldOrValue: string | number): this { return this.stringRuleWith('gte', [fieldOrValue]); }
+    lt(fieldOrValue: string | number): this { return this.stringRuleWith('lt', [fieldOrValue]); }
+    lte(fieldOrValue: string | number): this { return this.stringRuleWith('lte', [fieldOrValue]); }
+    /** No duplicates in a list value (tags, multiple select, checkbox list). */
+    distinct(): this { return this.stringRuleWith('distinct'); }
+    /** Required when another field of the form has one of these values (`requiredIf('type', 'company')`). */
+    requiredIf(field: string, values: unknown): this { return this.stringRuleWith('required_if', [field, ...[values].flat()]); }
+    requiredUnless(field: string, values: unknown): this { return this.stringRuleWith('required_unless', [field, ...[values].flat()]); }
+    requiredIfAccepted(field: string): this { return this.stringRuleWith('required_if_accepted', [field]); }
+    requiredWith(fields: string | string[]): this { return this.stringRuleWith('required_with', [fields].flat()); }
+    requiredWithAll(fields: string | string[]): this { return this.stringRuleWith('required_with_all', [fields].flat()); }
+    requiredWithout(fields: string | string[]): this { return this.stringRuleWith('required_without', [fields].flat()); }
+    requiredWithoutAll(fields: string | string[]): this { return this.stringRuleWith('required_without_all', [fields].flat()); }
+    prohibited(condition = true): this { return condition ? this.stringRuleWith('prohibited') : this; }
+    prohibitedIf(field: string, values: unknown): this { return this.stringRuleWith('prohibited_if', [field, ...[values].flat()]); }
+    prohibitedUnless(field: string, values: unknown): this { return this.stringRuleWith('prohibited_unless', [field, ...[values].flat()]); }
+    prohibits(fields: string | string[]): this { return this.stringRuleWith('prohibits', [fields].flat()); }
+    /**
+     * The value must exist: in a column of the host's data adapter (`exists()`, `exists({ column })`), in another adapter
+     * (`exists({ adapter: new ObjectionAdapter(Brand), column: 'id' })`), or according to a function.
+     */
+    exists(check: { adapter?: { exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean> }; column?: string } | ((value: unknown, ctx: ComponentContext) => boolean | Promise<boolean>) = {}): this {
+        return this.rule({
+            name: 'exists',
+            passes: async (value, ctx) => {
+                if (typeof check === 'function') return check(value, ctx);
+                const adapter = check.adapter ?? (ctx.livewire as any).getDataAdapter?.();
+                if (!adapter) throw new Error('exists(): no data adapter (pass one with { adapter }).');
+                for (const item of Array.isArray(value) ? value : [value]) if (!(await adapter.exists(check.column ?? this._name!, item, null))) return false;
+                return true;
+            },
+            message: (a) => `The selected ${a} is invalid.`,
+        });
+    }
     /** `unique` rule: the value must not exist in the column of the same name; `ignoreRecord` excludes the record being edited. */
     unique(options: { ignoreRecord?: boolean; column?: string } = {}): this {
         return this.rule({
@@ -153,10 +251,13 @@ export abstract class Field extends Component {
         if ((await this.isDisabled()) && this._dehydrated !== true) return [];
         // An empty string is treated as missing.
         const value = this.context().state === '' ? null : this.context().state;
-        const attribute = (await this.getLabel()).toLowerCase();
+        const attribute = this._validationAttribute ?? (await this.getLabel()).toLowerCase();
         for (const rule of await this.getValidationRules()) {
-            if (rule.name !== 'required' && blank(value)) continue;
-            if (!(await rule.passes(value, this.context()))) return [rule.message(attribute)];
+            if (rule.name !== 'required' && !rule.implicit && blank(value)) continue;
+            if (!(await rule.passes(value, this.context()))) {
+                const custom = this._validationMessages[rule.name];
+                return [custom === undefined ? rule.message(attribute) : typeof custom === 'function' ? custom(attribute) : custom.replace(/:attribute/g, attribute)];
+            }
         }
         return [];
     }
@@ -176,7 +277,7 @@ export abstract class Field extends Component {
         // Helper text: a small inline schema under the control.
         if (this._helperText !== null) html += `<div id="${e(this.getHelperTextId()!)}" class="fi-sc fi-inline fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="fi-sc-component"><span class="fi-sc-text">${e(this._helperText)}</span></div></div></div>`;
         return views.render('filament-forms::components.field-wrapper', {
-            id: this.getId(), label: await this.getLabel(), required: (await this.isRequired()) && !(await this.isDisabled()),
+            id: this.getId(), label: await this.getLabel(), required: (await this.isMarkedAsRequired()) && !(await this.isDisabled()),
             labelPrefix: options.labelPrefix ?? '', hiddenLabel: this._hiddenLabel, after: options.after ?? '', afterLabel: this._hiddenLabel ? '' : await this.renderAfterLabel(), labelAsDiv: options.labelAsDiv === true, focusable: options.focusable === true, html, errorMessage: errors[0] ?? null, wrapperClass: options.wrapperClass ?? null,
         });
     }
@@ -197,6 +298,7 @@ export class TextInput extends Field {
     private _live: 'live' | 'blur' | null = null;
 
     static make(name: string): TextInput { return configured(new TextInput(name)); }
+    protected hasNumericValidation(): boolean { return this._numeric !== null; }
     /** Decimal number: `type="number"`, `step="any"`. */
     numeric(): this { this._numeric = 'decimal'; return this.rule({ name: 'numeric', passes: (v) => String(v).trim() !== '' && Number.isFinite(Number(v)), message: (a) => `The ${a} field must be a number.` }); }
     /** Integer: `type="number"`, `step="1"`. */
@@ -908,13 +1010,41 @@ export class TagsInput extends Field {
     suggestions(suggestions: string[]): this { this._suggestions = suggestions.map(String).slice(0, 1000); return this; }
     /** Keys that confirm the current tag, besides Enter (`['Tab', ',']`). */
     splitKeys(keys: string[]): this { this._splitKeys = keys; return this; }
+    private _separator: string | null = null;
+    private _tagPrefix: string | null = null;
+    private _tagSuffix: string | null = null;
+    private _reorderable = false;
+    private _tagColor: string | null = null;
+    private _tagRules: Rule[] = [];
+    /** Saves the tags as one string joined with this separator (`'a,b,c'`) instead of a list. */
+    separator(separator: string | null = ','): this { this._separator = separator; return this; }
+    /** Text shown before / after each tag (not saved). */
+    tagPrefix(prefix: string | null): this { this._tagPrefix = prefix; return this; }
+    tagSuffix(suffix: string | null): this { this._tagSuffix = suffix; return this; }
+    /** Tags can be reordered by dragging. */
+    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    /** Badge color of the tags (`primary` by default). */
+    color(color: string | null): this { this._tagColor = color; return this; }
+    /** Rules applied to each tag (e.g. a maximum length); the message names the tag. */
+    nestedRecursiveRules(rules: Rule[]): this { this._tagRules = rules; return this; }
     getDefaultState(): unknown { return this._default ?? []; }
     hydrateState(value: unknown): unknown {
-        if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
-        return Array.isArray(value) ? value.filter((tag) => typeof tag === 'string' || typeof tag === 'number').map(String) : [];
+        if (typeof value === 'string' && this._separator !== null) value = value === '' ? [] : value.split(this._separator);
+        else if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
+        return Array.isArray(value) ? value.filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()).filter((tag) => tag !== '') : [];
     }
-    /** Only non-empty strings are saved, whatever shape the browser sends. */
-    dehydrateState(state: unknown): unknown { return (Array.isArray(state) ? state : []).filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()).filter((tag) => tag !== '').slice(0, 1000); }
+    /** Only non-empty strings are saved, whatever shape the browser sends (joined with the separator, if any). */
+    dehydrateState(state: unknown): unknown {
+        const tags = (Array.isArray(state) ? state : []).filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()).filter((tag) => tag !== '').slice(0, 1000);
+        return this._separator !== null ? tags.join(this._separator) : tags;
+    }
+    async getValidationRules(): Promise<Rule[]> {
+        if (!this._tagRules.length) return super.getValidationRules();
+        return [...(await super.getValidationRules()), ...this._tagRules.map((rule): Rule => ({
+            ...rule,
+            passes: async (value: unknown, ctx: any) => { for (const tag of Array.isArray(value) ? value : []) if (!(await rule.passes(tag, ctx))) return false; return true; },
+        }))];
+    }
     async toHtml(): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const id = this.getId();
@@ -926,14 +1056,15 @@ export class TagsInput extends Field {
         const input = new Attributes()
             .merge({ autocomplete: 'off', disabled: isDisabled, id, list: `${id}-suggestions`, placeholder: this._placeholder ?? t('filament-forms::components.tags_input.placeholder'), type: 'text', 'x-bind': 'input' })
             .class(['fi-input']);
-        const badge = ['fi-badge', 'fi-size-md', ...colorManager.getComponentClasses('badge', 'primary')].join(' ');
+        const badge = ['fi-badge', 'fi-size-md', ...colorManager.getComponentClasses('badge', this._tagColor ?? 'primary'), this._reorderable && !isDisabled ? 'fi-reorderable' : null].filter(Boolean).join(' ');
+        const reorderable = this._reorderable && !isDisabled;
         const deleteButton = isDisabled ? '' : `<button type="button" x-on:click.stop="deleteTag(tag)" x-bind:aria-label="'${e(t('filament-forms::components.tags_input.actions.delete.label'))}: ' + tag" class="fi-badge-delete-btn"><span aria-hidden="true" class="fi-badge-delete-btn-icon"></span></button>`;
         return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}" x-data="tagsInputFormComponent({
                     state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
                     splitKeys: ${this._splitKeys.length ? e(js(this._splitKeys)) : '[]'},
                     tagAddedMessage: ${e(js(t('filament-forms::components.tags_input.tag_added')))},
                     tagRemovedMessage: ${e(js(t('filament-forms::components.tags_input.tag_removed')))},
-                })"><input ${input.toHtml()} /><div x-ref="liveRegion" aria-live="polite" class="fi-sr-only"></div><datalist id="${e(id)}-suggestions">${this._suggestions.map((s) => `<template x-bind:key="${e(js(s))}" x-if="! (state?.includes(${e(js(s))}) ?? true)"><option value="${e(s)}" /></template>`).join('')}</datalist><div wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${createHash('md5').update(JSON.stringify(this.context().state ?? [])).digest('hex')}"><template x-cloak x-if="state?.length"><div class="fi-fo-tags-input-tags-ctn"><template x-for="(tag, index) in state" x-bind:key="\`\${tag}-\${index}\`"><span class="${badge}"><span class="fi-badge-label-ctn"><span class="fi-badge-label"><span x-text="tag"></span></span></span>${deleteButton}</span></template></div></template></div></div></div></div>`, { wrapperClass: 'fi-fo-tags-input-wrp' });
+                })"><input ${input.toHtml()} /><div x-ref="liveRegion" aria-live="polite" class="fi-sr-only"></div><datalist id="${e(id)}-suggestions">${this._suggestions.map((s) => `<template x-bind:key="${e(js(s))}" x-if="! (state?.includes(${e(js(s))}) ?? true)"><option value="${e(s)}" /></template>`).join('')}</datalist><div wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${createHash('md5').update(JSON.stringify(this.context().state ?? [])).digest('hex')}"><template x-cloak x-if="state?.length"><div${reorderable ? ' x-on:end.stop="reorderTags($event)" x-sortable data-sortable-animation-duration="300"' : ''} class="fi-fo-tags-input-tags-ctn"><template x-for="(tag, index) in state" x-bind:key="\`\${tag}-\${index}\`"><span${reorderable ? ' x-bind:x-sortable-item="index" x-sortable-handle' : ''} class="${badge}"><span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(this._tagPrefix ?? '')}<span x-text="tag"></span>${e(this._tagSuffix ?? '')}</span></span>${deleteButton}</span></template></div></template></div></div></div></div>`, { wrapperClass: 'fi-fo-tags-input-wrp' });
     }
 }
 

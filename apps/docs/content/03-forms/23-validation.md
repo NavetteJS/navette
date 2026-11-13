@@ -41,7 +41,7 @@ TextInput.make('email')
 
 For each field, `required` runs first, then the other rules in the order you added them. Validation stops at the first failing rule of the field.
 
-- **Empty values skip the other rules.** When the value is empty (`null`, an empty string or an empty list), only `required` is checked. An optional field may therefore be left empty even if it has `minLength()` or `email()`.
+- **Empty values skip the other rules.** When the value is empty (`null`, an empty string or an empty list), only the rules about presence run: `required` and its conditional variants (`requiredIf()`, `requiredWith()`…), `prohibited`, `accepted` and `declined`. An optional field may therefore be left empty even if it has `minLength()` or `email()`.
 - **Hidden fields are not validated.** Neither are the fields of a hidden section, tab or other layout component.
 - **Disabled fields are not validated**, unless they are `dehydrated()`, since their value is not saved.
 - **Fields that are not saved are still validated.** A field with `dehydrated(false)`, such as a password confirmation, keeps its rules.
@@ -69,6 +69,16 @@ TextInput.make('company_name')
 ```
 
 On a checkbox or a toggle, `required()` means the box must be checked. On a repeater, it means at least one item; on a file upload, at least one file; on a rich editor, some content.
+
+`markAsRequired()` shows the asterisk without adding the rule (useful with [conditional requirements](#conditional-requirements)), and `markAsRequired(false)` hides it on a required field:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .required()
+    .markAsRequired(false)
+```
 
 ### Email
 
@@ -160,12 +170,178 @@ Fields with predefined options check that the submitted value is one of them: `S
 
 `ColorPicker` checks that the value is a hexadecimal color. See [color picker validation](/forms/color-picker#color-picker-validation).
 
+### Format rules
+
+These rules check the shape of a text value:
+
+| Method | Rule | Passes when the value… |
+| --- | --- | --- |
+| `alpha()` | `alpha` | only contains letters |
+| `alphaDash()` | `alpha_dash` | only contains letters, numbers, dashes and underscores |
+| `alphaNum()` | `alpha_num` | only contains letters and numbers |
+| `ascii()` | `ascii` | only contains ASCII characters |
+| `uuid()` / `ulid()` | `uuid` / `ulid` | is a UUID / a ULID |
+| `json()` | `json` | is a valid JSON string |
+| `ip()`, `ipv4()`, `ipv6()` | `ip`, `ipv4`, `ipv6` | is an IP address |
+| `macAddress()` | `mac_address` | is a MAC address |
+| `hexColor()` | `hex_color` | is a hexadecimal color |
+| `multipleOf(5)` | `multiple_of:5` | is a multiple of the number |
+| `startsWith(['https://'])` | `starts_with` | starts with one of the strings |
+| `endsWith('.pdf')` | `ends_with` | ends with one of the strings |
+| `doesntStartWith()` / `doesntEndWith()` | `doesnt_start_with` / `doesnt_end_with` | does not start / end with any of the strings |
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('username')
+    .alphaDash()
+    .doesntStartWith(['admin'])
+```
+
+### Regex
+
+The value must match a pattern. Pass a `RegExp`, or a string written like Laravel's (`/pattern/flags`, with the `i`, `m`, `s` and `u` flags). `notRegex()` does the opposite:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('code')
+    .regex(/^[A-Z]{3}-\d{4}$/)
+    .notRegex('/^XXX/i')
+```
+
+### In and not in
+
+Besides the automatic check of fields with options, `in()` accepts a list of values, or an object whose values are the allowed ones (such as a TypeScript `const` enum object, also accepted by `enum()`). `notIn()` rejects the values of the list. On a list value, every item is checked:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+const Status = { Draft: 'draft', Published: 'published' } as const;
+
+TextInput.make('status')
+    .enum(Status)
+
+TextInput.make('username')
+    .notIn(['admin', 'root'])
+```
+
+### Distinct
+
+A list value (tags, multiple select, checkbox list) must not contain the same value twice:
+
+```ts
+import { TagsInput } from '@navette-js/forms';
+
+TagsInput.make('tags')
+    .distinct()
+```
+
+### Comparing with other fields
+
+These rules compare the value with another field of the same form, read with `get()` relative to the field's container:
+
+- `confirmed()`: the value must equal the `<name>_confirmation` field (or the field you pass).
+- `same('field')` / `different('field')`: the value must equal / differ from the other field.
+- `gt()`, `gte()`, `lt()`, `lte()`: the value must be greater than (or equal to), less than (or equal to) a number or another field. Text is compared by length, numbers by value.
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('password')
+    .password()
+    .confirmed()
+
+TextInput.make('password_confirmation')
+    .password()
+    .dehydrated(false)
+
+TextInput.make('max_price')
+    .numeric()
+    .gte('min_price')
+```
+
+### Conditional requirements
+
+These rules make a field required, or forbid a value, depending on other fields. Unlike the other rules, they also run when the value is empty:
+
+| Method | The field is required when… |
+| --- | --- |
+| `requiredIf('type', 'company')` | `type` has one of the values |
+| `requiredUnless('type', ['person'])` | `type` has none of the values |
+| `requiredIfAccepted('newsletter')` | `newsletter` is checked |
+| `requiredWith('company')` / `requiredWithAll([...])` | one / all of the fields have a value |
+| `requiredWithout('phone')` / `requiredWithoutAll([...])` | one / all of the fields are empty |
+
+`prohibited()` rejects any value; `prohibitedIf()` and `prohibitedUnless()` do it depending on another field, and `prohibits(['other'])` rejects the other fields when this one has a value.
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('company_name')
+    .requiredIf('customer_type', 'business')
+
+TextInput.make('phone')
+    .requiredWithout('email')
+```
+
+These rules do not show the required asterisk, since it depends on other values. To show it, use `markAsRequired()` (see [required](#required)); to show it only in some cases, combine `required()` with a function and `live()` on the other field.
+
+### Exists
+
+The value must exist in the database. Without an argument, the rule checks the column of the same name through the resource's data adapter, like `unique()`. You may pass another column, another adapter (to check another table), or a function:
+
+```ts
+import { ObjectionAdapter } from '@navette-js/database';
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('brand_id')
+    .exists({ adapter: new ObjectionAdapter(Brand), column: 'id' })
+
+TextInput.make('coupon')
+    .exists(async (value) => Boolean(await knex('coupons').where({ code: value, active: true }).first()))
+```
+
+On a list value, every item must exist.
+
 ### Other built-in rules
 
 - `FileUpload` validates file types, sizes and counts. See [file upload validation](/forms/file-upload#file-upload-validation).
 - `Slider` validates that each value is a number within its range and on its step. See [slider](/forms/slider).
 - `MarkdownEditor` and `CodeEditor` check that the value is a string.
 - `OneTimeCodeInput` checks that the value has exactly `length()` digits.
+
+## Laravel rule strings
+
+`rules()` adds several rules written as Laravel rule strings, in a list or separated by `|`. `rule()` adds one:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('slug')
+    .rules(['required', 'alpha_dash', 'max:64'])
+
+TextInput.make('quantity')
+    .integer()
+    .rules('min:1|max:99')
+```
+
+Supported rules: `required`, `filled`, `nullable`, `sometimes`, `bail`, `string`, `present`, `accepted`, `declined`, `numeric`, `integer`, `boolean`, `array`, `email`, `url`, `uuid`, `ulid`, `alpha`, `alpha_dash`, `alpha_num`, `ascii`, `lowercase`, `uppercase`, `json`, `ip`, `ipv4`, `ipv6`, `mac_address`, `hex_color`, `date`, `min`, `max`, `size`, `between`, `digits`, `digits_between`, `multiple_of`, `in`, `not_in`, `regex`, `not_regex`, `starts_with`, `ends_with`, `doesnt_start_with`, `doesnt_end_with`, `distinct`, `confirmed`, `same`, `different`, `gt`, `gte`, `lt`, `lte`, `after`, `after_or_equal`, `before`, `before_or_equal` (with a date, `today`, `tomorrow` or a field), `required_if`, `required_unless`, `required_if_accepted`, `required_with`, `required_with_all`, `required_without`, `required_without_all`, `prohibited`, `prohibited_if`, `prohibited_unless` and `prohibits`.
+
+`min`, `max`, `size` and `between` compare the number on a `numeric()` or `integer()` field, the number of items on a list, and the length of the text otherwise. `nullable`, `sometimes`, `bail`, `string` and `present` are accepted and do nothing, since empty values already skip the rules and validation stops at the first failure.
+
+An unknown rule, or a malformed regex, throws an error when the field is declared. Rules that need the database (`unique`, `exists`) have their own methods.
+
+### Conditional rules
+
+`rule()` and `rules()` accept a condition, a boolean or a function of the [field context](/forms/overview#using-the-field-context):
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('vat_number')
+    .rules(['required', 'regex:/^[A-Z]{2}\d+$/'], ({ get }) => get('country') !== 'US')
+```
 
 ## Custom rules
 
@@ -230,10 +406,43 @@ Select.make('order_id')
 
 Navette's messages are Laravel's default English messages, such as "The name field is required.". The attribute in the message is the field's label in lower case.
 
-`message()` receives this attribute. To change the wording of a built-in rule, replace the rule with your own: for example, use a custom rule instead of `maxLength()` to write your own length message.
+### Custom validation attribute
+
+`validationAttribute()` changes the name of the field in its messages:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .validationAttribute('full name')
+```
+
+### Custom validation messages
+
+`validationMessages()` replaces the message of a rule, by its name (the Laravel rule name: `required`, `max`, `regex`, `required_if`…). `:attribute` is replaced by the field's name. A message may also be a function that receives the attribute:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('email')
+    .unique({ ignoreRecord: true })
+    .validationMessages({
+        unique: 'The :attribute has already been registered.',
+        required: (attribute) => `Please enter your ${attribute}.`,
+    })
+```
+
+```preview
+// state: {"email": ""}
+// errors: {"data.email": ["Please enter your email."]}
+// width: 32rem
+TextInput.make('email')
+    .required()
+    .validationMessages({ required: (attribute) => `Please enter your ${attribute}.` })
+```
 
 Error messages are always escaped when displayed.
 
 <Aside variant="warning">
-`rules()` with Laravel rule strings, `validationAttribute()`, `validationMessages()`, translated messages and the Laravel rules without a dedicated method in Navette (`alpha`, `regex`, `confirmed`, `exists`, `different`, `uuid`…) are not available. Write them as custom rules with `rule()`.
+Messages are not translated yet: they are in English unless you replace them with `validationMessages()`.
 </Aside>
