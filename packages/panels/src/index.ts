@@ -981,7 +981,8 @@ export class Dashboard extends Page {
     /** Filters form state. Stays `null` while the page has no filters. */
     filters: Record<string, unknown> | null = null;
     /** Dashboard widgets. Defaults to the panel's (`panel.widgets([...])`). */
-    getWidgets(): (typeof Widget)[] { return this.panel.getWidgets(); }
+    /** The panel's widgets, ordered by their `sort` (stable). */
+    getWidgets(): (typeof Widget)[] { return [...this.panel.getWidgets()].map((widget, index) => ({ widget, index })).sort((a, b) => (a.widget.sort ?? Infinity) - (b.widget.sort ?? Infinity) || a.index - b.index).map(({ widget }) => widget); }
     /** Grid columns: a number (at the `lg` breakpoint), or one number per breakpoint. */
     getColumns(): number | Record<string, number> { return 2; }
     hasFiltersForm(): boolean { return typeof (this as any).filtersFormSchema === 'function'; }
@@ -1581,12 +1582,14 @@ export abstract class Resource {
 
 /** Sub-navigation tab of a page. */
 export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean };
-type ColumnSpan = number | 'full';
+type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
 /** Widget: a component displayed in a page's widget grid. */
 export abstract class Widget extends Component {
     static componentName: string;
-    /** Width in the widget grid: a number of columns, or `'full'`. */
+    /** Width in the widget grid: a number of columns or `'full'` (from `lg`), or a span per breakpoint (`{ md: 2, xl: 3 }`). */
     static columnSpan: ColumnSpan = 1;
+    /** Position on the dashboard (lower first); widgets without a sort keep their order, after the sorted ones. */
+    static sort: number | null = null;
     /** Loaded when it becomes visible. */
     static isLazy = true;
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
@@ -1598,9 +1601,16 @@ export abstract class Widget extends Component {
         const WidgetClass = this.constructor as typeof Widget;
         if (!(await ctx.panel.authorize(ctx.user, 'view', { widget: WidgetClass, rule: () => WidgetClass.canView(ctx.user!) }))) throw new WireError(403, 'Forbidden.');
     }
-    /** Grid column classes and style, at the `lg` breakpoint. */
+    /** Grid column classes and style: at the `lg` breakpoint, or per breakpoint. */
     protected gridColumn(): { classes: string[]; style: string } {
         const span = (this.constructor as typeof Widget).columnSpan;
+        if (typeof span === 'object') {
+            const entries = Object.entries(span).filter(([breakpoint, value]) => /^(default|sm|md|lg|xl|2xl)$/.test(breakpoint) && (value === 'full' || (Number.isInteger(value) && value > 0)));
+            return {
+                classes: ['fi-grid-col', ...entries.map(([breakpoint]) => (breakpoint === 'default' ? 'fi-grid-col-span' : `${breakpoint}:fi-grid-col-span`))],
+                style: entries.map(([breakpoint, value]) => `--col-span-${breakpoint}: ${value === 'full' ? '1 / -1' : `span ${value} / span ${value}`};`).join(' '),
+            };
+        }
         // The span is always written, even for a single column.
         return { classes: ['fi-grid-col', 'lg:fi-grid-col-span'], style: `--col-span-lg: ${span === 'full' ? '1 / -1' : `span ${Math.floor(span)} / span ${Math.floor(span)}`};` };
     }
@@ -1906,6 +1916,10 @@ export abstract class StatsOverviewWidget extends Widget {
     /** Polling interval, or `null` to disable polling. */
     static pollingInterval: string | null = '5s';
     abstract getStats(): Stat[] | Promise<Stat[]>;
+    /** Heading shown above the stats. */
+    protected getHeading(): string | null { return null; }
+    /** Description under the heading. */
+    protected getDescription(): string | null { return null; }
     /** Row columns: three, or four when the number of stats fits better. */
     protected getColumns(count: number): number { return count < 3 ? 3 : count % 3 !== 1 ? 3 : 4; }
     async render(): Promise<string> {
@@ -1918,11 +1932,13 @@ export abstract class StatsOverviewWidget extends Widget {
             const id = `stats-overview-stat-${index}`, key = `content.${id}`;
             return `<div wire:partial="schema-component::${key}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${this.id}.${key}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(this.panel, id)}</div></div>`;
         }).join('');
+        const heading = this.getHeading(), description = this.getDescription();
+        const header = heading !== null || description !== null ? `<header class="fi-section-header"><div class="fi-section-header-content fi-section-header-content-has-heading"><div class="fi-section-header-text-ctn">${heading !== null ? `<h3 class="fi-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
         const interval = (this.constructor as typeof StatsOverviewWidget).pollingInterval;
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}` : '';
         return this.wrap(`<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymous} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component fi-grid-ctn"><div${poll} class="fi-sc-section"><section x-data="{
         isCollapsed: false,
-    }" class="fi-section fi-section-not-contained"><div class="fi-section-content-ctn"><div class="fi-section-content fi-grid @xl:fi-grid-cols !@lg:fi-grid-cols fi-sc fi-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div>`, ['fi-wi-stats-overview']);
+    }" class="fi-section fi-section-not-contained${header ? ' fi-section-has-header' : ''}">${header}<div class="fi-section-content-ctn"><div class="fi-section-content fi-grid @xl:fi-grid-cols !@lg:fi-grid-cols fi-sc fi-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div>`, ['fi-wi-stats-overview']);
     }
 }
 
@@ -1935,6 +1951,10 @@ export type ChartData = { datasets?: Record<string, unknown>[]; labels?: unknown
  * has changed (checksum).
  */
 export abstract class ChartWidget extends Widget {
+    /** Empty state shown when `getData()` returns nothing. */
+    protected getEmptyStateHeading(): string { return t('filament-widgets::chart.empty.heading'); }
+    protected getEmptyStateDescription(): string | null { return null; }
+    protected getEmptyStateIcon(): string | null { return 'o-x-mark'; }
     static callable = ['updateChartData'];
     static locked = ['dataChecksum'];
     /** Polling interval, or `null` to disable polling. */
@@ -2001,7 +2021,7 @@ export abstract class ChartWidget extends Widget {
                                 type: ${e(js(type))},
                             })" class="${cls([...this.panel.colors.getComponentClasses('stat-chart', this.getColor()), 'fi-wi-chart-frame', 'fi-wi-chart-canvas-ctn', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"><canvas x-ref="canvas" aria-hidden="true" style="width: 100%; ${hasMaxHeight ? `max-height: ${e(maxHeight)}` : 'height: 100%; max-height: 100%'}"></canvas>${colors.map((name, index) => `<span aria-hidden="true" x-ref="${refs[index]}ColorElement" class="fi-wi-chart-${name}-color"></span>`).join('')}</div>`;
         const empty = isEmpty
-            ? `<div class="${cls(['fi-wi-chart-frame', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"${hasMaxHeight ? ` style="min-height: ${e(maxHeight)}"` : ''}>${emptyState({ heading: t('filament-widgets::chart.empty.heading'), icon: 'o-x-mark', iconColor: 'gray', contained: false })}</div>`
+            ? `<div class="${cls(['fi-wi-chart-frame', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"${hasMaxHeight ? ` style="min-height: ${e(maxHeight)}"` : ''}>${emptyState({ heading: this.getEmptyStateHeading(), description: this.getEmptyStateDescription() ?? undefined, icon: this.getEmptyStateIcon() ?? undefined, iconColor: 'gray', contained: false })}</div>`
             : '';
         const body = `<div${poll}${isEmpty ? ' style="display: none"' : ''}><div class="fi-wi-chart-image"${label ? ` role="img" aria-label="${e(label)}"` : ''}>${frame}</div>${assistive ? `<div class="fi-wi-chart-assistive-content fi-sr-only"><p>${e(assistive)}</p></div>` : ''}</div>${empty}`;
         return this.wrap(`<section x-data="{

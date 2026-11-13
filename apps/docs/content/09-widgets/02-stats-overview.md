@@ -234,6 +234,28 @@ return [
 `trendPageTable()` requires the resource to use an `ObjectionAdapter`, and groups months with the SQLite function `strftime()`.
 </Aside>
 
+## Adding a heading and description
+
+Override `getHeading()` and `getDescription()` to show a heading and a description above the stats (both escaped):
+
+```ts
+import { Stat, StatsOverviewWidget } from '@navette-js/panels';
+
+export class StatsOverview extends StatsOverviewWidget {
+    protected getHeading(): string | null {
+        return 'Analytics';
+    }
+
+    protected getDescription(): string | null {
+        return 'An overview of some analytics.';
+    }
+
+    getStats() {
+        return [Stat.make('Unique views', '192.1k')];
+    }
+}
+```
+
 <Aside variant="warning">
-A heading and description for the stats overview widget, extra HTML attributes on a stat, and custom placeholders are not available yet.
+Extra HTML attributes on a stat and custom placeholders are not available yet.
 </Aside>

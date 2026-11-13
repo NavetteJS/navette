@@ -150,8 +150,24 @@ To filter the data of several widgets at once from a dashboard, see [filtering w
 
 When `getData()` returns an empty object, the chart is replaced by an empty state, with the heading "No chart data".
 
+You may customize it by overriding `getEmptyStateHeading()`, `getEmptyStateDescription()` and `getEmptyStateIcon()` (`null` for no icon):
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+
+export class RevenueChart extends ChartWidget {
+    protected getEmptyStateHeading(): string {
+        return 'No revenue yet';
+    }
+
+    protected getEmptyStateDescription(): string | null {
+        return 'Revenue appears here after the first order.';
+    }
+}
+```
+
 <Aside variant="warning">
-Customizing the empty state's heading, description, icon and actions is not available yet.
+Actions in the empty state are not available yet.
 </Aside>
 
 ## Live updating chart data (polling)

@@ -143,9 +143,29 @@ export class RevenueChart extends ChartWidget {
 
 The span applies from the `lg` breakpoint; below it, widgets take the full width. Stats, table and calendar widgets span the full width by default, and other widgets one column.
 
-<Aside variant="warning">
-Responsive widget widths (a span per breakpoint) and the `sort` property are not available yet: widgets are displayed in the order of the array that lists them.
-</Aside>
+You may also give a span per breakpoint (`default`, `sm`, `md`, `lg`, `xl`, `2xl`):
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+
+export class RevenueChart extends ChartWidget {
+    static columnSpan = { md: 2, xl: 3 };
+}
+```
+
+#### Sorting widgets
+
+The dashboard displays the panel's widgets in the order of their static `sort` property (lowest first). Widgets without a `sort` come after, in the order of the array that lists them:
+
+```ts
+import { StatsOverviewWidget } from '@navette-js/panels';
+
+export class StatsOverview extends StatsOverviewWidget {
+    static sort = 1;
+}
+```
+
+Header and footer widgets of other pages keep the order of the array returned by the page.
 
 ## Displaying widgets on other pages
 
