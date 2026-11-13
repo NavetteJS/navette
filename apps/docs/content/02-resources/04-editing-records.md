@@ -185,9 +185,49 @@ When the resource declares a [sub-navigation](/resources/overview#resource-sub-n
 static recordSubNavigation = ['view', 'edit', 'comments'];
 ```
 
-<Aside variant="warning">
-A resource has a single edit page: additional Edit pages, and saving a part of the form independently, are not available yet.
-</Aside>
+## Creating another edit page
+
+A record may have several edit pages, each with its own form: its address, its billing details… Create a subclass of `EditRecord` with its form, and declare it in the resource's `relatedPages`: it is served at `<slug>/{record}/<name>`.
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { EditRecord, Resource } from '@navette-js/panels';
+import type { Schema } from '@navette-js/schemas';
+
+export class EditCustomerContact extends EditRecord {
+    formSchema(schema: Schema): Schema {
+        return schema.columns(2).components([
+            TextInput.make('email').email().required(),
+            TextInput.make('phone'),
+        ]);
+    }
+}
+
+export class CustomerResource extends Resource {
+    static relatedPages = { contact: EditCustomerContact };
+    static recordSubNavigation = ['edit', 'contact'];
+}
+```
+
+`CustomerResource.getUrl('contact', key)` gives its URL, and `recordSubNavigation` links the pages of the record. A view page (`ViewRecord`) can be added the same way.
+
+## Saving a part of the form independently
+
+A section of the form can have its own "Save" button, saving only its fields, after validating only them. Call `saveFormComponentOnly()` with the section's `key()`:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Section } from '@navette-js/schemas';
+
+Section.make('Rate limiting')
+    .key('rateLimiting')
+    .schema([/* … */])
+    .footerActions([
+        Action.make('saveRateLimiting').label('Save').action(({ livewire }) => livewire.saveFormComponentOnly('rateLimiting', 'Rate limiting saved')),
+    ])
+```
+
+The second argument is the title of the notification ("Saved" by default). The `mutateFormDataBeforeSave()` and `handleRecordUpdate()` hooks of the page are used, with the fields of the section only.
 
 ## Custom page content
 

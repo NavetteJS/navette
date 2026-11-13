@@ -378,8 +378,80 @@ static policy: Policy = {
 ```
 
 <Aside variant="danger">
-Do not deny `viewAny` in the policy of a relation manager to hide it: the manager is loaded with the page, and the whole edit page then answers 403. Conditionally showing relation managers is not available yet; deny the actions instead, or restrict the manager's adapter.
+Do not deny `viewAny` in the policy of a relation manager to hide it: the manager is loaded with the page, and the whole edit page then answers 403. Hide a manager with [`canViewForRecord()`](#showing-a-relation-manager-conditionally) instead, deny the actions, or restrict the manager's adapter.
 </Aside>
+
+## Showing a relation manager conditionally
+
+`canViewForRecord()` decides whether a manager is shown for a record, on a given page:
+
+```ts
+import { RelationManager, ViewRecord, type Page } from '@navette-js/panels';
+
+export class InvoicesRelationManager extends RelationManager {
+    static canViewForRecord(ownerRecord: Customer, pageClass: typeof Page): boolean {
+        return ownerRecord.is_business && !(pageClass.prototype instanceof ViewRecord);
+    }
+}
+```
+
+## Customizing the relation manager tabs
+
+### Adding an icon and a badge
+
+Each manager is a tab of the record page, with its title. Give it an icon, and a badge (a count of related records…) with its color:
+
+```ts
+export class TasksRelationManager extends RelationManager {
+    static icon = 'm-clipboard-document-check';
+    static badgeColor = 'warning';
+
+    static async getBadge(ownerRecord: Project): Promise<number> {
+        return knex('tasks').where('project_id', ownerRecord.id).whereNot('status', 'done').count({ n: '*' }).first().then((row) => Number(row?.n ?? 0));
+    }
+}
+```
+
+A fixed badge can be set with `static badge = 'New'`.
+
+### Grouping relation managers
+
+`RelationGroup` shows several managers under one tab, one below the other:
+
+```ts
+import { RelationGroup, Resource } from '@navette-js/panels';
+
+export class CustomerResource extends Resource {
+    static relations = [
+        RelationGroup.make('Contact', [PhonesRelationManager, EmailsRelationManager]).icon('m-user').badge(() => countContacts()),
+        OrdersRelationManager,
+    ];
+}
+```
+
+### Combining the managers with the form in tabs
+
+To show the form as the first tab, next to the managers, return `true` from `hasCombinedRelationManagerTabsWithContent()` on the edit page (or the view page, for its infolist). The tab is named "Edit" ("View"); change its label and icon:
+
+```ts
+import { EditRecord } from '@navette-js/panels';
+
+export class EditProject extends EditRecord {
+    hasCombinedRelationManagerTabsWithContent(): boolean { return true; }
+    getContentTabLabel(): string { return 'Project'; }
+    getContentTabIcon(): string | null { return 'm-pencil-square'; }
+}
+```
+
+### Choosing the managers of a page
+
+By default, the edit and view pages show the resource's `relations`. A page can show its own list with `static relationManagers`:
+
+```ts
+export class ViewProject extends ViewRecord {
+    static relationManagers = [TasksRelationManager];
+}
+```
 
 ## Relation pages
 
@@ -424,6 +496,3 @@ List the page in `recordSubNavigation` to show it next to the View and Edit page
 static recordSubNavigation = ['view', 'edit', 'comments'];
 ```
 
-<Aside variant="warning">
-Grouping relation managers, combining them with the form in tabs, and tab badges are not available yet.
-</Aside>

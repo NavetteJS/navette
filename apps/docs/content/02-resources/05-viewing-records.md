@@ -123,9 +123,9 @@ When the resource declares a [sub-navigation](/resources/overview#resource-sub-n
 static recordSubNavigation = ['view', 'edit', 'comments'];
 ```
 
-<Aside variant="warning">
-A resource has a single View page: additional View pages, and per-page relation managers, are not available yet.
-</Aside>
+## Creating another view page
+
+A record can have several view pages: declare a subclass of `ViewRecord` with its own infolist in the resource's `relatedPages`, as for [another edit page](/resources/editing-records#creating-another-edit-page). Each page can show its own relation managers with `static relationManagers` (see [choosing the managers of a page](/resources/managing-relationships#choosing-the-managers-of-a-page)).
 
 ## Custom page content
 

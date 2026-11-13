@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
 import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
 import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
-import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
+import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
@@ -32,7 +32,7 @@ import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNot
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
-import { emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
+import { badge as uiBadge, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import type { DataAdapter } from '@navette-js/database';
 import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
@@ -1825,8 +1825,9 @@ export abstract class Resource {
     static widgets: (typeof Widget)[] = [];
     /** Widgets shown above the table on the list page. */
     static headerWidgets: (typeof Widget)[] = [];
-    /** Relation managers shown below the edit form. */
-    static relations: any[] = [];
+    /** Relation managers shown below the edit form (and the view page), or groups of them (`RelationGroup`). */
+    static relations: (typeof RelationManager | RelationGroup)[] = [];
+    static getRelations(): (typeof RelationManager | RelationGroup)[] { return this.relations; }
     /** Tabs of the list page. */
     static tabs(): Record<string, Tab> { return {}; }
     /** Simple resource: a single page, with create and edit in modals. */
@@ -1840,7 +1841,7 @@ export abstract class Resource {
         return page === 'index' ? base : page === 'create' ? `${base}/create` : page === 'view' ? `${base}/${record}` : `${base}/${record}/edit`;
     }
     /** Related records pages: `{ comments: ManagePostComments }` is served at `<slug>/{record}/comments`. */
-    static relatedPages: Record<string, typeof ManageRelatedRecords> = {};
+    static relatedPages: Record<string, typeof ManageRelatedRecords | typeof EditRecord | typeof ViewRecord> = {};
     /** Pages listed in a record's sub-navigation, in order: `['view', 'edit', 'comments']`. Empty: no sub-navigation. */
     static recordSubNavigation: string[] = [];
     /** Record sub-navigation: one tab per declared page, the current page's tab active. */
@@ -1947,6 +1948,11 @@ export abstract class Resource {
         if (resource.isSimple) return { index: List };
         const related: Record<string, typeof Page> = {};
         for (const [name, RelatedPage] of Object.entries(resource.relatedPages)) {
+            // Another edit or view page of the record (`EditCustomerContact extends EditRecord`): served at `<slug>/{record}/<name>`.
+            if ((RelatedPage as any).prototype instanceof EditRecord || (RelatedPage as any).prototype instanceof ViewRecord) {
+                related[name] = class extends (RelatedPage as any) { static resource = resource; static slug = `${resource.slug}/{record}/${name}`; static shouldRegisterNavigation = false; } as unknown as typeof Page;
+                continue;
+            }
             related[name] = class extends RelatedPage {
                 static parentResource = resource;
                 static slug = `${resource.slug}/{record}/${name}`;
@@ -2502,40 +2508,100 @@ export class EmbeddedTable extends SchemaComponent {
     static make(): EmbeddedTable { return new EmbeddedTable(); }
     async toHtml(): Promise<string> { return (this.livewire as unknown as ListRecords).renderTable(); }
 }
-/** Relation manager tabs of an edit page: only the active tab's manager is mounted, as a lazy child component. */
+/**
+ * Several relation managers under one tab of a record page: `RelationGroup.make('Contacts', [PhonesManager, EmailsManager])`.
+ * The managers are shown one below the other.
+ */
+export class RelationGroup {
+    private _label: string;
+    private _managers: (typeof RelationManager)[];
+    private _icon: string | null = null;
+    private _badge: string | number | null | (() => string | number | null | Promise<string | number | null>) = null;
+    private _badgeColor = 'primary';
+    constructor(label: string, managers: (typeof RelationManager)[]) { this._label = label; this._managers = managers; }
+    static make(label: string, managers: (typeof RelationManager)[]): RelationGroup { return new RelationGroup(label, managers); }
+    icon(name: string | null): this { this._icon = name; return this; }
+    badge(badge: string | number | null | (() => string | number | null | Promise<string | number | null>)): this { this._badge = badge; return this; }
+    badgeColor(color: string): this { this._badgeColor = color; return this; }
+    getLabel(): string { return this._label; }
+    getIcon(): string | null { return this._icon; }
+    getManagers(): (typeof RelationManager)[] { return this._managers; }
+    async getBadge(): Promise<string | number | null> { return typeof this._badge === 'function' ? this._badge() : this._badge; }
+    getBadgeColor(): string { return this._badgeColor; }
+}
+/** A tab of a record page's relation managers: a manager, a group of them, or the page's own content. */
+type RelationTab = { key: string; label: string; icon: string | null; badge: string | number | null; badgeColor: string; managers: (typeof RelationManager)[]; isContent: boolean };
+/** Relation manager tabs of a record page: only the active tab's managers are mounted, as lazy child components. */
 class RelationManagerTabs extends SchemaComponent {
-    constructor() { super(); this._keyName = 'relationManagerTabs'; }
+    private content: SchemaComponent[] = [];
+    constructor(content: SchemaComponent[] = []) { super(); this._keyName = 'relationManagerTabs'; this.content = content; }
+    /** With content (the form or infolist), it is the first tab: `hasCombinedRelationManagerTabsWithContent()`. */
+    getChildSchemas(): Schema[] { return this.content.length ? [childSchema(this, this.content)] : []; }
     getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
     getLazyLoadedTabBadges(): Record<string, unknown> { return {}; }
     getDeferredTabBadges(): Record<string, unknown> { return {}; }
+    /** Tabs the user can see on this record: managers and groups whose `canViewForRecord()` allows it. */
+    private async tabs(page: EditRecord | ViewRecord): Promise<RelationTab[]> {
+        const owner = (page as any)._record;
+        const PageClass = page.constructor as typeof Page;
+        const visible = async (manager: typeof RelationManager) => Boolean(await manager.canViewForRecord(owner, PageClass));
+        const tabs: RelationTab[] = [];
+        if (this.content.length) tabs.push({ key: '-1', label: page.getContentTabLabel(), icon: page.getContentTabIcon(), badge: null, badgeColor: 'primary', managers: [], isContent: true });
+        for (const [index, entry] of page.getRelationManagers().entries()) {
+            if (entry instanceof RelationGroup) {
+                const managers: (typeof RelationManager)[] = [];
+                for (const manager of entry.getManagers()) if (await visible(manager)) managers.push(manager);
+                if (managers.length) tabs.push({ key: String(index), label: entry.getLabel(), icon: entry.getIcon(), badge: await entry.getBadge(), badgeColor: entry.getBadgeColor(), managers, isContent: false });
+            } else if (await visible(entry)) {
+                tabs.push({ key: String(index), label: entry.getTitle(), icon: entry.getIcon(), badge: await entry.getBadge(owner, PageClass), badgeColor: entry.getBadgeColor(), managers: [entry], isContent: false });
+            }
+        }
+        return tabs;
+    }
+    async isVisible(): Promise<boolean> { return (await super.isVisible()) && (this.content.length > 0 || (await this.tabs(this.livewire as any)).length > 0); }
     async toHtml(): Promise<string> {
         const page = this.livewire as unknown as EditRecord;
-        const managers: (typeof RelationManager)[] = page.resource.relations;
+        const tabs = await this.tabs(page);
+        if (!tabs.length) return '';
         const key = this.getKey()!;
         const id = page.id;
-        const active = Math.min(Math.max(Math.floor(Number(page.activeRelationManager)) || 0, 0), managers.length - 1);
-        const tabId = (index: number) => `fi-sc-tab-${createHash('md5').update(`${key}.${index}`).digest('hex')}`;
-        const tabs = managers.map((manager, index) => `<button id="${tabId(index)}" role="tab" aria-controls="${key}.${index}" aria-selected="${index === active ? 'true' : 'false'}" x-bind:aria-selected="isTabSelected('${index}')" tabindex="${index === active ? '0' : '-1'}" x-bind:tabindex="getTabIndex('${index}')" data-tab-key="${index}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab('${index}', $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected('${index}') }" type="button" wire:click="$set('activeRelationManager', '${index}')" class="${cls(['fi-tabs-item', { 'fi-active': index === active }])}"><span class="fi-tabs-item-label">${e(manager.getTitle())}</span></button>`);
+        const active = tabs.find((tab) => tab.key === String(page.activeRelationManager)) ?? tabs[0];
+        const tabId = (tab: RelationTab) => `fi-sc-tab-${createHash('md5').update(`${key}.${tab.key}`).digest('hex')}`;
+        const header = tabs.map((tab) => {
+            const isActive = tab === active;
+            const iconHtml = tab.icon ? icon(tab.icon) : '';
+            const badgeHtml = tab.badge !== null && tab.badge !== undefined && tab.badge !== '' ? uiBadge({ color: tab.badgeColor, size: 'sm' }, e(String(tab.badge))) : '';
+            return `<button id="${tabId(tab)}" role="tab" aria-controls="${key}.${tab.key}" aria-selected="${isActive ? 'true' : 'false'}" x-bind:aria-selected="isTabSelected('${tab.key}')" tabindex="${isActive ? '0' : '-1'}" x-bind:tabindex="getTabIndex('${tab.key}')" data-tab-key="${tab.key}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab('${tab.key}', $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected('${tab.key}') }" type="button" wire:click="$set('activeRelationManager', '${tab.key}')" class="${cls(['fi-tabs-item', { 'fi-active': isActive }])}">${iconHtml}<span class="fi-tabs-item-label">${e(tab.label)}</span>${badgeHtml}</button>`;
+        });
         const panels: string[] = [];
-        for (const [index, manager] of managers.entries()) {
+        for (const tab of tabs) {
             let content = '';
-            if (index === active) {
-                const componentName = (page as any)._runtime.nameOf(manager);
-                const childKey = `${key}.${index}.${componentName}`;
-                const child = await page.mountChild(componentName, { ownerRecord: page.recordKey }, `${id}.${childKey}`, { lazy: true });
-                content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div wire:partial="schema-component::${e(childKey)}" x-data="filamentSchemaComponent(${e(js({ key: childKey, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${id}.${childKey}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${child}</div></div></div>`;
+            if (tab.isContent) {
+                // The form or infolist: always rendered, so that its state and actions stay in the page.
+                content = (await this.getChildSchemas()[0]?.toHtml()) ?? '';
+            } else if (tab === active) {
+                const parts: string[] = [];
+                for (const manager of tab.managers) {
+                    const componentName = (page as any)._runtime.nameOf(manager);
+                    const childKey = `${key}.${tab.key}.${componentName}`;
+                    const child = await page.mountChild(componentName, { ownerRecord: page.recordKey }, `${id}.${childKey}`, { lazy: true });
+                    parts.push(`<div wire:partial="schema-component::${e(childKey)}" x-data="filamentSchemaComponent(${e(js({ key: childKey, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${id}.${childKey}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${child}</div></div>`);
+                }
+                content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${parts.join('')}</div>`;
             }
-            panels.push(`<div aria-labelledby="${tabId(index)}" id="${key}.${index}" role="tabpanel" tabindex="0" wire:key="${id}.${key}.${index}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected('${index}') }" x-on:expand="revealTab('${index}')" x-data="filamentSchemaComponent(${e(js({ key: `${key}.${index}`, exposedMethods: [], path: '', containerPath: '' }))})" class="fi-sc-tabs-tab">${content}</div>`);
+            const isActive = tab === active;
+            panels.push(`<div aria-labelledby="${tabId(tab)}" id="${key}.${tab.key}" role="tabpanel" tabindex="0" wire:key="${id}.${key}.${tab.key}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected('${tab.key}') }" x-on:expand="revealTab('${tab.key}')" x-data="filamentSchemaComponent(${e(js({ key: `${key}.${tab.key}`, exposedMethods: [], path: '', containerPath: '' }))})" class="${cls(['fi-sc-tabs-tab', { 'fi-active': isActive && tab.isContent }])}">${content}</div>`);
         }
+        const activeIndex = tabs.indexOf(active);
         return `<div x-data="tabsSchemaComponent({
- activeTab: ${active + 1},
+ activeTab: ${activeIndex + 1},
  hasTabPanels: true,
  isScrollable: true,
  isVertical: false,
  livewireId: ${e(js(id))},
  livewireProperty: 'activeRelationManager',
- tab: '${active}',
- })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${active}" /><div x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${tabs.join('')}</div></div>${panels.join('')}</div>`;
+ tab: '${active.key}',
+ })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${active.key}" /><div x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${header.join('')}</div></div>${panels.join('')}</div>`;
     }
 }
 /** List page tab: restricts the table query and can show a badge. */
@@ -3019,6 +3085,19 @@ export class RelationManager extends ListRecords {
     static table(table: Table): Table { return table; }
     static form(schema: Schema): Schema { return schema; }
     static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
+    /** Icon of the manager's tab. */
+    static icon: string | null = null;
+    static getIcon(): string | null { return this.icon; }
+    /** Badge of the manager's tab (a count of related records…), and its color. */
+    static badge: string | number | null = null;
+    static badgeColor = 'primary';
+    static getBadge(_ownerRecord: any, _pageClass: typeof Page): string | number | null | Promise<string | number | null> { return this.badge; }
+    static getBadgeColor(): string { return this.badgeColor; }
+    /**
+     * Whether the manager is shown for this record and page (all by default). Hide it here rather than by denying `viewAny`,
+     * which would forbid the whole page.
+     */
+    static canViewForRecord(_ownerRecord: any, _pageClass: typeof Page): boolean | Promise<boolean> { return true; }
 
     /** Owner record key: set on mount by the page, never writable from the browser. */
     ownerRecord = '';
@@ -3694,10 +3773,40 @@ export class EditRecord extends ResourceFormPage {
      */
     previousUrl = '';
     protected getCancelUrl(): string { return this.previousUrl; }
+    /** Relation managers of this page: the resource's by default (`static relationManagers` on the page replaces them). */
+    getRelationManagers(): (typeof RelationManager | RelationGroup)[] { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
+    /** `true`: the form becomes the first tab, next to the relation managers. */
+    hasCombinedRelationManagerTabsWithContent(): boolean { return false; }
+    getContentTabLabel(): string { return t('filament-panels::resources/pages/edit-record.content.tab.label'); }
+    getContentTabIcon(): string | null { return null; }
+    protected withRelationManagers(content: Schema): Schema {
+        const components = content.getComponents();
+        if (!this.getRelationManagers().length) return content.components([...components, new RelationManagerTabs().key(null).hidden()]);
+        if (this.hasCombinedRelationManagerTabsWithContent()) return content.components([new RelationManagerTabs(components)]);
+        return content.components([...components, new RelationManagerTabs()]);
+    }
     contentSchema(schema: Schema): Schema {
-        const content = super.contentSchema(schema);
-        // Always present: hidden (empty column) when the resource has no relation manager.
-        return content.components([...content.getComponents(), this.resource.relations.length ? new RelationManagerTabs() : new RelationManagerTabs().key(null).hidden()]);
+        // The tabs are always present: hidden (empty column) when the page has no relation manager.
+        return this.withRelationManagers(super.contentSchema(schema));
+    }
+    /**
+     * Saves the fields of one component of the form (a section with its own "Save" action), after validating them only:
+     * `livewire.saveFormComponentOnly('contact')` (the component's `key()`, or the component).
+     */
+    async saveFormComponentOnly(component: SchemaComponent | string, notificationTitle: string | null = null): Promise<void> {
+        const form = this.getSchema('form');
+        const wanted = typeof component === 'string' ? component : component.getKey();
+        const target = ((await form.getVisibleFlatComponents()) as SchemaComponent[]).find((candidate) => { const key = candidate.getKey(); return key !== null && wanted !== null && (key === wanted || key.endsWith(`.${wanted}`)); });
+        const part = target?.getChildSchemas()[0];
+        if (!part) throw new Error(`saveFormComponentOnly(): no component ${String(wanted)} with fields in the form.`);
+        const errors = await validateSchema(part);
+        if (Object.keys(errors).length) { this._errors = errors; this.dispatch('form-validation-error', { livewireId: this.id }); return; }
+        this._errors = {};
+        const data = await this.mutateFormDataBeforeSave(await getSchemaState(part));
+        this._record = await this.handleRecordUpdate(this._record, data);
+        await saveSchemaRelationships(part, this._record);
+        const title = notificationTitle ?? this.getSavedNotificationTitle();
+        if (title !== null) Notification.make().success().title(title).send();
     }
     static locked = ['recordKey', 'previousUrl'];
     _record: any = null;
@@ -3705,6 +3814,8 @@ export class EditRecord extends ResourceFormPage {
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
+        // Combined tabs: the form's tab is open first.
+        if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
         await this.hydrate();
         await this.beforeFill();
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
@@ -3785,6 +3896,7 @@ export class ViewRecord extends Page {
     getDataAdapter(): DataAdapter { return this.resource.adapter; }
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
+        if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
         await this.hydrate();
     }
     /** The record is reloaded on every request, as on the edit page. */
@@ -3797,10 +3909,20 @@ export class ViewRecord extends Page {
     getActionMountContext(): Record<string, unknown> { return { recordKey: this.recordKey }; }
     protected getActionRecord(): unknown { return this._record; }
     infolistSchema(schema: Schema): Schema { return this.resource.infolist(schema.columns(2).operation('view').record(this._record)); }
+    /** Relation managers of this page: the resource's by default (`static relationManagers` on the page replaces them). */
+    getRelationManagers(): (typeof RelationManager | RelationGroup)[] { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
+    /** `true`: the infolist becomes the first tab, next to the relation managers. */
+    hasCombinedRelationManagerTabsWithContent(): boolean { return false; }
+    getContentTabLabel(): string { return t('filament-panels::resources/pages/view-record.content.tab.label'); }
+    getContentTabIcon(): string | null { return null; }
+    protected withRelationManagers(content: Schema): Schema {
+        const components = content.getComponents();
+        if (!this.getRelationManagers().length) return content.components([...components, new RelationManagerTabs().key(null).hidden()]);
+        if (this.hasCombinedRelationManagerTabsWithContent()) return content.components([new RelationManagerTabs(components)]);
+        return content.components([...components, new RelationManagerTabs()]);
+    }
     contentSchema(schema: Schema): Schema {
-        const content = schema.components([EmbeddedSchema.make('infolist')]);
-        // Always present: hidden (empty column) when the resource has no relation manager.
-        return content.components([...content.getComponents(), this.resource.relations.length ? new RelationManagerTabs() : new RelationManagerTabs().key(null).hidden()]);
+        return this.withRelationManagers(schema.components([EmbeddedSchema.make('infolist')]));
     }
     /** Defaults to a link to the edit page. */
     getHeaderActions(): Action[] { return [this.editAction()]; }
@@ -4094,7 +4216,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtime.register('navette.notifications', Notifications);
     for (const [index, widget] of panel.getWidgets().entries()) runtime.register(name(`widgets.panel.${index}`), widget);
     for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${resource.slug.replace(/\//g, '.')}.${index}`), widget);
-    for (const resource of panel.getResources()) for (const manager of resource.relations) runtime.register(name(`relation-managers.${resource.slug.replace(/\//g, '.')}.${manager.relationship}`), manager);
+    for (const resource of panel.getResources()) {
+        const managers = new Set<typeof RelationManager>();
+        const add = (entries: (typeof RelationManager | RelationGroup)[] | undefined) => { for (const entry of entries ?? []) for (const manager of entry instanceof RelationGroup ? entry.getManagers() : [entry]) managers.add(manager); };
+        add(resource.getRelations());
+        for (const page of Object.values(resource.getPages())) add((page as any).relationManagers);
+        for (const manager of managers) runtime.register(name(`relation-managers.${resource.slug.replace(/\//g, '.')}.${manager.relationship}`), manager);
+    }
 
     router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
     // Navette's own front-end files.

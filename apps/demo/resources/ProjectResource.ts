@@ -9,7 +9,7 @@ import { CreateAction, DeleteAction, DeleteBulkAction, EditRecord, ForceDeleteAc
 import { Tab, Tabs, type Schema } from '@navette-js/schemas';
 import { IconColumn, SelectFilter, Sum, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 import { PROJECT_STATUSES, TASK_PRIORITIES, TASK_STATUSES, type EnumCase } from './enums.ts';
-import { Tasks, tasksTable, type Task } from './TaskResource.ts';
+import { Task, Tasks, tasksTable } from './TaskResource.ts';
 import { Timesheets, type Timesheet } from './TimesheetResource.ts';
 
 export class Project extends Model {
@@ -101,6 +101,9 @@ const workflowActions = () => [
 
 class EditProject extends EditRecord {
     getHeaderActions(): Action[] { return [ViewAction.make(), DeleteAction.make(), RestoreAction.make(), ForceDeleteAction.make()]; }
+    /** The form is the first tab, next to the tasks and timesheets (not for screenshot comparisons). */
+    hasCombinedRelationManagerTabsWithContent(): boolean { return !process.env.NAVETTE_NO_THEMES; }
+    getContentTabIcon(): string | null { return 'm-pencil-square'; }
 }
 class ViewProject extends ViewRecord {
     getHeaderActions(): Action[] { return [...workflowActions(), this.editAction()]; }
@@ -109,6 +112,10 @@ class ViewProject extends ViewRecord {
 /** The task table, limited to the project. */
 export class TasksRelationManager extends RelationManager {
     static relationship = 'tasks';
+    static icon = 'm-clipboard-document-check';
+    /** Number of open tasks, on the tab. */
+    static async getBadge(ownerRecord: any): Promise<number> { return Number(((await Task.query().where('project_id', ownerRecord.id).whereNot('status', 'done').count({ n: '*' }).first()) as any)?.n ?? 0); }
+    static badgeColor = 'warning';
     static modelLabel = 'task';
     static recordTitleAttribute = 'title';
     static adapterFor(ownerKey: string): DataAdapter { return new ProjectTasks(ownerKey); }
@@ -134,6 +141,7 @@ class ProjectTasks extends Tasks {
 /** The project's timesheets (read-only). */
 export class TimesheetsRelationManager extends RelationManager {
     static relationship = 'timesheets';
+    static icon = 'm-clock';
     static modelLabel = 'timesheet';
     static adapterFor(ownerKey: string): DataAdapter { return new Timesheets(ownerKey); }
     static table(table: Table): Table {
