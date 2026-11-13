@@ -143,6 +143,8 @@ export abstract class Field extends Component {
         for (const rule of typeof rules === 'string' ? rules.split('|').filter((item) => item.trim() !== '') : rules) this.rule(rule, condition);
         return this;
     }
+    /** Value checked by the rules (a subclass may trim it, for instance). */
+    protected stateForValidation(state: unknown): unknown { return state; }
     /** Sizes (`min`, `max`, `size`, `between`) compare the number, not the text length. */
     protected hasNumericValidation(): boolean { return false; }
     /** Name of the field in validation messages (the lowercased label by default). */
@@ -260,7 +262,8 @@ export abstract class Field extends Component {
         // only a disabled field (not forced by `dehydrated()`) is skipped.
         if ((await this.isDisabled()) && this._dehydrated !== true) return [];
         // An empty string is treated as missing.
-        const value = this.context().state === '' ? null : this.context().state;
+        const raw = this.stateForValidation(this.context().state);
+        const value = raw === '' ? null : raw;
         const attribute = this._validationAttribute ?? (await this.getLabel()).toLowerCase();
         for (const rule of await this.getValidationRules()) {
             if (rule.name !== 'required' && !rule.implicit && blank(value)) continue;
@@ -360,6 +363,9 @@ export class TextInput extends Field {
     /** Removes the spaces around the value before it is validated and saved. */
     trim(condition = true): this { this._trim = condition; return this; }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
+    /** `trim()`: the submitted value is trimmed before it is validated and saved. */
+    protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
+    dehydrateState(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
     private _inputMode: string | null = null;
     private _autocapitalize: string | null = null;
     /** Virtual keyboard: `none`, `text`, `decimal`, `numeric`, `tel`, `search`, `email` or `url`. */
@@ -369,10 +375,6 @@ export class TextInput extends Field {
     /** Sends the state to the server on every keystroke, or on blur with `onBlur`. */
     live(options: { onBlur?: boolean } = {}): this { this._live = options.onBlur ? 'blur' : 'live'; return this; }
     type(type: string): this { this._type = type; return this; }
-    email(condition = true): this {
-        if (condition) { this._type = 'email'; this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
-        return this;
-    }
     password(condition = true): this { this._isPassword = condition; return this; }
     revealable(condition = true): this { this._isRevealable = condition; return this; }
     /** `true` → "on", `false` → "off", a string as is. */
@@ -383,7 +385,9 @@ export class TextInput extends Field {
     mask(pattern: string | null): this { this._mask = pattern; return this; }
     /** Phone number: digits, spaces and common punctuation. */
     tel(): this { this._type = 'tel'; return this.rule({ name: 'tel', passes: (v) => /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/.test(String(v)), message: (a) => `The ${a} field format is invalid.` }); }
-    email(): this { this._type = 'email'; return this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
+    email(condition = true): this {
+        if (!condition) { if (this._type === 'email') this._type = null; this._rules = this._rules.filter((rule) => rule.name !== 'email'); return this; }
+        this._type = 'email'; return this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
     /** Web address: `url` input type, a valid http(s) value is required. */
     url(): this { this._type = 'url'; return this.rule({ name: 'url', passes: (v) => { try { return ['http:', 'https:'].includes(new URL(String(v)).protocol); } catch { return false; } }, message: (a) => `The ${a} field must be a valid URL.` }); }
     maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
@@ -1145,6 +1149,9 @@ export class Textarea extends Field {
     /** Removes the spaces around the value before it is validated and saved. */
     trim(condition = true): this { this._trim = condition; return this; }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
+    /** `trim()`: the submitted value is trimmed before it is validated and saved. */
+    protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
+    dehydrateState(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         // Initial height: 1.5rem per row plus padding.
@@ -1190,7 +1197,7 @@ export class TagsInput extends Field {
     /** Badge color of the tags (`primary` by default). */
     color(color: string | null): this { this._tagColor = color; return this; }
     /** Rules applied to each tag (e.g. a maximum length); the message names the tag. */
-    nestedRecursiveRules(rules: Rule[]): this { this._tagRules = rules; return this; }
+    nestedRecursiveRules(rules: (Rule | string)[]): this { this._tagRules = rules.map((rule) => (typeof rule === 'string' ? stringRule(rule, { numeric: false, name: this._name ?? '' }) : rule)).filter((rule): rule is Rule => rule !== null); return this; }
     getDefaultState(): unknown { return this._default ?? []; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && this._separator !== null) value = value === '' ? [] : value.split(this._separator);
@@ -1595,7 +1602,9 @@ export class KeyValue extends Field {
     dehydrateState(state: unknown): unknown {
         const out: Record<string, string | null> = {};
         // Restrictions set on the field are enforced on the server: a forged state cannot add, delete or edit what the UI forbids.
-        const saved = KeyValue.toPairs(this._originalValue);
+        // The saved value: the one hydrated by this instance, else the record's (fields are rebuilt on every request), else the default.
+        const record = this.context().record as Record<string, unknown> | null;
+        const saved = KeyValue.toPairs(this._originalValue ?? (record && typeof record === 'object' ? record[this._name!] : null) ?? this._default);
         if (!this._addable || !this._deletable || !this._editableKeys || !this._editableValues) {
             const received = Array.isArray(state) ? state.filter((pair: any) => pair && typeof pair === 'object' && typeof pair.key === 'string') : [];
             const byKey = new Map(received.map((pair: any) => [String(pair.key).trim(), pair]));

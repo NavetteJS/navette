@@ -34,7 +34,64 @@ Toggle.make('is_visible')
     .default(true)
 ```
 
-The switch uses the panel's `primary` color.
+## Adding icons to the toggle button
+
+Toggles may also use an [icon](/styling/icons) to represent the "on" and "off" state of the button. To add an icon to the "on" state, use the `onIcon()` method. To add an icon to the "off" state, use the `offIcon()` method:
+
+```ts
+import { Toggle } from '@navette-js/forms';
+
+Toggle.make('is_admin')
+    .onIcon('m-bolt')
+    .offIcon('m-user')
+```
+
+```preview
+// state: {"is_admin": true}
+Toggle.make('is_admin')
+    .onIcon('m-bolt')
+    .offIcon('m-user')
+```
+
+## Customizing the color of the toggle button
+
+You may also customize the color representing the "on" or "off" state of the toggle. By default, the switch uses the panel's `primary` color when on, and gray when off. Use the `onColor()` and `offColor()` methods with any color registered on the panel:
+
+```ts
+import { Toggle } from '@navette-js/forms';
+
+Toggle.make('is_admin')
+    .onColor('success')
+    .offColor('danger')
+```
+
+```preview
+// state: {"is_admin": true}
+Toggle.make('is_admin')
+    .onColor('success')
+    .offColor('danger')
+```
+
+## Positioning the label above
+
+Toggle fields have two layout modes, inline and stacked. By default, they are inline, with the switch next to its label. You may display the label above the switch with `inline(false)`:
+
+```ts
+import { Toggle } from '@navette-js/forms';
+
+Toggle.make('is_admin')
+    .inline(false)
+```
+
+```preview
+// state: {"is_admin": false}
+Toggle.make('is_admin')
+    .inline(false)
+```
+
+## Making the field live
+
+You may call `live()` so the form is re-rendered as soon as the toggle is switched. See [reactivity](/forms/overview#the-basics-of-reactivity).
 
 ## Toggle validation
 
@@ -65,7 +122,3 @@ Toggle.make('is_under_18')
         message: (attribute) => `The ${attribute} field must be declined.`,
     })
 ```
-
-<Aside variant="warning">
-Icons inside the switch (`onIcon()`, `offIcon()`), custom colors (`onColor()`, `offColor()`), positioning the label above (`inline(false)`) and `live()` are not available yet.
-</Aside>

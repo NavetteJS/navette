@@ -42,7 +42,6 @@ export abstract class Component {
     visibleOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.visible(({ operation }) => operation !== null && list.includes(operation)); }
     /** A number applies from the `lg` breakpoint; an object replaces the default entirely. Values may be closures. */
     columnSpan(span: ColumnSpan): this { this._columnSpan = typeof span === 'object' ? span : { default: 1, lg: span }; return this; }
-    columnSpanFull(): this { this._columnSpan = { default: 'full' }; return this; }
     /** Starting grid column, from the `lg` breakpoint. */
     columnStart(start: number | null): this { this._columnStart = start; return this; }
     /** Full grid width on every screen size (`columnSpan('full')` only applies from `lg`). */

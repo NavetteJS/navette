@@ -97,7 +97,7 @@ TextInput.make('days').disabled().dehydrated(),
 ]
 ```
 
-The date-time picker and the time picker cannot be `live()` yet.
+The date-time picker and the time picker also accept `live()` and `live({ onBlur: true })`.
 
 ## Setting a placeholder
 

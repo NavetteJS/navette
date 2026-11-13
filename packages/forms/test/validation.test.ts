@@ -99,3 +99,23 @@ test('markAsRequired() controls the asterisk only', async () => {
     assert.equal(html.match(/fi-fo-field-label-required-mark/g)?.length, 1);
     assert.deepEqual(await validateSchema(schema), { 'data.a': ['The a field is required.'] });
 });
+
+test('trim() trims the submitted value before validation and saving', async () => {
+    const { getSchemaState } = await import('../src/index.ts');
+    const livewire = host({ name: '  Ada  ', bio: '  hi ' });
+    const { Textarea } = await import('../src/index.ts');
+    const schema = Schema.make(livewire as any).key('form').statePath('data').components([TextInput.make('name').trim().maxLength(3), Textarea.make('bio').trim()]);
+    assert.deepEqual(await validateSchema(schema), {});
+    assert.deepEqual(await getSchemaState(schema), { name: 'Ada', bio: 'hi' });
+});
+
+test('KeyValue restrictions use the record when the field is rebuilt', async () => {
+    const { KeyValue, getSchemaState } = await import('../src/index.ts');
+    const record = { meta: { color: 'red', size: 'M' } };
+    // A new field instance, as on a save request: the saved value comes from the record.
+    const livewire = host({ meta: [{ key: 'color', value: 'blue' }, { key: 'size', value: 'L' }, { key: 'extra', value: 'x' }] });
+    const schema = Schema.make(livewire as any).key('form').statePath('data').record(record).components([KeyValue.make('meta').addable(false).editableKeys(false)]);
+    assert.deepEqual(await getSchemaState(schema), { meta: { color: 'blue', size: 'L' } });
+    const locked = Schema.make(host({ meta: [{ key: 'color', value: 'blue' }] }) as any).key('form').statePath('data').record(record).components([KeyValue.make('meta').editableValues(false).deletable(false)]);
+    assert.deepEqual(await getSchemaState(locked), { meta: { color: 'red', size: 'M' } });
+});

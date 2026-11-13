@@ -386,7 +386,7 @@ TextInput.make('name')
 
 ## Setting the placeholder of a field
 
-Text inputs, selects, date pickers, tags inputs and Markdown editors may have a placeholder, displayed when the field has no value:
+Text inputs, textareas, selects, date pickers, tags inputs and Markdown editors may have a placeholder, displayed when the field has no value:
 
 ```ts
 import { TextInput } from '@navette-js/forms';
@@ -476,10 +476,10 @@ Select.make('status')
 
 In this example, when the user changes the value of the `status` field, the form is re-rendered. Functions passed to `visible()`, `required()`, `options()` and the other methods then see the new value through `get()`. You can also [hook into the field's lifecycle](#field-updates) to run custom logic when the field is updated.
 
-`live()` is available on `TextInput`, `Select`, `DatePicker`, `Radio`, `ToggleButtons`, `MarkdownEditor`, `CodeEditor` and `Slider`.
+`live()` is available on `TextInput`, `Textarea`, `Select`, `Checkbox`, `Toggle`, `CheckboxList`, `Radio`, `ToggleButtons`, `DatePicker`, `DateTimePicker`, `TimePicker`, `MarkdownEditor`, `CodeEditor` and `Slider`.
 
 <Aside variant="warning">
-`Checkbox`, `Toggle`, `CheckboxList`, `Textarea`, `TagsInput`, `KeyValue`, `ColorPicker`, `DateTimePicker`, `TimePicker` and `RichEditor` cannot be made `live()` yet. Their value is sent along with the next request.
+`TagsInput`, `KeyValue`, `ColorPicker` and `RichEditor` cannot be made `live()` yet. Their value is sent along with the next request.
 </Aside>
 
 ### Reactive fields on blur

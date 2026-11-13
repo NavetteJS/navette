@@ -28,6 +28,27 @@ Checkbox.make('accepts_newsletter')
     .default(true)
 ```
 
+## Positioning the label above
+
+Checkbox fields have two layout modes, inline and stacked. By default, they are inline, with the checkbox next to its label. You may display the label above the checkbox with `inline(false)`:
+
+```ts
+import { Checkbox } from '@navette-js/forms';
+
+Checkbox.make('is_admin')
+    .inline(false)
+```
+
+```preview
+// state: {"is_admin": true}
+Checkbox.make('is_admin')
+    .inline(false)
+```
+
+## Making the field live
+
+You may call `live()` so the form is re-rendered as soon as the checkbox is checked or unchecked. See [reactivity](/forms/overview#the-basics-of-reactivity).
+
 ## Checkbox validation
 
 As well as all rules listed on the [validation](/forms/validation) page, there are additional rules that are specific to checkboxes.
@@ -66,7 +87,3 @@ Checkbox.make('is_under_18')
         message: (attribute) => `The ${attribute} field must be declined.`,
     })
 ```
-
-<Aside variant="warning">
-Positioning the label above the checkbox (`inline(false)`) and making the checkbox `live()` are not available yet.
-</Aside>
