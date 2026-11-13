@@ -48,6 +48,8 @@ export function appPanel(options: { key: string; login: typeof Login; auth: Auth
         .registration()
         .passwordReset()
         .emailVerification(EmailVerificationPrompt)
+        // A new email address set on the profile is saved once confirmed from the link sent to it.
+        .emailChangeVerification()
         .mailer(fileMailer(path.resolve(options.mailLog)))
         .tenant(knexTenantProvider(table, { label: 'Current team' }))
         .tenantRegistration(RegisterTeam)

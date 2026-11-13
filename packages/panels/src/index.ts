@@ -1,9 +1,9 @@
 // @navette-js/panels: Panel, layouts, pages, resources, navigation, authentication and session.
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Throttle } from './throttle.ts';
 export { Throttle } from './throttle.ts';
-import { checkVerificationUrl, consoleMailer, readToken, signToken, signVerificationUrl, type Mailer, type MailMessage } from './auth.ts';
+import { checkVerificationUrl, consoleMailer, fingerprint, readToken, signToken, signVerificationUrl, type Mailer, type MailMessage } from './auth.ts';
 export { consoleMailer, fileMailer, hashPassword, knexAuthProvider, knexTenantProvider, mailText, multiFactorAuthenticationSchema, verifyPassword, type Mailer, type MailMessage, type TableQuery } from './auth.ts';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,7 +16,7 @@ import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 export { Notification, Notifications } from './notifications.ts';
-import { MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
+import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
 export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
@@ -326,17 +326,24 @@ export class Panel {
     private _authorizer: Authorizer | null = null;
     /** Plugs in your own permission system: consulted before any policy, for every ability, page and widget. */
     authorizeUsing(authorizer: Authorizer | null): this { this._authorizer = authorizer; return this; }
-    /** Authorization decision: the panel hook first, then the given rule. Always `false` without a user. */
+    private _guestAccess = false;
+    /**
+     * Lets visitors who are not signed in use the panel's pages. Policies, `canAccess()` and the authorization hook then receive
+     * a `null` user: return `true` there for what guests may see. Not available with tenancy.
+     */
+    guestAccess(condition = true): this { this._guestAccess = condition; return this; }
+    allowsGuests(): boolean { return this._guestAccess; }
+    /** Authorization decision: the panel hook first, then the given rule. Without a user: `false`, unless the panel allows guests. */
     async authorize(user: User | null, ability: string, subject: { resource?: unknown; record?: unknown; page?: typeof Page; widget?: typeof Widget; rule?: (() => boolean | Promise<boolean>) | null } = {}): Promise<boolean> {
-        if (!user) return false;
-        const decided = await this._authorizer?.({ user, ability, resource: subject.resource ?? null, record: subject.record ?? null, page: subject.page ?? null, widget: subject.widget ?? null });
+        if (!user && !this._guestAccess) return false;
+        const decided = await this._authorizer?.({ user: user as User, ability, resource: subject.resource ?? null, record: subject.record ?? null, page: subject.page ?? null, widget: subject.widget ?? null });
         if (typeof decided === 'boolean') return decided;
         return subject.rule ? Boolean(await subject.rule()) : true;
     }
     /** Whether the user can open a page. List: `viewAny`; create: `create`; edit: checked against the record; custom page: `canAccess`. */
     async canAccessPage(PageClass: typeof Page, user: User | null): Promise<boolean> {
         const resource = (PageClass as any).resource as typeof Resource | undefined;
-        if (resource && PageClass.prototype instanceof EditRecord) return user !== null;
+        if (resource && PageClass.prototype instanceof EditRecord) return user !== null || this._guestAccess;
         if (resource && PageClass.prototype instanceof CreateRecord) return resource.can('create', user);
         if (resource) return resource.can('viewAny', user);
         return this.authorize(user, 'access', { page: PageClass, rule: () => PageClass.canAccess(user!) });
@@ -473,7 +480,7 @@ export class Panel {
     getMultiFactorAuthenticationProviders(): MultiFactorAuthenticationProvider[] { return this._multiFactor?.providers ?? []; }
     isMultiFactorAuthenticationRequired(): boolean { return this._multiFactor?.isRequired === true; }
     getSetUpRequiredMultiFactorAuthenticationPage(): typeof SetUpRequiredMultiFactorAuthentication | null { return this._multiFactor?.isRequired ? this._multiFactor.setUpPage : null; }
-    getSetUpRequiredMultiFactorAuthenticationUrl(): string { return this.getBaseUrl('multi-factor-authentication/set-up'); }
+    getSetUpRequiredMultiFactorAuthenticationUrl(): string { return this.getBaseUrl(this.getAuthPaths().setUpRequiredMultiFactor); }
     /** The login challenge of this panel (enabled providers, rate limiting). */
     getMultiFactorChallenge(): MultiFactorChallenge { return MultiFactorChallenge.make(this); }
     /** Whether the user must set up multi-factor authentication before using the panel. */
@@ -486,7 +493,12 @@ export class Panel {
     mailer(mailer: Mailer): this { this._mailer = mailer; return this; }
     async sendMail(message: MailMessage): Promise<void> { await this._mailer.send(message); }
     getAuthKey(): string { return this._key; }
-    private _authSlugs = { login: 'login', registration: 'register', passwordResetPrefix: 'password-reset', passwordResetRequest: 'request', passwordReset: 'reset' };
+    private _authSlugs = {
+        login: 'login', registration: 'register', passwordResetPrefix: 'password-reset', passwordResetRequest: 'request', passwordReset: 'reset', logout: 'logout',
+        emailVerificationPrefix: 'email-verification', emailVerificationPrompt: 'prompt', emailVerification: 'verify',
+        emailChangeVerificationPrefix: 'email-change-verification', emailChangeVerification: 'verify',
+        multiFactorPrefix: 'multi-factor-authentication', setUpRequiredMultiFactor: 'set-up',
+    };
     private authSlug(slug: string): string { if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(slug)) throw new Error(`Invalid route slug: ${slug}`); return slug; }
     /** URL segment of the login page (`login` by default). */
     loginRouteSlug(slug: string): this { this._authSlugs.login = this.authSlug(slug); return this; }
@@ -497,12 +509,29 @@ export class Panel {
     passwordResetRequestRouteSlug(slug: string): this { this._authSlugs.passwordResetRequest = this.authSlug(slug); return this; }
     passwordResetRouteSlug(slug: string): this { this._authSlugs.passwordReset = this.authSlug(slug); return this; }
     /** Paths of the authentication pages, relative to the panel. */
-    getAuthPaths(): { login: string; registration: string; passwordResetRequest: string; passwordReset: string } {
+    /** URL segment of the logout route (`logout` by default). */
+    logoutRouteSlug(slug: string): this { this._authSlugs.logout = this.authSlug(slug); return this; }
+    /** URL segments of email verification: `<prefix>/<prompt>` and `<prefix>/<verify>/…` (`email-verification/prompt`, `email-verification/verify`). */
+    emailVerificationRoutePrefix(prefix: string): this { this._authSlugs.emailVerificationPrefix = this.authSlug(prefix); return this; }
+    emailVerificationPromptRouteSlug(slug: string): this { this._authSlugs.emailVerificationPrompt = this.authSlug(slug); return this; }
+    emailVerificationRouteSlug(slug: string): this { this._authSlugs.emailVerification = this.authSlug(slug); return this; }
+    /** URL segments of the email change links: `<prefix>/<verify>` and `<prefix>/block` (`email-change-verification/verify`). */
+    emailChangeVerificationRoutePrefix(prefix: string): this { this._authSlugs.emailChangeVerificationPrefix = this.authSlug(prefix); return this; }
+    emailChangeVerificationRouteSlug(slug: string): this { this._authSlugs.emailChangeVerification = this.authSlug(slug); return this; }
+    /** URL segments of the required multi-factor setup page (`multi-factor-authentication/set-up`). */
+    multiFactorAuthenticationRoutePrefix(prefix: string): this { this._authSlugs.multiFactorPrefix = this.authSlug(prefix); return this; }
+    setUpRequiredMultiFactorAuthenticationRouteSlug(slug: string): this { this._authSlugs.setUpRequiredMultiFactor = this.authSlug(slug); return this; }
+    getAuthPaths(): { login: string; registration: string; passwordResetRequest: string; passwordReset: string; logout: string; emailVerificationPrompt: string; emailVerification: string; emailChangeVerification: string; blockEmailChange: string; setUpRequiredMultiFactor: string } {
         const slugs = this._authSlugs;
-        return { login: slugs.login, registration: slugs.registration, passwordResetRequest: `${slugs.passwordResetPrefix}/${slugs.passwordResetRequest}`, passwordReset: `${slugs.passwordResetPrefix}/${slugs.passwordReset}` };
+        return {
+            login: slugs.login, registration: slugs.registration, passwordResetRequest: `${slugs.passwordResetPrefix}/${slugs.passwordResetRequest}`, passwordReset: `${slugs.passwordResetPrefix}/${slugs.passwordReset}`, logout: slugs.logout,
+            emailVerificationPrompt: `${slugs.emailVerificationPrefix}/${slugs.emailVerificationPrompt}`, emailVerification: `${slugs.emailVerificationPrefix}/${slugs.emailVerification}`,
+            emailChangeVerification: `${slugs.emailChangeVerificationPrefix}/${slugs.emailChangeVerification}`, blockEmailChange: `${slugs.emailChangeVerificationPrefix}/block`,
+            setUpRequiredMultiFactor: `${slugs.multiFactorPrefix}/${slugs.setUpRequiredMultiFactor}`,
+        };
     }
     /** First URL segments used by the panel itself (never page slugs or tenant keys). */
-    getReservedSegments(): Set<string> { return new Set([...RESERVED_SEGMENTS, this._authSlugs.login, this._authSlugs.registration, this._authSlugs.passwordResetPrefix]); }
+    getReservedSegments(): Set<string> { const slugs = this._authSlugs; return new Set([...RESERVED_SEGMENTS, slugs.login, slugs.registration, slugs.passwordResetPrefix, slugs.logout, slugs.emailVerificationPrefix, slugs.emailChangeVerificationPrefix, slugs.multiFactorPrefix]); }
     getRegistrationUrl(): string { return this.getBaseUrl(this.getAuthPaths().registration); }
     getRequestPasswordResetUrl(): string { return this.getBaseUrl(this.getAuthPaths().passwordResetRequest); }
     getResetPasswordUrl(user: User, fingerprint: string): string {
@@ -514,10 +543,28 @@ export class Panel {
     getVerifyEmailUrl(user: User): string {
         const expires = Math.floor(Date.now() / 1000) + 60 * 60;
         const { hash, signature } = signVerificationUrl(`${this._key}.${this._id}`, user.id, user.email, expires);
-        return `${this.getBaseUrl(`email-verification/verify/${encodeURIComponent(String(user.id))}/${hash}`)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+        return `${this.getBaseUrl(`${this.getAuthPaths().emailVerification}/${encodeURIComponent(String(user.id))}/${hash}`)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
     }
     checkVerifyEmailUrl(id: string, hash: string, expires: unknown, signature: unknown): boolean { return checkVerificationUrl(`${this._key}.${this._id}`, id, hash, expires, signature); }
-    getEmailVerificationPromptUrl(): string { return this.getBaseUrl('email-verification/prompt'); }
+    getEmailVerificationPromptUrl(): string { return this.getBaseUrl(this.getAuthPaths().emailVerificationPrompt); }
+    private _emailChangeVerification = false;
+    /**
+     * A new email address set on the profile page is only saved once confirmed: a link is sent to the new address, and a link
+     * to block the change to the old one. Both are valid for 60 minutes.
+     */
+    emailChangeVerification(condition = true): this { this._emailChangeVerification = condition; return this; }
+    hasEmailChangeVerification(): boolean { return this._emailChangeVerification; }
+    /** Links of an email change request: to confirm the new address, and to block the change. */
+    getEmailChangeUrls(user: User, newEmail: string): { verify: string; block: string } {
+        const nonce = randomBytes(12).toString('base64url');
+        const verify = signToken(this._key, `${this._id}.email-change`, { uid: user.id, email: newEmail, from: fingerprint(user.email), nonce }, 60 * 60);
+        const block = signToken(this._key, `${this._id}.email-change-block`, { uid: user.id, email: newEmail, nonce }, 60 * 60);
+        return { verify: `${this.getBaseUrl(this.getAuthPaths().emailChangeVerification)}?token=${encodeURIComponent(verify)}`, block: `${this.getBaseUrl(this.getAuthPaths().blockEmailChange)}?token=${encodeURIComponent(block)}` };
+    }
+    readEmailChangeToken(kind: 'verify' | 'block', token: unknown): { uid: string | number; email: string; from?: string; nonce: string } | null {
+        const payload = readToken(this._key, `${this._id}.${kind === 'verify' ? 'email-change' : 'email-change-block'}`, token) as any;
+        return payload && typeof payload.email === 'string' && typeof payload.nonce === 'string' ? payload : null;
+    }
     getProfileUrl(): string | null { return this._profile ? this.getBaseUrl('profile') : null; }
     /** Whether the user must still verify their email before using the panel. */
     async mustVerifyEmail(user: User | null): Promise<boolean> {
@@ -579,7 +626,7 @@ export class Panel {
     /** URL outside any tenant (login, registration, profile, tenant registration). */
     getBaseUrl(sub = ''): string { return '/' + [this._path, sub.replace(/^\/|\/$/g, '')].filter(Boolean).join('/'); }
     getLoginUrl(): string { return this.getBaseUrl(this.getAuthPaths().login); }
-    getLogoutUrl(): string { return this.getBaseUrl('logout'); }
+    getLogoutUrl(): string { return this.getBaseUrl(this.getAuthPaths().logout); }
     /** Prefix of this panel's Livewire endpoint (`/livewire` or `/<path>/livewire`): each panel has its own. */
     getLivewirePrefix(): string { return this._path ? `/${this._path}/livewire` : '/livewire'; }
     assetUrl(file: string): string { return `/${file}?v=${ASSET_VERSION}`; }
@@ -1057,7 +1104,7 @@ export class Page extends BasePage {
     /** Every request, including browser updates, requires an authenticated user: a snapshot kept after logout is not enough. */
     async boot(): Promise<void> {
         const ctx = this._ctx as PanelContext | null;
-        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
+        if (!ctx?.user && !ctx?.panel.allowsGuests()) throw new WireError(401, 'Unauthenticated.');
         // In a multi-tenant panel, every page belongs to a tenant the user is a member of (checked by the router).
         if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
         if (await ctx.panel.mustVerifyEmail(ctx.user)) throw new WireError(403, 'Email address not verified.');
@@ -1465,6 +1512,25 @@ export class EditProfile extends SimplePage {
             ...(panel.hasMultiFactorAuthentication() && user ? [this.multiFactorAuthenticationSection(panel, user)] : []),
         ]);
     }
+    /** Emails of an email change: a confirmation link to the new address, a link to block it to the old one. */
+    protected async sendEmailChangeVerification(user: User, newEmail: string): Promise<void> {
+        const { panel, req } = this._ctx as PanelContext;
+        const urls = panel.getEmailChangeUrls(user, newEmail);
+        await panel.sendMail({
+            to: newEmail, subject: 'Verify Email Address',
+            lines: ['Please click the button below to verify your new email address.'],
+            action: { label: 'Verify Email Address', url: absoluteUrl(panel, req, urls.verify) },
+            outro: ['This link will expire in 60 minutes.', 'If you did not request this change, no further action is required.'],
+        });
+        const notice = 'filament-panels::auth/notifications/notice-of-email-change-request';
+        await panel.sendMail({
+            to: user.email, subject: t(`${notice}.subject`),
+            lines: [0, 1, 2].map((index) => t(`${notice}.lines.${index}`, { email: newEmail })),
+            action: { label: t(`${notice}.action`), url: absoluteUrl(panel, req, urls.block) },
+            outro: [t(`${notice}.lines.3`, { email: newEmail })],
+        });
+        Notification.make().success().title(t('filament-panels::auth/pages/edit-profile.notifications.email_change_verification_sent.title')).body(t('filament-panels::auth/pages/edit-profile.notifications.email_change_verification_sent.body', { email: newEmail })).send();
+    }
     /** Multi-factor authentication settings: each provider's status and actions (set up, turn off…). */
     protected multiFactorAuthenticationSection(panel: Panel, user: User): SchemaComponent {
         if (!this.usesFullLayout()) return multiFactorManagementSection(panel, user);
@@ -1479,7 +1545,13 @@ export class EditProfile extends SimplePage {
         this._errors = await validateSchema(form);
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         const data = await getSchemaState(form);
-        await panel.getAuth().update!(user, { name: String(data.name), email: String(data.email), password: blankValue(data.password) ? undefined : String(data.password) });
+        const newEmail = String(data.email);
+        const verifyEmailChange = panel.hasEmailChangeVerification() && newEmail !== user.email;
+        await panel.getAuth().update!(user, { name: String(data.name), email: verifyEmailChange ? user.email : newEmail, password: blankValue(data.password) ? undefined : String(data.password) });
+        if (verifyEmailChange) {
+            await this.sendEmailChangeVerification(user, newEmail);
+            this.data = { ...this.data, email: user.email };
+        }
         this.data = { ...this.data, password: null, passwordConfirmation: null, currentPassword: null };
         Notification.make().success().title(t('filament-panels::auth/pages/edit-profile.notifications.saved.title')).send();
     }
@@ -3809,8 +3881,8 @@ export class Sidebar extends Component {
     /** A resource item stays active on its create and edit pages. */
     async render(): Promise<string> {
         const { panel, user } = this._ctx as PanelContext;
-        if (!user) return '<div></div>';
-        const inSidebar = (position: 'topbar' | 'sidebar') => position === 'sidebar';
+        if (!user && !panel.allowsGuests()) return '<div></div>';
+        const inSidebar = (position: 'topbar' | 'sidebar') => position === 'sidebar' && user !== null;
         return views.render('filament-panels::livewire.sidebar', {
             hasTopbar: panel.hasTopbar(), hasTopNavigation: panel.hasTopNavigation(), spa: panel.hasSpaMode(),
             isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), isSidebarFullyCollapsibleOnDesktop: panel.isSidebarFullyCollapsibleOnDesktop(),
@@ -3844,8 +3916,8 @@ export class Topbar extends Component {
     mount(params: Record<string, unknown>): void { this.currentPath = String(params.path ?? '/'); }
     async render(): Promise<string> {
         const { panel, user } = this._ctx as PanelContext;
-        if (!user) return '<div></div>';
-        const inTopbar = (position: 'topbar' | 'sidebar') => position === 'topbar';
+        if (!user && !panel.allowsGuests()) return '<div></div>';
+        const inTopbar = (position: 'topbar' | 'sidebar') => position === 'topbar' && user !== null;
         const hasNavigation = panel.hasNavigation();
         const showsNavigationHere = panel.hasTopNavigation() || !hasNavigation;
         const tenant = panel.getTenant();
@@ -4142,9 +4214,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         guestPage(panel.getAuthPaths().passwordReset, name('auth.password-reset.reset'), t('filament-panels::auth/pages/password-reset/reset-password.title'), (req) => ({ email: typeof req.query.email === 'string' ? req.query.email : null, token: typeof req.query.token === 'string' ? req.query.token : null }));
     }
     if (VerificationPrompt) {
-        userPage('email-verification/prompt', name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'), 'simple', { beforeMultiFactorSetUp: true });
+        userPage(panel.getAuthPaths().emailVerificationPrompt, name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'), 'simple', { beforeMultiFactorSetUp: true });
         // Emailed link: signed, time-limited, and only valid for the signed-in user it designates.
-        router.get(panel.getBaseUrl('email-verification/verify/:id/:hash'), async (req, res) => {
+        router.get(panel.getBaseUrl(`${panel.getAuthPaths().emailVerification}/:id/:hash`), async (req, res) => {
             const ctx = await context(req, res);
             if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
@@ -4156,14 +4228,53 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         });
     }
     if (profile) userPage(profile.page.slug, name('auth.profile'), profile.page.getLabel(), profile.isSimple ? 'simple' : 'index');
+    if (panel.hasEmailChangeVerification()) {
+        const flash = async (ctx: PanelContext, build: () => void) => { const { pending } = await runInRequest(ctx.mailbox, async () => build()); if (pending.length) publish(ctx.mailbox, pending); };
+        const group = 'filament-panels::auth/http/controllers';
+        // Link sent to the new address: only for the signed-in user who asked, while the old address is still theirs.
+        router.get(panel.getBaseUrl(panel.getAuthPaths().emailChangeVerification), async (req, res) => {
+            const ctx = await context(req, res);
+            if (ctx.denied) return forbidden(res);
+            if (!ctx.user) return res.redirect(panel.getLoginUrl());
+            const payload = panel.readEmailChangeToken('verify', req.query.token);
+            if (!payload || String(payload.uid) !== String(ctx.user.id) || payload.from !== fingerprint(ctx.user.email)) return void res.status(403).send('Invalid signature.');
+            const store = getDefaultCacheStore();
+            if (await store.get(`navette:email-change:blocked:${payload.nonce}`)) return void res.status(403).send('This email change was blocked.');
+            const auth = panel.getAuth();
+            const other = await auth.findByEmail?.(payload.email);
+            if (other && String(other.id) !== String(ctx.user.id)) {
+                await flash(ctx, () => Notification.make().danger().title(t(`${group}/email-change-verification-controller.notifications.unavailable.title`)).body(t(`${group}/email-change-verification-controller.notifications.unavailable.body`)).send());
+            } else {
+                const updated = await auth.update!(ctx.user, { email: payload.email });
+                // The new address was just proven by following the link.
+                await auth.markEmailAsVerified?.(updated);
+                await flash(ctx, () => Notification.make().success().title(t(`${group}/email-change-verification-controller.notifications.verified.title`)).body(t(`${group}/email-change-verification-controller.notifications.verified.body`, { email: payload.email })).send());
+            }
+            res.redirect(panel.getProfileUrl() ?? panel.getBaseUrl());
+        });
+        // Link sent to the old address: works without signing in, until the change is confirmed.
+        router.get(panel.getBaseUrl(panel.getAuthPaths().blockEmailChange), async (req, res) => {
+            const ctx = await context(req, res);
+            const payload = panel.readEmailChangeToken('block', req.query.token);
+            if (!payload) return void res.status(403).send('Invalid signature.');
+            const user = await panel.getAuth().find(payload.uid);
+            if (!user) return void res.status(403).send('Invalid signature.');
+            const changed = user.email === payload.email;
+            if (!changed) await getDefaultCacheStore().put(`navette:email-change:blocked:${payload.nonce}`, true, 60 * 60 + 60);
+            await flash(ctx, () => (changed
+                ? Notification.make().danger().persistent().title(t(`${group}/block-email-change-verification-controller.notifications.failed.title`)).body(t(`${group}/block-email-change-verification-controller.notifications.failed.body`, { email: payload.email }))
+                : Notification.make().success().persistent().title(t(`${group}/block-email-change-verification-controller.notifications.blocked.title`)).body(t(`${group}/block-email-change-verification-controller.notifications.blocked.body`, { email: payload.email }))).send());
+            res.redirect(ctx.user ? (panel.getProfileUrl() ?? panel.getBaseUrl()) : panel.getLoginUrl());
+        });
+    }
     if (TenantRegistration) userPage(TenantRegistration.slug, name('tenancy.registration'), TenantRegistration.getLabel());
-    if (MultiFactorSetUpPage) userPage('multi-factor-authentication/set-up', name('auth.multi-factor-authentication.set-up-required'), t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'), 'simple', { beforeMultiFactorSetUp: true });
+    if (MultiFactorSetUpPage) userPage(panel.getAuthPaths().setUpRequiredMultiFactor, name('auth.multi-factor-authentication.set-up-required'), t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'), 'simple', { beforeMultiFactorSetUp: true });
 
     /** Context of a protected page: login, email verification, tenant. Returns `null` after responding. */
     const pageContext = async (req: Request, res: Response): Promise<PanelContext | null> => {
         const ctx = await context(req, res);
         if (ctx.denied) { forbidden(res); return null; }
-        if (!ctx.user) { res.redirect(panel.getLoginUrl()); return null; }
+        if (!ctx.user) { if (panel.allowsGuests()) return ctx; res.redirect(panel.getLoginUrl()); return null; }
         if (await panel.mustVerifyEmail(ctx.user)) { res.redirect(panel.getEmailVerificationPromptUrl()); return null; }
         if (await panel.mustSetUpMultiFactorAuthentication(ctx.user)) { res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl()); return null; }
         if (panel.hasTenancy()) {
@@ -4214,6 +4325,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
 
 /** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
 function assertAuthCapabilities(panel: Panel): void {
+    if (panel.allowsGuests() && panel.hasTenancy()) throw new Error('guestAccess() is not available in a multi-tenant panel: tenants belong to signed-in users.');
     for (const provider of panel.getMultiFactorAuthenticationProviders()) provider.checkConfiguration?.(panel);
     if (!panel.hasRegistration() && !panel.hasPasswordReset() && !panel.hasEmailVerification() && !panel.hasProfile()) return;
     const auth = panel.getAuth();
@@ -4225,4 +4337,5 @@ function assertAuthCapabilities(panel: Panel): void {
     if (panel.hasPasswordReset()) missing('Password reset', ['findByEmail', 'update', 'getPasswordFingerprint']);
     if (panel.hasEmailVerification()) missing('Email verification', ['hasVerifiedEmail', 'markEmailAsVerified']);
     if (panel.hasProfile()) missing('Profile', ['update']);
+    if (panel.hasEmailChangeVerification()) missing('Email change verification', ['update', 'findByEmail']);
 }

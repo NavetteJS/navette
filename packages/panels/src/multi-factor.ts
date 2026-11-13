@@ -70,6 +70,8 @@ export class MemoryCacheStore implements MultiFactorCacheStore {
 let defaultCacheStore: MultiFactorCacheStore = new MemoryCacheStore();
 /** Store used by the providers that do not set their own `cacheStore()`. */
 export const useMultiFactorCacheStore = (store: MultiFactorCacheStore): void => { defaultCacheStore = store; };
+/** The store of short-lived values shared by authentication features (multi-factor codes, email change blocks). */
+export const getDefaultCacheStore = (): MultiFactorCacheStore => defaultCacheStore;
 
 /** Runs `fn` after any other call holding the same key in this process (check-then-write sequences). */
 const queues = new Map<string, Promise<unknown>>();

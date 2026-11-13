@@ -165,6 +165,47 @@ import { EditProfile } from '@navette-js/panels';
 panel.profile(EditProfile, false);
 ```
 
+### Email change verification
+
+With `emailChangeVerification()`, users who change their email address on the profile page must confirm the new address before it is saved: a link is sent to the new address, and the address in the database only changes when the user follows it, signed in. At the same time, an email to the old address offers a link to block the change, which works without signing in, in case someone else made it.
+
+```ts
+import { Panel } from '@navette-js/panels';
+
+Panel.make()
+    .profile()
+    .emailChangeVerification()
+```
+
+Both links are valid for 60 minutes. A confirmation link only works for the user who asked, while their address is still the one it was issued for, so it works once. If another account took the new address meanwhile, the change is refused. The new address is marked as verified when it is confirmed. The user provider must implement `update()` and `findByEmail()`; a blocked change is remembered in the [cache store](/panels/multi-factor-authentication#running-several-instances).
+
+## Setting up guest access to a panel
+
+By default, every page of a panel requires a signed-in user. `guestAccess()` lets visitors use the panel without signing in:
+
+```ts
+import { Panel } from '@navette-js/panels';
+
+Panel.make()
+    .guestAccess()
+```
+
+For a visitor, the layout has the navigation but no user menu, notifications or global search. Policies, the `canAccess()` of pages and the panel's [authorization hook](/resources/authorization) are still consulted, with a `null` user: decide there what guests may see.
+
+```ts
+import type { Policy } from '@navette-js/panels';
+
+export const postPolicy: Policy = {
+    viewAny: () => true,
+    view: () => true,
+    create: (user) => user !== null,
+    update: (user) => user !== null,
+    delete: (user) => user?.role === 'admin',
+};
+```
+
+Guest access is not available in a multi-tenant panel. The login page stays available, so that a panel can serve both visitors and signed-in users.
+
 ## Customizing the authentication pages
 
 Each method takes the page class as its first argument. Extend the class to change it:
@@ -304,21 +345,26 @@ What remains for you to do:
 
 ## Customizing the authentication route slugs
 
-The login, registration and password reset pages are served at `login`, `register`, `password-reset/request` and `password-reset/reset`, under the panel's path. You may change these segments (lowercase letters, digits and dashes):
+The authentication routes are served under the panel's path. You may change their segments (lowercase letters, digits and dashes); the values shown are the defaults:
 
 ```ts
 import { Panel } from '@navette-js/panels';
 
 Panel.make()
-    .loginRouteSlug('sign-in')
-    .registrationRouteSlug('sign-up')
-    .passwordResetRoutePrefix('forgot-password')
+    .loginRouteSlug('login')
+    .logoutRouteSlug('logout')
+    .registrationRouteSlug('register')
+    .passwordResetRoutePrefix('password-reset')
     .passwordResetRequestRouteSlug('request')
     .passwordResetRouteSlug('reset')
+    .emailVerificationRoutePrefix('email-verification')
+    .emailVerificationPromptRouteSlug('prompt')
+    .emailVerificationRouteSlug('verify')
+    .emailChangeVerificationRoutePrefix('email-change-verification')
+    .emailChangeVerificationRouteSlug('verify')
+    .multiFactorAuthenticationRoutePrefix('multi-factor-authentication')
+    .setUpRequiredMultiFactorAuthenticationRouteSlug('set-up')
 ```
 
 These segments are reserved: in a multi-tenant panel, they are never read as tenant keys.
 
-<Aside variant="warning">
-Guest access, verification of a new email address before it is changed, and the slugs of the email verification and logout routes are not available yet.
-</Aside>
