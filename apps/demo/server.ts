@@ -28,7 +28,7 @@ import { labPanel } from './lab-panel.ts';
 import { shopWidgets } from './widgets/shop.ts';
 import { welcomeWidgets } from './widgets/welcome.ts';
 import { STATUSES } from './resources/OrderResource.ts';
-import { DatePicker, Select } from '@navette-js/forms';
+import { DatePicker, FileUpload, LocalFileStorage, Select } from '@navette-js/forms';
 import { Section, type Schema } from '@navette-js/schemas';
 import { Model } from '@navette-js/database';
 
@@ -144,6 +144,8 @@ if (existsSync(storage)) app.use('/storage', express.static(storage, { dotfiles:
 const uploads = process.env.NAVETTE_UPLOADS ?? file('./storage');
 mkdirSync(path.join(uploads, 'public'), { recursive: true });
 app.use('/storage', express.static(path.join(uploads, 'public'), { dotfiles: 'deny', index: false }));
+// Files saved by upload fields and attached in the editors.
+FileUpload.storage = new LocalFileStorage(path.join(uploads, 'public'), '/storage');
 ProductResource.mediaRoot = path.join(uploads, 'public');
 AuthorResource.exportRoot = path.join(uploads, 'public');
 PostResource.mediaRoot = path.join(uploads, 'public');
