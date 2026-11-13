@@ -155,3 +155,13 @@ test('`TextColumn`: `html()` is sanitized, `markdown()` renders safe HTML', asyn
     assert.match(markdown, /<p><strong>Bold<\/strong> &lt;b&gt;raw&lt;\/b&gt;<\/p>/);
     assert.match(await TextColumn.make('notes').toHtml(row), /\*\*Bold\*\* &lt;b&gt;raw&lt;\/b&gt;/, 'escaped by default');
 });
+
+test('SelectColumn: allowHtml() sanitizes labels for the JavaScript select, strips tags in the native one', async () => {
+    const { SelectColumn } = await import('../src/index.ts');
+    const options = { a: '<b>Bold</b><img src=x onerror=alert(1)>' };
+    const js = await SelectColumn.make('status').options(options).native(false).allowHtml().toHtml({ status: 'a' } as any, 1);
+    assert.match(js, /isHtmlAllowed: true/);
+    assert.doesNotMatch(js, /onerror/);
+    const native = await SelectColumn.make('status').options(options).allowHtml().toHtml({ status: 'a' } as any, 1);
+    assert.match(native, /<option value="a">Bold<\/option>/);
+});

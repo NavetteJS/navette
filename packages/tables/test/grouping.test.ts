@@ -121,3 +121,11 @@ test('summarizer `query()`: scoped on all records, on the page and on each group
     const groupHighs = [...grouped.matchAll(/<span class="fi-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
     assert.deepEqual(groupHighs, ['0', '0', '2', '2'], 'draft, published, reviewing (7 and 6), then all records');
 });
+
+test('summaries(): the "this page" and "all" rows can be hidden, group summaries stay', async () => {
+    const headings = async (table: Table) => [...records(clean(await renderTable(table, host(), adapter))).matchAll(/heading-cell ">([^<]+)<\/th>/g)].map((m) => m[1]);
+    assert.deepEqual(await headings(new Table().pluralModelLabel('posts').columns(columns()).defaultGroup('status').summaries(false, true)), ['draft summary', 'published summary', 'All posts']);
+    assert.deepEqual(await headings(new Table().pluralModelLabel('posts').columns(columns()).defaultGroup('status').summaries(false, false)), ['draft summary', 'published summary']);
+    const single = records(clean(await renderTable(new Table().pluralModelLabel('posts').columns(columns()).summaries(false, false), host({ tableRecordsPerPage: 10 }), adapter)));
+    assert.ok(!single.includes('fi-ta-summary-row'));
+});

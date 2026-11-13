@@ -1147,6 +1147,10 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     selectablePlaceholder(condition = true): this { this._selectablePlaceholder = condition; return this; }
     /** `false`: a JavaScript select instead of the browser's native one. */
     native(condition = true): this { this._native = condition; return this; }
+    private _allowHtml = false;
+    /** Option labels are HTML, sanitized on the server (JavaScript select only; the native select shows their text). */
+    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    private labelForDisplay(label: string): string { return !this._allowHtml ? label : this.isNative() ? label.replace(/<[^>]*>/g, '') : sanitizeHtml(label); }
     /** A search field in the select (implies a JavaScript select). */
     searchableOptions(condition = true): this { this._searchable = condition; return this; }
     isNative(): boolean { return this._native && !this._searchable; }
@@ -1183,11 +1187,12 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         const state = await this.getState(record);
         const value = state === null || state === undefined ? '' : String(state);
         const options = await this.getOptionsFor(record);
-        const optionLabel = options.find(([option]) => option === value)?.[1] ?? null;
+        const found = options.find(([option]) => option === value)?.[1] ?? null;
+        const optionLabel = found === null ? null : this.labelForDisplay(found);
         const isDisabled = await this.isDisabledFor(record);
         const isNative = this.isNative();
         const placeholder = this._placeholder ?? t('filament-forms::components.select.placeholder');
-        const optionsForJs = isNative ? [] : options.map(([option, label]) => ({ label, value: option, isDisabled: this.isOptionDisabled(option, label, record) }));
+        const optionsForJs = isNative ? [] : options.map(([option, label]) => ({ label: this.labelForDisplay(label), value: option, isDisabled: this.isOptionDisabled(option, label, record) }));
         const config = `selectTableColumn({
                     accessibilityAttributes: [],
                     ariaLabel: ${js(this.getLabel())},
@@ -1200,7 +1205,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
                     hasInitialNoOptionsMessage: true,
                     initialOptionLabel: ${js(optionLabel)},
                     isDisabled: ${js(isDisabled)},
-                    isHtmlAllowed: false,
+                    isHtmlAllowed: ${js(this._allowHtml && !isNative)},
                     isNative: ${js(isNative)},
                     isSearchable: ${js(this._searchable)},
                     loadingMessage: ${js(t('filament-forms::components.select.loading_message'))},
@@ -1228,7 +1233,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
             'x-tooltip': tooltip,
         }).class(['fi-select-input']);
         const control = isNative
-            ? `<select x-model="state" ${select.toHtml()}>${this._selectablePlaceholder ? `<option value="">${e(placeholder)}</option>` : ''}${options.map(([option, label]) => `<option${this.isOptionDisabled(option, label, record) ? ' disabled' : ''} value="${e(option)}">${e(label)}</option>`).join('')}</select>`
+            ? `<select x-model="state" ${select.toHtml()}>${this._selectablePlaceholder ? `<option value="">${e(placeholder)}</option>` : ''}${options.map(([option, label]) => `<option${this.isOptionDisabled(option, label, record) ? ' disabled' : ''} value="${e(option)}">${e(this.labelForDisplay(label))}</option>`).join('')}</select>`
             : '<div wire:ignore class="fi-select-input"><div x-ref="select"></div></div>';
         return `<div wire:ignore.self x-load="x-load" x-load-src="${e(views.render('filament-tables::asset', { path: 'columns/select' }).trim())}" x-data="${e(config)}" x-id="['table-column-error']" x-on:click.capture="preventEdit($event)" x-on:keydown.capture="preventEdit($event)" class="${cls(['fi-ta-select', this._inline ? 'fi-inline' : null])}"><input type="hidden" value="${e(value)}" data-option-label="${e(optionLabel ?? '')}" data-disabled="${isDisabled ? 'true' : 'false'}" x-ref="serverState" /><div x-bind:class="{
                     'fi-disabled': isLoading || ${js(isDisabled)},
@@ -1730,13 +1735,13 @@ export class Filter extends BaseFilter {
         if (!this.hasSchema()) return { isActive: this._default === true };
         return Object.fromEntries(this.fields().map((c: any) => {
             const value = typeof c.getDefaultState === 'function' ? c.getDefaultState() : null;
-            return [String(c.getName()), ['string', 'number', 'boolean'].includes(typeof value) && value !== '' ? value : null];
+            return [String(c.getName()), filterFieldValue(value)];
         }));
     }
     sanitizeState(state: unknown): FilterState {
         const received = state && typeof state === 'object' ? (state as Record<string, unknown>) : {};
         if (!this.hasSchema()) return { isActive: received.isActive === true || received.isActive === 1 || received.isActive === '1' };
-        return Object.fromEntries(this.fields().map((c: any) => { const name = String(c.getName()); const value = received[name]; return [name, ['string', 'number', 'boolean'].includes(typeof value) && value !== '' ? value : null]; }));
+        return Object.fromEntries(this.fields().map((c: any) => { const name = String(c.getName()); const value = received[name]; return [name, filterFieldValue(value)]; }));
     }
     /** A field left empty, or an unchecked checkbox, does not filter. */
     isActive(state: FilterState): boolean { return Object.values(this.sanitizeState(state)).some((value) => value !== null && value !== false); }
@@ -1750,6 +1755,12 @@ export class Filter extends BaseFilter {
         return [indicator];
     }
     removeIndicator(state: FilterState, field: string): FilterState { return field === '' ? this.getResetState() : { ...this.sanitizeState(state), [field]: null }; }
+}
+
+/** Value of a custom filter field: a scalar, or a list of scalars (multiple select, checkbox list, 100 at most); anything else, empty strings and empty lists become `null`. */
+function filterFieldValue(value: unknown): unknown {
+    if (Array.isArray(value)) { const items = [...new Set(value.filter((item) => (typeof item === 'string' && item !== '') || typeof item === 'number').map(String))].slice(0, 100); return items.length ? items : null; }
+    return ['string', 'number', 'boolean'].includes(typeof value) && value !== '' ? value : null;
 }
 
 // ------------------------------------------------------------------ table
@@ -1795,6 +1806,12 @@ export class Table<R = any> {
     constructor() { configured(this); }
     private _columns: Column<R>[] = [];
     private _recordAction: string | null = null;
+    private _pageSummary = true;
+    private _allTableSummary = true;
+    /** Which summary rows to show: "this page" (`pageCondition`) and the whole table (`allTableCondition`); group summaries are not affected. */
+    summaries(pageCondition = true, allTableCondition = true): this { this._pageSummary = pageCondition; this._allTableSummary = allTableCondition; return this; }
+    hasPageSummary(): boolean { return this._pageSummary; }
+    hasAllTableSummary(): boolean { return this._allTableSummary; }
     private _recordActions: any[] = [];
     private _heading: string | null = null;
     private _headerActions: any[] = [];
@@ -2272,7 +2289,10 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
         })));
     };
     const label = table.getPluralModelLabel();
-    const hasPageSummary = !options.groupsOnly && page.lastPage > 1;
+    const showPage = table.hasPageSummary(), showAll = table.hasAllTableSummary();
+    const isMultiPage = !options.groupsOnly && page.lastPage > 1;
+    // Several pages: "this page" and "all" rows under a heading row; a single page: one "Summary" row.
+    const hasPageSummary = isMultiPage && (showPage || showAll);
     const rowHtml = (row: SummaryRow) => summaryRowHtml(row, span, options.groupsOnly, options.placeholders);
     const header = hasPageSummary
         ? `<tr class="fi-ta-row fi-ta-summary-header-row fi-striped">${options.placeholders.selection ? '<td></td>' : ''}${options.placeholders.actionsBefore ? '<td></td>' : ''}${columns.map((c, i) => {
@@ -2281,8 +2301,11 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
         }).join('')}${options.placeholders.actions ? '<td></td>' : ''}</tr>`
         : '';
     const rows = hasPageSummary
-        ? [{ heading: t('filament-tables::table.summary.subheadings.page', { label }), cells: await cells(onPage, page.records), striped: false }, { heading: t('filament-tables::table.summary.subheadings.all', { label }), cells: await cells(all, query), striped: false }]
-        : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: await cells(all, query), striped: true }];
+        ? [
+            ...(showPage ? [{ heading: t('filament-tables::table.summary.subheadings.page', { label }), cells: await cells(onPage, page.records), striped: false }] : []),
+            ...(showAll ? [{ heading: t('filament-tables::table.summary.subheadings.all', { label }), cells: await cells(all, query), striped: false }] : []),
+        ]
+        : isMultiPage || !(showPage || showAll) ? [] : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: await cells(all, query), striped: true }];
     return {
         html: header + rows.map(rowHtml).join(''),
         /** Group summary row: aggregates over all the group's records (not only those on the page). */

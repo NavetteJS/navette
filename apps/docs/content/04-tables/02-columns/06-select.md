@@ -100,9 +100,18 @@ The second argument is the column displayed as the option label. A third argumen
 
 Up to 1,000 options are listed. When the value is saved, the server checks that it is the key of a related record that the (modified) query returns.
 
-<Aside variant="warning">
-HTML option labels are not available yet.
-</Aside>
+## Allowing HTML in the option labels
+
+`allowHtml()` displays the option labels as HTML in the JavaScript select. The labels are sanitized on the server with an allow-list; the native select shows their text only:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make('status')
+    .options({ draft: '<span style="color: gray">Draft</span>', published: '<strong>Published</strong>' })
+    .native(false)
+    .allowHtml()
+```
 
 ## Disable placeholder selection
 

@@ -441,6 +441,14 @@ TextColumn.make('rating')
         .query((query) => query.where('rating', '>=', 8)))
 ```
 
-<Aside variant="warning">
-Hiding summary rows is not available yet.
-</Aside>
+## Hiding summary rows
+
+By default, both the "this page" and the total summary rows are displayed when columns have summarizers. `summaries()` controls them: the first argument for the page row, the second for the total row. Group summaries are not affected:
+
+```ts
+import { Table } from '@navette-js/tables';
+
+table.summaries(false, true)
+```
+
+This is useful with [group summaries](#summarising-groups-of-rows), when you only want summaries per group, or when the page row is redundant.

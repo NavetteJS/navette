@@ -125,3 +125,13 @@ test('customized filters actions: trigger, apply and reset', async () => {
     assert.match(defaults, /title="Filter" aria-label="Filter"/);
     assert.match(defaults, /data-table-filter-action="reset"/);
 });
+
+test('custom filter: list values of a multiple select are kept, cleaned and capped', async () => {
+    const { Filter } = await import('../src/index.ts');
+    const { Select } = await import('@navette-js/forms');
+    const filter = Filter.make('statuses').schema([Select.make('status').multiple().options({ a: 'A', b: 'B' })]).query(() => {});
+    assert.deepEqual(filter.sanitizeState({ status: ['a', 'a', 'b', '', { x: 1 }, 3] }), { status: ['a', 'b', '3'] });
+    assert.deepEqual(filter.sanitizeState({ status: [] }), { status: null });
+    assert.equal(filter.isActive({ status: ['a'] }), true);
+    assert.equal(filter.isActive({ status: [] }), false);
+});

@@ -65,14 +65,14 @@ With `ObjectionAdapter`, `query` is the Objection query builder of the table's l
 `data` contains one key for each field of the schema, named after the field. Before it reaches `query()`, Navette cleans the data received from the browser:
 
 - keys that are not the name of a field of `schema()` are dropped;
-- values that are not a string, a number or a boolean, and empty strings, become `null`.
+- values that are not a string, a number, a boolean or a list of strings and numbers (a multiple select, a checkbox list), empty strings and empty lists become `null`. Lists are deduplicated, their items turned into strings, and capped at 100.
 
 The filter is active, and `query()` is called, when at least one value is neither `null` nor `false` (an unchecked checkbox). Even so, check each value before using it, as in the `isDate()` test above: a date field may receive any string from a forged request.
 
 The `default()` values of the fields are applied when the table opens, and when the user clicks "Reset".
 
 <Aside variant="warning">
-Put the fields directly in `schema()`: fields nested in layout components are not read. Fields whose value is an array, such as a multiple select or a checkbox list, are not supported yet.
+Put the fields directly in `schema()`: fields nested in layout components are not read.
 </Aside>
 
 ## Active indicators
