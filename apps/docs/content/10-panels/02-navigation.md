@@ -67,7 +67,7 @@ By default, the label of the item is the title of the page. To change it, set `n
 static navigationLabel = 'Status';
 ```
 
-For a resource, the label is its plural model label. To change it, set `navigationLabel` on a [custom list page](/resources/overview#customizing-resource-pages).
+For a resource, the label is its plural model label. To change it, set `navigationLabel` on the resource.
 
 ## Customizing a navigation item's icon
 
@@ -143,8 +143,34 @@ Panel.make()
 
 As in Filament, the items of a group with an icon are displayed without their own icons.
 
+### Nesting navigation items
+
+An item may be shown below another item of its group: set `navigationParentItem` to the label of that item, on a page or a resource:
+
+```ts
+export class RefundResource extends Resource {
+    static navigationGroup = 'Shop';
+    static navigationParentItem = 'Orders';
+}
+```
+
+The child items are shown while their parent, or one of them, is active. A parent item without a URL always shows them. A custom item takes its children with `childItems()`:
+
+```ts
+NavigationItem.make('Reports')
+    .icon('o-chart-bar')
+    .childItems([
+        NavigationItem.make('Sales').url('/reports/sales'),
+        NavigationItem.make('Returns').url('/reports/returns'),
+    ])
+```
+
+An item whose parent is not in its group is not shown. In the [top navigation](#using-top-navigation), an item with children forms a list of its own in the group's dropdown.
+
+To gather many pages under a single item with their own sub-navigation, use a [cluster](/panels/clusters).
+
 <Aside variant="warning">
-Nested items, clusters, and the dropdown of a group's items when the sidebar is collapsed to icons are not available yet.
+The dropdown of a group's items when the sidebar is collapsed to icons is not available yet.
 </Aside>
 
 ## Collapsible sidebar on desktop
@@ -223,7 +249,7 @@ export class SalesReport extends Page {
 }
 ```
 
-The position is `'start'` (before the content, the default), `'end'` (after it) or `'top'` (tabs). On small screens, the sub-navigation becomes a dropdown. Resources build the sub-navigation of their records for you: see [resource sub-navigation](/resources/overview#resource-sub-navigation).
+The position is `'start'` (before the content, the default), `'end'` (after it) or `'top'` (tabs). On small screens, the sub-navigation becomes a dropdown. Items with a `group` are gathered under its label: a column of the sidebar, or a dropdown among the tabs. An item may also have a `badge` and a `badgeColor`. Resources build the sub-navigation of their records for you: see [resource sub-navigation](/resources/overview#resource-sub-navigation).
 
 ## Customizing the user menu
 

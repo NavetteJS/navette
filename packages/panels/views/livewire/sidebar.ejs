@@ -1,5 +1,33 @@
 <%# Sidebar: navigation groups and items %>
 <% const collapsible = isSidebarCollapsibleOnDesktop || isSidebarFullyCollapsibleOnDesktop; %>
+<%# One item, with its child items below it when it has no URL, is active, or one of them is. %>
+<% const sidebarItem = (item, { grouped, subGrouped = false, first, last }) => { %>
+                                <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.isActive, 'fi-sidebar-item-has-active-child-items': item.activeChildItems, 'fi-sidebar-item-has-url': Boolean(item.url) }]) %>">
+                                    <a<% if (item.url) { %> href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% } %><% if (item.isActive) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
+                                        <% if (item.icon && (!subGrouped || isSidebarCollapsibleOnDesktop)) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon', 'x-show': subGrouped ? '! $store.sidebar.isOpen' : false }) }) %><% } %>
+                                        <% if ((!item.icon && grouped) || subGrouped) { %>
+                                            <div<% if (item.icon && subGrouped && isSidebarCollapsibleOnDesktop) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-sidebar-item-grouped-border">
+                                                <% if (!first) { %><div class="fi-sidebar-item-grouped-border-part-not-first"></div><% } %>
+                                                <% if (!last) { %><div class="fi-sidebar-item-grouped-border-part-not-last"></div><% } %>
+                                                <div class="fi-sidebar-item-grouped-border-part"></div>
+                                            </div>
+                                        <% } %>
+                                        <span class="fi-sidebar-item-label">
+                                            <%= item.label %>
+                                        </span>
+                                        <% if (item.badge !== null) { %>
+                                            <span class="fi-sidebar-item-badge-ctn">
+                                                <%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %>
+                                            </span>
+                                        <% } %>
+                                    </a>
+                                    <% if (item.childItems?.length && (!item.url || item.isActive || item.activeChildItems)) { %>
+                                        <ul class="fi-sidebar-sub-group-items">
+                                            <% item.childItems.forEach((child, index) => sidebarItem(child, { grouped: true, subGrouped: true, first: index === 0, last: index === item.childItems.length - 1 })) %>
+                                        </ul>
+                                    <% } %>
+                                </li>
+<% } %>
 <div>
     <div x-data="filamentSidebar({
             hasTopNavigation: <%= hasTopNavigation ? 'true' : 'false' %>,
@@ -56,21 +84,7 @@
                             </div>
                         <% } %>
                         <ul<% if (group.label) { %> id="<%= group.itemsId %>"<% if (group.collapsible !== false) { %> x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %><% } %> class="fi-sidebar-group-items">
-                            <% for (const item of group.items) { %>
-                                <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.isActive }, 'fi-sidebar-item-has-url']) %>">
-                                    <a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
-                                        <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon' }) }) %><% } %>
-                                        <span class="fi-sidebar-item-label">
-                                            <%= item.label %>
-                                        </span>
-                                        <% if (item.badge !== null) { %>
-                                            <span class="fi-sidebar-item-badge-ctn">
-                                                <%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %>
-                                            </span>
-                                        <% } %>
-                                    </a>
-                                </li>
-                            <% } %>
+                            <% group.items.forEach((item, index) => sidebarItem(item, { grouped: Boolean(group.label), first: index === 0, last: index === group.items.length - 1 })) %>
                         </ul>
                     </li>
                 <% } %>

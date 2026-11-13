@@ -4,7 +4,7 @@ import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Checkbox, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
-    DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
+    Cluster, DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, Tab, type AuthProvider, type Login,
 } from '@navette-js/panels';
 import { Section } from '@navette-js/schemas';
@@ -140,6 +140,8 @@ class LabCards extends Resource {
     static navigationIcon = 'o-squares-2x2';
     static navigationLabel = 'Cards layout';
     static navigationGroup = 'Tables';
+    // Shown below "Products lab" in the menu (nested navigation).
+    static navigationParentItem = 'Products lab';
     static adapter = new ObjectionAdapter(LabProduct);
     static table(table: Table<LabProduct>): Table<LabProduct> {
         return table
@@ -192,6 +194,31 @@ class LabFields extends Resource {
     static table(table: Table<any>): Table<any> { return table.columns([TextColumn.make('name').searchable(), TextColumn.make('website')]); }
 }
 
+/** Cluster: one menu item for the catalog pages, listed in its sub-navigation and served under `/lab/catalog`. */
+class CatalogCluster extends Cluster {
+    static navigationIcon = 'o-squares-2x2';
+    static navigationSort = 10;
+}
+class LabCatalogBrands extends Resource {
+    static slug = 'brands';
+    static modelLabel = 'brand';
+    static navigationIcon = 'o-tag';
+    static cluster = CatalogCluster;
+    static isSimple = true;
+    static adapter = new ObjectionAdapter(LabBrand);
+    static table(table: Table<any>): Table<any> { return table.columns([TextColumn.make('name').searchable().sortable(), TextColumn.make('website')]); }
+}
+class LabCatalogProducts extends Resource {
+    static slug = 'products';
+    static modelLabel = 'product';
+    static navigationIcon = 'o-cube';
+    static navigationGroup = 'Inventory';
+    static cluster = CatalogCluster;
+    static isSimple = true;
+    static adapter = new ObjectionAdapter(LabProduct);
+    static table(table: Table<any>): Table<any> { return table.columns([TextColumn.make('name').searchable(), TextColumn.make('qty').numeric()]); }
+}
+
 export function labPanel(options: { key: string; login: typeof Login; auth: AuthProvider; canAccess: (user: any) => boolean }): Panel {
     return Panel.make()
         .id('lab')
@@ -200,7 +227,7 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .brandName('Navette Lab')
         .setColors({ primary: Color.Violet })
         .login(options.login)
-        .resources([LabProducts, LabCards, LabFields])
+        .resources([LabProducts, LabCards, LabFields, LabCatalogBrands, LabCatalogProducts])
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
         .defaultThemeMode('dark')
         .auth(options.auth)

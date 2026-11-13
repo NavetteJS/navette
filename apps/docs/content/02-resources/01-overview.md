@@ -218,6 +218,16 @@ Labels are written in lower case, and Navette capitalizes them where needed: "Po
 
 The navigation item of a resource is the navigation item of its list page. It uses the title-case plural model label, and the static properties below.
 
+### Customizing a resource navigation label
+
+The `navigationLabel` property replaces the plural model label in the menu:
+
+```ts
+static navigationLabel = 'Clients';
+```
+
+The item may also be shown [below another item](/panels/navigation#nesting-navigation-items) (`navigationParentItem`), or in a [cluster](/panels/clusters) (`cluster`).
+
 ### Setting a resource navigation icon
 
 The `navigationIcon` property sets the [icon](/styling/icons) of the navigation item:

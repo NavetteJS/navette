@@ -1,6 +1,48 @@
 <%# Panel page: header, breadcrumbs, sub-navigation and content %>
 <% const beforeHeaderActions = renderHook('panels::page.header.actions.before', renderHookScopes), afterHeaderActions = renderHook('panels::page.header.actions.after', renderHookScopes); %>
 <% const subNavigation = locals.subNavigation ?? []; const activeSubItem = subNavigation.find((item) => item.active) ?? subNavigation[0]; const subNavigationPosition = locals.subNavigationPosition ?? 'top'; %>
+<%# Sub-navigation groups: items without a group first, then each group in order of appearance. %>
+<% const subNavigationGroups = []; for (const item of subNavigation) { const label = item.group || null; let group = subNavigationGroups.find((candidate) => candidate.label === label); if (!group) { group = { label, items: [] }; if (label === null) subNavigationGroups.unshift(group); else subNavigationGroups.push(group); } group.items.push(item); } %>
+<% const subNavigationBadge = (item, wrap) => { if (item.badge === null || item.badge === undefined || item.badge === '') return; %><% if (wrap) { %><span class="fi-sidebar-item-badge-ctn"><% } %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses ?? [] }) %><% if (wrap) { %></span><% } %><% } %>
+<% const subNavigationSidebar = () => { %>
+                    <ul class="fi-page-sub-navigation-sidebar">
+                        <% for (const group of subNavigationGroups) { %>
+                        <li x-data="{ label: <% if (group.label) { %><%- js('sub_navigation_' + group.label) %><% } else { %>'sub_navigation_'<% } %> }" data-group-label="sub_navigation_<%= group.label ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': group.items.some((item) => item.active) }, 'fi-collapsible']) %>">
+                            <% if (group.label) { %>
+                                <div x-on:click="$store.sidebar.toggleCollapsedGroup(label)" class="fi-sidebar-group-btn">
+                                    <span class="fi-sidebar-group-label">
+                                        <%= group.label %>
+                                    </span>
+                                    <%- view('filament::components.icon-button', {
+                                        iconName: 'm-chevron-up', label: group.label, className: 'fi-sidebar-group-collapse-btn',
+                                        extra: attrs({ 'x-bind:aria-expanded': '! $store.sidebar.groupIsCollapsed(label)', 'x-on:click.stop': '$store.sidebar.toggleCollapsedGroup(label)' }),
+                                    }) %>
+                                </div>
+                            <% } %>
+                            <ul<% if (group.label) { %> x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %> class="fi-sidebar-group-items">
+                                <% group.items.forEach((item, index) => { %>
+                                    <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.active }, 'fi-sidebar-item-has-url']) %>">
+                                        <a href="<%= item.url %>" wire:navigate<% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
+                                            <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon' }) }) %><% } %>
+                                            <% if (!item.icon && group.label) { %>
+                                                <div class="fi-sidebar-item-grouped-border">
+                                                    <% if (index > 0) { %><div class="fi-sidebar-item-grouped-border-part-not-first"></div><% } %>
+                                                    <% if (index < group.items.length - 1) { %><div class="fi-sidebar-item-grouped-border-part-not-last"></div><% } %>
+                                                    <div class="fi-sidebar-item-grouped-border-part"></div>
+                                                </div>
+                                            <% } %>
+                                            <span class="fi-sidebar-item-label">
+                                                <%= item.label %>
+                                            </span>
+                                            <% subNavigationBadge(item, true) %>
+                                        </a>
+                                    </li>
+                                <% }) %>
+                            </ul>
+                        </li>
+                        <% } %>
+                    </ul>
+<% } %>
 <div class="<%- cls(['fi-page', subNavigation.length ? `fi-page-has-sub-navigation fi-page-has-sub-navigation-${subNavigationPosition}` : null, ...(locals.pageClasses ?? [])]) %>">
     <%- renderHook('panels::page.start', renderHookScopes) %>
     <div class="fi-page-header-main-ctn">
@@ -14,7 +56,7 @@
                 <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel fi-width-xs" style="">
                     <div class="fi-dropdown-list">
                         <% for (const item of subNavigation) { %>
-                            <a href="<%= item.url %>" wire:navigate class="fi-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span></a>
+                            <a href="<%= item.url %>" wire:navigate class="fi-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
                         <% } %>
                     </div>
                 </div>
@@ -73,22 +115,7 @@
                 <%- renderHook('panels::page.sub-navigation.start.before', renderHookScopes) %>
                 <div class="fi-page-sub-navigation-sidebar-ctn">
                     <%- renderHook('panels::page.sub-navigation.sidebar.before', renderHookScopes) %>
-                    <ul class="fi-page-sub-navigation-sidebar">
-                        <li x-data="{ label: 'sub_navigation_' }" data-group-label="sub_navigation_" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': subNavigation.some((item) => item.active) }, 'fi-collapsible']) %>">
-                            <ul class="fi-sidebar-group-items">
-                                <% for (const item of subNavigation) { %>
-                                    <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.active }, 'fi-sidebar-item-has-url']) %>">
-                                        <a href="<%= item.url %>" wire:navigate<% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
-                                            <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon' }) }) %><% } %>
-                                            <span class="fi-sidebar-item-label">
-                                                <%= item.label %>
-                                            </span>
-                                        </a>
-                                    </li>
-                                <% } %>
-                            </ul>
-                        </li>
-                    </ul>
+<% subNavigationSidebar() %>
                     <%- renderHook('panels::page.sub-navigation.sidebar.after', renderHookScopes) %>
                 </div>
                 <%- renderHook('panels::page.sub-navigation.start.after', renderHookScopes) %>
@@ -96,8 +123,14 @@
             <% if (subNavigation.length && subNavigationPosition === 'top') { %>
                 <%- renderHook('panels::page.sub-navigation.top.before', renderHookScopes) %>
                 <nav class="fi-tabs fi-page-sub-navigation-tabs" aria-label="<%= t('filament::components/tabs.label') %>">
-                    <% for (const item of subNavigation) { %>
-                        <a href="<%= item.url %>" wire:navigate class="<%- cls(['fi-tabs-item', { 'fi-active': item.active }]) %>"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-tabs-item-label"><%= item.label %></span></a>
+                    <% for (const group of subNavigationGroups) { %>
+                        <% if (group.label) { %>
+                            <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger"><button type="button" class="<%- cls(['fi-tabs-item', { 'fi-active': group.items.some((item) => item.active) }]) %>"><span class="fi-tabs-item-label"><%= group.label %></span></button></div><div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel" style=""><div class="fi-dropdown-list"><% for (const item of group.items) { %><a href="<%= item.url %>" wire:navigate class="fi-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a><% } %></div></div></div>
+                        <% } else { %>
+                            <% for (const item of group.items) { %>
+                                <a href="<%= item.url %>" wire:navigate class="<%- cls(['fi-tabs-item', { 'fi-active': item.active }]) %>"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-tabs-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
+                            <% } %>
+                        <% } %>
                     <% } %>
                 </nav>
                 <%- renderHook('panels::page.sub-navigation.top.after', renderHookScopes) %>
@@ -115,22 +148,7 @@
                 <%- renderHook('panels::page.sub-navigation.end.before', renderHookScopes) %>
                 <div class="fi-page-sub-navigation-sidebar-ctn">
                     <%- renderHook('panels::page.sub-navigation.sidebar.before', renderHookScopes) %>
-                    <ul class="fi-page-sub-navigation-sidebar">
-                        <li x-data="{ label: 'sub_navigation_' }" data-group-label="sub_navigation_" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': subNavigation.some((item) => item.active) }, 'fi-collapsible']) %>">
-                            <ul class="fi-sidebar-group-items">
-                                <% for (const item of subNavigation) { %>
-                                    <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.active }, 'fi-sidebar-item-has-url']) %>">
-                                        <a href="<%= item.url %>" wire:navigate<% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
-                                            <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon' }) }) %><% } %>
-                                            <span class="fi-sidebar-item-label">
-                                                <%= item.label %>
-                                            </span>
-                                        </a>
-                                    </li>
-                                <% } %>
-                            </ul>
-                        </li>
-                    </ul>
+<% subNavigationSidebar() %>
                     <%- renderHook('panels::page.sub-navigation.sidebar.after', renderHookScopes) %>
                 </div>
                 <%- renderHook('panels::page.sub-navigation.end.after', renderHookScopes) %>

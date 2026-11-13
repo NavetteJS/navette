@@ -155,8 +155,14 @@ export class NavigationItem {
     _isActive: ((path: string) => boolean) | null = null;
     _badge: string | number | null = null;
     _badgeColor = 'primary';
+    _parentItem: string | null = null;
+    _childItems: NavigationItem[] = [];
     constructor(label: string) { this.label = label; }
     static make(label: string): NavigationItem { return new NavigationItem(label); }
+    /** Shows the item below another item of its group, by that item's label. */
+    parentItem(label: string | null): this { this._parentItem = label; return this; }
+    /** Items shown below this one, when it (or one of them) is active, or when it has no URL. */
+    childItems(items: NavigationItem[]): this { this._childItems = items; return this; }
     url(url: string): this { this._url = url; return this; }
     icon(icon: string | null): this { this._icon = icon; return this; }
     group(group: string | null): this { this._group = group; return this; }
@@ -282,11 +288,38 @@ export class Panel {
     }
     /** Name of the session cookie: per guard (shared), or per panel. */
     getSessionCookieName(): string { return this._authGuard !== null ? `navette_${this._authGuard}_session` : `navette_${this._id}_session`; }
-    pages(pages: (typeof Page)[]): this { this._pages.push(...pages); return this; }
+    pages(pages: (typeof Page)[]): this {
+        for (const page of pages) { this.registerCluster(page); this._pages.push(page); }
+        return this;
+    }
     /** Registers resources: their pages and navigation items. */
     resources(resources: (typeof Resource)[]): this {
-        for (const resource of resources) { resource.panel = this; this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
+        for (const resource of resources) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
         return this;
+    }
+    /** A page or resource in a cluster is served under the cluster's slug; the cluster page is registered with it. */
+    private registerCluster(component: typeof Page | typeof Resource): void {
+        const cluster = (component as any).cluster as typeof Cluster | null;
+        if (!cluster) return;
+        if (!(cluster.prototype instanceof Cluster)) throw new Error(`${component.name}.cluster must be a Cluster subclass.`);
+        cluster.slug = cluster.getSlug();
+        if (!component.slug.startsWith(`${cluster.slug}/`)) component.slug = `${cluster.slug}/${component.slug}`;
+        if (!this._pages.includes(cluster)) this._pages.push(cluster);
+    }
+    /** Pages (resource list pages included) shown in a cluster's sub-navigation. */
+    getClusteredComponents(cluster: typeof Cluster): (typeof Page)[] {
+        return this._pages.filter((page) => page !== cluster && page.shouldRegisterNavigation && clusterOf(page) === cluster);
+    }
+    /** Sub-navigation of a cluster, for one of its pages: the components the user can open, sorted, with their groups. */
+    async getClusterSubNavigation(cluster: typeof Cluster, current: Page, user: User | null): Promise<SubNavigationItem[]> {
+        const components: (typeof Page)[] = [];
+        for (const component of this.getClusteredComponents(cluster)) if (await this.canAccessPage(component, user)) components.push(component);
+        const items: (SubNavigationItem & { sort: number })[] = [];
+        for (const component of components.sort((a, b) => a.navigationSort - b.navigationSort)) {
+            const badge = typeof (component as any).getNavigationBadge === 'function' ? await (component as any).getNavigationBadge() : component.navigationBadge;
+            items.push({ label: component.getNavigationLabel(), icon: component.navigationIcon, url: this.getUrl(component.slug), active: current instanceof component, group: component.navigationGroup, badge: badge ?? null, badgeColor: component.navigationBadgeColor, sort: component.navigationSort });
+        }
+        return items.map(({ sort: _sort, ...item }) => item);
     }
     navigationItems(items: NavigationItem[]): this { this._navigationItems.push(...items); return this; }
     /** Order of navigation groups. */
@@ -345,6 +378,11 @@ export class Panel {
     }
     /** Whether the user can open a page. List: `viewAny`; create: `create`; edit: checked against the record; custom page: `canAccess`. */
     async canAccessPage(PageClass: typeof Page, user: User | null): Promise<boolean> {
+        if (PageClass.prototype instanceof Cluster) {
+            if (!(await this.authorize(user, 'access', { page: PageClass, rule: () => PageClass.canAccess(user!) }))) return false;
+            for (const component of this.getClusteredComponents(PageClass as typeof Cluster)) if (await this.canAccessPage(component, user)) return true;
+            return false;
+        }
         const resource = (PageClass as any).resource as typeof Resource | undefined;
         if (resource && PageClass.prototype instanceof EditRecord) return user !== null || this._guestAccess;
         if (resource && PageClass.prototype instanceof CreateRecord) return resource.can('create', user);
@@ -693,20 +731,28 @@ export class Panel {
         for (const page of this._pages) if (page.shouldRegisterNavigation && !(await this.canAccessPage(page, user))) hidden.add(page.slug);
         return hidden;
     }
-    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; items: { label: string; url: string; icon: string | null; isActive: boolean; badge: string | number | null; badgeColorClasses: string[] }[] }[] {
+    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[] }[] {
         const items = [
-            ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug)).map((p) => {
-                const item = NavigationItem.make(p.getNavigationLabel()).url(this.getUrl(p.slug)).icon(p.navigationIcon).group(p.navigationGroup).sort(p.navigationSort).badge(badges.has(p.slug) ? badges.get(p.slug)! : p.navigationBadge, p.navigationBadgeColor);
+            // The pages of a cluster are in its sub-navigation: the menu only shows the cluster.
+            ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => {
+                const item = NavigationItem.make(p.getNavigationLabel()).url(this.getUrl(p.slug)).icon(p.navigationIcon).group(p.navigationGroup).sort(p.navigationSort).badge(badges.has(p.slug) ? badges.get(p.slug)! : p.navigationBadge, p.navigationBadgeColor).parentItem(p.navigationParentItem);
                 const base = this.getUrl(p.slug);
-                return (p as any).resource ? item.isActiveWhen((current) => current === base || current.startsWith(base + '/')) : item;
+                return (p as any).resource || p.prototype instanceof Cluster ? item.isActiveWhen((current) => current === base || current.startsWith(base + '/')) : item;
             }),
             ...this._navigationItems,
         ].sort((a, b) => a._sort - b._sort);
+        const view = (item: NavigationItem, children: NavigationItem[]): NavigationItemView => {
+            const childItems = children.map((child) => view(child, child._childItems));
+            const activeChildItems = childItems.some((child) => child.isActive || child.activeChildItems);
+            return { label: item.label, url: item._url, icon: item._icon, isActive: !activeChildItems && item.isActive(path), badge: item._badge, badgeColorClasses: this.colors.getComponentClasses('badge', item._badgeColor), childItems, activeChildItems };
+        };
         const order = [null, ...this._navigationGroups, ...items.map((i) => i._group).filter((g): g is string => g !== null && !this._navigationGroups.includes(g))];
         return [...new Set(order)].map((label) => {
-            const own = items.filter((i) => i._group === label).map((i) => ({ label: i.label, url: i._url, icon: i._icon, isActive: i.isActive(path), badge: i._badge, badgeColorClasses: this.colors.getComponentClasses('badge', i._badgeColor) }));
+            const inGroup = items.filter((i) => i._group === label);
+            // An item with a parent item is shown below it (an unknown parent hides it, as in Filament).
+            const own = inGroup.filter((i) => i._parentItem === null).map((i) => view(i, [...i._childItems, ...inGroup.filter((child) => child._parentItem === i.label)]));
             const options = label ? this._navigationGroupOptions.get(label) : undefined;
-            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
+            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive || i.activeChildItems), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
         }).filter((g) => g.items.length);
     }
 
@@ -1116,6 +1162,19 @@ abstract class BasePage extends Component implements SchemaHost {
     }
 }
 
+/** A navigation group for the topbar: in a dropdown, an item with children forms its own list with them. */
+function topNavigationGroup<G extends { items: NavigationItemView[] }>(group: G): G & { lists: (NavigationItemView & { colorClasses: string[] })[][] } {
+    const colored = (item: NavigationItemView) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] });
+    const lists: (NavigationItemView & { colorClasses: string[] })[][] = [];
+    for (const item of group.items) {
+        if (item.childItems.length) { lists.push([colored(item), ...item.childItems.map(colored)], []); continue; }
+        if (!lists.length) lists.push([]);
+        lists[lists.length - 1].push(colored(item));
+    }
+    if (lists.length && !lists[lists.length - 1].length) lists.pop();
+    return { ...group, items: group.items.map(colored), lists };
+}
+
 /** A panel page, in the full layout (sidebar, header). */
 export class Page extends BasePage {
     /** Methods the browser may call. A subclass adds its own: `static callable = ['approve']`. */
@@ -1128,6 +1187,10 @@ export class Page extends BasePage {
     static navigationSort = 0;
     static navigationBadge: string | number | null = null;
     static navigationBadgeColor = 'primary';
+    /** Label of another menu item of the group, below which this page is shown. */
+    static navigationParentItem: string | null = null;
+    /** Cluster of the page: it is served under the cluster's URL and listed in its sub-navigation. */
+    static cluster: typeof Cluster | null = null;
     static shouldRegisterNavigation = true;
     /** Restricts the page to some users: returning `false` hides it from the menu and denies it (403). */
     static canAccess(_user: User): boolean | Promise<boolean> { return true; }
@@ -1151,14 +1214,25 @@ export class Page extends BasePage {
     getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
     getHeaderActions(): Action[] { return []; }
     getPageClasses(): string[] { return []; }
-    /** Page sub-navigation; empty by default. */
-    getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> { return []; }
+    /** Page sub-navigation: its cluster's pages, for a page in a cluster; empty otherwise. */
+    getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> {
+        const cluster = (this.constructor as typeof Page).cluster;
+        return cluster?.shouldRegisterSubNavigation ? this.panel.getClusterSubNavigation(cluster, this, (this._ctx as PanelContext).user) : [];
+    }
+    /** Breadcrumbs, preceded by the cluster's for a page in a cluster. */
+    protected getBreadcrumbsWithCluster(): { label: string; url: string | null }[] {
+        const breadcrumbs = this.getBreadcrumbs();
+        const cluster = clusterOf(this.constructor);
+        if (!cluster || this instanceof Cluster) return breadcrumbs;
+        const crumb = cluster.getClusterBreadcrumb();
+        return breadcrumbs[0]?.label === crumb ? breadcrumbs : [{ label: crumb, url: this.panel.getUrl(cluster.slug) }, ...breadcrumbs];
+    }
     /** Sub-navigation position: `start` (column before the content), `end` (after) or `top` (tabs). Defaults to the resource's, then the panel's. */
     static subNavigationPosition: 'start' | 'end' | 'top' | null = null;
     getSubNavigationPosition(): 'start' | 'end' | 'top' {
         const own = (this.constructor as typeof Page).subNavigationPosition;
         const resource = (this.constructor as any).resource ?? (this.constructor as any).parentResource;
-        return own ?? resource?.subNavigationPosition ?? this.panel.getSubNavigationPosition();
+        return own ?? resource?.subNavigationPosition ?? clusterOf(this.constructor)?.subNavigationPosition ?? this.panel.getSubNavigationPosition();
     }
     /** Widgets shown below the page content. */
     getFooterWidgets(): (typeof Widget)[] { return []; }
@@ -1222,12 +1296,34 @@ export class Page extends BasePage {
         for (const action of this.getHeaderActions()) if (await action.isVisible(ctx)) headerActions.push(await action.toHtml(ctx));
         return views.render('filament-panels::pages.page', {
             heading: this.getHeading(), headerWidgets: await this.renderHeaderWidgets(), content: await this.renderContent(), footerWidgets: await this.renderFooterWidgets(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(),
-            subNavigation: await this.getSubNavigation(), subNavigationPosition: this.getSubNavigationPosition(),
-            breadcrumbs: this.getBreadcrumbs(), headerActions, pageClasses: this.getPageClasses(), actionModals: this.rendersActionModalsInPage() ? await this.renderActionModals() : '',
+            subNavigation: (await this.getSubNavigation()).map((item) => ({ ...item, badgeColorClasses: sharedColors.getComponentClasses('badge', item.badgeColor ?? 'primary') })), subNavigationPosition: this.getSubNavigationPosition(),
+            breadcrumbs: this.getBreadcrumbsWithCluster(), headerActions, pageClasses: this.getPageClasses(), actionModals: this.rendersActionModalsInPage() ? await this.renderActionModals() : '',
             headerActionsKey: createHash('md5').update(this.getHeaderActions().map((a) => a.getName()).join(',')).digest('hex'),
         });
     }
 }
+/**
+ * Cluster: a menu item gathering pages and resources (`static cluster = Settings`), listed in its sub-navigation and served
+ * under its URL (`/settings/...`). Opening the cluster goes to its first page.
+ */
+export class Cluster extends Page {
+    /** Breadcrumb before those of its pages; defaults to the title. */
+    static clusterBreadcrumb: string | null = null;
+    /** `false`: the pages of the cluster have no sub-navigation. */
+    static shouldRegisterSubNavigation = true;
+    static getTitle(): string { return this.title ?? this.name.replace(/Cluster$/, '').replace(/([a-z])([A-Z])/g, '$1 $2'); }
+    /** URL segment: `slug`, or the class name without "Cluster" in kebab case (`ProductsCluster` → `products`). */
+    static getSlug(): string { return this.slug || this.name.replace(/Cluster$/, '').replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(); }
+    static getClusterBreadcrumb(): string { return this.clusterBreadcrumb ?? this.getTitle(); }
+    async mount(): Promise<void> {
+        const [first] = await this.getSubNavigation();
+        if (first) this.redirect(first.url);
+    }
+    getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> {
+        return this.panel.getClusterSubNavigation(this.constructor as typeof Cluster, this, (this._ctx as PanelContext).user);
+    }
+}
+
 /**
  * Dashboard: a widget grid, preceded by a filters form when the page defines `filtersFormSchema(schema)`.
  * The filters are passed to widgets as `pageFilters`.
@@ -1835,6 +1931,12 @@ export abstract class Resource {
     static navigationGroup: string | null = null;
     static navigationSort = 0;
     static navigationBadge: string | number | null = null;
+    /** Menu label; defaults to the plural model label in title case. */
+    static navigationLabel: string | null = null;
+    /** Label of another menu item of the group, below which the resource is shown. */
+    static navigationParentItem: string | null = null;
+    /** Cluster of the resource: its pages are served under the cluster's URL, and its list is in the cluster's sub-navigation. */
+    static cluster: typeof Cluster | null = null;
     static adapter: DataAdapter;
     /** In a multi-tenant panel, whether records belong to each tenant (`true` by default). */
     static isScopedToTenant = true;
@@ -1966,6 +2068,8 @@ export abstract class Resource {
             static navigationGroup = resource.navigationGroup;
             static navigationSort = resource.navigationSort;
             static navigationBadge = resource.navigationBadge;
+            static navigationParentItem = resource.navigationParentItem;
+            static navigationLabel = resource.navigationLabel;
             static getNavigationBadge = typeof (resource as any).getNavigationBadge === 'function' ? () => (resource as any).getNavigationBadge() : undefined;
         };
         const Create = class extends (resource.pages.create ?? CreateRecord) {
@@ -2002,8 +2106,12 @@ export abstract class Resource {
     }
 }
 
-/** Sub-navigation tab of a page. */
-export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean };
+/** Sub-navigation tab of a page; items with a `group` are gathered under its label. */
+export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
+/** A sidebar item, as rendered. */
+export type NavigationItemView = { label: string; url: string; icon: string | null; isActive: boolean; badge: string | number | null; badgeColorClasses: string[]; childItems: NavigationItemView[]; activeChildItems: boolean };
+/** The cluster a page belongs to: its own, or its resource's. */
+export const clusterOf = (page: unknown): typeof Cluster | null => (page as any)?.cluster ?? (page as any)?.resource?.cluster ?? (page as any)?.parentResource?.cluster ?? null;
 type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
 /** Widget: a component displayed in a page's widget grid. */
 export abstract class Widget extends Component {
@@ -2740,6 +2848,11 @@ class ResourceTabs extends SchemaComponent {
 export class ListRecords extends Page implements TableHost {
     static callable = ['updateTableColumnState', 'sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableFilters', 'resetTableFiltersForm', 'removeTableFilters', 'removeTableFilter', 'applyTableColumnManager', 'resetTableColumnManager', 'toggleTableReordering', 'reorderTable'];
     static resource: typeof Resource;
+    /** In a cluster, the list page shows the cluster's sub-navigation. */
+    getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> {
+        const cluster = this.resource.cluster;
+        return cluster?.shouldRegisterSubNavigation ? this.panel.getClusterSubNavigation(cluster, this, (this._ctx as PanelContext).user) : [];
+    }
     tableSearch = '';
     tableSort: string | null = null;
     tableColumnSearches: Record<string, string> = {};
@@ -4120,7 +4233,7 @@ export class Topbar extends Component {
             hasNavigation, spa: panel.hasSpaMode(), isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), isSidebarFullyCollapsibleOnDesktop: panel.isSidebarFullyCollapsibleOnDesktop(),
             homeUrl: panel.getUrl(), brand: panel.getBrand(), livewireId: this.id,
             tenantMenu: showsNavigationHere ? (await renderTenantMenu(this, { teleport: true })) || null : null,
-            topNavigation: groups?.map((group) => ({ ...group, items: group.items.map((item) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] })) })) ?? null,
+            topNavigation: groups?.map((group) => topNavigationGroup(group)) ?? null,
             persistKey: panel.hasTenancy() ? `topbar.end.panel-${panel.getId()}.tenant-${tenant ? panel.getTenantUrlKey(tenant) : ''}` : `topbar.end.panel-${panel.getId()}`,
             globalSearch: panel.hasGlobalSearch() && inTopbar(panel.getGlobalSearchPosition()) ? await this.mountChild(`navette.${panel.getId()}.global-search`, {}, `${this.id}.global-search`) : null,
             databaseNotifications: panel.getDatabaseNotifications() && inTopbar(panel.getDatabaseNotificationsPosition()) ? await this.mountChild(`navette.${panel.getId()}.database-notifications`, {}, `${this.id}.database-notifications`, { lazy: true }) : null,
@@ -4499,6 +4612,16 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         return ctx;
     };
     const tenantSegment = panel.hasTenancy() ? ':tenant/' : '';
+    if (!panel.hasTenancy() && !panel.getPages().some((page) => page.slug === '')) {
+        // Panel root without a dashboard: the first menu page, as in Filament.
+        router.get(panel.getBaseUrl(), async (req, res) => {
+            const ctx = await pageContext(req, res);
+            if (!ctx) return;
+            const url = panel.getNavigation(req.path, new Map(), await panel.resolveInaccessiblePages(ctx.user))[0]?.items[0]?.url ?? null;
+            if (!url) return void res.status(404).send('Not Found');
+            res.redirect(url);
+        });
+    }
     if (panel.hasTenancy()) {
         // Panel root: the user's first tenant, otherwise tenant registration.
         router.get(panel.getBaseUrl(), async (req, res) => {
