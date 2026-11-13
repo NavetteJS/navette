@@ -91,3 +91,17 @@ test('grouping selector: hidden, without direction, in a dropdown on desktop; gr
     const silent = clean(await renderTable(new Table().columns(columns()).defaultGroup(Group.make('status').titlePrefixedWithLabel(false).getTitleFromRecordUsing((r: any) => (r.status === 'draft' ? 'Brouillons' : ''))), host(), adapter));
     assert.match(silent, /<tr aria-hidden="true" class="fi-ta-row fi-ta-group-header-row">/);
 });
+
+test('custom group key, scope and order', async () => {
+    const group = Group.make('status')
+        .getKeyFromRecordUsing((record: any) => (record.status === 'published' ? 'live' : 'not-live'))
+        .getTitleFromRecordUsing((record: any) => (record.status === 'published' ? 'Live' : 'Not live'))
+        .scopeQueryByKeyUsing((query, key) => (key === 'live' ? query.where('status', 'published') : query.whereNot('status', 'published')))
+        .orderQueryUsing((query, direction) => query.orderByRaw(`case status when 'reviewing' then 0 when 'draft' then 1 else 2 end ${direction}`));
+    const table = new Table().columns(columns()).groups([group]);
+    const html = clean(await renderTable(table, host({ tableGrouping: 'status:asc', tableRecordsPerPage: 10 } as any), adapter));
+    const titles = [...records(html).matchAll(/<div class="fi-ta-text fi-ta-text-item fi-size-sm">(T\d)<\/div>/g)].map((match) => match[1]);
+    assert.deepEqual(titles, ['T4', 'T5', 'T6', 'T1', 'T2', 'T3'], 'custom order: reviewing, draft, published');
+    assert.equal((html.match(/class="fi-ta-group-heading"/g) ?? []).length, 2, 'two groups: not live, live');
+    assert.match(html, /Not live summary/);
+});

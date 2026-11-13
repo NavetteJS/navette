@@ -258,6 +258,87 @@ new Table()
 
 The summarizer does not inherit the column's formatting: set `money()` on the summarizer too.
 
+### Number formatting
+
+`numeric()` sets the number of decimal places:
+
+```ts
+import { Average, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('rating')
+    .summarize(Average.make().numeric(2))
+```
+
+### Custom formatting
+
+`formatStateUsing()` receives the value and returns the text to display (it is escaped):
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('duration_minutes')
+    .summarize(Sum.make().formatStateUsing((minutes) => `${Math.floor(Number(minutes) / 60)} h`))
+```
+
+### Adding a prefix or suffix
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('volume')
+    .summarize(Sum.make()
+        .prefix('Total volume: ')
+        .suffix(' m³'))
+```
+
+## Hiding the label
+
+`hiddenLabel()` keeps the label for screen readers only:
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('price')
+    .summarize(Sum.make().hiddenLabel())
+```
+
+## Conditionally hiding the summary
+
+`hidden()` and `visible()` accept a boolean or a function, evaluated each time the table is rendered:
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('salary')
+    .summarize(Sum.make().visible(() => currentUser()?.role === 'admin'))
+```
+
+## Custom summaries
+
+You may create a custom summary with `Summarizer.make()` and `using()`. The function receives the column name and `records()`, which loads the summarized records: all records of the query, those of the current page, or those of a group:
+
+```ts
+import { Summarizer, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('name')
+    .summarize(Summarizer.make()
+        .label('First last name')
+        .using(async ({ records }) => (await records()).map((record) => record.last_name).sort()[0] ?? null))
+```
+
+`records()` loads up to 10,000 records: prefer the built-in summarizers, which aggregate in the database, for large tables.
+
+## Values
+
+`Values` lists the distinct values of the column, as a bulleted list (`bulleted(false)` for a plain list):
+
+```ts
+import { TextColumn, Values } from '@navette-js/tables';
+
+TextColumn.make('product.brand')
+    .summarize(Values.make())
+```
+
 ## Summarizing a computed column
 
 Summaries are computed on the column of the query that the column [sorts by](/tables/columns/overview#sorting-by-a-different-column). For a column whose state comes from a computed column, set the `column` option of `sortable()`:
@@ -310,5 +391,5 @@ new Table()
 Each line starts with the group's title, in the cell of the column that has the group's name, followed by the group's summaries. Name that column after the group's column, as above, so that the cells line up with the headers. The table is not paginated, and up to 1,000 records are read to build the groups.
 
 <Aside variant="warning">
-Custom summaries (`using()`), scoping the dataset of a summarizer (`query()`), prefixes and suffixes, hiding a summarizer's label, conditionally hiding summaries and hiding summary rows are not available yet.
+Scoping the dataset of a summarizer (`query()`) and hiding summary rows are not available yet.
 </Aside>

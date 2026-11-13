@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BooleanConstraint, DateConstraint, MAX_NESTING_DEPTH, MAX_RULES, NumberConstraint, QueryBuilder, TextConstraint, compileRules, resolveRuleDate, sanitizeRules, type ConditionNode } from '../src/index.ts';
+import { BooleanConstraint, CustomConstraint, DateConstraint, MAX_NESTING_DEPTH, MAX_RULES, NumberConstraint, QueryBuilder, QueryBuilderOperator, TextConstraint, compileRules, resolveRuleDate, sanitizeRules, type ConditionNode } from '../src/index.ts';
 
 const constraints = [TextConstraint.make('name'), NumberConstraint.make('qty').label('Quantity'), BooleanConstraint.make('is_visible').label('Visibility'), DateConstraint.make('published_at').label('Publishing date').attribute('products.published_at')];
 const rule = (type: string, operator: unknown, settings: unknown = null) => ({ type, data: { operator, settings } });
@@ -117,4 +117,39 @@ test('filter: sanitized applied state, indicators, removal, query', () => {
     assert.equal(none.modifiers, undefined);
     assert.throws(() => TextConstraint.make('or'));
     assert.throws(() => QueryBuilder.make().constraints([TextConstraint.make('a'), NumberConstraint.make('a')]));
+});
+
+test('`maxRules()`, `maxNestingDepth()`, `integer()` and custom operators', () => {
+    const many = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`k${i}`, rule('name', 'contains', { text: 'x' })]));
+    const limited = QueryBuilder.make().constraints(constraints).maxRules(3).maxNestingDepth(1);
+    assert.equal(limited.countRules({ rules: many }), 3);
+    const nested = { r: { type: 'or', data: { groups: { g: { rules: { a: rule('name', 'contains', { text: 'x' }) } } } } } };
+    assert.deepEqual((limited.sanitizeState({ rules: nested }) as any).rules, {}, 'depth 1: no "or" groups');
+    assert.equal(QueryBuilder.make().maxRules(5000).getMaxRules(), MAX_RULES, 'never above the hard limit');
+
+    const whole = [NumberConstraint.make('qty').integer()];
+    const compileWhole = (raw: unknown) => compileRules(whole, sanitizeRules(whole, raw)).nodes;
+    assert.equal(compileWhole({ a: rule('qty', 'isMin', { number: '2.5' }) }).length, 0);
+    assert.equal(compileWhole({ a: rule('qty', 'isMin', { number: '2' }) }).length, 1);
+
+    const applied: unknown[] = [];
+    const custom = [
+        CustomConstraint.make('popularity').operators([
+            QueryBuilderOperator.make('isPopular').label('Is popular', 'Is not popular')
+                .query((query, { inverse }) => { applied.push(inverse); query.where('views', inverse ? '<' : '>=', 1000); })
+                .summary(({ inverse }) => (inverse ? 'Not popular' : 'Popular')),
+        ]),
+        TextConstraint.make('name').pushOperators([QueryBuilderOperator.make('isShort').query((query) => query.whereRaw('length(name) < 5'))]),
+    ];
+    assert.deepEqual(custom[0].getOperatorOptions(), [['isPopular', 'Is popular'], ['isPopular.inverse', 'Is not popular']]);
+    assert.ok(custom[1].getOperatorOptions().some(([value]) => value === 'isShort'));
+    assert.ok(custom[1].getOperatorOptions().some(([value]) => value === 'contains'), 'default operators kept');
+    const compiled = compileRules(custom, sanitizeRules(custom, { a: rule('popularity', 'isPopular.inverse'), b: rule('popularity', 'unknown') }));
+    assert.deepEqual(compiled.summaries, { a: 'Not popular' });
+    const calls: unknown[][] = [];
+    const fake: any = { where: (arg: any, ...rest: unknown[]) => { if (typeof arg === 'function') arg(fake); else calls.push([arg, ...rest]); return fake; } };
+    (compiled.nodes[0] as any).apply(fake);
+    assert.deepEqual(calls, [['views', '<', 1000]]);
+    assert.deepEqual(applied, [true]);
+    assert.throws(() => TextConstraint.make('x').pushOperators([QueryBuilderOperator.make('contains')]).getOperatorOptions(), /same name/);
 });

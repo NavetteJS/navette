@@ -41,7 +41,9 @@ export type Condition =
     /** Number of related records compared to a value. */
     | { kind: 'relationCount'; relationship: string; operator: Comparison; value: number; modify?: RelationshipQueryModifier }
     /** At least one related record (among `keys` when given), or none (`negate`). */
-    | { kind: 'related'; relationship: string; keys: Key[] | null; negate: boolean; modify?: RelationshipQueryModifier };
+    | { kind: 'related'; relationship: string; keys: Key[] | null; negate: boolean; modify?: RelationshipQueryModifier }
+    /** Application-defined condition (custom operator). */
+    | { kind: 'custom'; apply: (query: any) => void };
 /** `{ relationship, nodes }`: the nodes apply to the related records (`whereExists` subquery). */
 export type ConditionNode = Condition | { or: ConditionNode[][] } | { relationship: string; nodes: ConditionNode[]; modify?: RelationshipQueryModifier };
 type Settings = Record<string, unknown>;
@@ -80,15 +82,16 @@ function textOperator(name: string, key: string, pattern: (text: string) => stri
         },
     };
 }
-function numberOperator(name: string, key: string, direct: Comparison, inverted: Comparison): Operator {
+function numberOperator(name: string, key: string, direct: Comparison, inverted: Comparison, integer = false): Operator {
     return {
         name, label: label('number', key), defaults: () => ({ number: null, aggregate: null }),
         // `aggregate` is only used for relationships; the field exists but stays hidden.
-        fields: () => [TextInput.make('number').label(tr('operators.number.form.number.label')).numeric().required(), Select.make('aggregate').label(tr('operators.number.form.aggregate.label')).hidden()],
+        fields: () => [(integer ? TextInput.make('number').integer() : TextInput.make('number').numeric()).label(tr('operators.number.form.number.label')).required(), Select.make('aggregate').label(tr('operators.number.form.aggregate.label')).hidden()],
         resolve: (settings, inverse, constraint) => {
             const raw = settings.number;
             if (!(typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '')) || !Number.isFinite(Number(raw))) return null;
             const number = Number(raw);
+            if (integer && !Number.isInteger(number)) return null;
             return { condition: { kind: 'compare', column: constraint.getColumn(), operator: inverse ? inverted : direct, value: number }, summary: summary('number', key, inverse, { attribute: constraint.getAttributeLabel(), number: new Intl.NumberFormat('en-US').format(number) }) };
         },
     };
@@ -298,23 +301,94 @@ export class Constraint {
     /** Relationship whose records hold the attribute, or `null` for a column of the table. */
     getRelationshipName(): string | null { return this._relationship; }
     getModifyRelationshipQueryUsing(): RelationshipQueryModifier | null { return this._modifyRelationshipQuery; }
-    getOperators(): Operator[] { return [...OPERATORS[this.type as keyof typeof OPERATORS], ...(this._nullable ? [isFilledOperator] : [])]; }
+    getOperators(): Operator[] { return [...(OPERATORS[this.type as keyof typeof OPERATORS] ?? []), ...(this._nullable ? [isFilledOperator] : [])]; }
+    protected _operatorsOverride: Operator[] | null = null;
+    protected _extraOperators: Operator[] = [];
+    /** Replaces the operators of the constraint. */
+    operators(operators: (QueryBuilderOperator | Operator)[]): this { this._operatorsOverride = operators.map(toOperator); return this; }
+    /** Adds operators after the default ones. */
+    pushOperators(operators: (QueryBuilderOperator | Operator)[]): this { this._extraOperators = [...this._extraOperators, ...operators.map(toOperator)]; return this; }
+    /** Operators offered to the user: the default ones, or those set with `operators()` / `pushOperators()`. */
+    getAvailableOperators(): Operator[] {
+        const list = this._operatorsOverride ?? [...this.getOperators(), ...this._extraOperators];
+        if (new Set(list.map((operator) => operator.name)).size !== list.length) throw new Error(`Constraint ${this.name}: two operators have the same name.`);
+        return list;
+    }
     /** `contains` or `contains.inverse` → operator and direction; null if the constraint does not declare it. */
     parseOperator(value: unknown): { operator: Operator; inverse: boolean } | null {
         if (typeof value !== 'string') return null;
         const inverse = value.endsWith('.inverse');
-        const operator = this.getOperators().find((candidate) => candidate.name === (inverse ? value.slice(0, -8) : value));
+        const operator = this.getAvailableOperators().find((candidate) => candidate.name === (inverse ? value.slice(0, -8) : value));
         return operator ? { operator, inverse } : null;
     }
-    getOperatorOptions(): [string, string][] { return this.getOperators().flatMap((operator): [string, string][] => [[operator.name, operator.label(false)], [`${operator.name}.inverse`, operator.label(true)]]); }
+    getOperatorOptions(): [string, string][] { return this.getAvailableOperators().flatMap((operator): [string, string][] => [[operator.name, operator.label(false)], [`${operator.name}.inverse`, operator.label(true)]]); }
     /** Setting names known to the constraint across all operators (switching operator keeps the previous settings). */
-    getSettingNames(): string[] { return [...new Set(this.getOperators().flatMap((operator) => Object.keys(operator.defaults() ?? {})))]; }
+    getSettingNames(): string[] { return [...new Set(this.getAvailableOperators().flatMap((operator) => Object.keys(operator.defaults() ?? {})))]; }
     /** Settings whose value is a list (multiple select). */
-    getListSettingNames(): string[] { return [...new Set(this.getOperators().flatMap((operator) => Object.entries(operator.defaults() ?? {}).filter(([, value]) => Array.isArray(value)).map(([name]) => name)))]; }
-    getDefaultData(): Record<string, unknown> { const [first] = this.getOperators(); return { operator: first.name, settings: first.defaults() }; }
+    getListSettingNames(): string[] { return [...new Set(this.getAvailableOperators().flatMap((operator) => Object.entries(operator.defaults() ?? {}).filter(([, value]) => Array.isArray(value)).map(([name]) => name)))]; }
+    getDefaultData(): Record<string, unknown> { const [first] = this.getAvailableOperators(); return { operator: first.name, settings: first.defaults() }; }
 }
+/** A constraint built only from your own operators: `Constraint.make('name').operators([...])`. */
+export class CustomConstraint extends Constraint {
+    static make(name: string): CustomConstraint { return configured(new CustomConstraint(name, 'custom' as ConstraintType, 'm-funnel')); }
+}
+
+/**
+ * Operator of a query builder constraint: its label, its settings form, the condition it adds to the query, and the summary
+ * shown in the filter indicator.
+ */
+export class QueryBuilderOperator {
+    readonly name: string;
+    private _label: string;
+    private _inverseLabel: string;
+    private _fields: Component[] = [];
+    private _query: ((query: any, ctx: { settings: Record<string, unknown>; inverse: boolean; column: string }) => void) | null = null;
+    private _summary: ((ctx: { attribute: string; settings: Record<string, unknown>; inverse: boolean }) => string) | null = null;
+    constructor(name: string) {
+        if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)) throw new Error(`Invalid operator name: ${name}`);
+        this.name = name; this._label = headline(name); this._inverseLabel = `Not ${headline(name).toLowerCase()}`;
+    }
+    static make(name: string): QueryBuilderOperator { return configured(new QueryBuilderOperator(name)); }
+    /** Labels of the operator and of its inverse ("is not ..."). */
+    label(label: string, inverseLabel: string | null = null): this { this._label = label; if (inverseLabel !== null) this._inverseLabel = inverseLabel; return this; }
+    /** Settings fields; their values reach `query()` and `summary()`, keyed by field name, as scalars from the browser. */
+    schema(fields: Component[]): this { this._fields = fields; return this; }
+    /** Adds the condition to the query. Check `settings` before using them, and pass them as bound parameters. */
+    query(callback: (query: any, ctx: { settings: Record<string, unknown>; inverse: boolean; column: string }) => void): this { this._query = callback; return this; }
+    /** Text of the filter indicator. */
+    summary(callback: (ctx: { attribute: string; settings: Record<string, unknown>; inverse: boolean }) => string): this { this._summary = callback; return this; }
+    toOperator(): Operator {
+        const fields = this._fields;
+        return {
+            name: this.name,
+            label: (inverse) => (inverse ? this._inverseLabel : this._label),
+            defaults: () => (fields.length ? Object.fromEntries(fields.filter((field: any) => typeof field.getName === 'function').map((field: any) => [field.getName(), typeof field.getDefaultState === 'function' ? field.getDefaultState() : null])) : null),
+            fields: () => fields,
+            resolve: (settings, inverse, constraint) => {
+                if (!this._query) return null;
+                const column = constraint.getColumn();
+                const query = this._query;
+                return {
+                    condition: { kind: 'custom', apply: (builder: any) => query(builder, { settings, inverse, column }) },
+                    summary: this._summary ? this._summary({ attribute: constraint.getAttributeLabel(), settings, inverse }) : `${constraint.getAttributeLabel()} ${(inverse ? this._inverseLabel : this._label).toLowerCase()}`,
+                };
+            },
+        };
+    }
+}
+const toOperator = (operator: QueryBuilderOperator | Operator): Operator => (operator instanceof QueryBuilderOperator ? operator.toOperator() : operator);
+
 export class TextConstraint extends Constraint { static make(name: string): TextConstraint { return configured(new TextConstraint(name, 'text', 'm-language')); } }
-export class NumberConstraint extends Constraint { static make(name: string): NumberConstraint { return configured(new NumberConstraint(name, 'number', 'm-variable')); } }
+export class NumberConstraint extends Constraint {
+    private _integer = false;
+    static make(name: string): NumberConstraint { return configured(new NumberConstraint(name, 'number', 'm-variable')); }
+    /** Whole numbers only: an integer field, and a rule with a decimal value has no effect. */
+    integer(condition = true): this { this._integer = condition; return this; }
+    getOperators(): Operator[] {
+        if (!this._integer) return super.getOperators();
+        return [numberOperator('isMin', 'is_min', '>=', '<', true), numberOperator('isMax', 'is_max', '<=', '>', true), numberOperator('equals', 'equals', '=', '!=', true), ...(this._nullable ? [isFilledOperator] : [])];
+    }
+}
 export class BooleanConstraint extends Constraint { static make(name: string): BooleanConstraint { return configured(new BooleanConstraint(name, 'boolean', 'm-check-circle')); } }
 /** Date constraint; with `time()`, date and time (date-time picker, minute and hour presets and units). */
 export class DateConstraint extends Constraint {
@@ -504,7 +578,7 @@ const isObject = (value: unknown): value is Record<string, any> => value !== nul
  * Reduces the browser's rule tree to what the filter declares: known block types, the constraint's operators, scalar settings with
  * known names, bounded depth and rule count. An unknown operator is reset to null (the rule has no effect).
  */
-export function sanitizeRules(constraints: Constraint[], raw: unknown, depth = 1, budget = { rules: MAX_RULES }): Rules {
+export function sanitizeRules(constraints: Constraint[], raw: unknown, depth = 1, budget = { rules: MAX_RULES }, maxDepth = MAX_NESTING_DEPTH): Rules {
     const rules: Rules = {};
     if (!isObject(raw)) return rules;
     for (const [key, rule] of Object.entries(raw)) {
@@ -512,10 +586,10 @@ export function sanitizeRules(constraints: Constraint[], raw: unknown, depth = 1
         if (!isItemKey(key) || !isObject(rule) || typeof rule.type !== 'string') continue;
         const data = isObject(rule.data) ? rule.data : {};
         if (rule.type === OR) {
-            if (depth >= MAX_NESTING_DEPTH) continue;
+            if (depth >= maxDepth) continue;
             const groups: Record<string, { rules: Rules }> = {};
             for (const [groupKey, group] of Object.entries(isObject(data.groups) ? data.groups : {}).slice(0, 20)) {
-                if (isItemKey(groupKey)) groups[groupKey] = { rules: sanitizeRules(constraints, isObject(group) ? group.rules : null, depth + 1, budget) };
+                if (isItemKey(groupKey)) groups[groupKey] = { rules: sanitizeRules(constraints, isObject(group) ? group.rules : null, depth + 1, budget, maxDepth) };
             }
             rules[key] = { type: OR, data: { groups } };
             continue;
@@ -622,6 +696,8 @@ export function applyConditions(query: any, nodes: ConditionNode[], dialect: Sql
         } else if (node.kind === 'relationCount') {
             // Count subquery passed as a bound parameter (Objection does not accept it as a `where` column).
             query.whereRaw(`(?) ${node.operator} ?`, [relatedQuery(query, node.relationship, node.modify).count(), node.value]);
+        } else if (node.kind === 'custom') {
+            query.where((inner: any) => { node.apply(inner); });
         } else if (node.kind === 'related') {
             const sub = relatedQuery(query, node.relationship, node.modify);
             if (node.keys !== null) { const related = sub.modelClass(); sub.whereIn(`${sub.tableRefFor(related)}.${related.idColumn}`, node.keys); }
@@ -772,17 +848,22 @@ export class RuleBuilder extends Builder {
             .addActionLabel(tr('actions.add_rule.label')).addActionIcon('c-plus').addActionAlignment('start')
             .labelBetweenItems(tr('item_separators.and')).blockHeaders(false).addBetweenAction(false).storedAsList(false).cloneable().generateUuidUsing(shortKey)
             .blockPickerColumns(columns).blockPickerWidth(columns === 2 ? 'md' : columns === 3 ? '2xl' : null)
-            .extraClass('fi-fo-builder-not-contained').maxItems(MAX_RULES);
+            .extraClass('fi-fo-builder-not-contained').maxItems(filter.getMaxRules());
     }
     /** The "OR" block is neither offered nor accepted beyond the maximum depth; nothing is offered once the rule limit is reached. */
     getBlockPickerBlocks(): Block[] {
         if (this.isAtRuleLimit()) return [];
-        return this.getBlocks().filter((block) => block.name !== OR || this.depth < MAX_NESTING_DEPTH);
+        return this.getBlocks().filter((block) => block.name !== OR || this.depth < this.filter.getMaxNestingDepth());
     }
-    getBlock(name: unknown): Block | undefined { return name === OR && this.depth >= MAX_NESTING_DEPTH ? undefined : super.getBlock(name); }
+    getBlock(name: unknown): Block | undefined { return name === OR && this.depth >= this.filter.getMaxNestingDepth() ? undefined : super.getBlock(name); }
     protected canAdd(): boolean { return !this.isAtRuleLimit(); }
     /** Counts rules across the whole tree ("OR" blocks excluded), read from the host's deferred filter state. */
-    isAtRuleLimit(): boolean { return this.filter.countRules((this.livewire as any).tableDeferredFilters?.[this.filter.name]) >= MAX_RULES; }
+    isAtRuleLimit(): boolean {
+        const livewire = this.livewire as any;
+        // Live filters (`deferFilters(false)`) edit the applied state directly.
+        const state = livewire.getTable?.().hasDeferredFilters?.() === false ? livewire.tableFilters : livewire.tableDeferredFilters;
+        return this.filter.countRules(state?.[this.filter.name]) >= this.filter.getMaxRules();
+    }
     /** Component action without modal (also used by "OR" groups). */
     makeAction(name: string, handler: (args: Record<string, unknown>) => void): any { return this.getActions()[0].constructor.make(name).action(({ arguments: args }: { arguments: Record<string, unknown> }) => handler(args)); }
 }
@@ -794,7 +875,15 @@ export class QueryBuilder implements TableFilter {
     private _constraints: Constraint[] = [];
     private _pickerColumns: number | null = null;
     private _model: any = null;
+    private _maxRules = MAX_RULES;
+    private _maxNestingDepth = MAX_NESTING_DEPTH;
     static make(): QueryBuilder { return configured(new QueryBuilder()); }
+    /** Maximum number of rules (at most `MAX_RULES`, 100). Extra rules sent by the browser are dropped. */
+    maxRules(count: number): this { this._maxRules = Math.min(MAX_RULES, Math.max(1, Math.floor(count))); return this; }
+    getMaxRules(): number { return this._maxRules; }
+    /** Maximum nesting depth of "or" groups: 1 forbids them (at most `MAX_NESTING_DEPTH`, 3). */
+    maxNestingDepth(depth: number): this { this._maxNestingDepth = Math.min(MAX_NESTING_DEPTH, Math.max(1, Math.floor(depth))); return this; }
+    getMaxNestingDepth(): number { return this._maxNestingDepth; }
     constraints(constraints: Constraint[]): this {
         if (new Set(constraints.map((c) => c.name)).size !== constraints.length) throw new Error('QueryBuilder: two constraints have the same name.');
         this._constraints = constraints;
@@ -832,7 +921,7 @@ export class QueryBuilder implements TableFilter {
     /** The filter spans the full width of the filters form. */
     getColumnSpan(): Record<string, number | string> { return { default: 'full' }; }
     getFormComponents(): Component[] { return [new RuleBuilder('rules', this).label(this.getLabel()).hiddenLabel()]; }
-    sanitizeState(state: unknown): FilterState { return { rules: sanitizeRules(this._constraints, isObject(state) ? state.rules : null) }; }
+    sanitizeState(state: unknown): FilterState { return { rules: sanitizeRules(this._constraints, isObject(state) ? state.rules : null, 1, { rules: this._maxRules }, this._maxNestingDepth) }; }
     countRules(state: unknown): number {
         const count = (rules: Rules): number => Object.values(rules).reduce((total, rule) => total + (rule.type === OR ? Object.values(rule.data.groups as Record<string, { rules: Rules }>).reduce((sum, group) => sum + count(group.rules), 0) : 1), 0);
         return count(this.sanitizeState(state).rules as Rules);

@@ -375,6 +375,42 @@ static table(table: Table<Post>): Table<Post> {
 }
 ```
 
+## Customizing the group key
+
+By default, records with the same value in the group's column form a group. To group them differently, return a key with `getKeyFromRecordUsing()`, and tell Navette how to select the records of a group with `scopeQueryByKeyUsing()` (used by group summaries and "select the group"):
+
+```ts
+import { Group } from '@navette-js/tables';
+
+Group.make('status')
+    .getKeyFromRecordUsing((record) => (record.status === 'published' ? 'live' : 'draft'))
+    .getTitleFromRecordUsing((record) => (record.status === 'published' ? 'Live' : 'Draft'))
+    .scopeQueryByKeyUsing((query, key) => (key === 'live'
+        ? query.where('status', 'published')
+        : query.whereNot('status', 'published')))
+```
+
+Records are still ordered by the group's column: make sure records with the same key end up next to each other, with `orderQueryUsing()` if needed.
+
+## Customizing the group order
+
+`orderQueryUsing()` replaces the ordering by the group's column. It receives the query and the direction:
+
+```ts
+import { Group } from '@navette-js/tables';
+
+Group.make('status')
+    .orderQueryUsing((query, direction) => query.orderByRaw(
+        `case status when 'draft' then 0 when 'reviewing' then 1 else 2 end ${direction === 'desc' ? 'desc' : 'asc'}`,
+    ))
+```
+
+Only write column names and SQL that you control in these functions: never insert values from the browser.
+
+## Persisting the grouping in the session
+
+`persistGroupingInSession()` keeps the grouping chosen by the user when they come back to the page. See [persisting filters](/tables/filters/overview#persisting-filters-in-the-users-session) for where it is stored.
+
 <Aside variant="warning">
-Custom group keys (`getKeyFromRecordUsing()`), customizing how a group orders, scopes or groups the query, customizing the groups dropdown trigger action and persisting the grouping in the session are not available yet. Grouping is turned off while the user [reorders records](/tables/overview#reordering-records).
+Customizing how a group aggregates the query in `groupsOnly()` mode and the groups dropdown trigger action are not available yet. Grouping is turned off while the user [reorders records](/tables/overview#reordering-records).
 </Aside>

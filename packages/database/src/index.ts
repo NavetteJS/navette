@@ -16,7 +16,8 @@ export type ListQuery = {
     trashed?: 'without' | 'with' | 'only';
     sort?: { column: string; direction: SortDirection } | null;
     /** Table grouping: this sort is applied before `sort`. */
-    groupSort?: { column: string; direction: SortDirection } | null;
+    /** Rows are first ordered by their group: by `column`, or by `modify` (a custom order). */
+    groupSort?: { column: string; direction: SortDirection; modify?: (query: any, direction: SortDirection) => void } | null;
     /** Extra server-side conditions (list tab, custom filter); never built from unvalidated browser input. */
     modifiers?: ((query: any) => void)[];
     page: number;
@@ -191,7 +192,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
 
     private async finishPagination(q: QueryBuilder<M, M[]>, query: ListQuery): Promise<Page<M>> {
         const total = await q.clone().resultSize();
-        if (query.groupSort) q.orderBy(query.groupSort.column, query.groupSort.direction);
+        if (query.groupSort?.modify) query.groupSort.modify(q, query.groupSort.direction);
+        else if (query.groupSort) q.orderBy(query.groupSort.column, query.groupSort.direction);
         if (query.sort) q.orderBy(query.sort.column, query.sort.direction);
         q.orderBy(this.keyColumn, 'asc');
         const perPage = Math.max(1, query.perPage);

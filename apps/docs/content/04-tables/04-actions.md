@@ -107,6 +107,10 @@ Action.make('toggle_billable')
 
 You may open one of the record actions when the user clicks anywhere on a row, by passing its name to the table's [`recordAction()`](/tables/overview#opening-an-action-when-a-row-is-clicked) method.
 
+## Column actions
+
+A column may run its own action when its cell is clicked, with `action()`. See [triggering actions](/tables/columns/overview#triggering-actions).
+
 ## Bulk actions
 
 Tables also support "bulk actions". These can be used when the user selects rows in the table. When rows are selected, a "Bulk actions" button appears. When the user clicks this button, they are presented with a dropdown menu of actions to choose from. You can put them in the `groupedBulkActions()` method:
@@ -291,8 +295,30 @@ static table(table: Table<Post>): Table<Post> {
 Actions that are hidden for a record are left out of its dropdown.
 
 <Aside variant="warning">
-Action groups are only supported in `recordActions()`. Toolbar actions and column actions are not available yet.
+Action groups are only supported in `recordActions()`.
 </Aside>
+
+## Toolbar actions
+
+`toolbarActions()` puts actions in the toolbar of the table, before the search field. They are mounted like [header actions](#header-actions). A `BulkActionGroup` among them adds its actions to the "Bulk actions" dropdown, like `groupedBulkActions()`:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { DeleteBulkAction } from '@navette-js/panels';
+import { BulkActionGroup, type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .toolbarActions([
+            Action.make('export').icon('m-arrow-down-tray').url('/posts/export'),
+            BulkActionGroup.make([
+                DeleteBulkAction.make(),
+            ]),
+        ]);
+}
+```
+
+Toolbar actions are hidden while the user reorders records.
 
 ## Positioning record actions
 

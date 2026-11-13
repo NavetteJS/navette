@@ -4,7 +4,7 @@ import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database
 import { ColorManager, resetConfigurators, views } from '@navette-js/support';
 import '@navette-js/support/ui';
 import { t, tc } from '@navette-js/support/i18n';
-import { getTableRecords, renderTable, Table, TextColumn, useColorManager, type TableHost } from '../src/index.ts';
+import { BulkActionGroup, getTableRecords, Grid, Panel, renderTable, Split, Stack, Table, TextColumn, useColorManager, View, type TableHost } from '../src/index.ts';
 
 views.share({ t, tc, assetUrl: (file: string) => `/${file}` });
 useColorManager(new ColorManager());
@@ -76,4 +76,45 @@ test('row actions position, responsive columns, selectability and selection limi
     assert.match(limited, /x-bind:disabled="! areRecordsToggleable\(\[/);
     assert.equal((limited.match(/class="fi-ta-record-checkbox/g) ?? []).length, 9, 'Note 1 has no checkbox');
     assert.match(limited, /value="29" x-ref="allSelectableRecordsCount"/);
+});
+
+test('column actions: the cell mounts the action with its record; a column URL wins', async () => {
+    const action = { getName: () => 'preview' };
+    const table = new Table().recordAction('edit').columns([TextColumn.make('title').action(action), TextColumn.make('id').action('view').url(() => '/notes')]);
+    assert.deepEqual(table.getColumnActions(), [action]);
+    const html = clean(await renderTable(table, host(), adapter));
+    assert.match(html, /<button type="button" wire:click\.prevent\.stop="mountAction\(&#39;preview&#39;, \{\}, JSON\.parse\(/);
+    assert.match(html, /<a href="\/notes"/);
+});
+
+test('toolbar actions: buttons in the toolbar, and a bulk action group for the bulk actions', async () => {
+    const archive = { getName: () => 'archive' }, remove = { getName: () => 'delete' };
+    const table = new Table().columns([TextColumn.make('title')]).toolbarActions([{ getName: () => 'export' }, BulkActionGroup.make([archive, remove])]);
+    assert.deepEqual(table.getBulkActions(), [archive, remove]);
+    assert.equal(table.getToolbarActions().length, 1);
+    assert.equal(new Table().getBulkActions(), null);
+    const html = clean(await renderTable(table, host(), adapter, { toolbarActions: ['<button>Export</button>'] }));
+    assert.match(html, /<div class="fi-ta-actions fi-align-start fi-wrapped"><button>Export<\/button>/);
+});
+
+test('column layouts: `Grid`, collapsible `Panel`, `View`, `contentGrid()`, `grow()` and responsive components', async () => {
+    const table = new Table().contentGrid({ md: 2, xl: 3 }).columns([
+        Split.make([
+            TextColumn.make('title').grow(false),
+            Stack.make([TextColumn.make('id')]).hiddenFrom('md'),
+            View.make(({ record }: any) => `<span class="my-view">${record.title.length}</span>`),
+        ]),
+        Grid.make({ default: 1, lg: 2 }).schema([TextColumn.make('title').label('Again')]),
+        Panel.make([TextColumn.make('id').label('Hidden id')]).collapsible(),
+    ]);
+    const html = clean(await renderTable(table, host(), adapter));
+    assert.match(html, /role="list" class="fi-grid md:fi-grid-cols xl:fi-grid-cols fi-ta-content fi-ta-content-grid" style="--cols-md: repeat\(2, minmax\(0, 1fr\)\); --cols-xl: repeat\(3, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
+    assert.match(html, /<div class="fi-grid-col fi-ta-col" style="--col-span-default: span 1 \/ span 1;"><div class="fi-ta-text/, 'grow(false)');
+    assert.match(html, /class="fi-grid-col fi-growable md:fi-hidden"[^>]*><div class="fi-ta-stack/);
+    assert.match(html, /<span class="my-view">6<\/span>/);
+    assert.match(html, /class="fi-grid lg:fi-grid-cols fi-ta-grid fi-gap-sm lg:fi-gap-lg"/);
+    assert.match(html, /x-data="\{ isCollapsed: true \}"/);
+    assert.match(html, /<div x-collapse x-show="! isCollapsed" class="fi-ta-record-content fi-collapsible"><div class="fi-grid-col fi-growable"[^>]*><div class="fi-ta-panel">/);
+    assert.match(html, /class="fi-ta-record-collapse-btn fi-icon-btn"/);
+    assert.match(html, /fi-ta-actions fi-wrapped sm:fi-not-wrapped fi-align-start"|fi-ta-record-with-content-suffix/);
 });

@@ -117,3 +117,41 @@ test('`ColorColumn`: swatches, list, copyable, placeholder, unsafe colors not st
     assert.doesNotMatch(copyable, /role="img"/);
     assert.equal(await ColorColumn.make('none').placeholder('—').toHtml(row), '<div class="fi-ta-color"><p class="fi-ta-placeholder">—</p></div>');
 });
+
+test('summaries: prefix, suffix, formatting, hidden label, hidden summarizer, `using()` and `Values`', async () => {
+    const { Model, ObjectionAdapter, sqlite } = await import('@navette-js/database');
+    const { renderTable, Sum, Count, Summarizer, Values } = await import('../src/index.ts');
+    class Item extends Model { static tableName = 'items'; }
+    const db = sqlite(':memory:');
+    try {
+        await db.schema.createTable('items', (table) => { table.increments('id'); table.string('kind'); table.integer('price'); });
+        await db('items').insert([{ kind: 'a', price: 10 }, { kind: 'b', price: 25 }, { kind: 'a', price: 5 }]);
+        const host = { id: 'S', tableSearch: '', tableSort: null, tableColumnSearches: {}, tableRecordsPerPage: 10, paginators: { page: 1 } };
+        const table = new Table().columns([
+            TextColumn.make('id'),
+            TextColumn.make('price').summarize([
+                Sum.make().prefix('~').suffix(' pts').numeric(1).hiddenLabel(),
+                Count.make().hidden(),
+                Summarizer.make().label('Max').using(async ({ column, records }) => Math.max(...(await records()).map((record: any) => record[column]))),
+            ]),
+            TextColumn.make('kind').summarize(Values.make().label('Kinds')),
+        ]);
+        const html = (await renderTable(table, host as any, new ObjectionAdapter(Item))).replace(/\s+/g, ' ').replace(/> </g, '><');
+        assert.match(html, /<span class="fi-ta-text-summary-label fi-sr-only">Sum<\/span><span>~40\.0 pts<\/span>/);
+        assert.doesNotMatch(html, />Count</);
+        assert.match(html, /<span class="fi-ta-text-summary-label">Max<\/span><span>25<\/span>/);
+        assert.match(html, /<div class="fi-ta-values-summary"><span class="fi-ta-values-summary-label">Kinds<\/span><ul class="fi-bulleted"><li>a<\/li><li>b<\/li><\/ul><\/div>/);
+    } finally {
+        await db.destroy();
+    }
+});
+
+test('`TextColumn`: `html()` is sanitized, `markdown()` renders safe HTML', async () => {
+    const row = { body: '<p onclick="x()">Hi <script>alert(1)</script><a href="javascript:alert(1)">there</a></p>', notes: '**Bold** <b>raw</b>' };
+    const html = await TextColumn.make('body').html().toHtml(row);
+    assert.match(html, /<p>Hi <a>there<\/a><\/p>/);
+    assert.doesNotMatch(html, /script|onclick|javascript/);
+    const markdown = await TextColumn.make('notes').markdown().toHtml(row);
+    assert.match(markdown, /<p><strong>Bold<\/strong> &lt;b&gt;raw&lt;\/b&gt;<\/p>/);
+    assert.match(await TextColumn.make('notes').toHtml(row), /\*\*Bold\*\* &lt;b&gt;raw&lt;\/b&gt;/, 'escaped by default');
+});

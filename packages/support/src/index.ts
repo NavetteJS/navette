@@ -488,3 +488,4 @@ export function hasRenderHook(name: string, scopes: unknown | unknown[] | null =
     return activeRegistries().some((registry) => registry.has(name, scopes));
 }
 views.share({ renderHook, hasRenderHook });
+export { isSafeUrl, markdownToHtml, sanitizeHtml } from './html.ts';

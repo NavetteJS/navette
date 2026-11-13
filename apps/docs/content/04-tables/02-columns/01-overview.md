@@ -357,6 +357,27 @@ TextColumn.make<Payment>('order.number')
 Navette escapes the URL in the HTML, but does not check its scheme. If it contains user-controlled data, make sure it cannot use a dangerous scheme such as `javascript:` or `data:`.
 </Aside>
 
+### Triggering actions
+
+To run an action when the cell is clicked, pass an `Action` to the `action()` method. It is mounted with the record of the row, like a [record action](/tables/actions#record-actions): its visibility and authorization are checked again on the server:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<Order>('number')
+    .action(
+        Action.make('showNotes')
+            .modalHeading('Order notes')
+            .modalDescription(({ record }) => record.notes ?? 'No notes.')
+            .modalSubmitAction(false),
+    )
+```
+
+You may also pass the name of one of the table's record actions, such as `action('edit')`.
+
+A column `url()` takes precedence over its action. The column's action takes precedence over the row's [record URL or record action](/tables/overview#record-urls-clickable-rows). Editable columns, such as the toggle column, are never clickable.
+
 ## Aligning column content
 
 You may align the content of a column, and its header, to the start, center or end using the `alignment()` method, or its shortcuts `alignCenter()` and `alignEnd()`:

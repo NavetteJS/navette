@@ -496,6 +496,32 @@ TextColumn.make('tags')
     .color((record, tag) => (tag === 'urgent' ? 'danger' : 'gray'))
 ```
 
-<Aside variant="warning">
-Markdown and HTML rendering are not available yet: the text is always escaped.
+## Rendering Markdown
+
+If your column value is Markdown, you may render it using `markdown()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('description')
+    .markdown()
+```
+
+Headings, paragraphs, lists, quotes, code, emphasis and links are rendered. HTML written in the Markdown is shown as text, and links only keep `http`, `https`, `mailto` and relative URLs.
+
+## Rendering HTML
+
+If your column value is HTML, you may render it using `html()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('description')
+    .html()
+```
+
+The HTML is sanitized before it is rendered. Only formatting elements are kept: paragraphs, line breaks, emphasis, headings, lists, quotes, code, and links with safe URLs. Their `style`, `class` and event attributes are removed, as are scripts, images, frames and forms. `sanitizeHtml()` and `markdownToHtml()` from `@navette-js/support` do the same work if you need them elsewhere.
+
+<Aside variant="info">
+Without `html()` or `markdown()`, the text is always escaped: a value containing `<b>` shows those characters.
 </Aside>

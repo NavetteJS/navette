@@ -230,8 +230,142 @@ new Table()
     ])
 ```
 
-<Aside variant="warning">
-`grow()`, `visibleFrom()` and `hiddenFrom()` on stacks and splits (they are available on [columns of a regular table](/tables/columns/overview#hiding-columns-responsively)), grid layouts (`Grid`), collapsible content (`Panel`), arranging records into a grid (`contentGrid()`) and custom HTML layouts (`View`) are not available yet.
+### Controlling column width using a split
+
+Inside a split, columns and components share the available width. To make one take only the space it needs, such as an avatar, use `grow(false)`:
+
+```ts
+import { ImageColumn, Split, TextColumn } from '@navette-js/tables';
+
+Split.make([
+    ImageColumn.make('avatar_url').circular().grow(false),
+    TextColumn.make('name').weight('bold'),
+    TextColumn.make('email'),
+])
+```
+
+### Hiding components responsively
+
+Columns, stacks and splits accept `visibleFrom()` and `hiddenFrom()` with a breakpoint (`sm`, `md`, `lg`, `xl`, `2xl`):
+
+```ts
+import { Split, Stack, TextColumn } from '@navette-js/tables';
+
+Split.make([
+    TextColumn.make('name'),
+    Stack.make([
+        TextColumn.make('phone'),
+        TextColumn.make('email'),
+    ]).visibleFrom('md'),
+])
+```
+
+### Collapsible content
+
+You may put content behind a toggle button at the bottom of each record. Make a top-level `Panel` (or any layout component) `collapsible()`; it starts collapsed, and `collapsed(false)` shows it open:
+
+```ts
+import { Panel, Split, Stack, TextColumn } from '@navette-js/tables';
+
+static table(table: Table<User>): Table<User> {
+    return table
+        .columns([
+            Split.make([
+                TextColumn.make('name'),
+                TextColumn.make('email'),
+            ]),
+            Panel.make([
+                Stack.make([
+                    TextColumn.make('phone'),
+                    TextColumn.make('address'),
+                ]),
+            ]).collapsible(),
+        ]);
+}
+```
+
+```preview
+// records: [{"name": "Ada Lovelace", "email": "ada@example.com", "phone": "+44 20 7946 0101", "avatar_url": "https://ui-avatars.com/api/?name=Ada+Lovelace&color=FFFFFF&background=2563eb"}, {"name": "Grace Hopper", "email": "grace@example.com", "phone": "+1 202 555 0143", "avatar_url": "https://ui-avatars.com/api/?name=Grace+Hopper&color=FFFFFF&background=16a34a"}, {"name": "Alan Turing", "email": "alan@example.com", "phone": "+44 161 496 0754", "avatar_url": "https://ui-avatars.com/api/?name=Alan+Turing&color=FFFFFF&background=d97706"}]
+new Table()
+    .pluralModelLabel('users')
+    .columns([
+        Split.make([
+            ImageColumn.make('avatar_url').circular().grow(false),
+            TextColumn.make('name').weight('bold'),
+        ]),
+        Stack.make([
+            TextColumn.make('phone'),
+            TextColumn.make('email'),
+        ]).collapsible(),
+    ])
+```
+
+Only one top-level component can be collapsible.
+
+### Arranging records into a grid
+
+With a column layout, records are cards. `contentGrid()` arranges them in a grid, with a number of columns per breakpoint:
+
+```ts
+import { Stack, TextColumn } from '@navette-js/tables';
+
+static table(table: Table<User>): Table<User> {
+    return table
+        .columns([
+            Stack.make([
+                TextColumn.make('name'),
+                TextColumn.make('email'),
+            ]),
+        ])
+        .contentGrid({ md: 2, xl: 3 });
+}
+```
+
+```preview
+// records: [{"name": "Ada Lovelace", "email": "ada@example.com", "phone": "+44 20 7946 0101", "avatar_url": "https://ui-avatars.com/api/?name=Ada+Lovelace&color=FFFFFF&background=2563eb"}, {"name": "Grace Hopper", "email": "grace@example.com", "phone": "+1 202 555 0143", "avatar_url": "https://ui-avatars.com/api/?name=Grace+Hopper&color=FFFFFF&background=16a34a"}, {"name": "Alan Turing", "email": "alan@example.com", "phone": "+44 161 496 0754", "avatar_url": "https://ui-avatars.com/api/?name=Alan+Turing&color=FFFFFF&background=d97706"}]
+new Table()
+    .pluralModelLabel('users')
+    .columns([
+        Stack.make([
+            TextColumn.make('name').weight('bold'),
+            TextColumn.make('email'),
+            TextColumn.make('phone'),
+        ]),
+    ])
+    .contentGrid({ md: 2, xl: 3 })
+```
+
+### Grid layouts
+
+`Grid` arranges columns in a grid inside a record: `Grid.make(2)` has 2 columns from the `lg` breakpoint, and `Grid.make({ default: 1, md: 2 })` sets them per breakpoint. A component spans several grid columns with `columnSpan()` or `columnSpanFull()`:
+
+```ts
+import { Grid, Stack, TextColumn } from '@navette-js/tables';
+
+Grid.make({ default: 1, md: 2 })
+    .schema([
+        TextColumn.make('phone'),
+        TextColumn.make('email'),
+        Stack.make([TextColumn.make('address')]).columnSpanFull(),
+    ])
+```
+
+### Rendering your own HTML
+
+`View` renders your own markup in the record: a function returning HTML, or the name of an EJS view (see [custom columns](/tables/columns/custom-columns)) rendered with `record` and `recordKey`:
+
+```ts
+import { e } from '@navette-js/support';
+import { Split, TextColumn, View } from '@navette-js/tables';
+
+Split.make([
+    TextColumn.make('name'),
+    View.make<User>(({ record }) => `<span class="my-badge">${e(record.role)}</span>`),
+])
+```
+
+<Aside variant="danger">
+The HTML of a `View` is inserted as it is. Escape record data with `e()` from `@navette-js/support`, or with `<%= %>` in an EJS view.
 </Aside>
 
 ## Grouping column headers

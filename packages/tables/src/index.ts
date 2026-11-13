@@ -1,6 +1,6 @@
 // @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
-import { Attributes, cls, e, hasRenderHook, icon, js, renderHook, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
+import { Attributes, cls, e, hasRenderHook, icon, js, markdownToHtml, renderHook, sanitizeHtml, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
@@ -75,6 +75,14 @@ export abstract class Column<R = any> {
     isSortInverted(): boolean { return this._sortInverted; }
     /** Link on the cell; takes precedence over the row action. */
     url(resolver: (record: R) => string | null): this { this._url = resolver; return this; }
+    protected _cellAction: string | { getName(): string } | null = null;
+    /**
+     * Clicking the cell runs an action on its record: the name of a record action of the table, or an `Action` (checked and
+     * authorized like record actions when it is mounted). A column `url()` takes precedence; the action takes precedence over the row's link and action.
+     */
+    action(action: string | { getName(): string } | null): this { this._cellAction = action; return this; }
+    getAction(): { getName(): string } | null { return this._cellAction !== null && typeof this._cellAction === 'object' ? this._cellAction : null; }
+    getActionName(): string | null { return this._cellAction === null ? null : typeof this._cellAction === 'string' ? this._cellAction : this._cellAction.getName(); }
     getUrl(record: R): string | null { return this._url ? this._url(record) : null; }
     /** `isGlobal: false` excludes the column from the global search; `isIndividual` adds a search field for this column. */
     getSearchColumn(): string { return this._searchColumn ?? this.name; }
@@ -90,7 +98,7 @@ export abstract class Column<R = any> {
     protected _visibleFrom: string | null = null;
     protected _hiddenFrom: string | null = null;
     protected _columnWidth: string | null = null;
-    protected _grow = false;
+    protected _grow: boolean | null = null;
     protected _wrapHeader = false;
     /** Shows the column only from this screen size up (`sm`, `md`, `lg`, `xl`, `2xl`). */
     visibleFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._visibleFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
@@ -103,7 +111,8 @@ export abstract class Column<R = any> {
     getWidth(): string | null { return this._columnWidth; }
     /** The column takes the remaining width of the table (when it has no `width()`). */
     grow(condition = true): this { this._grow = condition; return this; }
-    canGrow(): boolean { return this._grow; }
+    /** In a table, columns do not grow unless told to; in a layout (split), they do. */
+    canGrow(defaultValue = false): boolean { return this._grow ?? defaultValue; }
     /** Lets a long label wrap in the header. */
     wrapHeader(condition = true): this { this._wrapHeader = condition; return this; }
     canHeaderWrap(): boolean { return this._wrapHeader; }
@@ -287,6 +296,21 @@ export class TextColumn<R = any> extends Column<R> {
     expandableLimitedList(condition = true): this { this._expandableLimitedList = condition; return this; }
     /** Splits a string state into a list on this separator. */
     separator(separator: string | null = ','): this { this._separator = separator; return this; }
+    private _html: PerItem<R, boolean> = false;
+    private _markdown: PerItem<R, boolean> = false;
+    /**
+     * Renders the state as HTML. It is sanitized first: only formatting elements (paragraphs, emphasis, lists, links with safe
+     * URLs...) are kept, without any attribute that could run scripts or change the page's styles.
+     */
+    html(condition: PerItem<R, boolean> = true): this { this._html = condition; return this; }
+    /** Renders the state as Markdown. Raw HTML in it is shown as text, and links only keep safe URLs. */
+    markdown(condition: PerItem<R, boolean> = true): this { this._markdown = condition; return this; }
+    /** Item text as HTML: Markdown, sanitized HTML, or escaped text. */
+    private renderItemText(text: string, record: R, item: unknown): string {
+        if (resolveItem(this._markdown, record, item)) return markdownToHtml(text);
+        if (resolveItem(this._html, record, item)) return sanitizeHtml(text);
+        return e(text);
+    }
 
     /** Displayed text of one state item, escaped by the caller. */
     private formatItem(item: unknown, record: R): string {
@@ -311,7 +335,7 @@ export class TextColumn<R = any> extends Column<R> {
     /** Plain value without per-item options: Filament's short markup. */
     private canRenderOptimized(state: unknown): boolean {
         return !Array.isArray(state) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && this._tooltip === null
-            && this._copyable === false && this._weight === null && this._fontFamily === null && this._lineClamp === null && this._size === null && !this.hasDescriptions() && !this._wrap;
+            && this._copyable === false && this._weight === null && this._fontFamily === null && this._lineClamp === null && this._size === null && !this.hasDescriptions() && !this._wrap && this._html === false && this._markdown === false;
     }
     private alignClass(): string | null { return this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null; }
     private containerClasses(): (string | null)[] { return ['fi-ta-text', this._inline ? 'fi-inline' : null, this._numeric || this._money ? 'fi-numeric' : null, this.alignClass()]; }
@@ -376,7 +400,7 @@ export class TextColumn<R = any> extends Column<R> {
                 content = `<span ${[...attributes, classString ? `class="${classString}"` : ''].filter(Boolean).join(' ')}>`;
             }
             const before = this._iconPosition === 'before' ? iconHtml : '', after = this._iconPosition === 'after' ? iconHtml : '';
-            const inner = `${content ?? ''}${before}${collapsedHtml ?? e(formatted)}${after}${content ? '</span>' : ''}`;
+            const inner = `${content ?? ''}${before}${collapsedHtml ?? this.renderItemText(formatted, record, item)}${after}${content ? '</span>' : ''}`;
             return { itemClasses, itemStyle, inner };
         };
 
@@ -420,39 +444,90 @@ export class TextColumn<R = any> extends Column<R> {
 
 /** Values a summarizer works from: aggregates over the query (all records) or over the displayed page. */
 export type SummaryValues = { count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> };
-export type SummaryItem = { type: 'text' | 'range'; label: string | null; value: string };
+export type SummaryItem = { type: 'text' | 'range' | 'values'; label: string | null; value: string; labelHidden?: boolean; values?: string[]; bulleted?: boolean };
+/** Records a custom summarizer works on: all records, the displayed page, or a group. */
+export type SummaryDataset = { column: string; records: () => Promise<any[]> };
 
-/** Column summary below the table: sum, average, count or range. */
-export abstract class Summarizer {
-    abstract readonly kind: 'sum' | 'avg' | 'count' | 'range';
+/**
+ * Column summary below the table: sum, average, count, range, distinct values, or your own with `Summarizer.make().using()`.
+ */
+export class Summarizer {
+    readonly kind: 'sum' | 'avg' | 'count' | 'range' | 'values' | 'custom' = 'custom';
     protected _label: string | null = null;
     protected _money: string | null = null;
+    protected _decimals: number | null = null;
+    protected _prefix: string | null = null;
+    protected _suffix: string | null = null;
+    protected _formatStateUsing: ((state: unknown) => string | null) | null = null;
+    protected _labelHidden = false;
+    protected _hidden: boolean | (() => boolean) = false;
+    protected _using: ((dataset: SummaryDataset) => unknown) | null = null;
+    static make(): Summarizer { return configured(new Summarizer()); }
     label(label: string | null): this { this._label = label; return this; }
     money(currency = 'usd'): this { this._money = currency.toUpperCase(); return this; }
+    /** Number formatting, with a fixed number of decimals. */
+    numeric(decimals: number | null = null): this { this._decimals = decimals; return this; }
+    prefix(prefix: string | null): this { this._prefix = prefix; return this; }
+    suffix(suffix: string | null): this { this._suffix = suffix; return this; }
+    /** Formats the value yourself (the result is escaped). */
+    formatStateUsing(callback: ((state: unknown) => string | null) | null): this { this._formatStateUsing = callback; return this; }
+    /** Keeps the label for screen readers only. */
+    hiddenLabel(condition = true): this { this._labelHidden = condition; return this; }
+    isLabelHidden(): boolean { return this._labelHidden; }
+    hidden(condition: boolean | (() => boolean) = true): this { this._hidden = condition; return this; }
+    visible(condition: boolean | (() => boolean) = true): this { return this.hidden(typeof condition === 'function' ? () => !condition() : !condition); }
+    isHidden(): boolean { return typeof this._hidden === 'function' ? this._hidden() : this._hidden; }
+    /** Computes the value from the summarized records (`records()` loads them: keep the dataset small). */
+    using(callback: ((dataset: SummaryDataset) => unknown) | null): this { this._using = callback; return this; }
+    hasCustomCalculation(): boolean { return this._using !== null; }
+    async compute(dataset: SummaryDataset): Promise<unknown> { return this._using ? this._using(dataset) : null; }
     getLabel(): string | null { return this._label; }
-    format(value: number): string { return this._money ? new Intl.NumberFormat('en-US', { style: 'currency', currency: this._money }).format(value) : new Intl.NumberFormat('en-US').format(value); }
-    abstract summarize(column: string, values: SummaryValues): SummaryItem | null;
+    /** Formatted value: `formatStateUsing()`, money or number, then the prefix and suffix. */
+    format(value: unknown): string {
+        let text: string;
+        if (this._formatStateUsing) text = this._formatStateUsing(value) ?? '';
+        else if (typeof value === 'number' && Number.isFinite(value)) {
+            const digits = this._decimals !== null ? { minimumFractionDigits: this._decimals, maximumFractionDigits: this._decimals } : {};
+            text = this._money ? new Intl.NumberFormat('en-US', { style: 'currency', currency: this._money, ...digits }).format(value) : new Intl.NumberFormat('en-US', digits).format(value);
+        } else text = value === null || value === undefined ? '' : String(value);
+        return `${this._prefix ?? ''}${text}${this._suffix ?? ''}`;
+    }
+    protected item(value: unknown, type: SummaryItem['type'] = 'text'): SummaryItem { return { type, label: this.getLabel(), value: this.format(value), labelHidden: this._labelHidden }; }
+    /** Summary item from the aggregates (or from `customValue`, computed by `using()`). */
+    summarize(_column: string, _values: SummaryValues, customValue?: unknown): SummaryItem | null { return this.item(customValue ?? null); }
 }
 /** Column total. */
 export class Sum extends Summarizer {
     readonly kind = 'sum';
     static make(): Sum { return configured(new Sum()); }
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.sum.label'); }
-    summarize(column: string, values: SummaryValues): SummaryItem { return { type: 'text', label: this.getLabel(), value: this.format(values.sum[column] ?? 0) }; }
+    summarize(column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.sum[column] ?? 0); }
 }
 /** Column average. */
 export class Average extends Summarizer {
     readonly kind = 'avg';
     static make(): Average { return configured(new Average()); }
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.average.label'); }
-    summarize(column: string, values: SummaryValues): SummaryItem { return { type: 'text', label: this.getLabel(), value: this.format(values.avg[column] ?? 0) }; }
+    summarize(column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.avg[column] ?? 0); }
 }
 /** Record count. */
 export class Count extends Summarizer {
     readonly kind = 'count';
     static make(): Count { return configured(new Count()); }
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.count.label'); }
-    summarize(_column: string, values: SummaryValues): SummaryItem { return { type: 'text', label: this.getLabel(), value: this.format(values.count) }; }
+    summarize(_column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.count); }
+}
+/** Distinct values of the column, as a (bulleted) list. */
+export class Values extends Summarizer {
+    readonly kind = 'values';
+    private _bulleted = true;
+    static make(): Values { return configured(new Values()); }
+    bulleted(condition = true): this { this._bulleted = condition; return this; }
+    constructor() { super(); this._using = async ({ column, records }) => [...new Set((await records()).map((record) => (record as any)[column]).filter((value) => value !== null && value !== undefined && value !== ''))]; }
+    summarize(_column: string, _values: SummaryValues, customValue?: unknown): SummaryItem {
+        const list = Array.isArray(customValue) ? customValue : [];
+        return { type: 'values', label: this.getLabel(), value: '', labelHidden: this._labelHidden, values: list.map((value) => this.format(value)), bulleted: this._bulleted };
+    }
 }
 /** Smallest and largest value of a column. */
 export class Range extends Summarizer {
@@ -461,7 +536,7 @@ export class Range extends Summarizer {
     static make(): Range { return configured(new Range()); }
     /** Dates: day only when the bounds fall on different days, day and time otherwise; a single value when both are equal. */
     minimalDateTimeDifference(condition = true): this { this._minimalDateTime = condition; return this; }
-    summarize(column: string, values: SummaryValues): SummaryItem | null {
+    summarize(column: string, values: SummaryValues, _customValue?: unknown): SummaryItem | null {
         let bounds = [values.min[column], values.max[column]].filter((v) => v !== null && v !== undefined && v !== '').map(String);
         if (!bounds.length) return null;
         if (this._minimalDateTime && bounds.length === 2) {
@@ -471,7 +546,7 @@ export class Range extends Summarizer {
             if (days[0] !== days[1]) bounds = days;
             else { const times = bounds.map(dateTime); bounds = times[0] === times[1] ? [times[0]] : times; }
         }
-        return { type: 'range', label: this._label, value: bounds.join(' - ') };
+        return { type: 'range', label: this._label, value: `${this._prefix ?? ''}${bounds.join(' - ')}${this._suffix ?? ''}`, labelHidden: this._labelHidden };
     }
 }
 
@@ -485,7 +560,17 @@ export class Group<R = any> {
     private _collapsible = false;
     private _date = false;
     private _titlePrefixedWithLabel = true;
+    private _keyUsing: ((record: R) => string | null) | null = null;
+    private _scopeUsing: ((query: any, key: string | null) => void) | null = null;
+    private _orderUsing: ((query: any, direction: SortDirection) => void) | null = null;
     constructor(id: string) { this.id = id; }
+    /** Group key of a record, when it is not the column value (records with the same key form a group). Use with `scopeQueryByKeyUsing()`. */
+    getKeyFromRecordUsing(resolver: ((record: R) => string | null) | null): this { this._keyUsing = resolver; return this; }
+    /** Restricts the query to one group (summaries, "select the group"): needed when `getKeyFromRecordUsing()` is not the column value. */
+    scopeQueryByKeyUsing(scope: ((query: any, key: string | null) => void) | null): this { this._scopeUsing = scope; return this; }
+    /** Orders the query by group, when ordering by the column is not right (e.g. a status with a custom order). */
+    orderQueryUsing(order: ((query: any, direction: SortDirection) => void) | null): this { this._orderUsing = order; return this; }
+    getOrderQueryUsing(): ((query: any, direction: SortDirection) => void) | null { return this._orderUsing; }
     static make<R = any>(id: string): Group<R> { return configured(new Group<R>(id)); }
     label(label: string | null): this { this._label = label; return this; }
     /** Query column holding the group value, when it differs from the id (relationship). */
@@ -513,6 +598,7 @@ export class Group<R = any> {
     isTitlePrefixedWithLabel(): boolean { return this._titlePrefixedWithLabel; }
     /** Group value of a record, as text; `null` when empty. */
     getStringKey(record: R): string | null {
+        if (this._keyUsing) { const custom = this._keyUsing(record); return custom === null || custom === undefined || custom === '' ? null : String(custom); }
         let key = (record as any)?.[this.getColumn()];
         if (key === null || key === undefined || key === '') return null;
         if (typeof key === 'boolean') key = key ? 1 : 0;
@@ -527,6 +613,7 @@ export class Group<R = any> {
     getDescription(record: R): string | null { return this._description ? this._description(record) : null; }
     /** Restricts a query to the records of the group with the given key. */
     scope(query: any, key: string | null): void {
+        if (this._scopeUsing) { this._scopeUsing(query, key); return; }
         if (key === null) query.where((sub: any) => sub.whereNull(this.getColumn()).orWhere(this.getColumn(), ''));
         else if (this._date) query.whereRaw('date(??) = ?', [this.getColumn(), key]);
         else query.where(this.getColumn(), key);
@@ -539,16 +626,47 @@ export class Group<R = any> {
  */
 export abstract class ColumnLayout<R = any> {
     protected _children: (Column<R> | ColumnLayout<R>)[];
+    protected _grow: boolean | null = null;
+    protected _visibleFrom: string | null = null;
+    protected _hiddenFrom: string | null = null;
+    protected _columnSpan: Record<string, number | string> = { default: 1 };
+    protected _collapsible = false;
+    // Collapsed until the user opens it, as in Filament.
+    protected _collapsed = true;
+    protected _hidden: boolean | (() => boolean) = false;
     constructor(children: (Column<R> | ColumnLayout<R>)[]) { this._children = children; }
     getChildren(): (Column<R> | ColumnLayout<R>)[] { return this._children; }
     /** Leaf columns, in order: the ones the table sorts, searches and toggles. */
     getColumns(): Column<R>[] { return this._children.flatMap((child) => (child instanceof ColumnLayout ? child.getColumns() : [child])); }
     abstract getClasses(): string[];
+    /** `false`: the component takes only the width it needs in a split, instead of sharing the remaining space. */
+    grow(condition = true): this { this._grow = condition; return this; }
+    canGrow(): boolean { return this._grow ?? true; }
+    visibleFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._visibleFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
+    hiddenFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._hiddenFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
+    getResponsiveClasses(): string[] { return [this._hiddenFrom ? `${this._hiddenFrom}:fi-hidden` : null, this._visibleFrom ? `${this._visibleFrom}:fi-visible` : null].filter((c): c is string => c !== null); }
+    /** Columns of a parent `Grid` taken by the component: a number, `'full'`, or one per breakpoint. */
+    columnSpan(span: number | string | Record<string, number | string>): this { this._columnSpan = typeof span === 'object' ? { default: 1, ...span } : { default: span }; return this; }
+    columnSpanFull(): this { return this.columnSpan('full'); }
+    getColumnSpan(): Record<string, number | string> { return this._columnSpan; }
+    /**
+     * Content hidden behind a toggle button at the bottom of the record. Only one top-level component of the layout can
+     * be collapsible. It starts collapsed; `collapsed(false)` shows it open.
+     */
+    collapsible(condition = true): this { this._collapsible = condition; return this; }
+    collapsed(condition = true): this { this._collapsible = true; this._collapsed = condition; return this; }
+    isCollapsible(): boolean { return this._collapsible; }
+    isCollapsed(): boolean { return this._collapsed; }
+    hidden(condition: boolean | (() => boolean) = true): this { this._hidden = condition; return this; }
+    visible(condition: boolean | (() => boolean) = true): this { return this.hidden(typeof condition === 'function' ? () => !condition() : !condition); }
+    isHidden(): boolean { return typeof this._hidden === 'function' ? this._hidden() : this._hidden; }
+    /** Inner markup of the component, around the already rendered children. */
+    async renderContent(children: string[], _record: R, _key: string): Promise<string> { return `<div class="${this.getClasses().join(' ')}">${children.join('')}</div>`; }
 }
 /** Columns side by side, from a given breakpoint. */
 export class Split<R = any> extends ColumnLayout<R> {
     private _from: string | null = null;
-    static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Split<R> { return new Split<R>(children); }
+    static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Split<R> { return configured(new Split<R>(children)); }
     from(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._from = breakpoint; return this; }
     getClasses(): string[] { return ['fi-ta-split', ...(this._from ? [`${this._from}:fi-ta-split`] : [])]; }
 }
@@ -556,25 +674,72 @@ export class Split<R = any> extends ColumnLayout<R> {
 export class Stack<R = any> extends ColumnLayout<R> {
     private _space: number | null = null;
     private _alignment = 'start';
-    static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Stack<R> { return new Stack<R>(children); }
+    static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Stack<R> { return configured(new Stack<R>(children)); }
     /** Gap between columns: 1 (small), 2 (medium) or 3 (large). */
     space(space: 1 | 2 | 3 | null = 1): this { this._space = space; return this; }
     alignment(alignment: 'start' | 'center' | 'end'): this { this._alignment = alignment; return this; }
     getClasses(): string[] { return ['fi-ta-stack', `fi-align-${this._alignment}`, ...(this._space ? [`fi-gap-${['sm', 'md', 'lg'][this._space - 1]}`] : [])]; }
 }
-const layoutCell = (classes: string[], html: string) => `<div class="${['fi-grid-col', 'fi-growable', ...classes].join(' ')}" style="--col-span-default: span 1 / span 1;">${html}</div>`;
+/** Responsive grid of columns: `Grid.make(2)` (2 columns from `lg`) or `Grid.make({ default: 1, md: 2, xl: 3 })`. */
+export class Grid<R = any> extends ColumnLayout<R> {
+    private _gridColumns: Record<string, number> = {};
+    constructor(columns: number | Record<string, number> | null = 2) { super([]); this.columns(columns); }
+    static make<R = any>(columns: number | Record<string, number> | null = 2): Grid<R> { return configured(new Grid<R>(columns)); }
+    /** Number of columns, or one per breakpoint (\`default\`, \`sm\`, \`md\`, \`lg\`, \`xl\`, \`2xl\`). */
+    columns(columns: number | Record<string, number> | null = 2): this {
+        const added = columns === null ? {} : typeof columns === 'number' ? { lg: columns } : columns;
+        this._gridColumns = { ...this._gridColumns, ...Object.fromEntries(Object.entries(added).filter(([, count]) => Number.isInteger(count) && count > 0 && count <= 12)) };
+        return this;
+    }
+    /** Components of the grid. */
+    schema(children: (Column<R> | ColumnLayout<R>)[]): this { this._children = children; return this; }
+    getGridColumns(): Record<string, number> { return this._gridColumns; }
+    getClasses(): string[] {
+        const columns = this._gridColumns;
+        const gap = (count: number) => (count === 1 ? 'fi-gap-sm' : 'fi-gap-lg');
+        return ['fi-ta-grid', gap(columns.default ?? 1), ...['sm', 'md', 'lg', 'xl', '2xl'].filter((breakpoint) => columns[breakpoint]).map((breakpoint) => `${breakpoint}:${gap(columns[breakpoint])}`)];
+    }
+    async renderContent(children: string[]): Promise<string> { return `<div ${new Attributes().grid(this._gridColumns).class(this.getClasses()).toHtml()}>${children.join('')}</div>`; }
+}
+/** Plain container, styled as a panel: often made collapsible. */
+export class Panel<R = any> extends ColumnLayout<R> {
+    static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Panel<R> { return configured(new Panel<R>(children)); }
+    getClasses(): string[] { return ['fi-ta-panel']; }
+}
+/**
+ * Your own markup inside the record: a function returning HTML, or the name of an EJS view rendered with `record` and
+ * `recordKey`. The HTML is inserted as it is: escape record data with `e()` (EJS's `<%= %>` does it).
+ */
+export class View<R = any> extends ColumnLayout<R> {
+    private _view: string | ((ctx: { record: R; recordKey: string }) => string | Promise<string>);
+    private _viewData: Record<string, unknown> = {};
+    constructor(view: string | ((ctx: { record: R; recordKey: string }) => string | Promise<string>)) { super([]); this._view = view; }
+    static make<R = any>(view: string | ((ctx: { record: R; recordKey: string }) => string | Promise<string>)): View<R> { return configured(new View<R>(view)); }
+    /** Extra data passed to the EJS view. */
+    viewData(data: Record<string, unknown>): this { this._viewData = data; return this; }
+    /** Columns rendered inside the view are not part of the table: the view has no children. */
+    components(children: (Column<R> | ColumnLayout<R>)[]): this { this._children = children; return this; }
+    getClasses(): string[] { return []; }
+    async renderContent(children: string[], record: R, key: string): Promise<string> {
+        if (typeof this._view === 'function') return this._view({ record, recordKey: key });
+        return views.render(this._view, { ...this._viewData, record, recordKey: key, getRecord: () => record, children: children.join('') });
+    }
+}
 /** Renders a record through the layout, skipping columns the user has hidden. */
 async function renderColumnLayout<R>(node: Column<R> | ColumnLayout<R>, record: R, key: string, visible: Set<Column<R>>): Promise<string> {
     if (node instanceof ColumnLayout) {
+        if (node.isHidden()) return '';
         const children = [];
         for (const child of node.getChildren()) children.push(await renderColumnLayout(child, record, key, visible));
-        return layoutCell([], `<div class="${node.getClasses().join(' ')}">${children.join('')}</div>`);
+        const cell = new Attributes().gridColumn(node.getColumnSpan()).class([{ 'fi-growable': node.canGrow() }, ...node.getResponsiveClasses()]);
+        return `<div ${cell.toHtml()}>${await node.renderContent(children, record, key)}</div>`;
     }
     if (!visible.has(node)) return '';
     const alignment = node.getAlignment();
     // Inside a layout, text is inline and carries its own alignment.
     const html = (await node.toHtml(record, key)).replace(/class="([^"]*\bfi-ta-text\b[^"]*)"/, (_match, classes: string) => `class="${classes.replace(/ fi-align-\w+/g, '')} fi-inline${alignment ? ` fi-align-${alignment}` : ''}"`);
-    return layoutCell(['fi-ta-col', ...(alignment ? [`fi-align-${alignment}`] : [])], html);
+    const cell = new Attributes().gridColumn({ default: 1 }).class([{ 'fi-growable': node.canGrow(true) }, 'fi-ta-col', ...(alignment ? [`fi-align-${alignment}`] : []), ...node.getResponsiveClasses()]);
+    return `<div ${cell.toHtml()}>${html}</div>`;
 }
 
 /** Column group: a shared label above the column headers. */
@@ -1522,6 +1687,14 @@ export class Filter extends BaseFilter {
 // ------------------------------------------------------------------ table
 export type ColumnState = { type: 'column'; name: string; label: string; isHidden: boolean; isToggled: boolean; isToggleable: boolean; isToggledHiddenByDefault: boolean | null };
 
+/** Bulk actions grouped in the "Bulk actions" dropdown of the toolbar (`toolbarActions([BulkActionGroup.make([...])])`). */
+export class BulkActionGroup {
+    private _actions: any[];
+    constructor(actions: any[]) { this._actions = actions; }
+    static make(actions: any[]): BulkActionGroup { return configured(new BulkActionGroup(actions)); }
+    getActions(): any[] { return this._actions; }
+}
+
 /** Upper bound on the rows loaded by an unpaginated table or the `'all'` page option. */
 export const MAX_UNPAGINATED_RECORDS = 10000;
 
@@ -1598,8 +1771,17 @@ export class Table<R = any> {
         this._columnsLayout = columns.some((c) => c instanceof ColumnLayout) ? (columns.filter((c) => !(c instanceof ColumnGroup)) as (Column<R> | ColumnLayout<R>)[]) : null;
         return this;
     }
-    /** Column layout, or `null` for a regular table. */
-    getColumnsLayout(): (Column<R> | ColumnLayout<R>)[] | null { return this._columnsLayout; }
+    /** Column layout, or `null` for a regular table. The collapsible component is left out (see `getCollapsibleColumnsLayout()`). */
+    getColumnsLayout(): (Column<R> | ColumnLayout<R>)[] | null {
+        const collapsible = this.getCollapsibleColumnsLayout();
+        return this._columnsLayout && collapsible ? this._columnsLayout.filter((node) => node !== collapsible) : this._columnsLayout;
+    }
+    /** The first top-level layout component marked `collapsible()`, shown behind a toggle button. */
+    getCollapsibleColumnsLayout(): ColumnLayout<R> | null { return (this._columnsLayout?.find((node) => node instanceof ColumnLayout && node.isCollapsible()) as ColumnLayout<R> | undefined) ?? null; }
+    private _contentGrid: Record<string, number> | null = null;
+    /** Arranges the record cards of a column layout in a grid: `contentGrid({ md: 2, xl: 3 })`. */
+    contentGrid(columns: Record<string, number> | number | null): this { this._contentGrid = columns === null ? null : typeof columns === 'number' ? { lg: columns } : columns; return this; }
+    getContentGrid(): Record<string, number> | null { return this._contentGrid; }
     /** Action mounted when a row is clicked (e.g. `'edit'`), instead of a URL. */
     recordAction(name: string | null): this { this._recordAction = name; return this; }
     getRecordAction(): string | null { return this._recordAction; }
@@ -1611,10 +1793,22 @@ export class Table<R = any> {
     getHeaderActions(): any[] { return this._headerActions; }
     /** Bulk actions ("Bulk actions" menu); if never called, the host provides its default ones. */
     groupedBulkActions(actions: any[]): this { this._bulkActions = actions; return this; }
-    getBulkActions(): any[] | null { return this._bulkActions; }
+    /** Bulk actions: those of `groupedBulkActions()`, then those of the `BulkActionGroup`s of `toolbarActions()`; `null` when none is declared. */
+    getBulkActions(): any[] | null {
+        const groups = this._toolbarActions.filter((action) => action instanceof BulkActionGroup) as BulkActionGroup[];
+        if (this._bulkActions === null && !groups.length) return null;
+        return [...(this._bulkActions ?? []), ...groups.flatMap((group) => group.getActions())];
+    }
+    private _toolbarActions: any[] = [];
+    /** Actions in the toolbar, left of the search field: buttons, and a `BulkActionGroup` for the bulk actions dropdown. */
+    toolbarActions(actions: any[]): this { this._toolbarActions = actions; return this; }
+    /** Toolbar actions other than bulk action groups. */
+    getToolbarActions(): any[] { return this._toolbarActions.filter((action) => !(action instanceof BulkActionGroup)); }
     /** Row actions: `Action`s or an `ActionGroup` (dropdown). */
     recordActions(actions: any[]): this { this._recordActions = actions; return this; }
     getRecordActions(): any[] { return this._recordActions; }
+    /** Actions given to columns with `action()` (not those named after a record action). */
+    getColumnActions(): any[] { return this.getColumns().map((column) => column.getAction()).filter((action) => action !== null); }
     /** CSS classes added to a row depending on its record. */
     recordClasses(resolver: (record: R) => string | null): this { this._recordClasses = resolver; return this; }
     getRecordClasses(record: R): string | null { return this._recordClasses ? this._recordClasses(record) : null; }
@@ -1678,6 +1872,9 @@ export class Table<R = any> {
     persistSearchInSession(condition = true): this { this._persist.search = condition; return this; }
     persistColumnSearchesInSession(condition = true): this { this._persist.columnSearches = condition; return this; }
     persistSortInSession(condition = true): this { this._persist.sort = condition; return this; }
+    private _persistGrouping = false;
+    persistGroupingInSession(condition = true): this { this._persistGrouping = condition; return this; }
+    persistsGroupingInSession(): boolean { return this._persistGrouping; }
     persistsFiltersInSession(): boolean { return this._persist.filters; }
     persistsSearchInSession(): boolean { return this._persist.search; }
     persistsColumnSearchesInSession(): boolean { return this._persist.columnSearches; }
@@ -1779,7 +1976,7 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
         sort: sortColumn?.isSortable() ? { column: sortColumn.getSortColumn(), direction: ((direction === 'desc') !== sortColumn.isSortInverted() ? 'desc' : 'asc') as SortDirection } : table.getDefaultSort(),
     };
     const grouping = getTableGrouping(table, host);
-    if (grouping) query.groupSort = { column: grouping.group.getColumn(), direction: grouping.direction };
+    if (grouping) query.groupSort = { column: grouping.group.getColumn(), direction: grouping.direction, ...(grouping.group.getOrderQueryUsing() ? { modify: grouping.group.getOrderQueryUsing()! } : {}) };
     // The host can restrict the query (active list tab).
     (host as any).modifyTableQuery?.(query);
     for (const filter of table.getFilters()) {
@@ -1875,6 +2072,8 @@ export type RenderTableOptions<R> = {
     after?: string;
     /** Already rendered HTML of the table header actions. */
     headerActions?: string[];
+    /** Already rendered HTML of the toolbar actions. */
+    toolbarActions?: string[];
     /** Already rendered HTML of the empty state actions. */
     emptyStateActions?: string[];
     /** Already rendered HTML of the row actions (ActionGroup…), replacing the `rowActions` links. */
@@ -1894,7 +2093,11 @@ type SummaryPlaceholders = { selection: boolean; actions: boolean; actionsBefore
 
 /** Summary row; with `groupsOnly`, a leading label cell, then one cell per column. */
 function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, placeholders: SummaryPlaceholders): string {
-    const items = (cell: SummaryCell) => cell.items.map((item) => `<div class="fi-ta-${item.type}-summary">${item.label !== null ? `<span class="fi-ta-${item.type}-summary-label">${e(item.label)}</span>` : ''}<span>${e(item.value)}</span></div>`).join('');
+    const items = (cell: SummaryCell) => cell.items.map((item) => {
+        const label = item.label !== null && item.label !== '' ? `<span class="fi-ta-${item.type}-summary-label${item.labelHidden ? ' fi-sr-only' : ''}">${e(item.label)}</span>` : '';
+        if (item.type === 'values') return `<div class="fi-ta-values-summary">${label}${item.values?.length ? `<ul${item.bulleted ? ' class="fi-bulleted"' : ''}>${item.values.map((value) => `<li>${e(value)}</li>`).join('')}</ul>` : ''}</div>`;
+        return `<div class="fi-ta-${item.type}-summary">${label}<span>${e(item.value)}</span></div>`;
+    }).join('');
     const heading = groupsOnly
         ? `<th scope="row" class="fi-ta-cell fi-ta-summary-row-heading-cell fi-align-start">${e(row.heading)}</th>`
         : `<th scope="row"${span > 1 ? ` colspan="${span}"` : ''} class="fi-ta-cell fi-align-start fi-ta-summary-row-heading-cell ">${e(row.heading)}</th>`;
@@ -1908,7 +2111,7 @@ function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, plac
 async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, visible: Column<R>[], page: { records: R[]; lastPage: number }, options: { group: Group<R> | null; groupsOnly: boolean; placeholders: SummaryPlaceholders }) {
     // Groups only: the grouped column has no summary cell (its label already leads the row).
     const columns = options.groupsOnly && options.group ? visible.filter((c) => c.name !== options.group!.getColumn()) : visible;
-    const lists = columns.map((c) => (c instanceof TextColumn ? c.getSummarizers() : []));
+    const lists = columns.map((c) => (c instanceof TextColumn ? c.getSummarizers().filter((summarizer) => !summarizer.isHidden()) : []));
     if (!lists.some((list) => list.length) || !page.records.length) return null;
     // The first cell holds the row label and spans up to the first summarized column after it.
     const next = lists.findIndex((list, i) => i > 0 && list.length > 0);
@@ -1926,10 +2129,15 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
         min: Object.fromEntries(names('range').map((name) => [name, present(name).map(String).sort()[0] ?? null])),
         max: Object.fromEntries(names('range').map((name) => [name, present(name).map(String).sort().pop() ?? null])),
     };
-    const cells = (values: SummaryValues): SummaryCell[] => columns.slice(span).map((c, i) => ({
-        alignment: c.getAlignment() ?? 'start',
-        items: lists[i + span].map((s) => s.summarize(columnOf(c), values)).filter((item): item is SummaryItem => item !== null),
-    }));
+    // `using()` summarizers get the records of the summarized dataset, loaded once per row.
+    const loader = (dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]) => { let cache: Promise<R[]> | null = null; return () => (cache ??= Array.isArray(dataset) ? Promise.resolve(dataset) : adapter.paginate({ ...dataset, page: 1, perPage: MAX_UNPAGINATED_RECORDS }).then((result) => result.records)); };
+    const cells = async (values: SummaryValues, dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]): Promise<SummaryCell[]> => {
+        const records = loader(dataset);
+        return Promise.all(columns.slice(span).map(async (c, i) => ({
+            alignment: c.getAlignment() ?? 'start',
+            items: (await Promise.all(lists[i + span].map(async (s) => s.summarize(columnOf(c), values, s.hasCustomCalculation() ? await s.compute({ column: c.name, records }) : undefined)))).filter((item): item is SummaryItem => item !== null),
+        })));
+    };
     const label = table.getPluralModelLabel();
     const hasPageSummary = !options.groupsOnly && page.lastPage > 1;
     const rowHtml = (row: SummaryRow) => summaryRowHtml(row, span, options.groupsOnly, options.placeholders);
@@ -1940,14 +2148,15 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
         }).join('')}${options.placeholders.actions ? '<td></td>' : ''}</tr>`
         : '';
     const rows = hasPageSummary
-        ? [{ heading: t('filament-tables::table.summary.subheadings.page', { label }), cells: cells(onPage), striped: false }, { heading: t('filament-tables::table.summary.subheadings.all', { label }), cells: cells(all), striped: false }]
-        : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: cells(all), striped: true }];
+        ? [{ heading: t('filament-tables::table.summary.subheadings.page', { label }), cells: await cells(onPage, page.records), striped: false }, { heading: t('filament-tables::table.summary.subheadings.all', { label }), cells: await cells(all, query), striped: false }]
+        : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: await cells(all, query), striped: true }];
     return {
         html: header + rows.map(rowHtml).join(''),
         /** Group summary row: aggregates over all the group's records (not only those on the page). */
         group: async (group: Group<R>, key: string | null, title: string | null): Promise<string> => {
-            const values = await aggregate({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => group.scope(q, key)] });
-            return rowHtml({ heading: options.groupsOnly ? (title ?? '') : t('filament-tables::table.summary.subheadings.group', { group: title ?? '', label }), cells: cells(values), striped: false });
+            const groupQuery = { ...query, modifiers: [...(query.modifiers ?? []), (q: any) => group.scope(q, key)] };
+            const values = await aggregate(groupQuery);
+            return rowHtml({ heading: options.groupsOnly ? (title ?? '') : t('filament-tables::table.summary.subheadings.group', { group: title ?? '', label }), cells: await cells(values, groupQuery), striped: false });
         },
     };
 }
@@ -1998,14 +2207,16 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         }
         previousGroup = { key: groupKey, title: groupTitle };
         const cells = [];
-        if (!groupsOnly) for (const column of visible) cells.push({ name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url: column.getUrl(record), html: await column.toHtml(record, key), plain: column.isClickDisabled() });
+        if (!groupsOnly) for (const column of visible) cells.push({ name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url: column.getUrl(record), html: await column.toHtml(record, key), plain: column.isClickDisabled(), mountExpression: !reordering && column.getActionName() !== null && !column.isClickDisabled() ? `mountAction(${js(column.getActionName())}, {}, ${js({ table: true, recordKey: key })})` : null });
         const recordAction = table.getRecordAction();
         if (reordering) for (const cell of cells) cell.url = null;
         let contentHtml: string | null = null;
         if (columnsLayout && !groupsOnly) { contentHtml = ''; for (const node of columnsLayout) contentHtml += await renderColumnLayout(node, record, key, visibleSet); }
+        const collapsibleLayout = columnsLayout && !groupsOnly && !reordering ? table.getCollapsibleColumnsLayout() : null;
+        const collapsibleHtml = collapsibleLayout && !collapsibleLayout.isHidden() ? await renderColumnLayout(collapsibleLayout, record, key, visibleSet) : null;
         rows.push({
             selectable: selectable && !reordering ? await table.isRecordSelectable(record) : true,
-            contentHtml, summaryBefore, groupSummaryHtml: '',
+            contentHtml, collapsibleHtml, collapsed: collapsibleLayout?.isCollapsed() ?? false, summaryBefore, groupSummaryHtml: '',
             groupHeader, groupKey, collapsedExpression: grouping?.group.isCollapsible() ? `isGroupCollapsed(${js(groupTitle)})` : null,
             reorder: reordering ? { id: `${host.id}-table-reorder-${createHash('md5').update(key).digest('hex')}`, label: String((record as any)[table.getColumns()[0]?.name ?? ''] ?? key), position: rows.length + 1 } : null,
             wasClickable: reordering && (recordAction !== null || table.getRecordUrl(record) !== null),
@@ -2037,14 +2248,15 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     }
     const scopes = (host as any).getRenderHookScopes?.() ?? [];
     return views.render('filament-tables::index', {
-        contentLayout: columnsLayout !== null,
+        contentLayout: columnsLayout !== null, contentGrid: table.getContentGrid(),
         hook: (name: string, data: Record<string, unknown> = {}) => renderHook(name, scopes, data), hasHook: (name: string) => hasRenderHook(name, scopes),
         visibleColumns: visible, isReordering: reordering,
         groups: reordering || table.areGroupingSettingsHidden() ? [] : table.getGroups().map((g) => ({ id: g.getId(), label: g.getLabel() })),
-        grouping: { directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
+        grouping: { active: grouping !== null, directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
         id: host.id, targets: LOADING_TARGETS, table, rows, page, number,
         reorder: reorderColumn !== null ? { active: reordering } : null,
         // No checkboxes without bulk actions (or in groups-only mode), no actions column without row actions.
+        toolbarActions: reordering ? [] : (options.toolbarActions ?? []),
         selectable, hasRowActions, actionsPosition: table.getRecordActionsPosition(), actionsAlignment: table.getRecordActionsAlignment() ?? (actionsBefore ? 'start' : null),
         // The key changes on every render to force the checkbox to be replaced.
         randomKey: () => Array.from(randomBytes(16), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join(''),

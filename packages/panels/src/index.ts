@@ -2215,6 +2215,7 @@ export class ListRecords extends Page implements TableHost {
         if (table.persistsSearchInSession()) await store.set(session, this.tableSessionKey('search'), this.tableSearch);
         if (table.persistsColumnSearchesInSession()) await store.set(session, this.tableSessionKey('column-searches'), this.tableColumnSearches);
         if (table.persistsSortInSession()) await store.set(session, this.tableSessionKey('sort'), this.tableSort);
+        if (table.persistsGroupingInSession()) await store.set(session, this.tableSessionKey('grouping'), this.tableGrouping);
     }
     /** Restores the persisted table state; every value is sanitized like browser input. */
     private async restoreTableSession(table: Table): Promise<void> {
@@ -2231,6 +2232,8 @@ export class ListRecords extends Page implements TableHost {
             if (saved && typeof saved === 'object') this.tableColumnSearches = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([name, value]) => typeof value === 'string' && table.getColumn(name)?.isIndividuallySearchable()).map(([name, value]) => [name, (value as string).slice(0, 1000)]));
         }
         if (table.persistsSortInSession()) { const saved = await store.get(session, this.tableSessionKey('sort')); if (typeof saved === 'string' || saved === null) this.tableSort = saved as string | null; }
+        // Only a group the table declares is kept: `getTableGrouping()` ignores anything else.
+        if (table.persistsGroupingInSession()) { const saved = await store.get(session, this.tableSessionKey('grouping')); if (typeof saved === 'string' && saved.length <= 200) this.tableGrouping = saved; }
     }
 
     async mount(_params: Record<string, unknown> = {}): Promise<void> {
@@ -2357,12 +2360,16 @@ export class ListRecords extends Page implements TableHost {
     protected rendersActionModalsInPage(): boolean { return false; }
     getBulkActions(): Action[] { return this.getTable().getBulkActions() ?? [DeleteBulkAction.make()]; }
     /** Row actions declared by the table, with groups flattened. */
-    getRecordActions(): Action[] { return this.getTable().getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])); }
+    getRecordActions(): Action[] {
+        const table = this.getTable();
+        // Column actions are record actions too: mounted with the record key, and checked the same way.
+        return [...table.getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])), ...table.getColumnActions()];
+    }
     protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
         if (typeof context.schemaComponent === 'string') return this.getSchemaComponentActions(context.schemaComponent);
         if (context.table === true && context.bulk === true) return this.getBulkActions();
         if (context.table === true && typeof context.recordKey === 'string') return this.getRecordActions();
-        if (context.table === true) return [...this.getTable().getHeaderActions(), ...this.getTable().getEmptyStateActions()];
+        if (context.table === true) return [...this.getTable().getHeaderActions(), ...this.getTable().getToolbarActions(), ...this.getTable().getEmptyStateActions()];
         return this.getHeaderActions();
     }
     /** Only known context shapes are kept; the record key is checked again in the database on mount. */
@@ -2453,7 +2460,7 @@ export class ListRecords extends Page implements TableHost {
         for (const action of this.getBulkActions()) if (await action.isVisible(ctx)) bulkActions.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
         const table = this.getTable();
         return renderTable(table, this, resource.adapter, {
-            bulkActions, headerActions: await this.renderTableHeaderActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
+            bulkActions, headerActions: await this.renderTableHeaderActions(ctx), toolbarActions: await this.renderTableToolbarActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
             filtersForm: table.getFilters().length ? await this.getSchema('tableFiltersForm').toHtml() : null,
             rowActionsHtml: table.getRecordActions().length ? async (record) => {
                 const key = resource.adapter.getKey(record);
@@ -2477,6 +2484,11 @@ export class ListRecords extends Page implements TableHost {
         return html;
     }
     /** Table header actions (none on a list page: they go in the page header). */
+    protected async renderTableToolbarActions(ctx: any): Promise<string[]> {
+        const html: string[] = [];
+        for (const action of this.getTable().getToolbarActions()) if (await action.isVisible(ctx)) html.push(await action.toHtml(ctx, { table: true }));
+        return html;
+    }
     protected async renderTableHeaderActions(ctx: any): Promise<string[]> {
         const html: string[] = [];
         for (const action of this.getTable().getHeaderActions()) if (await action.isVisible(ctx)) html.push(await action.toHtml(ctx, { table: true }));

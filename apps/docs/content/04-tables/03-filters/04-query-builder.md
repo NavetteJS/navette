@@ -135,10 +135,17 @@ By default, the following operators are available:
 - Equals - filters a column to equal the search number
 - Does not equal - filters a column to not equal the search number
 
-Number constraints accept decimal values.
+Number constraints accept decimal values. To accept whole numbers only, use `integer()`: the field only allows integers, and a rule with a decimal value has no effect:
+
+```ts
+import { NumberConstraint } from '@navette-js/tables';
+
+NumberConstraint.make('stock')
+    .integer()
+```
 
 <Aside variant="warning">
-`integer()` and aggregating the values of related records (sum, average, minimum, maximum) are not available yet.
+Aggregating the values of related records (sum, average, minimum, maximum) is not available yet.
 </Aside>
 
 ### Date constraints
@@ -380,9 +387,18 @@ The set of rules a user builds is part of the page's state and is submitted with
 
 The UI enforces these limits: the "add rule" and clone buttons are disabled once the maximum number of rules is reached, and the "or" block is not offered at the maximum depth. A submitted tree is cut down to these limits before it is used.
 
-<Aside variant="warning">
-`maxRules()` and `maxNestingDepth()` are not available: the limits cannot be changed yet.
-</Aside>
+You may lower the number of rules and the nesting depth with `maxRules()` and `maxNestingDepth()`. A depth of 1 removes "or" blocks. Values above the fixed limits are reduced to them:
+
+```ts
+import { QueryBuilder } from '@navette-js/tables';
+
+QueryBuilder.make()
+    .maxRules(10)
+    .maxNestingDepth(2)
+    .constraints([
+        // ...
+    ])
+```
 
 ## Scoping relationships
 
@@ -456,6 +472,47 @@ The picker is made wider for 2 or 3 columns.
 
 The SQL for dates, months, years and text searches is written for SQLite, MySQL and MariaDB, PostgreSQL and SQL Server. Navette reads the client of the Knex connection to choose it. Columns are passed as identifiers and values as bound parameters; the operators come from a closed list.
 
+## Custom operators
+
+You may add your own operators to a constraint with `pushOperators()`, or replace its operators with `operators()`. An operator has a name, labels, an optional settings form, the condition it adds to the query, and the summary shown in the filter indicator:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { QueryBuilderOperator, TextConstraint } from '@navette-js/tables';
+
+TextConstraint.make('email')
+    .pushOperators([
+        QueryBuilderOperator.make('hasDomain')
+            .label('Has domain', 'Does not have domain')
+            .schema([TextInput.make('domain').required()])
+            .query((query, { settings, inverse }) => {
+                // Only plain domain names: `%` and `_` would be wildcards in `like`.
+                const domain = typeof settings.domain === 'string' && /^[a-z0-9.-]+$/i.test(settings.domain) ? settings.domain : null;
+                if (domain === null) return;
+                query.where('email', inverse ? 'not like' : 'like', `%@${domain}`);
+            })
+            .summary(({ attribute, settings, inverse }) => `${attribute} ${inverse ? 'is not' : 'is'} on ${settings.domain}`),
+    ])
+```
+
+Each operator also exists in an inverse form ("Does not have domain"); `inverse` tells you which one the user picked. `settings` comes from the browser: only the names of the schema fields are kept, as scalars, but check their values and pass them as bound parameters.
+
+## Custom constraints
+
+`CustomConstraint` has no operators of its own: give it yours with `operators()`:
+
+```ts
+import { CustomConstraint, QueryBuilderOperator } from '@navette-js/tables';
+
+CustomConstraint.make('popularity')
+    .icon('m-fire')
+    .operators([
+        QueryBuilderOperator.make('isPopular')
+            .label('Is popular', 'Is not popular')
+            .query((query, { inverse }) => query.where('views', inverse ? '<' : '>=', 1000)),
+    ])
+```
+
 <Aside variant="warning">
-Custom constraints and operators, overriding the default operators, grouping constraints in the picker and `constraintPickerWidth()` are not available yet.
+Grouping constraints in the picker and `constraintPickerWidth()` are not available yet.
 </Aside>
