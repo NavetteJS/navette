@@ -110,7 +110,7 @@ import { AudioPlayerEntry } from './entries/AudioPlayerEntry.ts';
 AudioPlayerEntry.make('recording')
 ```
 
-Your entry inherits the features shared by all entries: `label()`, `hiddenLabel()`, `state()`, `hidden()`, `visible()`, `columnSpan()`… `configured()` applies the [global settings](/infolists/overview#global-settings) registered with `AudioPlayerEntry.configureUsing()`.
+Your entry inherits the features shared by all entries: `label()`, `hiddenLabel()`, `inlineLabel()`, `state()`, `default()`, `url()`, `alignment()`, the [extra content slots](/infolists/overview#adding-extra-content-to-an-entry), `hidden()`, `visible()`, `hiddenJs()`, `columnSpan()`… `this.wrap()` renders the label, the slots and the link around your content. `configured()` applies the [global settings](/infolists/overview#global-settings) registered with `AudioPlayerEntry.configureUsing()`.
 
 <Aside variant="info">
 Navette entries are not stateful components. Defining public properties on an entry class does not send them to the browser: the entry is rebuilt from your schema on every request.
