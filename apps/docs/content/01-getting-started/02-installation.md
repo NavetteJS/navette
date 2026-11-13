@@ -56,7 +56,8 @@ The generator asks for:
 | Database | SQLite, PostgreSQL, MySQL / MariaDB | SQLite |
 | Language | English, Français | English |
 | Install the dependencies now | runs `npm install` | yes |
-| Admin email address | with SQLite and installation, creates the first admin account and prints its generated password | `admin@example.com` |
+| Admin email address | with SQLite and installation, creates the first admin account | `admin@example.com` |
+| Admin password | typed twice, hidden; leave it empty to generate one | generated |
 
 Then start the development server, which restarts on every change:
 
@@ -65,7 +66,7 @@ cd my-navette-app
 npm run dev
 ```
 
-Open `http://127.0.0.1:3000/admin` and sign in with the admin account printed at the end of the installation. Pending migrations run every time the server starts.
+Open `http://127.0.0.1:3000/admin` and sign in with the admin account: the installation ends with its email address and, if it was generated, its password. Copy a generated password then: it is not stored anywhere in clear and is not shown again. Pending migrations run every time the server starts.
 
 With PostgreSQL or MySQL, set `DATABASE_URL` in `.env` first, then create the admin account with `npx navette make:user --admin`.
 
@@ -87,7 +88,7 @@ npm create navette@latest my-app -- --template=blank --user-panel --teams --db=p
 | `--locale=en` or `--locale=fr` | Language of the interface |
 | `--no-install` | Do not run `npm install` |
 | `--admin-email=` | Email address of the first admin account |
-| `--admin-password=` | Its password (generated when omitted) |
+| `--admin-password=` | Its password, at least 8 characters (generated and printed when omitted) |
 | `--port=` | Port of the development server (`3000`) |
 
 The `--` after the project name passes the options to `create-navette` instead of npm.

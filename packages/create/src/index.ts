@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, join, resolve } from 'node:path';
 import { createInterface, type Interface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { readSecret } from './secret.ts';
 import { projectFiles, type ProjectOptions } from './templates.ts';
 
 const own = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')) as { version: string };
@@ -27,6 +28,22 @@ async function text(question: string, fallback: string, given?: string): Promise
     if (given !== undefined) return given;
     if (!interactive) return fallback;
     return (await prompt().question(`  ${bold(question)} ${dim(`(${fallback})`)} `)).trim() || fallback;
+}
+async function secret(question: string): Promise<string> {
+    // Readline would echo the characters: it is closed while the password is typed (`prompt()` opens a new one after).
+    rl?.close();
+    rl = null;
+    return readSecret(`  ${bold(question)} `);
+}
+/** The admin's password, typed twice; empty: `null`, one is generated. */
+async function choosePassword(): Promise<string | null> {
+    for (;;) {
+        const password = await secret(`Admin password ${dim('(at least 8 characters; leave empty to generate one)')}`);
+        if (!password) return null;
+        if (password.length < 8) { say(`  ${dim('✖')} At least 8 characters: try again.`); continue; }
+        if ((await secret('Confirm the password')) === password) return password;
+        say(`  ${dim('✖')} The passwords do not match: try again.`);
+    }
 }
 async function choose<T extends string>(question: string, choices: [T, string][], fallback: T, given?: string): Promise<T> {
     if (given !== undefined) { const match = choices.find(([value]) => value === given); if (!match) fail(`--${question.toLowerCase()} must be one of ${choices.map(([v]) => v).join(', ')}`); return match![0]; }
@@ -56,6 +73,10 @@ const database = await choose('Database', [['sqlite', 'SQLite — a file, nothin
 const locale = await choose('Language of the interface', [['en', 'English'], ['fr', 'Français']], 'en', flag('locale'));
 const install = await confirm('Install the dependencies now?', true, flags['no-install'] ? 'no' : flags.install);
 const adminEmail = install && database === 'sqlite' ? await text('Admin email address', 'admin@example.com', flag('admin-email')) : null;
+// The admin's password: `--admin-password`, typed twice, or generated (and then shown at the end).
+const givenPassword = flag('admin-password');
+if (givenPassword !== undefined && givenPassword.length < 8) fail('--admin-password must be at least 8 characters.');
+const chosenPassword = adminEmail ? (givenPassword ?? (interactive ? await choosePassword() : null)) : null;
 rl?.close();
 
 const options: ProjectOptions = {
@@ -82,12 +103,15 @@ say(`\n  ✔ Created ${name} (${Object.keys(files).length} files)`);
 
 const run = (command: string, commandArgs: string[]) => spawnSync(command, commandArgs, { cwd: target, stdio: 'inherit', shell: process.platform === 'win32' }).status === 0;
 let adminPassword: string | null = null;
+const passwordGenerated = adminEmail !== null && chosenPassword === null;
 if (install) {
     say('  … Installing dependencies\n');
     if (!run('npm', ['install', '--no-fund', '--no-audit'])) fail('npm install failed: fix the error above, then run `npm install` in the project.');
     if (adminEmail) {
-        adminPassword = flag('admin-password') ?? randomBytes(12).toString('base64url');
-        if (!run('npx', ['navette', 'make:user', '--admin', '--name=Admin', `--email=${adminEmail}`, `--password=${adminPassword}`])) fail('Creating the admin user failed: run `npx navette make:user --admin` in the project.');
+        adminPassword = chosenPassword ?? randomBytes(12).toString('base64url');
+        // Passed through the environment, not the command line, where other users of the machine could read it.
+        const created = spawnSync('npx', ['navette', 'make:user', '--admin', '--name=Admin', `--email=${adminEmail}`], { cwd: target, stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, NAVETTE_PASSWORD: adminPassword } }).status === 0;
+        if (!created) fail('Creating the admin user failed: run `npx navette make:user --admin` in the project.');
     }
 }
 
@@ -97,6 +121,13 @@ if (!install) say('    npm install');
 if (database !== 'sqlite') say(`    ${dim('# set DATABASE_URL in .env, then:')}`);
 if (!adminPassword) say('    npx navette make:user --admin');
 say('    npm run dev\n');
-say(`  Admin panel  http://127.0.0.1:${options.port}/admin${adminPassword ? `   ${dim('sign in:')} ${adminEmail} / ${adminPassword}` : ''}`);
+say(`  Admin panel  http://127.0.0.1:${options.port}/admin`);
 if (userPanel) say(`  User panel   http://127.0.0.1:${options.port}/app`);
+if (adminPassword) {
+    say(`\n  ${bold('Admin account')}\n`);
+    say(`    Email     ${adminEmail}`);
+    say(passwordGenerated
+        ? `    Password  ${bold(adminPassword)}   ${dim('generated: copy it now, it is not shown again')}`
+        : `    Password  ${dim('the one you chose')}`);
+}
 say(`\n  Generate code with ${bold('npx navette make:resource Post --generate')} — see README.md.\n`);

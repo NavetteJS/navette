@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
+import { readSecret } from './secret.ts';
 import { generateColumn, generateComponent, generateEntry, generateField, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
@@ -33,6 +34,19 @@ async function ask(question: string, fallback = ''): Promise<string> {
     const answer = (await rl.question(`  ${question}${fallback ? ` (${fallback})` : ''}: `)).trim();
     rl.close();
     return answer || fallback;
+}
+async function askSecret(question: string): Promise<string> {
+    return process.stdin.isTTY ? readSecret(`  ${question}: `) : '';
+}
+/** A password typed twice; empty: `''`, one is generated. */
+async function askPassword(): Promise<string> {
+    for (;;) {
+        const password = await askSecret('Password (at least 8 characters; leave empty to generate one)');
+        if (!password) return '';
+        if (password.length < 8) { say('  ✖ At least 8 characters: try again.'); continue; }
+        if ((await askSecret('Confirm the password')) === password) return password;
+        say('  ✖ The passwords do not match: try again.');
+    }
 }
 /** Never overwrites an existing file unless `--force` is given. */
 function write(file: string, content: string): void {
@@ -66,14 +80,15 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
         },
     },
     'make:user': {
-        usage: 'navette make:user [--admin] [--name=] [--email=] [--password=]   Create a user (role admin with --admin)',
+        usage: 'navette make:user [--admin] [--name=] [--email=] [--password=]   Create a user (role admin with --admin; the password may also come from NAVETTE_PASSWORD)',
         async run() {
             const { db, migrate } = await project();
             await migrate();
             const name = flag('name') ?? (await ask('Name', 'Admin'));
             const email = flag('email') ?? (await ask('Email address', 'admin@example.com'));
             if (!/^[^\s@]+@[^\s@]+$/.test(email)) fail(`Invalid email address: ${email}`);
-            let password = flag('password') ?? (await ask('Password (leave empty to generate one)'));
+            // `--password` is visible to the other users of the machine (process list): prefer NAVETTE_PASSWORD, or typing it.
+            let password = flag('password') ?? process.env.NAVETTE_PASSWORD ?? (await askPassword());
             const generated = !password;
             if (generated) password = randomBytes(12).toString('base64url');
             if (password.length < 8) fail('The password must be at least 8 characters.');
@@ -82,7 +97,8 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
             const user = await knexAuthProvider((table: string) => db(table)).create!({ name, email, password });
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
             await db('users').where('id', user.id).update({ role: flags.admin ? 'admin' : 'user', email_verified_at: now });
-            say(`  ✔ ${flags.admin ? 'Admin' : 'User'} ${email} created${generated ? ` — password: ${password}` : ''}`);
+            say(`  ✔ ${flags.admin ? 'Admin' : 'User'} ${email} created`);
+            if (generated) say(`    Password: ${password}   (generated: copy it now, it is not shown again)`);
             await db.destroy();
         },
     },

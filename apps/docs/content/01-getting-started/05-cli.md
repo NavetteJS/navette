@@ -51,10 +51,10 @@ Creates `src/migrations/<timestamp>_create_posts_table.ts`. When the name has th
 npx navette make:user --admin
 ```
 
-Asks for a name, an email address and a password — leave the password empty to generate one, which is printed once. You can pass the answers as options, for scripts:
+Asks for a name, an email address and a password. The password is typed twice and hidden; leave it empty to generate one, which is printed once. You can pass the answers as options, for scripts, and the password through the `NAVETTE_PASSWORD` environment variable:
 
 ```bash
-npx navette make:user --admin --name="Ada Lovelace" --email=ada@example.com --password=a-long-password
+NAVETTE_PASSWORD=a-long-password npx navette make:user --admin --name="Ada Lovelace" --email=ada@example.com
 ```
 
 | Option | Effect |
@@ -62,7 +62,7 @@ npx navette make:user --admin --name="Ada Lovelace" --email=ada@example.com --pa
 | `--admin` | Gives the user the `admin` role, required to sign in to the generated admin panel |
 | `--name=` | Name of the user |
 | `--email=` | Email address (must not be used by another user) |
-| `--password=` | Password, at least 8 characters |
+| `--password=` | Password, at least 8 characters. Prefer `NAVETTE_PASSWORD`: options are visible to the other users of the machine in the process list |
 
 The password is hashed with scrypt, the email address is marked as verified, and the pending migrations run first.
 
