@@ -73,8 +73,18 @@ static tabs(): Record<string, Tab> {
 
 To decide the tabs on the page rather than on the resource, override `getTabs()` in a [custom list page](/resources/overview#customizing-resource-pages).
 
+### Adding icons to tabs
+
+`icon()` adds an icon before the tab label; `iconPosition('after')` moves it after:
+
+```ts
+import { Tab } from '@navette-js/panels';
+
+Tab.make('Active').icon('m-check-circle').iconPosition('after')
+```
+
 <Aside variant="warning">
-Tab icons, extra attributes and `excludeQueryWhenResolvingRecord()` are not available yet.
+Extra attributes on tabs and `excludeQueryWhenResolvingRecord()` are not available yet.
 </Aside>
 
 ## Authorization

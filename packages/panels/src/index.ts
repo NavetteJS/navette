@@ -2199,6 +2199,13 @@ export class Tab {
     badge(resolver: () => number | string | null | Promise<number | string | null>): this { this._badge = resolver; return this; }
     badgeColor(color: string): this { this._badgeColor = color; this._hasBadgeColor = true; return this; }
     query(modifier: (query: any) => void): this { this._query = modifier; return this; }
+    private _icon: string | null = null;
+    private _iconPosition: 'before' | 'after' = 'before';
+    /** Icon of the tab, before its label (or after, with `iconPosition('after')`). */
+    icon(name: string | null): this { this._icon = name; return this; }
+    iconPosition(position: 'before' | 'after'): this { this._iconPosition = position; return this; }
+    getIcon(): string | null { return this._icon; }
+    getIconPosition(): 'before' | 'after' { return this._iconPosition; }
     getLabel(key: string): string { return this._label ?? ucfirst(key.replace(/[_-]+/g, ' ')); }
     hasBadge(): boolean { return this._badge !== null; }
     async getBadge(): Promise<number | string | null> { return this._badge ? this._badge() : null; }
@@ -2253,7 +2260,7 @@ class ResourceTabs extends SchemaComponent {
  ${d}?.badgeIconHtml &&
  ${d}?.badgeIconPosition === 'after'
  "><span x-html="${d}.badgeIconHtml"></span></template></span></template>` : '';
-            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})" class="${cls(['fi-tabs-item', { 'fi-active': k === active }])}"><span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${badge}</button>`;
+            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})" class="${cls(['fi-tabs-item', { 'fi-active': k === active }])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}${badge}</button>`;
         });
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${Math.max(tabs.findIndex(([k]) => k === active), 0) + 1},

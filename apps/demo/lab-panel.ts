@@ -5,7 +5,7 @@ import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Checkbox, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
     DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
-    ReplicateAction, type AuthProvider, type Login,
+    ReplicateAction, Tab, type AuthProvider, type Login,
 } from '@navette-js/panels';
 import { Section } from '@navette-js/schemas';
 import { Color } from '@navette-js/support';
@@ -54,6 +54,14 @@ class LabProducts extends Resource {
     static navigationGroup = 'Tables';
     static recordTitleAttribute = 'name';
     static adapter = new ObjectionAdapter(LabProduct);
+
+    static tabs(): Record<string, Tab> {
+        return {
+            '': Tab.make('All').icon('m-squares-2x2'),
+            visible: Tab.make('Visible').icon('m-eye').query((query) => { query.where('is_visible', 1); }),
+            low: Tab.make('Low stock').icon('m-exclamation-triangle').iconPosition('after').query((query) => { query.where('qty', '<', 10); }).badge(async () => (await LabProduct.query().where('qty', '<', 10).resultSize())).badgeColor('warning'),
+        };
+    }
 
     static form(schema: any) {
         return schema.columns(2).components([
