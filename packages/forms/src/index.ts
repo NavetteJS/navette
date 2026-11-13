@@ -12,7 +12,12 @@ import TextAlign from '@tiptap/extension-text-align';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import Highlight from '@tiptap/extension-highlight';
-import Image from '@tiptap/extension-image';
+import { RICH_CONTENT_EXTENSIONS, SizedImage, customRichContentExtensions, registerTextColors, sanitizeCssColor, TextColor, textColorsForJs, MentionProvider, type CustomBlockClass } from './rich-content.ts';
+export { CustomBlockNode, GridColumnNode, GridNode, LeadNode, MentionNode, MentionProvider, MergeTagNode, registerRichContentExtensions, RichContentCustomBlock, RichContentRenderer, sanitizeCssColor, SizedImage, SmallMark, TextColor, TextColorMark, type CustomBlockClass } from './rich-content.ts';
+import { RichEditorTool } from './rich-editor-tool.ts';
+export { RichEditorTool, type RichEditorToolDefinition } from './rich-editor-tool.ts';
+import { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
+export { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
 import { TableKit } from '@tiptap/extension-table';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
@@ -1769,24 +1774,25 @@ export class ToggleButtons extends Field {
     }
 }
 
-// Server-side TipTap schema: the nodes and marks the rich editor's default toolbar can produce.
-// Not supported yet: grids, custom blocks, mentions, merge tags, text color, "lead" and "small".
-const RICH_EXTENSIONS = [StarterKit, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'start' }), Subscript, Superscript, Highlight, Image, TableKit];
+// Server-side TipTap schema: the nodes and marks the rich editor can produce, and the extensions your application registers.
+const richExtensions = () => [StarterKit, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'start' }), Subscript, Superscript, Highlight, SizedImage, TableKit, ...RICH_CONTENT_EXTENSIONS, ...customRichContentExtensions];
 type RichDocument = { type: 'doc'; content?: unknown[] };
 const isRichDocument = (value: unknown): value is RichDocument => !!value && typeof value === 'object' && (value as any).type === 'doc';
 const richText = (node: any): string => (typeof node?.text === 'string' ? node.text : '') + (Array.isArray(node?.content) ? node.content.map(richText).join('') : '');
-const hasRichContent = (node: any): boolean => node?.type === 'image' || node?.type === 'horizontalRule' || (Array.isArray(node?.content) && node.content.some(hasRichContent));
+const hasRichContent = (node: any): boolean => ['image', 'horizontalRule', 'mergeTag', 'mention', 'customBlock'].includes(node?.type) || (Array.isArray(node?.content) && node.content.some(hasRichContent));
 /** Stored HTML → TipTap document. Parsing drops anything the schema does not know (scripts, event attributes, `javascript:` links). */
-export function richHtmlToDocument(html: string | null | undefined): RichDocument { return generateJSON(html ?? '', RICH_EXTENSIONS) as RichDocument; }
+export function richHtmlToDocument(html: string | null | undefined): RichDocument { return generateJSON(html ?? '', richExtensions()) as RichDocument; }
 /**
  * TipTap document → HTML to save, or null if empty or invalid. The document comes from the browser,
  * so it is rendered then re-parsed to keep only what the schema accepts.
  */
+/** HTML of a document already sanitized (`RichContentRenderer`): no re-parsing. */
+export function renderRichDocument(document: unknown): string { return generateHTML(document as any, richExtensions()); }
 export function richDocumentToHtml(document: unknown): string | null {
     if (!isRichDocument(document)) return null;
     try {
-        const clean = generateJSON(generateHTML(document as any, RICH_EXTENSIONS), RICH_EXTENSIONS);
-        return richText(clean).trim() === '' && !hasRichContent(clean) ? null : generateHTML(clean, RICH_EXTENSIONS);
+        const clean = generateJSON(generateHTML(document as any, richExtensions()), richExtensions());
+        return richText(clean).trim() === '' && !hasRichContent(clean) ? null : generateHTML(clean, richExtensions());
     } catch { return null; }
 }
 
@@ -1816,6 +1822,18 @@ async function storeEditorAttachment(field: Field, id: string | null, options: {
 }
 /** Tools of the rich editor's toolbar, in their default groups. */
 export const RICH_EDITOR_TOOLS = [['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'link'], ['h2', 'h3'], ['alignStart', 'alignCenter', 'alignEnd'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
+/** The editor selection sent by the browser with a toolbar action. */
+const selectionOf = (args: Record<string, unknown>) => (args.editorSelection ?? null) as { head?: unknown; anchor?: unknown; type?: string } | null;
+// `details` needs a TipTap extension the server schema does not have: its content would be lost on save.
+const BUILT_IN_TOOLS = new Map(RICH_EDITOR_TOOL_DEFINITIONS.filter((definition) => definition.name !== 'details').map((definition) => [definition.name, definition]));
+/** Custom blocks of an editor: a list, or groups of blocks by label. */
+export type CustomBlocks = CustomBlockClass[] | Record<string, CustomBlockClass[]>;
+
+/**
+ * Rich text editor (TipTap): the browser works on a document, the database receives HTML (or JSON with `json()`).
+ * Besides the starter kit: text colors, merge tags, mentions, custom blocks, columns, resizable images, and your own
+ * tools and TipTap extensions.
+ */
 export class RichEditor extends Field {
     private _toolbar: string[][] | null = null;
     private _disabledTools: string[] = [];
@@ -1825,19 +1843,43 @@ export class RichEditor extends Field {
     private _attachmentsDirectory: string | null = null;
     private _attachmentTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
     private _attachmentMaxSize = 12288;
+    private _customTools: RichEditorTool[] = [];
+    private _textColors: Record<string, TextColor> | null = null;
+    private _customTextColors = false;
+    private _mergeTags: Record<string, string> = {};
+    private _noMergeTagResults: string | null = null;
+    private _mentions: MentionProvider[] = [];
+    private _customBlocks: CustomBlocks = [];
+    private _minimalCustomBlockControls = false;
+    private _customBlocksGrid = false;
+    private _searchableCustomBlocks = false;
+    private _activePanel: string | null = null;
+    private _stickyToolbar = false;
+    private _resizableImages = false;
+    private _jsExtensions: string[] = [];
+    private _editorActions: Action[] = [];
     static make(name: string): RichEditor { return configured(new RichEditor(name)); }
-    /** Toolbar tools, by group (`[['bold', 'italic', 'link'], ['h2', 'h3'], ['undo', 'redo']]`); see `RICH_EDITOR_TOOLS`. */
+    /** Toolbar tools, by group (`[['bold', 'italic', 'link'], ['h2', 'h3'], ['undo', 'redo']]`); see `RICH_EDITOR_TOOLS` and `RICH_EDITOR_TOOL_DEFINITIONS`. */
     toolbarButtons(groups: string[][] | string[]): this {
         const list = (groups.length && typeof groups[0] === 'string' ? [groups as string[]] : groups as string[][]);
-        const known = new Set(RICH_EDITOR_TOOLS.flat());
-        const unknown = list.flat().filter((tool) => !known.has(tool));
-        if (unknown.length) throw new Error(`RichEditor: unknown toolbar buttons ${unknown.join(', ')} (available: ${[...known].join(', ')}).`);
         this._toolbar = list;
+        this.assertKnownTools();
         return this;
+    }
+    private assertKnownTools(): void {
+        if (!this._toolbar) return;
+        const unknown = this._toolbar.flat().filter((tool) => !this.findTool(tool));
+        if (unknown.length) throw new Error(`RichEditor: unknown toolbar buttons ${unknown.join(', ')} (available: ${[...BUILT_IN_TOOLS.keys(), ...this._customTools.map((tool) => tool.getName())].join(', ')}).`);
     }
     /** Removes buttons; with no argument, removes them all. */
     disableToolbarButtons(tools: string[] = []): this { if (!tools.length) this._toolbar = []; this._disabledTools = [...this._disabledTools, ...tools]; return this; }
     disableAllToolbarButtons(condition = true): this { if (condition) this._toolbar = []; return this; }
+    /** Your own toolbar buttons (or replacements of built-in ones, by name); place them with `toolbarButtons()`. */
+    tools(tools: RichEditorTool[]): this { this._customTools = [...this._customTools.filter((tool) => !tools.some((other) => other.getName() === tool.getName())), ...tools]; this.assertKnownTools(); return this; }
+    /** Actions mounted by your tools (`RichEditorTool.make('x').action()`), run with the editor selection in `arguments.editorSelection`. */
+    editorActions(actions: Action[]): this { this._editorActions = [...this._editorActions, ...actions]; return this; }
+    /** Browser TipTap extensions: URLs of ES modules exporting an extension (or an array of them). Register their server side with `registerRichContentExtensions()`. */
+    extensions(urls: string[]): this { this._jsExtensions = [...this._jsExtensions, ...urls]; return this; }
     /** Saves the content as the editor's JSON document instead of HTML. */
     json(condition = true): this { this._json = condition; return this; }
     placeholder(text: string | null): this { this._richPlaceholder = text; return this; }
@@ -1848,8 +1890,39 @@ export class RichEditor extends Field {
     fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
     /** Maximum size of attached files, in kilobytes. */
     fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    /** Text colors offered by the `textColor` tool (the Tailwind palette by default): `{ brand: TextColor.make('Brand', '#0ea5e9', '#38bdf8') }`. */
+    textColors(colors: Record<string, TextColor> | null): this { this._textColors = colors; if (colors) registerTextColors(colors); return this; }
+    getTextColors(): Record<string, TextColor> { return this._textColors ?? TextColor.getDefaults(); }
+    /** Lets users pick any color, besides the listed ones. */
+    customTextColors(condition = true): this { this._customTextColors = condition; return this; }
+    /** Merge tags users insert (`mergeTags` tool and `{{` in the text), replaced by values when the content is rendered: `['name', 'today']` or `{ name: 'Name' }`. */
+    mergeTags(tags: string[] | Record<string, string>): this { this._mergeTags = Array.isArray(tags) ? Object.fromEntries(tags.map((tag) => [tag, tag])) : { ...tags }; return this; }
+    noMergeTagSearchResultsMessage(message: string | null): this { this._noMergeTagResults = message; return this; }
+    /** Mentions: `[MentionProvider.make('@').items({ 1: 'Ada' })]`. */
+    mentions(providers: MentionProvider[]): this { this._mentions = providers; return this; }
+    /** Custom blocks (`customBlocks` tool), as a list or grouped by label. */
+    customBlocks(blocks: CustomBlocks): this { this._customBlocks = blocks; return this; }
+    minimalCustomBlockControls(condition = true): this { this._minimalCustomBlockControls = condition; return this; }
+    /** Shows the blocks of the panel in a grid. */
+    customBlocksGrid(condition = true): this { this._customBlocksGrid = condition; return this; }
+    /** Adds a search field to the blocks panel. */
+    searchableCustomBlocks(condition = true): this { this._searchableCustomBlocks = condition; return this; }
+    /** Panel open when the editor loads (`customBlocks`, `mergeTags`). */
+    activePanel(panel: string | null): this { this._activePanel = panel; return this; }
+    /** Keeps the toolbar visible while scrolling the content. */
+    stickyToolbar(condition = true): this { this._stickyToolbar = condition; return this; }
+    /** Lets users resize images with handles; the size is saved on the image. */
+    resizableImages(condition = true): this { this._resizableImages = condition; return this; }
     private attachmentsStorage(): FileStorage | null { return this._attachmentsStorage ?? FileUpload.storage; }
-    private tools(): string[][] { return (this._toolbar ?? RICH_EDITOR_TOOLS).map((group) => group.filter((tool) => !this._disabledTools.includes(tool) && (tool !== 'attachFiles' || this.attachmentsStorage() !== null))).filter((group) => group.length); }
+    private findTool(name: string): RichEditorTool | null {
+        const custom = this._customTools.find((tool) => tool.getName() === name);
+        if (custom) return custom;
+        const definition = BUILT_IN_TOOLS.get(name);
+        return definition ? RichEditorTool.fromDefinition(definition) : null;
+    }
+    private toolGroups(): string[][] { return (this._toolbar ?? RICH_EDITOR_TOOLS).map((group) => group.filter((tool) => !this._disabledTools.includes(tool) && (tool !== 'attachFiles' || this.attachmentsStorage() !== null))).filter((group) => group.length); }
+    private blockGroups(): [string, CustomBlockClass[]][] { return Array.isArray(this._customBlocks) ? [['', this._customBlocks]] : Object.entries(this._customBlocks); }
+    getCustomBlock(id: unknown): CustomBlockClass | null { return this.blockGroups().flatMap(([, blocks]) => blocks).find((block) => block.getId() === id) ?? null; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && value.trim().startsWith('{')) { try { const parsed = JSON.parse(value); if (isRichDocument(parsed)) return parsed; } catch { /* HTML */ } }
         return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : '');
@@ -1866,9 +1939,36 @@ export class RichEditor extends Field {
         return [...rules, ...this._rules];
     }
     getExposedMethods(): string[] { return ['getMentionSearchResultsForJs', 'getMentionLabelsForJs', 'getCustomBlockPreviewsForJs', 'getUploadedFileAttachmentTemporaryUrl', 'saveUploadedFileAttachmentAndGetUrl']; }
-    getMentionSearchResultsForJs(): unknown[] { return []; }
-    getMentionLabelsForJs(): unknown[] { return []; }
-    getCustomBlockPreviewsForJs(): unknown[] { return []; }
+    private mentionProvider(char: unknown): MentionProvider | null { return this._mentions.find((provider) => provider.getTriggerCharacter() === char) ?? this._mentions[0] ?? null; }
+    /** Mention search, for the editor's JavaScript: `[{ id, label }]`. */
+    async getMentionSearchResultsForJs(search: unknown = '', triggerCharacter: unknown = '@'): Promise<{ id: string; label: string }[]> {
+        const provider = this.mentionProvider(triggerCharacter ?? '@');
+        if (!provider || (await this.isDisabled())) return [];
+        return Object.entries(await provider.getSearchResults(typeof search === 'string' ? search.slice(0, 200) : '')).slice(0, 50).map(([id, label]) => ({ id, label }));
+    }
+    /** Current labels of mentioned ids, by trigger character. */
+    async getMentionLabelsForJs(mentions: unknown = []): Promise<Record<string, Record<string, string>>> {
+        const byChar = new Map<string, string[]>();
+        for (const mention of Array.isArray(mentions) ? mentions.slice(0, 500) : []) {
+            const char = String((mention as any)?.triggerCharacter ?? '@'), id = (mention as any)?.id;
+            if (id === null || id === undefined) continue;
+            byChar.set(char, [...(byChar.get(char) ?? []), String(id)]);
+        }
+        const labels: Record<string, Record<string, string>> = {};
+        for (const [char, ids] of byChar) { const provider = this.mentionProvider(char); if (provider) labels[char] = await provider.getLabels(ids); }
+        return labels;
+    }
+    /** Previews of inserted blocks, for the editor's JavaScript. */
+    getCustomBlockPreviewsForJs(customBlocks: unknown = []): { key: number; label: string; preview: string; shouldApplyProseStylingToPreview: boolean }[] {
+        const previews: { key: number; label: string; preview: string; shouldApplyProseStylingToPreview: boolean }[] = [];
+        for (const item of Array.isArray(customBlocks) ? customBlocks.slice(0, 200) : []) {
+            const block = this.getCustomBlock((item as any)?.id);
+            const config = (item as any)?.config && typeof (item as any).config === 'object' && !Array.isArray((item as any).config) ? (item as any).config : {};
+            if (!block || !Number.isInteger((item as any)?.key)) continue;
+            previews.push({ key: (item as any).key, label: block.getPreviewLabel(config), preview: Buffer.from(block.toPreviewHtml(config) ?? '').toString('base64'), shouldApplyProseStylingToPreview: block.shouldApplyProseStylingToPreview(config) });
+        }
+        return previews;
+    }
     /**
      * URL of a file the editor just uploaded: the file is checked (type from its content, size), stored, and its public URL returned.
      * It stays stored even if the form is not saved.
@@ -1876,15 +1976,19 @@ export class RichEditor extends Field {
     async getUploadedFileAttachmentTemporaryUrl(args: unknown = {}): Promise<string | null> {
         const id = String((args as any)?.attachment ?? '');
         const storage = this.attachmentsStorage();
-        if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.tools().flat().includes('attachFiles') || (await this.isDisabled())) return null;
+        if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.toolGroups().flat().includes('attachFiles') || (await this.isDisabled())) return null;
         return storeEditorAttachment(this, id, { storage, directory: this._attachmentsDirectory, types: this._attachmentTypes, maxSize: this._attachmentMaxSize });
     }
     async saveUploadedFileAttachmentAndGetUrl(args: unknown = {}): Promise<string | null> { return this.getUploadedFileAttachmentTemporaryUrl(args); }
 
-    /** Toolbar "link" action: a modal (URL, new tab), then commands sent back to the browser editor. */
+    /** Sends commands to the editor in the browser (after an action), on the given selection. */
+    runCommands(livewire: any, commands: { name: string; arguments?: unknown[] }[], editorSelection: unknown = null): void {
+        const key = this.getKey()!;
+        livewire.dispatch('run-rich-editor-commands', { awaitSchemaComponent: key, livewireId: livewire.id, key, editorSelection, commands: commands.map((command) => ({ name: command.name, arguments: command.arguments ?? [] })) });
+    }
+    /** Toolbar actions: link, text color, custom block, and the ones of `editorActions()`. */
     getActions(): Action[] {
         const tr = (name: string) => t(`filament-forms::components.rich_editor.actions.link.${name}`);
-        const key = this.getKey()!;
         return [
             ...this.getHintActions(),
             Action.make('link').label(tr('label')).modalHeading(tr('modal.heading')).modalWidth('lg')
@@ -1896,21 +2000,96 @@ export class RichEditor extends Field {
                     Checkbox.make('shouldOpenInNewTab').label(tr('modal.form.should_open_in_new_tab.label')),
                 ])
                 .action(({ livewire, arguments: args, data }) => {
-                    const selection = (args.editorSelection ?? null) as { head?: unknown; anchor?: unknown } | null;
+                    const selection = selectionOf(args);
                     const single = selection?.head === selection?.anchor;
                     const url = typeof data.url === 'string' && data.url !== '' ? data.url : null;
-                    const commands = [
+                    this.runCommands(livewire, [
                         ...(single ? [{ name: 'extendMarkRange', arguments: ['link'] }] : []),
-                        url ? { name: 'setLink', arguments: [{ href: url, target: data.shouldOpenInNewTab ? '_blank' : null }] } : { name: 'unsetLink', arguments: [] },
-                    ];
-                    livewire.dispatch('run-rich-editor-commands', { awaitSchemaComponent: key, livewireId: livewire.id, key, editorSelection: selection, commands });
+                        url ? { name: 'setLink', arguments: [{ href: url, target: data.shouldOpenInNewTab ? '_blank' : null }] } : { name: 'unsetLink' },
+                    ], selection);
                 }),
+            this.textColorAction(),
+            this.customBlockAction(),
+            ...this._editorActions,
         ];
+    }
+    private textColorAction(): Action {
+        const tr = (name: string) => t(`filament-forms::components.rich_editor.actions.text_color.${name}`);
+        return Action.make('textColor').label(tr('label')).modalHeading(tr('modal.heading')).modalWidth('lg')
+            .fillForm(({ arguments: args }) => {
+                const color = typeof args.color === 'string' ? args.color : null;
+                if (!color) return {};
+                const known = Object.hasOwn(this.getTextColors(), color);
+                return { color: known ? color : null, customColor: this._customTextColors && !known ? color : null };
+            })
+            .schema(() => {
+                const options = Object.fromEntries(Object.entries(this.getTextColors()).map(([name, color]) => [name, `<div class="fi-fo-rich-editor-text-color-select-option"><div class="fi-fo-rich-editor-text-color-select-option-preview" style="--color: ${e(sanitizeCssColor(color.getColor()) ?? '')}; --dark-color: ${e(sanitizeCssColor(color.getDarkColor()) ?? '')}"></div><div>${e(color.getLabel() ?? name)}</div></div>`]));
+                return [
+                    ...(Object.keys(options).length ? [Select.make('color').label(tr('modal.form.color.label')).options(options).allowHtml().native(false).live()] : []),
+                    ...(this._customTextColors ? [ColorPicker.make('customColor').label(tr('modal.form.custom_color.label')).visible(({ get }) => !get('color'))] : []),
+                ];
+            })
+            .action(({ livewire, arguments: args, data }) => {
+                const selection = selectionOf(args);
+                const single = selection?.head === selection?.anchor;
+                const picked = typeof data.color === 'string' && Object.hasOwn(this.getTextColors(), data.color) ? data.color : this._customTextColors ? sanitizeCssColor(data.customColor) : null;
+                this.runCommands(livewire, picked
+                    ? [...(single ? [{ name: 'extendMarkRange', arguments: ['textColor'] }] : []), { name: 'setTextColor', arguments: [{ color: picked }] }]
+                    : [...(single ? [{ name: 'extendMarkRange', arguments: ['textColor'] }] : []), { name: 'unsetTextColor' }], selection);
+            });
+    }
+    /** Modal of a custom block, built from the block class named in the arguments (`id`): insert or edit. */
+    private customBlockAction(): Action {
+        const blockOf = (args: Record<string, unknown> | undefined) => this.getCustomBlock(args?.id);
+        const configured = (args: Record<string, unknown> | undefined): Action | null => { const block = blockOf(args); return block ? block.configureEditorAction(Action.make('customBlock')) : null; };
+        const argumentsOf = (livewire: any) => livewire?.mountedActions?.find?.((mounted: any) => mounted.name === 'customBlock')?.arguments ?? {};
+        return Action.make('customBlock').modalWidth('lg')
+            .modalHeading(({ arguments: args }) => blockOf(args)?.getLabel() ?? null)
+            .modalSubmitActionLabel(({ arguments: args }) => t(`filament-forms::components.rich_editor.actions.custom_block.modal.actions.${args.mode === 'edit' ? 'save' : 'insert'}.label`))
+            .modalHidden(async (ctx) => { const action = configured(ctx.arguments); return !action || (await action.isModalHidden(ctx)); })
+            .fillForm(({ arguments: args }) => (args.config && typeof args.config === 'object' && !Array.isArray(args.config) ? args.config as Record<string, unknown> : {}))
+            .schema((schema: any) => configured(argumentsOf(schema.livewire))?.applySchema(schema) ?? schema.components([]))
+            .action(({ livewire, arguments: args, data }) => {
+                const block = blockOf(args);
+                if (!block) return;
+                const config = data ?? {};
+                const content = { type: 'customBlock', attrs: { config, id: block.getId(), label: block.getPreviewLabel(config), preview: Buffer.from(block.toPreviewHtml(config) ?? '').toString('base64'), shouldApplyProseStylingToPreview: block.shouldApplyProseStylingToPreview(config) } };
+                const selection = { ...(selectionOf(args) ?? {}) } as { head?: number; anchor?: number; type?: string };
+                if (args.dragPosition !== undefined && args.dragPosition !== null) { this.runCommands(livewire, [{ name: 'insertContentAt', arguments: [args.dragPosition, content] }]); return; }
+                if (selection.type === 'node' && args.mode === 'insert') { this.runCommands(livewire, [{ name: 'insertContentAt', arguments: [Number(selection.anchor ?? -1) + 1, content] }]); return; }
+                if (args.mode === 'edit' && selection.type !== 'node') { selection.type = 'node'; selection.anchor = Number(selection.anchor ?? 1) - 1; delete selection.head; }
+                this.runCommands(livewire, [{ name: 'insertContent', arguments: [content] }], selection);
+            });
+    }
+
+    private customBlocksPanelHtml(key: string): string {
+        const searchable = this._searchableCustomBlocks;
+        const groups = this.blockGroups();
+        const allLabels = groups.flatMap(([label, blocks]) => [label, ...blocks.map((block) => block.getLabel())]).filter(Boolean);
+        const parts: string[] = [];
+        if (searchable) parts.push(`<div class="fi-fo-rich-editor-custom-blocks-search">${icon('m-magnifying-glass')}<input type="search" x-model="customBlockSearch" x-on:keydown.enter.prevent aria-label="${e(t('filament-forms::components.rich_editor.custom_blocks.search_label'))}" placeholder="${e(t('filament-forms::components.rich_editor.custom_blocks.search_prompt'))}" class="fi-fo-rich-editor-custom-blocks-search-input" /></div>`);
+        const list = groups.map(([groupLabel, blocks]) => {
+            const groupLabels = [groupLabel, ...blocks.map((block) => block.getLabel())];
+            const show = (labels: string[]) => (searchable ? ` x-show="${e(`matchesCustomBlockSearch(${js(labels)})`)}"` : '');
+            const header = groupLabel ? `<h4${show(groupLabels)} class="fi-fo-rich-editor-custom-blocks-group-header">${e(groupLabel)}</h4>` : '';
+            const buttons = blocks.map((block) => {
+                const id = block.getId();
+                const blockIcon = block.getIcon();
+                return `<button draggable="true" type="button" data-block-id="${e(id)}" x-data="{ isLoading: false }"${show([groupLabel, block.getLabel()])} x-on:click="${e(`isLoading = true\n$wire.mountAction('customBlock', { editorSelection, id: ${js(id)}, mode: 'insert' }, { schemaComponent: ${js(key)} })`)}" x-on:dragstart="${e(`$event.dataTransfer.setData('customBlock', ${js(id)})`)}" x-on:open-modal.window="isLoading = false" x-on:run-rich-editor-commands.window="isLoading = false" class="fi-fo-rich-editor-custom-block-btn">${blockIcon ? `<span x-show="! isLoading" class="fi-fo-rich-editor-custom-block-icon">${icon(blockIcon)}</span>` : ''}${loadingIndicator(new Attributes({ 'x-show': 'isLoading', 'x-cloak': '' }))}<span>${e(block.getLabel())}</span></button>`;
+            }).join('');
+            return `${header}<div${show(groupLabels)} class="${cls(['fi-fo-rich-editor-custom-blocks-list', { 'fi-fo-rich-editor-custom-blocks-grid': this._customBlocksGrid }])}">${buttons}</div>`;
+        }).join('');
+        const noResults = searchable ? `<p x-show="${e(`! matchesCustomBlockSearch(${js(allLabels)})`)}" x-cloak role="status" class="fi-fo-rich-editor-custom-blocks-no-results">${e(t('filament-forms::components.rich_editor.custom_blocks.no_search_results_message'))}</p>` : '';
+        return `${parts.join('')}<div class="fi-fo-rich-editor-custom-blocks-ctn">${list}${noResults}</div>`;
+    }
+    private mergeTagsPanelHtml(): string {
+        return Object.entries(this._mergeTags).map(([id, label]) => `<button draggable="true" type="button" x-on:click="${e(`insertMergeTag(${js(id)})`)}" x-on:dragstart="${e(`$event.dataTransfer.setData('mergeTag', ${js(id)})`)}" class="fi-fo-rich-editor-merge-tag-btn"><span data-type="mergeTag" data-id="${e(id)}">${e(label)}</span></button>`).join('');
     }
 
     async toHtml(): Promise<string> {
-        let html = views.render('filament-forms::components.rich-editor', { livewireId: this.livewire.id, key: this.getKey(), statePath: this.getStatePath(), label: await this.getLabel(), js });
-        // Toolbar: the snapshot's buttons, regrouped as configured.
+        const key = this.getKey()!;
+        let html = views.render('filament-forms::components.rich-editor', { livewireId: this.livewire.id, key, statePath: this.getStatePath(), label: await this.getLabel(), js });
+        // Toolbar: the configured groups, each tool rendered from its definition.
         const toolbarStart = html.indexOf('data-rich-editor-toolbar="main"');
         if (toolbarStart >= 0) {
             const open = html.indexOf('>', toolbarStart) + 1;
@@ -1919,23 +2098,41 @@ export class RichEditor extends Field {
             const close = message < 0 ? -1 : html.lastIndexOf('<div', message);
             if (close < 0) throw new Error('RichEditor: unexpected view markup (toolbar end not found).');
             const body = html.slice(open, close);
-            const buttons = new Map<string, string>();
-            for (const match of body.matchAll(/<button data-rich-editor-tool="([A-Za-z0-9]+)"[\s\S]*?<\/button>/g)) buttons.set(match[1], match[0]);
-            const groups = this.tools().map((group) => `<div class="fi-fo-rich-editor-toolbar-group">${group.map((tool) => buttons.get(tool) ?? '').join('')}</div>`).join('');
+            const groups = this.toolGroups().map((group) => `<div class="fi-fo-rich-editor-toolbar-group">${group.map((tool) => this.findTool(tool)?.toHtml() ?? '').join('')}</div>`).join('');
             const endOfToolbar = body.lastIndexOf('</div>');
             html = html.slice(0, open) + groups + body.slice(endOfToolbar) + html.slice(close);
+            if (this._stickyToolbar) html = html.replace('class="fi-fo-rich-editor-toolbar "', 'class="fi-fo-rich-editor-toolbar fi-fo-rich-editor-sticky-toolbar"');
         }
-        const attach = this.tools().flat().includes('attachFiles');
-        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.rich_editor.${key}`, replace);
+        // Panels: custom blocks and merge tags.
+        const blocksStart = html.indexOf('<div class="fi-fo-rich-editor-custom-blocks-ctn">');
+        if (blocksStart >= 0) {
+            const blocksEnd = html.indexOf('</div>', blocksStart) + '</div>'.length;
+            html = html.slice(0, blocksStart) + this.customBlocksPanelHtml(key) + html.slice(blocksEnd);
+        }
+        const tagsStart = html.indexOf('<div class="fi-fo-rich-editor-merge-tags-list">');
+        if (tagsStart >= 0) {
+            const open = html.indexOf('>', tagsStart) + 1;
+            html = html.slice(0, open) + this.mergeTagsPanelHtml() + html.slice(html.indexOf('</div>', open));
+        }
+        const attach = this.toolGroups().flat().includes('attachFiles');
+        const mentions = await Promise.all(this._mentions.map((provider) => provider.toJs()));
         html = html.replace('canAttachFiles: true,', `canAttachFiles: ${attach ? 'true' : 'false'},`)
             .replace('maxFileSize: 12288,', `maxFileSize: ${this._attachmentMaxSize},`)
             .replace(/maxFileSizeValidationMessage: '[^']*',/, () => `maxFileSizeValidationMessage: ${js(`Uploaded files must not be greater than ${this._attachmentMaxSize} kilobytes.`)},`)
             .replace(/acceptedFileTypes: JSON\.parse\('[^']*'\),/, () => `acceptedFileTypes: ${js(this._attachmentTypes)},`)
             .replace(/acceptedFileTypesValidationMessage: '[^']*',/, () => `acceptedFileTypesValidationMessage: ${js(`Uploaded files must be of type: ${this._attachmentTypes.join(', ')}.`)},`)
+            .replace('activePanel: null,', () => `activePanel: ${js(this._activePanel)},`)
+            .replace('extensions: [],', () => `extensions: ${js(this._jsExtensions)},`)
+            .replace('hasResizableImages: false,', `hasResizableImages: ${this._resizableImages ? 'true' : 'false'},`)
+            .replace('hasMinimalCustomBlockControls: false,', `hasMinimalCustomBlockControls: ${this._minimalCustomBlockControls ? 'true' : 'false'},`)
+            .replace('hasStickyToolbar: false,', `hasStickyToolbar: ${this._stickyToolbar ? 'true' : 'false'},`)
+            .replace('mentions: [],', () => `mentions: ${js(mentions)},`)
+            .replace('mergeTags: [],', () => `mergeTags: ${js(Object.keys(this._mergeTags).length ? this._mergeTags : [])},`)
+            .replace(/noMergeTagSearchResultsMessage: '[^']*',/, () => `noMergeTagSearchResultsMessage: ${js(this._noMergeTagResults ?? t('filament-forms::components.rich_editor.no_merge_tag_search_results_message'))},`)
+            .replace(/textColors: JSON\.parse\('[^']*'\),/, () => `textColors: ${js(textColorsForJs(this.getTextColors()))},`)
             .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
             .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this._liveMode === 'blur' ? 'true' : 'false'},`)
             .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this._liveMode === 'live' ? 'true' : 'false'})`);
-        void tr;
         return this.wrap(html, { labelAsDiv: true });
     }
 }

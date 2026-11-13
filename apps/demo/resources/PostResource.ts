@@ -1,7 +1,8 @@
 // Blog posts: form, infolist, table, comments, and List / Create / Edit / View pages.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';
-import { DatePicker, FileUpload, RichEditor, Select, TagsInput, TextInput, Toggle, type FileUploadEntry } from '@navette-js/forms';
+import { DatePicker, FileUpload, MentionProvider, RICH_EDITOR_TOOLS, RichContentCustomBlock, RichEditor, Select, TagsInput, TextInput, Toggle, type FileUploadEntry } from '@navette-js/forms';
+import { e } from '@navette-js/support';
 import { IconEntry, ImageEntry, TextEntry } from '@navette-js/infolists';
 import { CreateAction, DeleteAction, DeleteBulkAction, EditAction, EditRecord, ManageRelatedRecords, Notification, Resource, ViewAction, ViewRecord } from '@navette-js/panels';
 import { Flex, Grid, Group, Section, type Schema } from '@navette-js/schemas';
@@ -53,6 +54,40 @@ const options = (model: typeof Author | typeof PostCategory) => ({
     search: async (search: string): Promise<[string, string][]> => (await knex()(model.tableName).whereRaw('lower(name) like ?', [`%${search.toLowerCase().replace(/[%_\\]/g, '')}%`]).orderBy('name').limit(50).select('id', 'name')).map((row: any) => [String(row.id), row.name]),
     label: async (value: string): Promise<string | null> => (/^\d+$/.test(value) ? ((await knex()(model.tableName).where({ id: Number(value) }).first('name')) as any)?.name ?? null : null),
 });
+
+/** A "call to action" button users insert in a post: a label and a link, configured in a modal. */
+export class CallToActionBlock extends RichContentCustomBlock {
+    static getId() { return 'callToAction'; }
+    static getLabel() { return 'Call to action'; }
+    static getIcon() { return 'o-cursor-arrow-rays'; }
+    static configureEditorAction(action: Action) {
+        return action.schema([
+            TextInput.make('label').required().maxLength(60),
+            TextInput.make('url').label('URL').required().url(),
+        ]);
+    }
+    static getPreviewLabel(config: Record<string, unknown>) { return `Call to action: ${String(config.label ?? '')}`; }
+    static toPreviewHtml(config: Record<string, unknown>) { return `<p><strong>${e(config.label)}</strong> → ${e(config.url)}</p>`; }
+    static toHtml(config: Record<string, unknown>) {
+        const url = String(config.url ?? '');
+        return /^https?:\/\//.test(url) ? `<p><a class="cta" href="${e(url)}">${e(config.label)}</a></p>` : null;
+    }
+}
+/**
+ * Editor of a post's content: text colors, a call-to-action block, an author merge tag and author mentions
+ * (left out for screenshot comparisons, which use the default toolbar).
+ */
+const postContentEditor = (name: string) => {
+    const editor = RichEditor.make(name).required();
+    if (process.env.NAVETTE_NO_THEMES) return editor;
+    const authors = options(Author);
+    return editor
+        .toolbarButtons([...RICH_EDITOR_TOOLS, ['textColor', 'customBlocks', 'mergeTags']])
+        .customBlocks([CallToActionBlock])
+        .mergeTags({ author: 'Author name', published_at: 'Publishing date' })
+        .mentions([MentionProvider.make('@').getSearchResultsUsing(async (search) => Object.fromEntries(await authors.search(search))).getLabelsUsing(async (ids) => Object.fromEntries((await Promise.all(ids.map(async (id) => [id, await authors.label(id)]))).filter(([, label]) => label)))])
+        .resizableImages();
+};
 
 /** Posts: tags and image are read and saved with the post. */
 class Posts extends ObjectionAdapter<Post> {
@@ -264,7 +299,7 @@ export class PostResource extends Resource {
                 TextInput.make('title').required().live({ onBlur: true }).maxLength(255)
                     .afterStateUpdated(({ operation, state, set }) => { if (operation === 'create') set('slug', slugify(String(state ?? ''))); }),
                 TextInput.make('slug').disabled().dehydrated().required().maxLength(255).unique({ ignoreRecord: true }),
-                RichEditor.make('content').required().columnSpan('full'),
+                postContentEditor('content').columnSpan('full'),
                 Select.make('author_id').label('Author').searchable().required().getSearchResultsUsing(authors.search).getOptionLabelUsing(authors.label),
                 Select.make('post_category_id').label('Post category').searchable().required().getSearchResultsUsing(categories.search).getOptionLabelUsing(categories.label),
                 DatePicker.make('published_at').label('Publishing date'),

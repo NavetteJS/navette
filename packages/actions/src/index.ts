@@ -50,6 +50,7 @@ export class Action implements Renderable {
     private _modalHeading: Lazy<string | null, ActionCallContext> = null;
     private _modalDescription: Lazy<string | HtmlString | null, ActionCallContext> = null;
     private _modalSubmitActionLabel: string | null = null;
+    private _lazySubmitLabel: ((ctx: ActionCallContext) => string | null) | null = null;
     private _modalIcon: string | null = null;
     private _icon: string | null = null;
     private _alpineClick: string | null = null;
@@ -91,7 +92,8 @@ export class Action implements Renderable {
     modalHeading(heading: Lazy<string | null, ActionCallContext>): this { this._modalHeading = heading; return this; }
     /** Text under the heading; an `HtmlString` is inserted as is (build it from escaped values). */
     modalDescription(description: Lazy<string | HtmlString | null, ActionCallContext>): this { this._modalDescription = description; return this; }
-    modalSubmitActionLabel(label: string | null): this { this._modalSubmitActionLabel = label; return this; }
+    /** Label of the submit button; a function receives the action context (its arguments…). */
+    modalSubmitActionLabel(label: string | null | ((ctx: ActionCallContext) => string | null)): this { if (typeof label === 'function') { this._lazySubmitLabel = label; this._modalSubmitActionLabel = null; } else { this._modalSubmitActionLabel = label; this._lazySubmitLabel = null; } return this; }
     modalIcon(name: string | null): this { this._modalIcon = name; return this; }
     private _badge: string | number | null | (() => string | number | null | Promise<string | number | null>) = null;
     private _badgeColor = 'primary';
@@ -375,7 +377,7 @@ export class Action implements Renderable {
         const confirmation = this._requiresConfirmation;
         // A confirmation is centered (md); a form is start-aligned (4xl), except at small widths.
         const width = this._modalWidth ?? (confirmation ? 'md' : '4xl');
-        const submitLabel = this._modalSubmitActionLabel ?? t(confirmation ? 'filament-actions::modal.actions.confirm.label' : 'filament-actions::modal.actions.submit.label');
+        const submitLabel = this._lazySubmitLabel?.(ctx) ?? this._modalSubmitActionLabel ?? t(confirmation ? 'filament-actions::modal.actions.confirm.label' : 'filament-actions::modal.actions.submit.label');
         // Hook order: custom content, schema, content footer, each between its before/after slots.
         const scopes = (ctx.livewire as any).getRenderHookScopes?.() ?? [];
         const hook = (name: string) => renderHook(name, scopes, { action: this });
