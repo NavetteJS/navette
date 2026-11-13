@@ -6,15 +6,16 @@ title: Multi-factor authentication
 
 Users sign in with their email address and password. Multi-factor authentication (MFA) adds a second step: after the password, a user who has set up a second factor must prove their identity again before the panel signs them in.
 
-Navette includes two methods, which you can enable together:
+Navette includes three methods, which you can enable together:
 
 - [App authentication](#app-authentication): a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Authy…), generated from a shared secret (time-based one-time passwords, RFC 6238), with optional single-use [recovery codes](#setting-up-recovery-codes).
+- [Email authentication](#email-authentication): a code sent to the user's email address.
 - [Security keys](#security-keys): a hardware key (YubiKey, Titan…) or a passkey saved by the device or a password manager (WebAuthn).
 
 Users set up their methods on their [profile page](/panels/users#editing-the-profile): enabling MFA adds a "Two-factor authentication" section to it, with the status of each method and the actions to set it up or turn it off.
 
 ```ts
-import { AppAuthentication, knexAuthProvider, Panel, SecurityKeyAuthentication } from '@navette-js/panels';
+import { AppAuthentication, EmailAuthentication, knexAuthProvider, Panel, SecurityKeyAuthentication } from '@navette-js/panels';
 
 Panel.make()
     .auth(knexAuthProvider(knex))
@@ -22,6 +23,7 @@ Panel.make()
     .profile()
     .multiFactorAuthentication([
         AppAuthentication.make().recoverable(),
+        EmailAuthentication.make(),
         SecurityKeyAuthentication.make(),
     ]);
 ```
@@ -30,7 +32,7 @@ When a user with at least one method set up signs in, the login page asks for th
 
 ## Storing the data
 
-The methods store their data through the panel's user provider. [`knexAuthProvider()`](/panels/users#using-the-knex-user-provider) implements everything they need, in two columns of the `users` table (`app_authentication_secret`, `app_authentication_recovery_codes`) and a `security_keys` table. Create them with `multiFactorAuthenticationSchema()` in a migration; it only adds what is missing, so it can run more than once:
+The methods store their data through the panel's user provider. [`knexAuthProvider()`](/panels/users#using-the-knex-user-provider) implements everything they need, in three columns of the `users` table (`app_authentication_secret`, `app_authentication_recovery_codes`, `has_email_authentication`) and a `security_keys` table. Create them with `multiFactorAuthenticationSchema()` in a migration; it only adds what is missing, so it can run more than once:
 
 ```ts
 import type { Knex } from '@navette-js/database';
@@ -41,7 +43,7 @@ export async function up(db: Knex): Promise<void> {
 }
 ```
 
-Projects created with `npm create navette` already have this migration, and both panels enable app authentication with recovery codes and security keys.
+Projects created with `npm create navette` already have this migration, and their panels enable the three methods.
 
 The column and table names can be changed, as long as the migration and the provider agree:
 
@@ -69,6 +71,10 @@ const users: AuthProvider = {
     // Recovery codes (with recoverable())
     getAppAuthenticationRecoveryCodes: async (user) => (await db.users.find(user.id)).recoveryCodes,
     saveAppAuthenticationRecoveryCodes: async (user, codes) => { await db.users.update(user.id, { recoveryCodes: codes }); },
+
+    // Email authentication
+    hasEmailAuthentication: async (user) => (await db.users.find(user.id)).emailCodes,
+    saveEmailAuthentication: async (user, enabled) => { await db.users.update(user.id, { emailCodes: enabled }); },
 
     // Security keys
     getSecurityKeys: async (user) => db.securityKeys.where({ userId: user.id }),
@@ -182,6 +188,55 @@ AppAuthentication.make()
 
 The secret is encrypted (AES-256-GCM) with a key derived from the panel's [`key()`](/panels/configuration) before it is stored. Changing the panel key makes the stored secrets unreadable: the users concerned can then only sign in with a recovery code, and set the app up again.
 
+## Email authentication
+
+`EmailAuthentication` sends a 6-digit code to the user's email address, through the panel's [mailer](/panels/users#sending-emails). The code is sent when the challenge appears (or when the user picks this method), and the user can ask for a new one. To turn the method on or off, the user enters a code sent when the modal opens.
+
+```ts
+import { EmailAuthentication, Panel } from '@navette-js/panels';
+
+Panel.make()
+    .mailer(smtpMailer)
+    .multiFactorAuthentication([
+        EmailAuthentication.make(),
+    ]);
+```
+
+A code works once, only for the user it was sent to, and only the last code sent is valid. At most two codes are sent per minute and per user.
+
+### Changing the email code expiration time
+
+A code is valid for 4 minutes:
+
+```ts
+EmailAuthentication.make()
+    .codeExpiryMinutes(2)
+```
+
+### Customizing email code generation
+
+```ts
+import { randomInt } from 'node:crypto';
+
+EmailAuthentication.make()
+    .generateCodeUsing(() => String(randomInt(100_000_000)).padStart(8, '0'))
+```
+
+Pass `null` to restore the default generator. Codes of 4 to 12 digits are accepted.
+
+### Sending the code yourself
+
+To use your own email template, or another channel, send the code with `sendCodeUsing()`; the panel's mailer is then not used:
+
+```ts
+EmailAuthentication.make()
+    .sendCodeUsing(async (user, code, minutes) => {
+        await mailer.send({ to: user.email, template: 'sign-in-code', data: { code, minutes } });
+    })
+```
+
+Pending codes are kept in memory, hashed; with several instances, use a [shared cache store](#running-several-instances).
+
 ## Security keys
 
 `SecurityKeyAuthentication` lets users register security keys and passkeys, and use one of them to sign in. A user can register several keys (10 at most by default), each with a name; the profile lists them with the date they were added or last used.
@@ -262,7 +317,7 @@ panel.multiFactorAuthentication([AppAuthentication.make()], { isRequired: true, 
 
 ## Running several instances
 
-Two short-lived values are kept in memory by default: the last accepted app code of each secret (so that it cannot be used twice), and the pending security key challenges (between the page asking for the key and the answer). With several processes behind a load balancer, keep them in a shared store, such as Redis:
+Short-lived values are kept in memory by default: the last accepted app code of each secret (so that it cannot be used twice), the pending email codes, and the pending security key challenges (between the page asking for the key and the answer). With several processes behind a load balancer, keep them in a shared store, such as Redis:
 
 ```ts
 import { useMultiFactorCacheStore, type MultiFactorCacheStore } from '@navette-js/panels';
@@ -283,7 +338,7 @@ The attempt counters (five challenge answers per minute and per user) are kept p
 
 ## Creating a custom multi-factor authentication provider
 
-A method is an object implementing `MultiFactorAuthenticationProvider`: an SMS code, a code sent by email, a push notification… Here, a code sent by SMS:
+A method is an object implementing `MultiFactorAuthenticationProvider`: an SMS code, a code sent by email, a push notification… Here, a code sent by SMS (for an email code, use the built-in [email authentication](#email-authentication)):
 
 ```ts
 import { randomInt } from 'node:crypto';

@@ -5,7 +5,7 @@ import { Action } from '@navette-js/actions';
 import { Field, Halt, OneTimeCodeInput, Radio, Step, TextInput } from '@navette-js/forms';
 import { Actions, Component, Flex, Group, Html, Image, Section, Text, type ComponentContext } from '@navette-js/schemas';
 import { HtmlString, e, js } from '@navette-js/support';
-import { t } from '@navette-js/support/i18n';
+import { t, tc } from '@navette-js/support/i18n';
 import { button } from '@navette-js/support/ui';
 import { readToken, signToken } from './auth.ts';
 import { Notification } from './notifications.ts';
@@ -760,6 +760,162 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
                 if (!key) return;
                 await this.getStore(panel).deleteSecurityKey(user, key.id);
                 Notification.make().success().title(t(`${group}.notifications.removed.title`)).send();
+            });
+    }
+}
+
+// ------------------------------------------------------------------ email codes
+/** Where the email authentication flag is kept; by default, the panel's auth provider (`knexAuthProvider`: `has_email_authentication`). */
+export type EmailAuthenticationStore = Required<Pick<AuthProvider, 'hasEmailAuthentication' | 'saveEmailAuthentication'>>;
+
+/** One-time code field with a "Send a new code by email" link, which asks the server for another code. */
+export class EmailCodeInput extends OneTimeCodeInput {
+    protected _resend: ((field: EmailCodeInput) => MaybePromise<void>) | null = null;
+    protected _resendLabel = '';
+    static make(name: string): EmailCodeInput { return new this(name); }
+    /** What the link does (send a new code); without it, there is no link. */
+    resendUsing(callback: ((field: EmailCodeInput) => MaybePromise<void>) | null, label = ''): this {
+        this._resend = callback;
+        this._resendLabel = label;
+        if (callback) this.belowContent(() => Text.make(new HtmlString(`<button type="button" class="fi-link fi-size-sm fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400" x-on:click="${e(`$wire.callSchemaComponentMethod(${js(this.getKey())}, 'resendCode', {})`)}"><span class="fi-link-label">${e(this._resendLabel)}</span></button>`)));
+        return this;
+    }
+    getExposedMethods(): string[] { return this._resend ? ['resendCode'] : []; }
+    isRenderlessMethod(): boolean { return false; }
+    async resendCode(): Promise<void> {
+        if (!this._resend || !(await this.isVisible()) || (await this.isDisabled())) return;
+        await this._resend(this);
+    }
+}
+
+/**
+ * Authentication with a 6-digit code sent to the user's email address, through the panel's `mailer()`.
+ * A code is valid for a few minutes (4 by default) and once; at most two codes are sent per minute.
+ */
+export class EmailAuthentication implements MultiFactorAuthenticationProvider {
+    protected _id = 'email_code';
+    protected _codeExpiryMinutes = 4;
+    protected _generateCode: (() => string) | null = null;
+    protected _store: EmailAuthenticationStore | null = null;
+    protected _cacheStore: MultiFactorCacheStore | null = null;
+    protected _sendCode: ((user: User, code: string, minutes: number, panel: Panel) => MaybePromise<void>) | null = null;
+    protected sendThrottle = new Throttle(2);
+    protected managementThrottle = new Throttle(5);
+
+    static make(): EmailAuthentication { return new this(); }
+    getId(): string { return this._id; }
+    id(id: string): this { this._id = id; return this; }
+    getLoginFormLabel(): string { return t('filament-panels::auth/multi-factor/email/provider.login_form.label'); }
+    /** Minutes a code stays valid. */
+    codeExpiryMinutes(minutes: number): this { this._codeExpiryMinutes = Math.max(1, Math.min(60, Math.floor(minutes))); return this; }
+    getCodeExpiryMinutes(): number { return this._codeExpiryMinutes; }
+    /** Generates the codes (6 random digits by default). */
+    generateCodeUsing(callback: (() => string) | null): this { this._generateCode = callback; return this; }
+    generateCode(): string { return this._generateCode?.() ?? String(randomInt(1_000_000)).padStart(6, '0'); }
+    /** Sends the code yourself (SMS gateway, your own email template…) instead of the panel's mailer. */
+    sendCodeUsing(callback: ((user: User, code: string, minutes: number, panel: Panel) => MaybePromise<void>) | null): this { this._sendCode = callback; return this; }
+    store(store: EmailAuthenticationStore | null): this { this._store = store; return this; }
+    /** Where pending codes are kept until they are used or expire. */
+    cacheStore(store: MultiFactorCacheStore | null): this { this._cacheStore = store; return this; }
+
+    protected getStore(panel: Panel): EmailAuthenticationStore {
+        const store = this._store ?? (panel.getAuth() as EmailAuthenticationStore);
+        if (typeof store.hasEmailAuthentication !== 'function' || typeof store.saveEmailAuthentication !== 'function') {
+            throw new Error('Email authentication: the auth provider must implement hasEmailAuthentication and saveEmailAuthentication (knexAuthProvider does), or pass a store with store().');
+        }
+        return store;
+    }
+    checkConfiguration(panel: Panel): void { this.getStore(panel); }
+    async isEnabled(user: User, panel: Panel): Promise<boolean> { return Boolean(await this.getStore(panel).hasEmailAuthentication(user)); }
+    async setEnabled(user: User, panel: Panel, enabled: boolean): Promise<void> { await this.getStore(panel).saveEmailAuthentication(user, enabled); }
+    private cache(): MultiFactorCacheStore { return this._cacheStore ?? defaultCacheStore; }
+    private codeKey(user: User, panel: Panel) { return `navette:mfa:email:${panel.getId()}:${this._id}:${userKey(user)}`; }
+
+    /** Sends a new code (the previous one stops working). Returns `false` when two codes were already sent this minute. */
+    async sendCode(user: User, panel: Panel): Promise<boolean> {
+        if (this.sendThrottle.hit(`${panel.getId()}:${userKey(user)}`) > 0) return false;
+        const code = this.generateCode();
+        const minutes = this._codeExpiryMinutes;
+        await this.cache().put(this.codeKey(user, panel), { hash: createHash('sha256').update(code).digest('hex'), expires: Date.now() + minutes * 60_000 }, minutes * 60);
+        if (this._sendCode) { await this._sendCode(user, code, minutes, panel); return true; }
+        const group = 'filament-panels::auth/multi-factor/email/notifications/verify-email-authentication';
+        await panel.sendMail({ to: user.email, subject: t(`${group}.subject`), lines: [t(`${group}.lines.0`, { code }), tc(`${group}.lines.1`, minutes, { minutes })] });
+        return true;
+    }
+    /** Checks a code against the last one sent; a valid code is consumed. */
+    async verifyCode(code: unknown, user: User, panel: Panel): Promise<boolean> {
+        if (typeof code !== 'string' || !/^\d{4,12}$/.test(code)) return false;
+        const key = this.codeKey(user, panel);
+        return serialized(key, async () => {
+            const pending = (await this.cache().get(key)) as { hash?: string; expires?: number } | undefined;
+            if (!pending?.hash || !pending.expires || pending.expires < Date.now()) return false;
+            const expected = Buffer.from(pending.hash), actual = Buffer.from(createHash('sha256').update(code).digest('hex'));
+            if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return false;
+            await this.cache().forget(key);
+            return true;
+        });
+    }
+    async beforeChallenge(user: User, panel: Panel): Promise<void> { await this.sendCode(user, panel); }
+    /** Sends a new code and tells the user (or that they must wait). */
+    protected async resend(user: User, panel: Panel, group: string): Promise<void> {
+        if (await this.sendCode(user, panel)) Notification.make().success().title(t(`${group}.resend.notifications.resent.title`)).send();
+        else Notification.make().danger().title(t(`${group}.resend.notifications.throttled.title`)).send();
+    }
+
+    getChallengeFormComponents(user: User, panel: Panel): Component[] {
+        const group = 'filament-panels::auth/multi-factor/email/provider.login_form.code';
+        return [
+            EmailCodeInput.make('code').label(t(`${group}.label`)).validationAttribute(t(`${group}.validation_attribute`))
+                .submitOnCompletion().autofocus().required()
+                .resendUsing(() => this.resend(user, panel, `${group}.actions`), t(`${group}.actions.resend.label`))
+                .rule({ name: 'email_code', passes: (value) => this.verifyCode(value, user, panel), message: () => t(`${group}.messages.invalid`) }),
+        ];
+    }
+    /** Code field of the setup and disable modals: the signed-in user's code, rate limited. */
+    protected modalCodeInput(panel: Panel, group: string): EmailCodeInput {
+        const throttleKey = (ctx: ComponentContext) => `${panel.getId()}:${userKey(contextOf(ctx.livewire).user!)}`;
+        return EmailCodeInput.make('code').label(t(`${group}.modal.form.code.label`)).validationAttribute(t(`${group}.modal.form.code.validation_attribute`)).required()
+            .resendUsing((field) => this.resend(currentUser(field.livewire), panel, `${group}.modal.form.code.actions`), t(`${group}.modal.form.code.actions.resend.label`))
+            .rule(throttleRule(this.managementThrottle, throttleKey, t(`${group}.modal.form.code.messages.rate_limited`)))
+            .rule({ name: 'email_code', passes: (value, ctx) => this.verifyCode(value, contextOf(ctx.livewire).user!, panel), message: () => t(`${group}.modal.form.code.messages.invalid`) });
+    }
+    getManagementSchemaComponents(user: User, panel: Panel): Component[] {
+        const group = 'filament-panels::auth/multi-factor/email/provider.management_schema.actions';
+        const enabled = () => this.isEnabled(user, panel);
+        return [
+            Actions.make([this.setUpAction(panel).hidden(enabled), this.disableAction(panel).visible(enabled)]).key(`${this._id}-actions`)
+                .label(t(`${group}.label`)).belowContent(t(`${group}.below_content`))
+                .afterLabel(async () => statusBadge(await enabled(), t(`${group}.messages.enabled`), t(`${group}.messages.disabled`))),
+        ];
+    }
+    /** Sends a code when the modal opens; entering it turns email codes on. */
+    setUpAction(panel: Panel): Action {
+        const group = 'filament-panels::auth/multi-factor/email/actions/set-up';
+        return Action.make('setUpEmailAuthentication')
+            .label(t(`${group}.label`)).color('primary').icon('m-lock-closed').link()
+            .mountUsing(async (ctx) => { await this.sendCode(currentUser(ctx.livewire), panel); })
+            .modalWidth('md').modalIcon('o-lock-closed').modalIconColor('primary').closeModalByClickingAway(false)
+            .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
+            .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
+            .schema([this.modalCodeInput(panel, group)])
+            .action(async (ctx) => {
+                await this.setEnabled(currentUser(ctx.livewire), panel, true);
+                Notification.make().success().title(t(`${group}.notifications.enabled.title`)).icon('o-lock-closed').send();
+            });
+    }
+    /** Sends a code when the modal opens; entering it turns email codes off. */
+    disableAction(panel: Panel): Action {
+        const group = 'filament-panels::auth/multi-factor/email/actions/disable';
+        return Action.make('disableEmailAuthentication')
+            .label(t(`${group}.label`)).color('danger').icon('m-lock-open').link()
+            .mountUsing(async (ctx) => { await this.sendCode(currentUser(ctx.livewire), panel); })
+            .modalWidth('md').modalIcon('o-lock-open').modalIconColor('danger')
+            .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
+            .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
+            .schema([this.modalCodeInput(panel, group)])
+            .action(async (ctx) => {
+                await this.setEnabled(currentUser(ctx.livewire), panel, false);
+                Notification.make().success().title(t(`${group}.notifications.disabled.title`)).icon('o-lock-open').send();
             });
     }
 }

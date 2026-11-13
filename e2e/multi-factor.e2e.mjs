@@ -1,11 +1,13 @@
 // Multi-factor authentication on the demo's `/app` panel: authenticator app (TOTP, recovery codes) and security keys
 // (WebAuthn, with Chromium's virtual authenticator). Run by e2e/run.mjs, on a throwaway copy of the database.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { chromium } from 'playwright';
 import { openDatabase, reporter, specArgs } from './support.mjs';
 import { totpCode } from '../packages/panels/src/totp.ts';
 
-const { base, dbFile } = specArgs();
+const { base, dbFile, tmpDir } = specArgs();
 const { step, exitCode } = reporter({ errorLines: 3 });
 const browser = await chromium.launch();
 const email = `mfa-${Date.now()}@example.test`;
@@ -62,7 +64,7 @@ try {
     });
 
     await step('setting up the authenticator app: QR code, wrong then right code, password, recovery codes', async () => {
-        await page.getByText('Set up', { exact: true }).click();
+        await page.locator('[id$="app-actions"]').getByText('Set up', { exact: true }).click();
         await modal(page).waitFor();
         const qr = modal(page).locator('img.fi-sc-image, .fi-sc-image img, img[src^="data:image/svg+xml"]').first();
         assert.match(await qr.getAttribute('src'), /^data:image\/svg\+xml;base64,/);
@@ -166,13 +168,38 @@ try {
         await modal(page).locator('input[type=password]').fill(password);
         await modal(page).getByRole('button', { name: 'Remove key' }).click();
         await page.getByText('Security key removed').waitFor();
-        await page.getByText('Turn off').click();
+        await page.locator('[id$="app-actions"]').getByText('Turn off').click();
         await typeCode(page, modal(page), await freshCode());
         await modal(page).locator('input[type=password]').fill(password);
         await modal(page).getByRole('button', { name: 'Disable authenticator app' }).click();
         await page.getByText('Authenticator app has been disabled').waitFor();
         await signOut(page);
         await signIn(page, keyOrigin);
+        await signedIn(page);
+    });
+
+    // Codes sent by email land in the demo's mail log (one JSON message per line).
+    const lastEmailCode = () => {
+        const messages = fs.readFileSync(path.join(tmpDir, 'uploads', 'mail.log'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((message) => message.to === email && /sign-in code/.test(message.subject));
+        return /(\d{6})/.exec(messages.at(-1).lines[0])[1];
+    };
+    await step('email codes: set up with the emailed code, resends limited, sign in with the code', async () => {
+        const page = keyPage;
+        await page.goto(`${keyOrigin}/app/profile`);
+        await page.locator('[id$="email_code-actions"]').getByText('Set up', { exact: true }).click();
+        await modal(page).waitFor();
+        await typeCode(page, modal(page), lastEmailCode());
+        await modal(page).getByRole('button', { name: 'Enable email verification codes' }).click();
+        await page.getByText('Email verification codes have been enabled').waitFor();
+        await signOut(page);
+        await signIn(page, keyOrigin);
+        await page.getByRole('heading', { name: 'Verify your identity' }).waitFor();
+        const first = lastEmailCode();
+        await page.getByText('Send a new code by email').click();
+        // Two codes were already sent this minute (setup, then sign-in): the third is refused, the last one still works.
+        await page.getByText('Too many resend attempts').waitFor();
+        assert.equal(lastEmailCode(), first);
+        await typeCode(page, page.locator('#multiFactorChallengeForm'), first);
         await signedIn(page);
     });
 } finally {

@@ -17,7 +17,7 @@ import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 export { Notification, Notifications } from './notifications.ts';
 import { MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
-export { AppAuthentication, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
+export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
 export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
 export { authenticationOptions, decodeCbor, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type AuthenticationResponseJSON, type RegistrationResponseJSON, type StoredCredential, type UserVerification } from './webauthn.ts';
@@ -87,6 +87,9 @@ export interface AuthProvider {
     /** Stored recovery codes (hashed by Navette), or `null`. */
     getAppAuthenticationRecoveryCodes?(user: User): MaybePromise<string[] | null>;
     saveAppAuthenticationRecoveryCodes?(user: User, codes: string[] | null): MaybePromise<void>;
+    /** Whether the user receives sign-in codes by email (`EmailAuthentication`). */
+    hasEmailAuthentication?(user: User): MaybePromise<boolean>;
+    saveEmailAuthentication?(user: User, enabled: boolean): MaybePromise<void>;
     /** The user's security keys. */
     getSecurityKeys?(user: User): MaybePromise<SecurityKey[]>;
     createSecurityKey?(user: User, key: Omit<SecurityKey, 'id' | 'createdAt' | 'lastUsedAt'>): MaybePromise<void>;
@@ -1593,6 +1596,12 @@ export class Login extends SimplePage {
         panel.logIn(res, user, Boolean(this.data.remember));
         this.userUndertakingMultiFactorAuthentication = null;
         this.redirect(panel.getUrl());
+    }
+    /** The user picked another provider in the challenge: run its `beforeChallenge` (an email code is sent). */
+    async updatedData(value: unknown, key: string | null): Promise<void> {
+        if (key !== 'multiFactor.provider' || !this.isUndertakingMultiFactorAuthentication()) return;
+        const provider = this._multiFactorProviders.find((candidate) => candidate.getId() === value);
+        if (provider) await this.panel.getMultiFactorChallenge().beforeChallenge(this._multiFactorUser!, provider);
     }
     protected cancelMultiFactorChallenge(): void {
         this.userUndertakingMultiFactorAuthentication = null;

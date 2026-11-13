@@ -81,8 +81,9 @@ const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 export function knexAuthProvider(db: TableQuery, options: {
     table?: string; verify?: (password: string, hash: string) => boolean | Promise<boolean>;
     /** Multi-factor authentication storage: users table columns and security keys table (see `multiFactorAuthenticationSchema()`). */
-    appAuthenticationSecretColumn?: string; appAuthenticationRecoveryCodesColumn?: string; securityKeysTable?: string;
+    appAuthenticationSecretColumn?: string; appAuthenticationRecoveryCodesColumn?: string; securityKeysTable?: string; emailAuthenticationColumn?: string;
 } = {}): AuthProvider {
+    const emailColumn = options.emailAuthenticationColumn ?? 'has_email_authentication';
     const table = options.table ?? 'users';
     const secretColumn = options.appAuthenticationSecretColumn ?? 'app_authentication_secret';
     const recoveryColumn = options.appAuthenticationRecoveryCodesColumn ?? 'app_authentication_recovery_codes';
@@ -97,6 +98,8 @@ export function knexAuthProvider(db: TableQuery, options: {
         async saveAppAuthenticationSecret(user, secret) { await db(table).where('id', user.id).update({ [secretColumn]: secret, updated_at: now() }); },
         async getAppAuthenticationRecoveryCodes(user) { const value = (await db(table).where('id', user.id).first())?.[recoveryColumn]; return value === null || value === undefined ? null : parseList(value); },
         async saveAppAuthenticationRecoveryCodes(user, codes) { await db(table).where('id', user.id).update({ [recoveryColumn]: codes === null ? null : JSON.stringify(codes), updated_at: now() }); },
+        async hasEmailAuthentication(user) { return Boolean((await db(table).where('id', user.id).first())?.[emailColumn]); },
+        async saveEmailAuthentication(user, enabled) { await db(table).where('id', user.id).update({ [emailColumn]: enabled, updated_at: now() }); },
         async getSecurityKeys(user) { return (await db(keysTable).where('user_id', user.id).orderBy('id')).map(toKey); },
         async createSecurityKey(user, key) {
             await db(keysTable).insert({ user_id: user.id, name: key.name, credential_id: key.credentialId, public_key: key.publicKey, algorithm: key.algorithm, sign_count: key.signCount, transports: JSON.stringify(key.transports ?? []), created_at: now(), updated_at: now() });
@@ -142,13 +145,15 @@ export function knexAuthProvider(db: TableQuery, options: {
 }
 
 /**
- * Adds what multi-factor authentication stores, when missing: two columns of the users table (authenticator app secret,
- * recovery codes) and a `security_keys` table. Call it from a migration; it can run more than once.
+ * Adds what multi-factor authentication stores, when missing: three columns of the users table (authenticator app secret,
+ * recovery codes, email codes flag) and a `security_keys` table. Call it from a migration; it can run more than once.
  */
-export async function multiFactorAuthenticationSchema(knex: any, options: { usersTable?: string; securityKeysTable?: string; appAuthenticationSecretColumn?: string; appAuthenticationRecoveryCodesColumn?: string } = {}): Promise<void> {
+export async function multiFactorAuthenticationSchema(knex: any, options: { usersTable?: string; securityKeysTable?: string; appAuthenticationSecretColumn?: string; appAuthenticationRecoveryCodesColumn?: string; emailAuthenticationColumn?: string } = {}): Promise<void> {
     const users = options.usersTable ?? 'users', keys = options.securityKeysTable ?? 'security_keys';
     const secret = options.appAuthenticationSecretColumn ?? 'app_authentication_secret', codes = options.appAuthenticationRecoveryCodesColumn ?? 'app_authentication_recovery_codes';
     for (const column of [secret, codes]) if (!(await knex.schema.hasColumn(users, column))) await knex.schema.alterTable(users, (table: any) => { table.text(column).nullable(); });
+    const email = options.emailAuthenticationColumn ?? 'has_email_authentication';
+    if (!(await knex.schema.hasColumn(users, email))) await knex.schema.alterTable(users, (table: any) => { table.boolean(email).notNullable().defaultTo(false); });
     if (!(await knex.schema.hasTable(keys))) {
         await knex.schema.createTable(keys, (table: any) => {
             table.increments('id');

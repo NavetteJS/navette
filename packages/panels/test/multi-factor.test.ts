@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AppAuthentication, base32Encode, decryptSecret, encryptSecret, hotp, MemoryCacheStore, Panel, qrCodeMatrix, qrCodeSvg, SecurityKeyAuthentication, totpCode, totpUri, verifyTotp, type AuthProvider, type SecurityKey, type User } from '../src/index.ts';
+import { AppAuthentication, EmailAuthentication, base32Encode, decryptSecret, encryptSecret, hotp, MemoryCacheStore, Panel, qrCodeMatrix, qrCodeSvg, SecurityKeyAuthentication, totpCode, totpUri, verifyTotp, type AuthProvider, type SecurityKey, type User } from '../src/index.ts';
 import { registrationOptions, verifyRegistration } from '../src/webauthn.ts';
 import { SoftAuthenticator } from './helpers/authenticator.ts';
 
 const user: User = { id: 7, name: 'Ada', email: 'ada@example.com' };
 /** Auth provider keeping multi-factor data in memory. */
-function memoryAuth(): AuthProvider & { secret: string | null; codes: string[] | null; keys: SecurityKey[] } {
+function memoryAuth(): AuthProvider & { secret: string | null; codes: string[] | null; keys: SecurityKey[]; email: boolean } {
     const state = {
         secret: null as string | null, codes: null as string[] | null, keys: [] as SecurityKey[], update: async () => user,
         attempt: async () => user, find: async () => user,
@@ -14,6 +14,7 @@ function memoryAuth(): AuthProvider & { secret: string | null; codes: string[] |
         saveAppAuthenticationSecret: async (_user: User, secret: string | null) => { state.secret = secret; },
         getAppAuthenticationRecoveryCodes: async () => state.codes,
         saveAppAuthenticationRecoveryCodes: async (_user: User, codes: string[] | null) => { state.codes = codes; },
+        email: false, hasEmailAuthentication: async () => state.email, saveEmailAuthentication: async (_user: User, enabled: boolean) => { state.email = enabled; },
         getSecurityKeys: async () => state.keys,
         createSecurityKey: async (_user: User, key: Omit<SecurityKey, 'id' | 'createdAt' | 'lastUsedAt'>) => { state.keys.push({ ...key, id: state.keys.length + 1, createdAt: null, lastUsedAt: null }); },
         updateSecurityKey: async (_user: User, id: SecurityKey['id'], changes: { signCount?: number; lastUsedAt?: string }) => { const key = state.keys.find((candidate) => candidate.id === id)!; if (changes.signCount !== undefined) key.signCount = changes.signCount; if (changes.lastUsedAt) key.lastUsedAt = changes.lastUsedAt; },
@@ -153,4 +154,33 @@ test('required setup: panel pages redirect to the setup page until a provider is
     } finally {
         server.close();
     }
+});
+
+test('email codes: sent through the mailer, valid once, expired after the delay, two sends per minute', async () => {
+    const auth = memoryAuth();
+    const mails: { to: string; subject: string; lines: string[] }[] = [];
+    const panel = Panel.make().id('mail').key('k').auth(auth).mailer({ send: (message) => { mails.push(message); } });
+    const email = EmailAuthentication.make().cacheStore(new MemoryCacheStore());
+    assert.equal(await email.isEnabled(user, panel), false);
+    await email.setEnabled(user, panel, true);
+    assert.equal(await email.isEnabled(user, panel), true);
+    assert.equal(await email.sendCode(user, panel), true);
+    assert.equal(mails[0].to, user.email);
+    assert.equal(mails[0].subject, "Here's your sign-in code");
+    const code = /(\d{6})/.exec(mails[0].lines[0])![1];
+    assert.match(mails[0].lines[1], /4 minutes/);
+    assert.equal(await email.verifyCode('000000' === code ? '111111' : '000000', user, panel), false);
+    assert.equal(await email.verifyCode(code, { ...user, id: 99 }, panel), false, 'another user cannot use it');
+    assert.equal(await email.verifyCode(code, user, panel), true);
+    assert.equal(await email.verifyCode(code, user, panel), false, 'a code works once');
+    assert.equal(await email.sendCode(user, panel), true);
+    assert.equal(await email.sendCode(user, panel), false, 'two codes per minute at most');
+    const expiring = EmailAuthentication.make().cacheStore(new MemoryCacheStore()).codeExpiryMinutes(1).generateCodeUsing(() => '424242');
+    const sent: string[] = [];
+    expiring.sendCodeUsing((_user, value) => { sent.push(value); });
+    await expiring.sendCode(user, panel);
+    assert.deepEqual(sent, ['424242']);
+    const realNow = Date.now;
+    Date.now = () => realNow() + 61_000;
+    try { assert.equal(await expiring.verifyCode('424242', user, panel), false, 'expired'); } finally { Date.now = realNow; }
 });
