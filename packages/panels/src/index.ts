@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
 import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
-import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
+import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
 import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
@@ -907,8 +907,9 @@ export class Page extends BasePage {
             const data: Record<string, unknown> = {};
             mounted.data = data;
             fillSchema(schema, data);
-            const fill = await action.getFormFill(await this.actionContext(mounted));
-            if (fill) fillSchemaFromRecord(schema, data, fill);
+            const fillContext = await this.actionContext(mounted);
+            const fill = await action.getFormFill(fillContext);
+            if (fill) { fillSchemaFromRecord(schema, data, fill); await loadSchemaRelationships(schema, data, fillContext.record); }
         }
         await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
         this.renderPartial('action-modals', await this.renderActionModals());
@@ -932,7 +933,7 @@ export class Page extends BasePage {
             if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         }
         const callContext = await this.actionContext(mounted);
-        if (schema) callContext.data = await getSchemaState(schema);
+        if (schema) { callContext.data = await getSchemaState(schema); callContext.schema = schema; }
         try {
             await action.call(callContext);
         } catch (error) {
@@ -2854,6 +2855,7 @@ export class CreateRecord extends ResourceFormPage {
         const data = await this.mutateFormDataBeforeCreate(await getSchemaState(this.getSchema('form')));
         await this.beforeCreate(data);
         const record = await this.handleRecordCreation(data);
+        await saveSchemaRelationships(this.getSchema('form'), record);
         await this.afterCreate(record);
         const title = this.getCreatedNotificationTitle();
         if (title !== null) Notification.make().success().title(title).send();
@@ -2954,6 +2956,7 @@ export class CreateAction {
             .schema((schema: Schema) => of(schema.livewire).form(schema))
             .action(async (ctx) => {
                 const record = await of(ctx.livewire).adapter.create(ctx.data);
+                await saveSchemaRelationships(ctx.schema, record);
                 await finishAction(ctx.action!, { ...ctx, record }, t('filament-actions::create.single.notifications.created.title'));
             });
     }
@@ -2972,7 +2975,8 @@ export class EditAction {
             .fillForm(({ record }) => ({ ...record }))
             .action(async (ctx) => {
                 const adapter = of(ctx.livewire).adapter;
-                await adapter.update(adapter.getKey(ctx.record), ctx.data);
+                const saved = await adapter.update(adapter.getKey(ctx.record), ctx.data);
+                await saveSchemaRelationships(ctx.schema, saved ?? ctx.record);
                 await finishAction(ctx.action!, ctx, t('filament-actions::edit.single.notifications.saved.title'));
             });
     }
@@ -3184,6 +3188,7 @@ export class EditRecord extends ResourceFormPage {
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
         await this.hydrate();
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
+        await loadSchemaRelationships(this.getSchema('form'), this.data, this._record);
     }
     /** The record is reloaded on every request (no route model binding). */
     async hydrate(): Promise<void> {
@@ -3238,6 +3243,7 @@ export class EditRecord extends ResourceFormPage {
         const data = await this.mutateFormDataBeforeSave(await getSchemaState(this.getSchema('form')));
         await this.beforeSave(data);
         this._record = await this.handleRecordUpdate(this._record, data);
+        await saveSchemaRelationships(this.getSchema('form'), this._record);
         await this.afterSave(this._record);
         const title = this.getSavedNotificationTitle();
         if (title !== null) Notification.make().success().title(title).send();

@@ -1,5 +1,5 @@
 // @navette-js/forms — form fields (Field, TextInput, Select, Checkbox…) and server-side validation.
-import { Attributes, HtmlString, e, evaluate, icon, js, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, js, sanitizeHtml, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
 import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, slug, type ComponentContext, type InlineItem } from '@navette-js/schemas';
@@ -149,6 +149,16 @@ export abstract class Field extends Component {
     validationAttribute(name: string | null): this { this._validationAttribute = name; return this; }
     /** Custom messages by rule name (`{ required: 'Tell us your name.', max: 'Too long.' }`); `:attribute` is replaced by the field name. */
     validationMessages(messages: Record<string, string | ((attribute: string) => string)>): this { this._validationMessages = { ...this._validationMessages, ...messages }; return this; }
+    protected _loadStateFromRelationships: ((record: any, ctx: ComponentContext) => unknown) | null = null;
+    protected _saveRelationships: ((args: { record: any; state: unknown; ctx: ComponentContext }) => void | Promise<void>) | null = null;
+    /** Fills the field from the record's relationships (after the record's own values): `(record, ctx) => state`. */
+    loadStateFromRelationshipsUsing(callback: ((record: any, ctx: ComponentContext) => unknown) | null): this { this._loadStateFromRelationships = callback; return this; }
+    /** Saves the field into the record's relationships, once the record is created or updated. Such a field is not in the saved data. */
+    saveRelationshipsUsing(callback: ((args: { record: any; state: unknown; ctx: ComponentContext }) => void | Promise<void>) | null): this { this._saveRelationships = callback; return this; }
+    /** Whether the field saves itself through `saveRelationshipsUsing()` (and is then left out of the saved data). */
+    async savesRelationships(): Promise<boolean> { return this._saveRelationships !== null; }
+    async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> { return this._loadStateFromRelationships ? { state: await this._loadStateFromRelationships(record, this.context()) } : null; }
+    async saveRelationships(record: any): Promise<void> { if (this._saveRelationships) await this._saveRelationships({ record, state: await this.dehydrateState(this.context().state), ctx: this.context() }); }
     /** Shows (or hides, with `false`) the required asterisk, regardless of `required()`. */
     markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
     async isMarkedAsRequired(): Promise<boolean> { return this._markedAsRequired ?? (await this.isRequired()); }
@@ -473,14 +483,52 @@ export class DatePicker extends Field {
 }
 
 type Options = [string, string][] | Record<string, string>;
+/** Options, possibly grouped: `{ 'In process': { draft: 'Draft', reviewing: 'Reviewing' }, Reviewed: { … } }`. */
+type GroupedOptions = Options | Record<string, string | Record<string, string>> | [string, string | [string, string][]][];
+type OptionGroup = { label: string; options: [string, string][] };
+const flattenOptions = (groups: (OptionGroup | [string, string])[]): [string, string][] => groups.flatMap((item) => (Array.isArray(item) ? [item] : item.options));
+function normalizeOptions(options: GroupedOptions): (OptionGroup | [string, string])[] {
+    const entries: [string, unknown][] = Array.isArray(options) ? options as [string, unknown][] : Object.entries(options);
+    return entries.map(([key, value]): OptionGroup | [string, string] => {
+        if (value !== null && typeof value === 'object') return { label: String(key), options: (Array.isArray(value) ? value as [string, string][] : Object.entries(value as Record<string, string>)).map(([v, l]): [string, string] => [String(v), String(l)]) };
+        return [String(key), String(value)];
+    });
+}
+/** Objection model of the form (the host's data adapter), for relationships. */
+function modelOfForm(ctx: ComponentContext, explicit: any): any {
+    if (explicit) return explicit;
+    const host = ctx.livewire as any;
+    const adapter = host.getDataAdapter?.() ?? host.getDataAdapterForTable?.() ?? host.resource?.adapter ?? null;
+    const model = adapter?.model;
+    if (typeof model !== 'function' || typeof model.getRelation !== 'function') throw new Error('relationship(): the form has no Objection model; pass it with relationship(name, title, modify, { model }).');
+    return model;
+}
+/** Prefix or suffix of an input wrapper: actions, icon and label (escaped). */
+function inputAffixHtml(side: 'prefix' | 'suffix', options: { label: string | null; icon: string; actions: string[]; inline: boolean }): string {
+    if (options.label === null && !options.icon && !options.actions.length) return '';
+    const label = options.label !== null ? `<span class="fi-input-wrp-label">${e(options.label)}</span>` : '';
+    const actions = options.actions.length ? `<div class="fi-input-wrp-actions">${options.actions.join('')}</div>` : '';
+    const focus = options.label !== null || options.icon ? ` x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')"` : '';
+    const classes = cls([`fi-input-wrp-${side}`, side === 'prefix' ? 'fi-input-wrp-prefix-has-content' : null, { 'fi-inline': options.inline, [`fi-input-wrp-${side}-has-label`]: options.label !== null }]);
+    return `<div${focus} class="${classes}">${side === 'prefix' ? actions + options.icon + label : label + options.icon + actions}</div>`;
+}
 /**
  * Dropdown. Native (`<select>`) by default; `searchable()` switches to the JavaScript select,
  * which queries the server through the exposed methods (`getSearchResultsForJs`…).
  */
 export class Select extends Field {
-    private _options: Options | ((ctx: ComponentContext) => Options | Promise<Options>) = [];
+    private _options: GroupedOptions | ((ctx: ComponentContext) => GroupedOptions | Promise<GroupedOptions>) = [];
     private _placeholder: string | null = null;
     private _searchable = false;
+    private _native = true;
+    private _allowHtml = false;
+    private _maxItems: number | null = null;
+    private _minItems: number | null = null;
+    private _optionsLimit = 50;
+    private _searchDebounce = 1000;
+    private _messages: { loading?: string; noSearchResults?: string; searchPrompt?: string; searching?: string; noOptions?: string } = {};
+    private _relationship: { name: string; title: string | null; modify: ((query: any, search?: string) => unknown) | null; model: any } | null = null;
+    private _affixes: { prefix: string | null; suffix: string | null; prefixIcon: string | null; suffixIcon: string | null; prefixIconColor: string | null; suffixIconColor: string | null; prefixActions: Action[]; suffixActions: Action[]; prefixInline: boolean; suffixInline: boolean } = { prefix: null, suffix: null, prefixIcon: null, suffixIcon: null, prefixIconColor: null, suffixIconColor: null, prefixActions: [], suffixActions: [], prefixInline: false, suffixInline: false };
     private _dynamic: boolean | null = null;
     private _searchOnServer: boolean | null = null;
     private _live = false;
@@ -500,7 +548,87 @@ export class Select extends Field {
      * `dynamic: false`: options come from a function but stay fixed for the page's lifetime (announced as static to the browser).
      * `searchOnServer: false`: search runs in the browser, among the options already sent (for a complete list).
      */
-    options(options: Options | ((ctx: ComponentContext) => Options | Promise<Options>), config: { dynamic?: boolean; searchOnServer?: boolean } = {}): this { this._options = options; this._dynamic = config.dynamic ?? null; this._searchOnServer = config.searchOnServer ?? null; return this; }
+    options(options: GroupedOptions | ((ctx: ComponentContext) => GroupedOptions | Promise<GroupedOptions>), config: { dynamic?: boolean; searchOnServer?: boolean } = {}): this { this._options = options; this._dynamic = config.dynamic ?? null; this._searchOnServer = config.searchOnServer ?? null; return this; }
+    /** "Yes" / "No" options, saved as `1` / `0`. */
+    boolean(trueLabel: string | null = null, falseLabel: string | null = null, placeholder: string | null = null): this {
+        this._options = [['1', trueLabel ?? t('filament-forms::components.select.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.select.boolean.false')]];
+        if (placeholder !== null) this._placeholder = placeholder;
+        return this;
+    }
+    /** `false`: the JavaScript select, even without search. */
+    native(condition = true): this { this._native = condition; return this; }
+    /** Option labels are HTML (sanitized on the server; JavaScript select only). */
+    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    /** Maximum (and minimum) number of selected items of a multiple select, checked on the server. */
+    maxItems(count: number | null): this { this._maxItems = count; return this; }
+    minItems(count: number | null): this { this._minItems = count; return this; }
+    /** Number of options shown at once in the JavaScript select (50 by default). */
+    optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
+    searchDebounce(ms: number): this { this._searchDebounce = Math.max(0, Math.floor(ms)); return this; }
+    loadingMessage(message: string): this { this._messages.loading = message; return this; }
+    noSearchResultsMessage(message: string): this { this._messages.noSearchResults = message; return this; }
+    searchPrompt(message: string): this { this._messages.searchPrompt = message; return this; }
+    searchingMessage(message: string): this { this._messages.searching = message; return this; }
+    noOptionsMessage(message: string): this { this._messages.noOptions = message; return this; }
+    prefix(label: string | null, isInline = false): this { this._affixes.prefix = label; this._affixes.prefixInline = isInline; return this; }
+    suffix(label: string | null, isInline = false): this { this._affixes.suffix = label; this._affixes.suffixInline = isInline; return this; }
+    prefixIcon(name: string | null, isInline = false): this { this._affixes.prefixIcon = name; this._affixes.prefixInline = isInline; return this; }
+    suffixIcon(name: string | null, isInline = false): this { this._affixes.suffixIcon = name; this._affixes.suffixInline = isInline; return this; }
+    prefixIconColor(color: string | null): this { this._affixes.prefixIconColor = color; return this; }
+    suffixIconColor(color: string | null): this { this._affixes.suffixIconColor = color; return this; }
+    prefixAction(action: Action, isInline = false): this { this._affixes.prefixActions = [...this._affixes.prefixActions, action]; this._affixes.prefixInline = isInline; return this; }
+    suffixAction(action: Action, isInline = false): this { this._affixes.suffixActions = [...this._affixes.suffixActions, action]; this._affixes.suffixInline = isInline; return this; }
+    prefixActions(actions: Action[]): this { this._affixes.prefixActions = actions; return this; }
+    suffixActions(actions: Action[]): this { this._affixes.suffixActions = actions; return this; }
+    /**
+     * Options from a relationship of the form's model (Objection `relationMappings`): a belongs-to relationship (the field is the
+     * foreign key, `Select.make('author_id').relationship('author', 'name')`), or a many-to-many one with `multiple()` (the field is
+     * named after the relationship, and saves the links once the record is saved). `modifyQueryUsing(query, search)` scopes the
+     * options; picked keys outside that scope are rejected. With `searchable()`, the options are searched on the server.
+     */
+    relationship(name: string, titleAttribute: string | null = null, modifyQueryUsing: ((query: any, search?: string) => unknown) | null = null, options: { model?: any } = {}): this {
+        this._relationship = { name, title: titleAttribute, modify: modifyQueryUsing, model: options.model ?? null };
+        return this;
+    }
+    private relationInfo() {
+        const ctx = this.context();
+        const model = modelOfForm(ctx, this._relationship!.model);
+        const relation = model.getRelation(this._relationship!.name);
+        const related = relation.relatedModelClass;
+        const id = `${related.tableName}.${related.idColumn}`;
+        const title = `${related.tableName}.${this._relationship!.title ?? related.idColumn}`;
+        const isMany = /ManyToMany/.test(relation.constructor?.name ?? '') || typeof relation.joinTable === 'string';
+        return { model, relation, related, id, title, isMany };
+    }
+    private async relationshipOptions(search: string | null, keys: string[] | null, limit = 1000): Promise<[string, string][]> {
+        const { related, id, title } = this.relationInfo();
+        const query = related.query();
+        this._relationship!.modify?.(query, search ?? undefined);
+        if (keys !== null) { if (!keys.length) return []; query.whereIn(id, keys.slice(0, 1000)); }
+        if (search) query.where(title, 'like', `%${search.slice(0, 255)}%`);
+        const rows = await query.clearSelect().select({ __key: id, __title: title }).orderBy(title).limit(limit);
+        return rows.map((row: any): [string, string] => [String(row.__key), String(row.__title ?? row.__key)]);
+    }
+    private isManyRelationship(): boolean { return this._relationship !== null && this.relationInfo().isMany; }
+    async savesRelationships(): Promise<boolean> { return (await super.savesRelationships()) || this.isManyRelationship(); }
+    async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> {
+        if (!this.isManyRelationship()) return super.loadStateFromRelationships(record);
+        const { model, related } = this.relationInfo();
+        const rows = await model.relatedQuery(this._relationship!.name).for(record[model.idColumn]).clearSelect().select(`${related.tableName}.${related.idColumn} as __key`);
+        return { state: rows.map((row: any) => String(row.__key)) };
+    }
+    /** Many-to-many: links the picked records and unlinks the others (only keys allowed by the relationship's query). */
+    async saveRelationships(record: any): Promise<void> {
+        if (!this.isManyRelationship()) return super.saveRelationships(record);
+        const { model, related } = this.relationInfo();
+        const key = record[model.idColumn];
+        const desired = new Set((await this.relationshipOptions(null, this.selectedValues())).map(([value]) => value));
+        const current = ((await this.loadStateFromRelationships(record))!.state as string[]);
+        const removed = current.filter((value) => !desired.has(value));
+        if (removed.length) await model.relatedQuery(this._relationship!.name).for(key).unrelate().whereIn(`${related.tableName}.${related.idColumn}`, removed);
+        for (const value of desired) if (!current.includes(value)) await model.relatedQuery(this._relationship!.name).for(key).relate(related.idColumn === 'id' && /^\d+$/.test(value) ? Number(value) : value);
+        await super.saveRelationships(record);
+    }
     /** Disables an option depending on the context (e.g. already picked in another row). */
     disableOptionWhen(condition: (value: string, ctx: ComponentContext) => boolean): this { this._disableOptionWhen = condition; return this; }
     /** Sends the state to the server as soon as it changes. */
@@ -520,48 +648,67 @@ export class Select extends Field {
     private selectedValues(): string[] { const state = this.context().state; return [...new Set((Array.isArray(state) ? state : []).filter((v) => typeof v === 'string' || typeof v === 'number').map(String))]; }
     private async labelsOf(values: string[]): Promise<[string, string][]> {
         if (!values.length) return [];
-        const known = this._optionLabelsUsing ? await this._optionLabelsUsing(values, this.context()) : await this.resolveOptions();
+        const known = this._relationship ? await this.relationshipOptions(null, values) : this._optionLabelsUsing ? await this._optionLabelsUsing(values, this.context()) : await this.resolveOptions();
         const map = new Map((Array.isArray(known) ? known : Object.entries(known)).map(([value, label]): [string, string] => [String(value), String(label)]));
         return values.filter((value) => map.has(value)).map((value): [string, string] => [value, map.get(value)!]);
     }
-    /** No-op: options are always loaded with the form. */
-    preload(): this { return this; }
+    private _preload = false;
+    /** Relationship with `searchable()`: loads the options with the form, instead of on search only. Other options are always loaded. */
+    preload(condition = true): this { this._preload = condition; return this; }
     hydrateState(value: unknown): unknown {
         if (this._multiple) return (Array.isArray(value) ? value : []).map(String);
         return value === null || value === undefined || value === '' ? null : String(value);
     }
     dehydrateState(state: unknown): unknown { return this._multiple ? this.selectedValues() : state; }
-    async resolveOptions(): Promise<[string, string][]> {
+    /** Options with their groups (labels sanitized when `allowHtml()`). */
+    async resolveGroupedOptions(): Promise<(OptionGroup | [string, string])[]> {
+        if (this._relationship) return this._searchable && !this._preload ? [] : this.relationshipOptions(null, null);
         const options = typeof this._options === 'function' ? await this._options(this.context()) : this._options;
-        return (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]);
+        const groups = normalizeOptions(options);
+        if (!this._allowHtml) return groups;
+        const clean = ([value, label]: [string, string]): [string, string] => [value, sanitizeHtml(label)];
+        return groups.map((item) => (Array.isArray(item) ? clean(item) : { label: item.label, options: item.options.map(clean) }));
+    }
+    async resolveOptions(): Promise<[string, string][]> { return flattenOptions(await this.resolveGroupedOptions()); }
+    private itemCountRules(): Rule[] {
+        const count = (v: unknown) => (Array.isArray(v) ? new Set(v.map(String)).size : 0);
+        return [
+            ...(this._minItems !== null ? [{ name: 'min', passes: (v: unknown) => count(v) >= this._minItems!, message: (a: string) => `The ${a} field must have at least ${this._minItems} items.` }] : []),
+            ...(this._maxItems !== null ? [{ name: 'max', passes: (v: unknown) => count(v) <= this._maxItems!, message: (a: string) => `The ${a} field must not have more than ${this._maxItems} items.` }] : []),
+        ];
     }
     async getValidationRules(): Promise<Rule[]> {
         // With server search, a value is valid if the server can label it; otherwise it must be among the options.
-        if (this._multiple) return [...(await super.getValidationRules()), { name: 'in', passes: async (v) => { const values = Array.isArray(v) ? v.map(String) : []; return (await this.labelsOf([...new Set(values)])).length === new Set(values).size; }, message: (a) => `The selected ${a} is invalid.` }];
-        const passes = async (v: unknown) => (this._searchResultsUsing ? (await this._optionLabelUsing?.(String(v), this.context())) != null : (await this.resolveOptions()).some(([value]) => value === String(v)));
+        if (this._multiple) return [...(await super.getValidationRules()), ...this.itemCountRules(), { name: 'in', passes: async (v) => { const values = Array.isArray(v) ? v.map(String) : []; return (await this.labelsOf([...new Set(values)])).length === new Set(values).size; }, message: (a) => `The selected ${a} is invalid.` }];
+        const passes = async (v: unknown) => (this._relationship ? (await this.relationshipOptions(null, [String(v)])).length === 1 : this._searchResultsUsing ? (await this._optionLabelUsing?.(String(v), this.context())) != null : (await this.resolveOptions()).some(([value]) => value === String(v)));
         return [...(await super.getValidationRules()), { name: 'in', passes, message: (a) => `The selected ${a} is invalid.` }];
     }
 
     // Methods exposed to the select's JavaScript (called through callSchemaComponentMethod).
     getExposedMethods(): string[] { return ['getOptionLabel', 'getSearchResultsForJs', 'getOptionsForJs', 'getOptionLabelsForJs']; }
     private static forJs(options: [string, string][]) { return options.map(([value, label]) => ({ label, value, isDisabled: false })); }
-    async getOptionsForJs() { return this.withDisabled(Select.forJs(await this.resolveOptions())); }
+    private groupsForJs(groups: (OptionGroup | [string, string])[]): unknown[] {
+        return groups.map((item) => (Array.isArray(item) ? this.withDisabled(Select.forJs([item]))[0] : { label: item.label, options: this.withDisabled(Select.forJs(item.options)) }));
+    }
+    async getOptionsForJs() { return this.groupsForJs(await this.resolveGroupedOptions()); }
     private withDisabled<T extends { value: string; isDisabled: boolean }>(options: T[]): T[] {
         if (!this._disableOptionWhen) return options;
         const ctx = this.context();
         return options.map((option) => ({ ...option, isDisabled: this._disableOptionWhen!(option.value, ctx) }));
     }
     async getSearchResultsForJs(search: unknown = '') {
+        if (this._relationship) return this.withDisabled(Select.forJs(await this.relationshipOptions(String(search ?? '').slice(0, 1000), null, this._optionsLimit)));
         if (this._searchResultsUsing) {
             const found = await this._searchResultsUsing(String(search ?? '').slice(0, 1000), this.context());
             return Select.forJs((Array.isArray(found) ? found : Object.entries(found)).map(([value, label]): [string, string] => [String(value), String(label)]));
         }
         const needle = String(search ?? '').toLowerCase();
-        return Select.forJs((await this.resolveOptions()).filter(([, label]) => label.toLowerCase().includes(needle)));
+        return this.withDisabled(Select.forJs((await this.resolveOptions()).filter(([, label]) => label.toLowerCase().includes(needle))));
     }
     async getOptionLabel(): Promise<string | null> {
         const state = this.context().state;
         if (state === null || state === undefined || state === '') return null;
+        if (this._relationship) return (await this.relationshipOptions(null, [String(state)]))[0]?.[1] ?? null;
         if (this._optionLabelUsing) return this._optionLabelUsing(String(state), this.context());
         return (await this.resolveOptions()).find(([value]) => value === String(state))?.[1] ?? null;
     }
@@ -610,8 +757,10 @@ export class Select extends Field {
             .modalSubmitActionLabel(tr('modal.actions.create.label'))
             .schema(this._createOptionForm as any)
             .action(async ({ data }) => {
-                if (!this._createOptionUsing) throw new Error(`Select [${this.getStatePath()}]: createOptionUsing() is required with createOptionForm().`);
-                const created = await this._createOptionUsing(data, this.context());
+                let created: string | number | null;
+                if (this._createOptionUsing) created = await this._createOptionUsing(data, this.context());
+                else if (this._relationship) { const { related } = this.relationInfo(); const record = await related.query().insert(data); created = record[related.idColumn]; }
+                else throw new Error(`Select [${this.getStatePath()}]: createOptionUsing() is required with createOptionForm().`);
                 if (created === null || created === undefined || created === '') return;
                 this.setState(this._multiple ? [...new Set([...this.selectedValues(), String(created)])] : String(created));
                 await this.callAfterStateUpdated((name, value) => writePath(this.livewire as any, [...this.container.getStatePath().split('.').filter(Boolean), ...name.split('.')], value));
@@ -637,37 +786,52 @@ export class Select extends Field {
         return this._modifyEditOptionAction?.(action) ?? action;
     }
     /** Actions mounted on the field: hint, create option and edit option. */
-    getActions(): Action[] { return [...this.getHintActions(), ...[this.getCreateOptionAction(), this.getEditOptionAction()].filter((action): action is Action => action !== null)]; }
-    /** "+" and "edit" buttons on the right of the field. */
+    getActions(): Action[] { return [...this.getHintActions(), ...this._affixes.prefixActions, ...this._affixes.suffixActions, ...[this.getCreateOptionAction(), this.getEditOptionAction()].filter((action): action is Action => action !== null)]; }
+    private affixIcon(name: string | null, color: string | null): string { return name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : ''; }
+    private async affixActionsHtml(actions: Action[]): Promise<string[]> {
+        const ctx = this.context();
+        const html: string[] = [];
+        for (const action of actions) if (await action.isVisible(ctx)) html.push(await action.iconButton().size('sm').toHtml(ctx, { schemaComponent: this.getKey() }));
+        return html;
+    }
+    private async prefixHtml(): Promise<string> {
+        const a = this._affixes;
+        return inputAffixHtml('prefix', { label: a.prefix, icon: this.affixIcon(a.prefixIcon, a.prefixIconColor), actions: await this.affixActionsHtml(a.prefixActions), inline: a.prefixInline });
+    }
+    /** Suffix: label, icon, actions, then the "+" and "edit" buttons. */
     private async suffixHtml(): Promise<string> {
         const ctx = this.context();
         const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: this.getKey() };
-        const buttons: string[] = [];
+        const buttons: string[] = await this.affixActionsHtml(this._affixes.suffixActions);
         for (const action of [this.getCreateOptionAction(), this.getEditOptionAction()]) {
             if (action && (await action.isVisible(ctx))) buttons.push((await action.toLinkHtml(ctx, context, '')).replace(' wire:key=""', ''));
         }
-        return buttons.length ? `<div class="fi-input-wrp-suffix"><div class="fi-input-wrp-actions">${buttons.join('')}</div></div>` : '';
+        const a = this._affixes;
+        return inputAffixHtml('suffix', { label: a.suffix, icon: this.affixIcon(a.suffixIcon, a.suffixIconColor), actions: buttons, inline: a.suffixInline });
     }
 
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
-        const resolved = await this.resolveOptions();
+        const grouped = await this.resolveGroupedOptions();
+        const resolved = flattenOptions(grouped);
         const suffix = await this.suffixHtml();
-        if (this._searchable) {
+        const prefix = await this.prefixHtml();
+        if (this._searchable || this._multiple || !this._native || this._allowHtml) {
             const isRequired = (await this.isRequired()) && !isDisabled;
             const after = isRequired ? `<span id="${e(this.getId())}-required" class="fi-sr-only">${e(t('filament-forms::components.select.required_description'))}</span>` : '';
-            return this.wrap(await this.toJsHtml(resolved, isDisabled, suffix), { wrapperClass: 'fi-fo-select-wrp', after });
+            return this.wrap(await this.toJsHtml(grouped, isDisabled, suffix, prefix), { wrapperClass: 'fi-fo-select-wrp', after });
         }
         const select = new Attributes()
             .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
             .class(['fi-select-input']);
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('select')?.focus()" }).class(['fi-fo-select', 'fi-fo-select-native', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        const options = [this._selectablePlaceholder ? `<option value="">${isDisabled ? '' : e(this._placeholder ?? t('filament-forms::components.select.placeholder'))}</option>` : '', ...resolved.map(([value, label]) => `<option value="${e(value)}">${e(label)}</option>`)].join('');
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><select ${select.toHtml()}>${options}</select></div>${suffix}</div>`, { wrapperClass: 'fi-fo-select-wrp' });
+        const option = ([value, label]: [string, string]) => `<option value="${e(value)}"${this._disableOptionWhen?.(value, this.context()) ? ' disabled' : ''}>${e(label)}</option>`;
+        const options = [this._selectablePlaceholder ? `<option value="">${isDisabled ? '' : e(this._placeholder ?? t('filament-forms::components.select.placeholder'))}</option>` : '', ...grouped.map((item) => (Array.isArray(item) ? option(item) : `<optgroup label="${e(item.label)}">${item.options.map(option).join('')}</optgroup>`))].join('');
+        return this.wrap(`<div ${wrapper.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn"><select ${select.toHtml()}>${options}</select></div>${suffix}</div>`, { wrapperClass: 'fi-fo-select-wrp' });
     }
 
     /** JavaScript select rendering. */
-    private async toJsHtml(options: [string, string][], isDisabled: boolean, suffix = ''): Promise<string> {
+    private async toJsHtml(grouped: (OptionGroup | [string, string])[], isDisabled: boolean, suffix = '', prefix = ''): Promise<string> {
         const state = this.context().state;
         const hasState = !this._multiple && state !== null && state !== undefined && state !== '';
         const selected = this._multiple ? await this.labelsOf(this.selectedValues()) : [];
@@ -675,7 +839,7 @@ export class Select extends Field {
         // Required field: a screen-reader instruction ("Select an option.") is linked to the select.
         const describedBy = [isRequired ? `${this.getId()}-required` : null, this.hasError() ? `${this.getId()}-error` : null].filter(Boolean).join(' ') || null;
         const accessibility = JSON.stringify({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-required': isRequired ? 'true' : null });
-        const forJs = this.withDisabled(Select.forJs(options));
+        const forJs = this.groupsForJs(grouped);
         // Dynamic options come from a function, so they may change between requests.
         const hasDynamicOptions = this._dynamic ?? typeof this._options === 'function';
         const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.select.${key}`, replace);
@@ -685,41 +849,41 @@ export class Select extends Field {
  clearButtonLabel: ${js(tr('actions.clear.label'))},
  errorMessage: ${js(tr('error_message'))},
  hasDynamicOptions: ${hasDynamicOptions ? 'true' : 'false'},
- hasDynamicSearchResults: ${this._searchResultsUsing || (this._searchOnServer ?? hasDynamicOptions) ? 'true' : 'false'},
- hasInitialNoOptionsMessage: ${this._searchResultsUsing || this._hasNoInitialOptions ? 'false' : 'true'},
+ hasDynamicSearchResults: ${this._searchResultsUsing || (this._relationship && this._searchable) || (this._searchOnServer ?? hasDynamicOptions) ? 'true' : 'false'},
+ hasInitialNoOptionsMessage: ${this._searchResultsUsing || (this._relationship && this._searchable && !this._preload) || this._hasNoInitialOptions ? 'false' : 'true'},
  id: ${js(this.getId())},
  initialOptionLabel: ${js(hasState ? await this.getOptionLabel() : null)},
  initialOptionLabels: ${selected.length ? js(selected.map(([value, label]) => ({ label, value, isDisabled: false }))) : '[]'},
  initialState: ${this._multiple ? (selected.length ? js(selected.map(([value]) => value)) : '[]') : js(hasState ? String(state) : null)},
  isAutofocused: ${this._autofocus ? 'true' : 'false'},
  isDisabled: ${isDisabled ? 'true' : 'false'},
- isHtmlAllowed: false,
+ isHtmlAllowed: ${this._allowHtml ? 'true' : 'false'},
  isMultiple: ${this._multiple ? 'true' : 'false'},
  isReorderable: false,
- isSearchable: true,
+ isSearchable: ${this._searchable ? 'true' : 'false'},
  key: ${js(this.getKey())},
  livewireId: ${js(this.livewire.id)},
- loadingMessage: ${js(tr('loading_message'))},
- maxItems: null,
- maxItemsMessage: ${js(tr('max_items_message', { count: '' }))},
- noOptionsMessage: ${js(tr('no_options_message'))},
- noSearchResultsMessage: ${js(tr('no_search_results_message'))},
+ loadingMessage: ${js(this._messages.loading ?? tr('loading_message'))},
+ maxItems: ${this._maxItems ?? 'null'},
+ maxItemsMessage: ${js(tr('max_items_message', { count: String(this._maxItems ?? '') }))},
+ noOptionsMessage: ${js(this._messages.noOptions ?? tr('no_options_message'))},
+ noSearchResultsMessage: ${js(this._messages.noSearchResults ?? tr('no_search_results_message'))},
  options: ${forJs.length ? js(forJs) : '[]'},
- optionsLimit: 50,
+ optionsLimit: ${this._optionsLimit},
  placeholder: ${js(this._placeholder ?? tr('placeholder'))},
  position: null,
  removeButtonLabel: ${js(tr('actions.remove_option.label'))},
- searchDebounce: 1000,
- searchingMessage: ${js(tr('searching_message'))},
+ searchDebounce: ${this._searchDebounce},
+ searchingMessage: ${js(this._messages.searching ?? tr('searching_message'))},
  searchLabel: ${js(tr('search_label'))},
- searchPrompt: ${js(tr('search_prompt'))},
+ searchPrompt: ${js(this._messages.searchPrompt ?? tr('search_prompt'))},
  searchableOptionFields: ${js(['label'])},
  state: $wire.$entangle(${js(this.getStatePath())}, ${this._live ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  })`;
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('.fi-select-input-btn')?.focus()" }).class(['fi-fo-select', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(forJs)).digest('hex')}`;
-        return `<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div class="fi-hidden" data-select-accessibility="${e(accessibility)}" x-data="{
+        return `<div ${wrapper.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn"><div class="fi-hidden" data-select-accessibility="${e(accessibility)}" x-data="{
  isDisabled: ${isDisabled ? 'true' : 'false'},
  init() {
  const container = $el.nextElementSibling
@@ -1834,6 +1998,20 @@ export function fillSchemaFromRecord(schema: Schema, target: Record<string, unkn
         writePath(target, segments, c.hydrateState(readPath(record, segments) ?? c.getDefaultState()));
     }
 }
+/** Fills the fields that load their state from the record's relationships (`loadStateFromRelationshipsUsing()`, `Select::relationship()`…). */
+export async function loadSchemaRelationships(schema: Schema, target: Record<string, unknown>, record: unknown): Promise<void> {
+    if (!record) return;
+    for (const c of schema.getFlatComponents()) {
+        if (!(c instanceof Field)) continue;
+        const loaded = await c.loadStateFromRelationships(record);
+        if (loaded) writePath(target, relativePath(schema, c), c.hydrateState(loaded.state));
+    }
+}
+/** Saves the visible fields that write the record's relationships, once the record is created or updated. */
+export async function saveSchemaRelationships(schema: Schema, record: unknown): Promise<void> {
+    if (!record) return;
+    for (const c of await schema.getVisibleFlatComponents()) if (c instanceof Field && (await c.isDehydrated() || (c as any)._dehydrated === false) && (await c.savesRelationships())) await c.saveRelationships(record);
+}
 /** Validates every visible field of a schema; returns errors by state path. */
 export async function validateSchema(schema: Schema): Promise<Record<string, string[]>> {
     const errors: Record<string, string[]> = {};
@@ -1851,6 +2029,8 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     const fields: Field[] = [];
     for (const c of await schema.getVisibleFlatComponents()) {
         if (!(c instanceof Field) || !(await c.isDehydrated())) continue;
+        // Relationship fields save themselves after the record (see saveSchemaRelationships), unless forced with `dehydrated()`.
+        if ((c as any)._dehydrated !== true && (await c.savesRelationships())) continue;
         const state = await c.dehydrateState(c.context().state);
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
         fields.push(c);

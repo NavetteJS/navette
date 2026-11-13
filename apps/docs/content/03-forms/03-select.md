@@ -71,13 +71,153 @@ Select.make('country')
     .options(async () => loadCountries(), { dynamic: false })
 ```
 
-<Aside variant="warning">
-`relationship()` is not available. List related records with an options function, and save the foreign key (or, for a multi-select, the related keys) in your data adapter.
-</Aside>
+## Grouping options
+
+You may group options under a label by passing an object of groups. The native select uses `<optgroup>` elements, and the JavaScript select shows group headings:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('status')
+    .searchable()
+    .options({
+        'In Process': {
+            draft: 'Draft',
+            reviewing: 'Reviewing',
+        },
+        Reviewed: {
+            published: 'Published',
+            rejected: 'Rejected',
+        },
+    })
+```
+
+## Boolean options
+
+`boolean()` fills the options with "Yes" and "No", saved as `1` and `0`. You may change the labels, and the placeholder:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('feedback')
+    .label('Like this post?')
+    .boolean('Yes, I like it', 'No, not really', 'Pick an answer')
+```
+
+## Integrating with a relationship
+
+`relationship()` lists the records of a relationship of the form's model, an Objection model with `relationMappings` (the resource's data adapter model). The second argument is the column used as the option label:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+```
+
+For a belongs-to relationship, the field is named after the foreign key, and saves it like any other field. The value must be one of the related records: a key forged by the browser is rejected.
+
+### Many-to-many relationships
+
+With `multiple()` and a many-to-many relationship, name the field after the relationship. The selected records are loaded when the form is filled, and the links are saved once the record is created or updated, on resource pages and in the `CreateAction` and `EditAction` modals. The field is not part of the saved data:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('technologies')
+    .multiple()
+    .relationship('technologies', 'name')
+```
+
+### Searching relationship options
+
+With `searchable()`, the related records are searched on the server, in the title column, and only matching records are sent to the browser. Call `preload()` to also load the options when the form opens:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+    .searchable()
+    .preload()
+```
+
+### Customizing the relationship query
+
+The third argument scopes the query. It receives the Objection query, and the search term when searching. Records outside this scope are neither listed nor accepted:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name', (query) => query.where('is_active', true))
+```
+
+When the form has no model (a custom page, an action on another model), pass it with the fourth argument: `relationship('author', 'name', null, { model: Post })`.
+
+### Creating related records
+
+With a relationship, `createOptionForm()` works without `createOptionUsing()`: the related record is inserted with the modal's data, and selected:
+
+```ts
+import { Select, TextInput } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+    .createOptionForm([
+        TextInput.make('name').required(),
+        TextInput.make('email').email().required(),
+    ])
+```
+
+### Saving other relationships
+
+For other relationships, any field can load and save its state itself with `loadStateFromRelationshipsUsing()` and `saveRelationshipsUsing()`. The second callback runs after the record is saved; such a field is not part of the saved data:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('category_ids')
+    .multiple()
+    .options(async () => listCategories())
+    .loadStateFromRelationshipsUsing(async (record) => (await knex('product_category').where('product_id', record.id)).map((row) => String(row.category_id)))
+    .saveRelationshipsUsing(async ({ record, state }) => {
+        await knex('product_category').where('product_id', record.id).delete();
+        await knex('product_category').insert((state as string[]).map((id) => ({ product_id: record.id, category_id: id })));
+    })
+```
 
 ## Enabling the JavaScript select
 
 By default, Navette uses the native HTML select. You may enable the JavaScript select, which offers search, by calling `searchable()`. A [multi-select](#multi-select) always uses the JavaScript select.
+
+## Using the JavaScript select without search
+
+`native(false)` uses the JavaScript select without enabling search:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('status')
+    .native(false)
+    .options({ draft: 'Draft', published: 'Published' })
+```
+
+## Allowing HTML in the option labels
+
+`allowHtml()` displays the option labels as HTML in the JavaScript select. Labels are sanitized on the server with an allow-list (formatting, links and images; no scripts, styles or event handlers):
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('technology')
+    .options({
+        tailwind: '<span class="text-blue-500">Tailwind</span>',
+        alpine: '<span class="text-green-500">Alpine</span>',
+    })
+    .searchable()
+    .allowHtml()
+```
 
 ## Searching options
 
@@ -163,6 +303,50 @@ Select.make('tags')
 
         return rows.map((row): [string, string] => [String(row.id), row.name]);
     })
+```
+
+### Limiting the number of selected items
+
+`maxItems()` limits how many items a multi-select can have (the JavaScript select stops adding items, and the server rejects more), and `minItems()` requires a minimum:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('technologies')
+    .multiple()
+    .options({ tailwind: 'Tailwind CSS', alpine: 'Alpine.js', laravel: 'Laravel' })
+    .maxItems(2)
+```
+
+## Customizing the select messages
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+    .searchable()
+    .searchPrompt('Search authors by name')
+    .searchingMessage('Searching authors...')
+    .noSearchResultsMessage('No authors found.')
+    .loadingMessage('Loading authors...')
+    .optionsLimit(20)
+    .searchDebounce(500)
+```
+
+`optionsLimit()` sets how many options the JavaScript select shows at once (50 by default), and `searchDebounce()` the delay before a server search, in milliseconds (1000 by default).
+
+## Adding affix text and icons
+
+Like the [text input](/forms/text-input#adding-affix-text-aside-the-field), the select may have a prefix and a suffix: text, icons (with a color) and actions:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('domain')
+    .options({ com: 'example.com', org: 'example.org' })
+    .prefix('https://')
+    .suffixIcon('m-globe-alt')
 ```
 
 ## Creating a new option in a modal
@@ -317,6 +501,9 @@ As well as all rules listed on the [validation](/forms/validation) page, the sel
 
 The error message is "The selected author is invalid.".
 
+- With a relationship, the value must be a record of the relationship's query.
+- With `maxItems()` or `minItems()`, the number of selected items is checked.
+
 <Aside variant="warning">
-Grouped options, HTML option labels, boolean options, `maxItems()`, affixes and selecting options from a table in a modal are not available yet.
+Selecting options from a table in a modal is not available yet.
 </Aside>

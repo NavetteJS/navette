@@ -19,7 +19,7 @@ let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 
 /** Execution context of a mounted action. */
-export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action; /** Form data of the parent action, for an action of its modal footer (changes are kept). */ parentData?: Record<string, unknown>; /** For an action of a form component (affix action...): the component's state. */ state?: unknown; /** For an action of a form component: changes a field of the same form (`set('slug', value)`). */ set?: (name: string, value: unknown) => void; get?: (name: string) => unknown };
+export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action; /** Form data of the parent action, for an action of its modal footer (changes are kept). */ parentData?: Record<string, unknown>; /** For an action of a form component (affix action...): the component's state. */ state?: unknown; /** For an action of a form component: changes a field of the same form (`set('slug', value)`). */ set?: (name: string, value: unknown) => void; get?: (name: string) => unknown; /** The modal's form, once validated (to save its relationships). */ schema?: any };
 /** Message of a bulk notification, from the number of records concerned and the number of selected records. */
 export type BulkMessage = string | ((count: number, total: number) => string);
 
