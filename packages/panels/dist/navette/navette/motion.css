@@ -1,40 +1,40 @@
 /*
- * Navette — mouvement et indicateurs de chargement.
+ * Navette — motion and loading indicators.
  *
- * Écart volontaire avec FilamentPHP (décision du 2026-11-12) : cette feuille n'ajoute que du mouvement et des indicateurs,
- * sans toucher au balisage ni aux dimensions. Elle se désactive avec `Panel.motion(false)`, ce qui rend l'interface de Filament
- * telle quelle. Les courbes reprennent l'esprit d'iOS : ressorts doux, sorties rapides, échelle légère à la pression.
- * Tout est neutralisé pour les personnes qui demandent moins d'animations (`prefers-reduced-motion`).
+ * A deliberate difference from FilamentPHP (decided on 2026-11-12): this sheet only adds motion and indicators, without
+ * touching the markup or the dimensions. `Panel.motion(false)` turns it off, which renders Filament's interface as is.
+ * The curves follow the spirit of iOS: soft springs, quick exits, a slight scale on press.
+ * Everything is neutralized for people who ask for less motion (`prefers-reduced-motion`).
  */
 :root {
-    --nv-spring: cubic-bezier(0.32, 0.72, 0, 1);      /* glissement amorti, sans dépassement */
-    --nv-bounce: cubic-bezier(0.2, 0.9, 0.3, 1.25);   /* léger dépassement à l'arrivée */
+    --nv-spring: cubic-bezier(0.32, 0.72, 0, 1);      /* damped slide, without overshoot */
+    --nv-bounce: cubic-bezier(0.2, 0.9, 0.3, 1.25);   /* slight overshoot on arrival */
     --nv-out: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-    /* --- arrivée de page : le contenu monte de quelques pixels en apparaissant */
+    /* --- page arrival: the content rises a few pixels as it appears */
     @keyframes nv-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-    /* `backwards` et non `both` : une animation de `transform` qui reste appliquée après sa fin fait de l'élément le bloc conteneur de ses descendants en `position: fixed` ; le fond d'une modale ne couvrait alors que la page, pas la fenêtre. */
+    /* `backwards`, not `both`: a `transform` animation still applied after its end makes the element the containing block of its `position: fixed` descendants; the backdrop of a modal then only covered the page, not the window. */
     .fi-page { animation: nv-rise 0.42s var(--nv-spring) backwards; }
     .fi-simple-main { animation: nv-rise 0.5s var(--nv-spring) backwards; }
 
-    /* --- pression : boutons, liens d'action, éléments de navigation */
+    /* --- press: buttons, action links, navigation items */
     .fi-btn, .fi-icon-btn, .fi-link, .fi-tabs-item, .fi-sidebar-item-btn, .fi-dropdown-list-item, .fi-pagination-item-btn {
         transition: transform 0.18s var(--nv-spring), background-color 0.2s var(--nv-out), color 0.2s var(--nv-out), box-shadow 0.2s var(--nv-out), opacity 0.2s var(--nv-out);
     }
     .fi-btn:active:not(.fi-disabled, [disabled]), .fi-icon-btn:active:not(.fi-disabled, [disabled]) { transform: scale(0.96); }
     .fi-link:active, .fi-tabs-item:active, .fi-sidebar-item-btn:active, .fi-dropdown-list-item:active:not(.fi-disabled), .fi-pagination-item-btn:active { transform: scale(0.97); }
 
-    /* --- modales : la fenêtre arrive avec un ressort ; le fond reste celui de Filament (voile sombre, sans flou) */
+    /* --- modals: the window arrives with a spring; the backdrop stays Filament's (dark veil, no blur) */
     .fi-modal-window { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.42s !important; }
     .fi-modal-window.fi-transition-leave { transition-timing-function: var(--nv-out) !important; transition-duration: 0.2s !important; }
 
-    /* --- menus déroulants : ils s'ouvrent depuis leur déclencheur */
+    /* --- dropdowns: they open from their trigger */
     @keyframes nv-pop { from { opacity: 0; transform: scale(0.94) translateY(-4px); } to { opacity: 1; transform: none; } }
     .fi-dropdown-panel:not([style*="display: none"]) { animation: nv-pop 0.26s var(--nv-bounce); transform-origin: top; }
 
-    /* --- notifications : entrée latérale amortie */
+    /* --- notifications: damped side entrance */
     .fi-no-notification { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.45s !important; }
 
     /* --- surfaces et champs */
@@ -44,7 +44,7 @@
     .fi-badge { transition: background-color 0.2s var(--nv-out), color 0.2s var(--nv-out); }
     .fi-sidebar-group-items { transition: opacity 0.25s var(--nv-out); }
 
-    /* --- indicateur de chargement des zones différées : une roue, au lieu d'un cadre vide */
+    /* --- loading indicator of deferred areas: a spinner, instead of an empty frame */
     @keyframes nv-spin { to { transform: rotate(360deg); } }
     @keyframes nv-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
     .fi-loading-section { position: relative; animation: nv-breathe 1.6s ease-in-out infinite; }
@@ -54,8 +54,8 @@
         animation: nv-spin 0.7s linear infinite;
     }
 
-    /* --- éléments qui arrivent après l'affichage de la page : ils se déploient au lieu d'apparaître d'un coup */
-    /* compteur d'onglet (chargé après coup) : il s'élargit depuis zéro, l'onglet s'étire avec lui */
+    /* --- elements that arrive after the page is displayed: they unfold instead of popping in */
+    /* tab counter (loaded afterwards): it widens from zero, and the tab stretches with it */
     @keyframes nv-expand {
         from { opacity: 0; max-width: 0; padding-inline: 0; margin-inline-start: -0.5rem; transform: scale(0.6); }
         60% { opacity: 1; }
@@ -64,22 +64,22 @@
     .fi-tabs-item > .fi-badge { overflow: hidden; white-space: nowrap; transform-origin: left center; animation: nv-expand 0.5s var(--nv-spring) both; }
     /* roue d'attente du compteur : elle s'efface en douceur */
     .fi-tabs-item-badge-placeholder { transition: opacity 0.2s var(--nv-out); }
-    /* zone chargée à la demande (relation manager, widget) : son contenu monte en place quand il remplace la roue */
+    /* area loaded on demand (relation manager, widget): its content rises into place when it replaces the spinner */
     .fi-resource-relation-manager, .fi-wi-widget { animation: nv-rise 0.45s var(--nv-spring) backwards; }
-    /* lignes d'une table qui vient d'être rechargée, erreurs de validation, lignes ajoutées à un Repeater */
+    /* rows of a table that was just reloaded, validation errors, items added to a Repeater */
     @keyframes nv-fade-in { from { opacity: 0; } to { opacity: 1; } }
     @keyframes nv-unfold { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
     .fi-fo-field-wrp-error-message { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
-    /* `backwards` et non `both` : une animation d'opacité qui reste appliquée garde la ligne en contexte d'empilement ; la liste d'un sélecteur de la ligne passait alors sous le bouton d'ajout du Repeater. */
+    /* `backwards`, not `both`: an opacity animation still applied keeps the row a stacking context; the list of a select in the row then went under the Repeater's add button. */
     .fi-fo-table-repeater tbody tr { animation: nv-fade-in 0.3s var(--nv-out) backwards; }
     .fi-ta-summary-row, .fi-ta-summary-header-row { animation: nv-fade-in 0.35s var(--nv-out) backwards; }
 
-    /* --- contenu qui se recharge : il s'estompe légèrement pendant la requête */
+    /* --- content being reloaded: it fades slightly during the request */
     .fi-ta-content-ctn { transition: opacity 0.2s var(--nv-out); }
     html[data-nv-busy] .fi-ta-content-ctn { opacity: 0.6; }
 }
 
-/* --- pastille d'activité : visible quand une requête dure (posée par motion.js) */
+/* --- activity pill: visible while a request takes a while (added by motion.js) */
 .nv-busy {
     position: fixed; top: 0.75rem; left: 50%; z-index: 60; display: flex; align-items: center; gap: 0.5rem;
     padding: 0.4rem 0.8rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 500; pointer-events: none;

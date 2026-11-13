@@ -61,11 +61,11 @@ try {
     });
     await step('once saved, the page can be left without a question', async () => {
         await page.goto(`${BASE}/projects/${project.id}/edit`);
-        await page.locator('[id="form.name"]').fill(`${project.name} (saved)`);
+        await page.locator('[id="form.name"]').fill(`${project.name} (kept)`);
         await page.locator('form#form button[type=submit]').first().click();
         await page.getByText('Saved').first().waitFor({ timeout: 10000 });
         assert.ok(await isSaved());
-        assert.equal(db.prepare('select name from projects where id = ?').get(project.id).name, `${project.name} (saved)`);
+        assert.equal(db.prepare('select name from projects where id = ?').get(project.id).name, `${project.name} (kept)`);
         let asked = false;
         page.once('dialog', (dialog) => { asked = true; dialog.dismiss(); });
         await page.locator('.fi-sidebar-item a', { hasText: 'Tasks' }).first().click();

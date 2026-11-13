@@ -1,7 +1,7 @@
-// Navette — pastille d'activité : signale une requête qui dure, pour que l'écran ne paraisse jamais figé.
-// Écart volontaire avec FilamentPHP, désactivable avec `Panel.motion(false)`. Aucune dépendance : s'appuie sur les hooks de Livewire.
+// Navette activity pill: signals a request that takes a while, so that the screen never looks frozen.
+// A deliberate difference from FilamentPHP, turned off with `Panel.motion(false)`. No dependency: it relies on Livewire's hooks.
 (() => {
-    const DELAY = 350; // en dessous, la réponse arrive avant qu'un indicateur soit utile
+    const DELAY = 350; // below this, the response arrives before an indicator would help
     let pending = 0;
     let timer = null;
 
@@ -12,7 +12,7 @@
             element.className = 'nv-busy';
             element.setAttribute('role', 'status');
             element.setAttribute('aria-live', 'polite');
-            // Conservée d'une page à l'autre par la navigation de Livewire.
+            // Kept from one page to the next by Livewire's navigation.
             element.setAttribute('wire:ignore', '');
             element.setAttribute('x-persist', 'nv-busy');
             element.textContent = document.documentElement.lang?.startsWith('fr') ? 'Chargement…' : 'Loading…';
@@ -34,7 +34,7 @@
     const end = () => { pending = Math.max(0, pending - 1); update(); };
 
     document.addEventListener('livewire:init', () => {
-        // Chaque requête de mise à jour d'un composant.
+        // Every update request of a component.
         window.Livewire.hook('commit', ({ succeed, fail }) => {
             begin();
             let done = false;
@@ -43,7 +43,7 @@
             fail(finish);
         });
     });
-    // Navigation entre pages.
+    // Navigation between pages.
     document.addEventListener('livewire:navigate', begin);
     document.addEventListener('livewire:navigated', () => { pending = 0; update(); });
 })();

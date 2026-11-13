@@ -1,9 +1,9 @@
 /*
- * Navette — calendrier (CalendarWidget).
+ * Navette — calendar (CalendarWidget).
  *
- * Composant propre à Navette. Tout passe par des variables : redéfinissez-les sur `.nv-cal` (ou sur une classe ajoutée par
- * `getExtraClasses()`) pour changer hauteur des cases, rayons, bordures… Les couleurs des événements viennent des classes
- * `fi-color fi-color-<nom>` de Filament : toute couleur déclarée par le panel fonctionne.
+ * A Navette component. Everything goes through variables: redefine them on `.nv-cal` (or on a class added by
+ * `getExtraClasses()`) to change the height of the cells, the radii, the borders… Event colors come from Filament's
+ * `fi-color fi-color-<name>` classes: any color declared by the panel works.
  */
 .nv-cal {
     --nv-cal-border: var(--gray-200);
@@ -86,7 +86,7 @@ button.nv-cal-day-number:hover { background: var(--nv-cal-surface-muted); }
 :where(.dark) :is(a, button).nv-cal-event:hover { background: color-mix(in oklab, var(--color-400) 22%, transparent); }
 .nv-cal-event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nv-cal-event-time { flex: none; font-variant-numeric: tabular-nums; opacity: 0.8; }
-/* Événement sur plusieurs jours : les bords intérieurs sont droits et collés à la case voisine. */
+/* An event over several days: its inner edges are straight and touch the next cell. */
 .nv-cal-grid .nv-cal-event-continued { border-start-start-radius: 0; border-end-start-radius: 0; margin-inline-start: -0.375rem; }
 .nv-cal-grid .nv-cal-event-continues { border-start-end-radius: 0; border-end-end-radius: 0; margin-inline-end: -0.375rem; }
 .nv-cal-more { align-self: flex-start; padding: 0 0.375rem; border-radius: var(--nv-cal-event-radius); font-size: 0.75rem; font-weight: 500; color: var(--nv-cal-muted); }
