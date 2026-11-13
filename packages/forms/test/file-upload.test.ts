@@ -81,3 +81,9 @@ test('deletable(false) keeps saved files; editor and avatar options reach the br
     assert.match(html, /class="fi-fo-file-upload-editor fi-fo-file-upload-editor-circle-cropper"/);
     assert.match(html, />16:9<\/button>/);
 });
+
+test('deletable(false) keeps a saved file the browser dropped from the state', async () => {
+    const livewire = host({ doc: {} }, []);
+    const schema = form(livewire, [FileUpload.make('doc').deletable(false).storage(new LocalFileStorage(path.join(dir, 'kept'), '/files'))], { doc: 'docs/a.pdf' });
+    assert.deepEqual(await getSchemaState(schema), { doc: 'docs/a.pdf' });
+});

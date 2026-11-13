@@ -73,7 +73,7 @@ FileUpload.make('contract').storage(new LocalFileStorage(path.resolve('./storage
 
 ### The local storage
 
-`LocalFileStorage` copies the file to a folder, under a random name (`<directory>/<uuid>.<extension>`), and writes its original name and type next to it. The second argument is the URL under which the folder is served, used to display and download the file:
+`LocalFileStorage` copies the file to a folder, under a random name (`<directory>/<uuid>.<extension>`), and writes its original name and type next to it. When the field chooses the name ([`preserveFilenames()`, `getUploadedFileNameForStorageUsing()`](/forms/file-upload#controlling-file-names)), the name is sanitized with `safeStorageName()` and an existing file is never overwritten: a short random suffix is added. The second argument is the URL under which the folder is served, used to display and download the file:
 
 ```ts
 import express from 'express';
@@ -89,13 +89,13 @@ To store files elsewhere, such as an object storage service, implement the `File
 
 ```ts
 import { randomUUID } from 'node:crypto';
-import type { FileStorage, TemporaryUpload, UploadedFileInfo } from '@navette-js/forms';
+import { safeStorageName, type FileStorage, type TemporaryUpload, type UploadedFileInfo } from '@navette-js/forms';
 
 class BucketStorage implements FileStorage {
-    // Stores a temporary file and returns its key.
-    async store(file: TemporaryUpload, directory: string | null): Promise<string> {
+    // Stores a temporary file and returns its key. `name` is set when the field chooses the file name.
+    async store(file: TemporaryUpload, directory: string | null, name: string | null = null): Promise<string> {
         // file.path: the temporary file; file.type and file.extension: detected; file.name: original name.
-        const key = `${directory ?? 'files'}/${randomUUID()}.${file.extension}`;
+        const key = `${directory ?? 'files'}/${name === null ? `${randomUUID()}.${file.extension}` : safeStorageName(name, file.extension)}`;
         await bucket.upload(file.path, key, { contentType: file.type });
 
         return key;

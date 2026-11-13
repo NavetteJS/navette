@@ -750,6 +750,8 @@ export class Page extends BasePage {
 
     // --- mounted actions: the stack lives in the component state, modals are rendered server-side
     mountedActions: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }[] = [];
+    /** Files uploaded by rich editors (`componentFileAttachments.<state path>.<id>`), stored by the editor when it asks for their URL. */
+    componentFileAttachments: Record<string, unknown> = {};
     getActionMountContext(): Record<string, unknown> { return {}; }
     protected getActionRecord(): unknown { return null; }
     /** Record targeted by an action mounted in a given context (table row…). */

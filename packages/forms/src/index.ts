@@ -16,7 +16,7 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { constants as fsConstants, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 
 views.namespace('filament-forms', fileURLToPath(new URL('../views', import.meta.url)));
 let colorManager: ColorManager | null = null;
@@ -1790,11 +1790,71 @@ export function richDocumentToHtml(document: unknown): string | null {
  * Rich text editor: the browser works on a TipTap document, the database receives HTML.
  * Not supported yet: attachments, custom blocks, mentions.
  */
+/**
+ * Stores a file uploaded by an editor (`componentFileAttachments.<state path>[.<id>]`): type checked on the file's content, size,
+ * then stored; the reference is consumed. Returns the public URL (local or http(s) only).
+ */
+async function storeEditorAttachment(field: Field, id: string | null, options: { storage: FileStorage | null; directory: string | null; types: string[]; maxSize: number }): Promise<string | null> {
+    if (!options.storage) return null;
+    const livewire = field.livewire as any;
+    const segments = field.getStatePath().split('.');
+    const holder = readPath(livewire.componentFileAttachments ?? {}, id === null ? segments.slice(0, -1) : segments) as Record<string, unknown> | undefined;
+    const name = id ?? segments[segments.length - 1];
+    if (!holder || typeof holder !== 'object' || !Object.hasOwn(holder, name)) return null;
+    const uploads = livewire._runtime?.uploads;
+    const file = uploads?.resolve(holder[name]) as TemporaryUpload | null;
+    delete holder[name];
+    if (!file || !options.types.includes(file.type) || file.size > options.maxSize * 1024) return null;
+    const key = await options.storage.store(file, options.directory);
+    uploads.remove(file.id);
+    const info = await options.storage.info(key);
+    return info && /^(\/(?!\/)|https?:\/\/)/.test(info.url) ? info.url : null;
+}
+/** Tools of the rich editor's toolbar, in their default groups. */
+export const RICH_EDITOR_TOOLS = [['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'link'], ['h2', 'h3'], ['alignStart', 'alignCenter', 'alignEnd'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
 export class RichEditor extends Field {
+    private _toolbar: string[][] | null = null;
+    private _disabledTools: string[] = [];
+    private _json = false;
+    private _richPlaceholder: string | null = null;
+    private _attachmentsStorage: FileStorage | null = null;
+    private _attachmentsDirectory: string | null = null;
+    private _attachmentTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    private _attachmentMaxSize = 12288;
     static make(name: string): RichEditor { return configured(new RichEditor(name)); }
-    hydrateState(value: unknown): unknown { return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : ''); }
+    /** Toolbar tools, by group (`[['bold', 'italic', 'link'], ['h2', 'h3'], ['undo', 'redo']]`); see `RICH_EDITOR_TOOLS`. */
+    toolbarButtons(groups: string[][] | string[]): this {
+        const list = (groups.length && typeof groups[0] === 'string' ? [groups as string[]] : groups as string[][]);
+        const known = new Set(RICH_EDITOR_TOOLS.flat());
+        const unknown = list.flat().filter((tool) => !known.has(tool));
+        if (unknown.length) throw new Error(`RichEditor: unknown toolbar buttons ${unknown.join(', ')} (available: ${[...known].join(', ')}).`);
+        this._toolbar = list;
+        return this;
+    }
+    disableToolbarButtons(tools: string[] = []): this { this._disabledTools = [...this._disabledTools, ...tools]; return this; }
+    disableAllToolbarButtons(condition = true): this { if (condition) this._toolbar = []; return this; }
+    /** Saves the content as the editor's JSON document instead of HTML. */
+    json(condition = true): this { this._json = condition; return this; }
+    placeholder(text: string | null): this { this._richPlaceholder = text; return this; }
+    /** Where files attached in the editor are stored (`FileUpload.storage` by default); without storage, attaching is off. */
+    fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
+    fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
+    /** Accepted types of attached files, checked on the file's content (images only: they are inserted as images). */
+    fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
+    /** Maximum size of attached files, in kilobytes. */
+    fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    private attachmentsStorage(): FileStorage | null { return this._attachmentsStorage ?? FileUpload.storage; }
+    private tools(): string[][] { return (this._toolbar ?? RICH_EDITOR_TOOLS).map((group) => group.filter((tool) => !this._disabledTools.includes(tool) && (tool !== 'attachFiles' || this.attachmentsStorage() !== null))).filter((group) => group.length); }
+    hydrateState(value: unknown): unknown {
+        if (typeof value === 'string' && value.trim().startsWith('{')) { try { const parsed = JSON.parse(value); if (isRichDocument(parsed)) return parsed; } catch { /* HTML */ } }
+        return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : '');
+    }
     getDefaultState(): unknown { return richHtmlToDocument(typeof this._default === 'string' ? this._default : ''); }
-    dehydrateState(state: unknown): unknown { return richDocumentToHtml(state); }
+    /** HTML (sanitized by the editor's schema), or the JSON document with `json()` (normalized through the same schema). */
+    dehydrateState(state: unknown): unknown {
+        const html = richDocumentToHtml(state);
+        return this._json ? (html === null ? null : richHtmlToDocument(html)) : html;
+    }
     async getValidationRules(): Promise<Rule[]> {
         const rules: Rule[] = [];
         if (await this.isRequired()) rules.push({ name: 'required', passes: (value) => richDocumentToHtml(value) !== null, message: (a) => `The ${a} field is required.` });
@@ -1804,8 +1864,17 @@ export class RichEditor extends Field {
     getMentionSearchResultsForJs(): unknown[] { return []; }
     getMentionLabelsForJs(): unknown[] { return []; }
     getCustomBlockPreviewsForJs(): unknown[] { return []; }
-    getUploadedFileAttachmentTemporaryUrl(): null { return null; }
-    saveUploadedFileAttachmentAndGetUrl(): null { return null; }
+    /**
+     * URL of a file the editor just uploaded: the file is checked (type from its content, size), stored, and its public URL returned.
+     * It stays stored even if the form is not saved.
+     */
+    async getUploadedFileAttachmentTemporaryUrl(args: unknown = {}): Promise<string | null> {
+        const id = String((args as any)?.attachment ?? '');
+        const storage = this.attachmentsStorage();
+        if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.tools().flat().includes('attachFiles')) return null;
+        return storeEditorAttachment(this, id, { storage, directory: this._attachmentsDirectory, types: this._attachmentTypes, maxSize: this._attachmentMaxSize });
+    }
+    async saveUploadedFileAttachmentAndGetUrl(args: unknown = {}): Promise<string | null> { return this.getUploadedFileAttachmentTemporaryUrl(args); }
 
     /** Toolbar "link" action: a modal (URL, new tab), then commands sent back to the browser editor. */
     getActions(): Action[] {
@@ -1835,7 +1904,30 @@ export class RichEditor extends Field {
     }
 
     async toHtml(): Promise<string> {
-        return this.wrap(views.render('filament-forms::components.rich-editor', { livewireId: this.livewire.id, key: this.getKey(), statePath: this.getStatePath(), label: await this.getLabel(), js }), { labelAsDiv: true });
+        let html = views.render('filament-forms::components.rich-editor', { livewireId: this.livewire.id, key: this.getKey(), statePath: this.getStatePath(), label: await this.getLabel(), js });
+        // Toolbar: the snapshot's buttons, regrouped as configured.
+        const toolbarStart = html.indexOf('data-rich-editor-toolbar="main"');
+        if (toolbarStart >= 0) {
+            const open = html.indexOf('>', toolbarStart) + 1;
+            const close = html.indexOf('            \n            <div\n                x-show="isUploadingFile"', open);
+            const body = html.slice(open, close);
+            const buttons = new Map<string, string>();
+            for (const match of body.matchAll(/<button data-rich-editor-tool="([A-Za-z0-9]+)"[\s\S]*?<\/button>/g)) buttons.set(match[1], match[0]);
+            const groups = this.tools().map((group) => `<div class="fi-fo-rich-editor-toolbar-group">${group.map((tool) => buttons.get(tool) ?? '').join('')}</div>`).join('');
+            const endOfToolbar = body.lastIndexOf('</div>');
+            html = html.slice(0, open) + groups + body.slice(endOfToolbar) + html.slice(close);
+        }
+        const attach = this.tools().flat().includes('attachFiles');
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.rich_editor.${key}`, replace);
+        html = html.replace('canAttachFiles: true,', `canAttachFiles: ${attach ? 'true' : 'false'},`)
+            .replace('maxFileSize: 12288,', `maxFileSize: ${this._attachmentMaxSize},`)
+            .replace(/maxFileSizeValidationMessage: '[^']*',/, () => `maxFileSizeValidationMessage: ${js(`Uploaded files must not be greater than ${this._attachmentMaxSize} kilobytes.`)},`)
+            .replace(/acceptedFileTypes: JSON\.parse\('[^']*'\),/, () => `acceptedFileTypes: ${js(this._attachmentTypes)},`)
+            .replace(/acceptedFileTypesValidationMessage: '[^']*',/, () => `acceptedFileTypesValidationMessage: ${js(`Uploaded files must be of type: ${this._attachmentTypes.join(', ')}.`)},`)
+            .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
+            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this.isLive() ? 'true' : 'false'})`);
+        void tr;
+        return this.wrap(html, { labelAsDiv: true });
     }
 }
 
@@ -2060,10 +2152,10 @@ type LiveMode = { onBlur: boolean; debounce: number | null } | null;
 /** Second `$entangle()` argument: true only for a plain `live()` field (no `onBlur`, no `debounce`). */
 const entangleLive = (live: LiveMode) => (live !== null && !live.onBlur && live.debounce === null ? 'true' : 'false');
 
-const MARKDOWN_TOOLBAR: string[][] = [['bold', 'italic', 'strike', 'link'], ['heading'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table'], ['undo', 'redo']];
+const MARKDOWN_TOOLBAR: string[][] = [['bold', 'italic', 'strike', 'link'], ['heading'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
 /**
  * Markdown editor (EasyMDE). The state is raw Markdown text, to sanitize before any HTML display.
- * Attachments are not supported (no `attachFiles` button by default); when read-only (`disabled()`),
+ * Files can be attached (images, stored on upload) when a storage is set (`fileAttachmentsStorage()` or `FileUpload.storage`); when read-only (`disabled()`),
  * the text is shown escaped, without Markdown conversion.
  */
 export class MarkdownEditor extends Field {
@@ -2097,9 +2189,29 @@ export class MarkdownEditor extends Field {
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'string', passes: (v) => typeof v === 'string', message: (a) => `The ${a} field must be a string.` }];
     }
+    private _attachmentsStorage: FileStorage | null = null;
+    private _attachmentsDirectory: string | null = null;
+    private _attachmentTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    private _attachmentMaxSize = 12288;
+    /** Where attached files are stored (`FileUpload.storage` by default); without storage, the "Attach files" button is hidden. */
+    fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
+    fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
+    /** Accepted types of attached files (images), checked on the file's content. */
+    fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
+    /** Maximum size of attached files, in kilobytes. */
+    fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    private canAttachFiles(): boolean { return this.hasToolbarButton('attachFiles') && (this._attachmentsStorage ?? FileUpload.storage) !== null; }
+    private visibleToolbar(): (string | string[])[] {
+        if (this.canAttachFiles()) return this._toolbarButtons;
+        return this._toolbarButtons.map((group) => (Array.isArray(group) ? group.filter((name) => name !== 'attachFiles') : group)).filter((group) => (Array.isArray(group) ? group.length > 0 : group !== 'attachFiles'));
+    }
     getExposedMethods(): string[] { return ['getUploadedFileAttachmentTemporaryUrl', 'saveUploadedFileAttachmentAndGetUrl']; }
     getUploadedFileAttachmentTemporaryUrl(): null { return null; }
-    saveUploadedFileAttachmentAndGetUrl(): null { return null; }
+    /** Stores the file just uploaded to `componentFileAttachments.<state path>` and returns its URL. */
+    async saveUploadedFileAttachmentAndGetUrl(): Promise<string | null> {
+        if (!this.canAttachFiles() || (await this.isDisabled())) return null;
+        return storeEditorAttachment(this, null, { storage: this._attachmentsStorage ?? FileUpload.storage, directory: this._attachmentsDirectory, types: this._attachmentTypes, maxSize: this._attachmentMaxSize });
+    }
     async toHtml(): Promise<string> {
         const id = this.getId();
         const accessibility = accessibilityOf(this);
@@ -2120,7 +2232,7 @@ export class MarkdownEditor extends Field {
             tools: Object.fromEntries(['attach_files', 'blockquote', 'bold', 'bullet_list', 'code_block', 'heading', 'italic', 'link', 'ordered_list', 'redo', 'strike', 'table', 'undo'].map((tool) => [tool, tr(`tools.${tool}`)])),
         };
         const config = `markdownEditorFormComponent({
- canAttachFiles: false,
+ canAttachFiles: ${this.canAttachFiles() ? 'true' : 'false'},
  isLiveDebounced: ${this._live?.debounce !== null && this._live?.debounce !== undefined ? 'true' : 'false'},
  isLiveOnBlur: ${this._live?.onBlur ? 'true' : 'false'},
  label: ${js(await this.getLabel())},
@@ -2129,10 +2241,26 @@ export class MarkdownEditor extends Field {
  minHeight: ${js(this._minHeight)},
  placeholder: ${js(this._placeholder)},
  state: $wire.$entangle(${js(this.getStatePath())}, ${entangleLive(this._live)}),
- toolbarButtons: ${js(this._toolbarButtons)},
+ toolbarButtons: ${js(this.visibleToolbar())},
  translations: ${js(translations)},
  uploadFileAttachmentUsing: async (file, onSuccess, onError) => {
+ const acceptedTypes = ${js(this._attachmentTypes)}
+ if (acceptedTypes && ! acceptedTypes.includes(file.type)) {
+ return onError(${js(tr('file_attachments_accepted_file_types_message').replace(':values', this._attachmentTypes.join(', ')))})
+ }
+ const maxSize = ${js(this._attachmentMaxSize)}
+ if (maxSize && file.size > +maxSize * 1024) {
+ return onError(${js(tr('file_attachments_max_size_message').replace(':max', String(this._attachmentMaxSize)))})
+ }
+ $wire.upload(${js(`componentFileAttachments.${this.getStatePath()}`)}, file, () => {
+ $saveUploadedFileAttachmentAndGetUrl()
+ .then((url) => {
+ if (! url) {
  return onError()
+ }
+ onSuccess(url)
+ })
+ })
  },
  })`;
         const wrapper = new Attributes().class(['fi-fo-markdown-editor', 'fi-input-wrp', { 'fi-invalid': this.hasError() }]);
@@ -2642,8 +2770,8 @@ export interface FileStorage {
 }
 /** Local disk storage, served under a public URL. File names are random; the extension comes from the detected type. */
 /**
- * A file name chosen by the application or the user, made safe for storage: no directory part, only letters, digits, `.`, `_`
- * and `-`, and always the extension detected from the file's content (an uploaded `shell.php` declared as an image is stored
+ * A file name chosen by the application or the user, made safe for storage: no directory part, only letters, digits, `_` and
+ * `-`, and always the extension detected from the file's content (an uploaded `shell.php` declared as an image is stored
  * as `shell.png`).
  */
 export function safeStorageName(name: string, extension: string): string {
@@ -2653,7 +2781,7 @@ export function safeStorageName(name: string, extension: string): string {
 /** Width and height of a PNG, GIF, JPEG or WebP image, read from its header; `null` for other files. */
 export function readImageSize(path: string): { width: number; height: number } | null {
     let buffer: Buffer;
-    try { const fd = openSync(path, 'r'); buffer = Buffer.alloc(65536); const read = readSync(fd, buffer, 0, buffer.length, 0); closeSync(fd); buffer = buffer.subarray(0, read); } catch { return null; }
+    try { const fd = openSync(path, 'r'); buffer = Buffer.alloc(1024 * 1024); const read = readSync(fd, buffer, 0, buffer.length, 0); closeSync(fd); buffer = buffer.subarray(0, read); } catch { return null; }
     if (buffer.length >= 24 && buffer.readUInt32BE(0) === 0x89504e47) return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
     if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'GIF') return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
     if (buffer.length >= 30 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
@@ -2692,7 +2820,11 @@ export class LocalFileStorage implements FileStorage {
         const target = this.resolve(key);
         if (!target) throw new Error('Invalid upload directory.');
         mkdirSync(nodePath.dirname(target), { recursive: true });
-        copyFileSync(file.path, target);
+        try { copyFileSync(file.path, target, fsConstants.COPYFILE_EXCL); } catch (error: any) {
+            // Another save took this name meanwhile: random suffix.
+            if (error?.code !== 'EEXIST' || name === null) throw error;
+            return this.store(file, directory, `${safeStorageName(name, file.extension).replace(/\.[^.]*$/, '')}-${randomUUID().slice(0, 8)}`);
+        }
         writeFileSync(`${target}.meta.json`, JSON.stringify({ name: file.name, type: file.type }));
         return key;
     }
@@ -2766,7 +2898,7 @@ export class FileUpload extends Field {
     uploadingMessage(message: string): this { this._ui.uploadingMessage = message; return this; }
     /** Number of files uploaded at the same time. */
     maxParallelUploads(count: number | null): this { this._ui.maxParallelUploads = count; return this; }
-    /** Extension → MIME type map for files the browser cannot type (`{ 'application/x-zip': ['zip'] }`). */
+    /** Extension → MIME type map for files the browser cannot type (`{ zip: 'application/zip' }`). */
     mimeTypeMap(map: Record<string, string>): this { this._ui.mimeTypeMap = map; return this; }
     /** `false`: images keep their EXIF orientation. */
     orientImagesFromExif(condition = true): this { this._ui.shouldOrientImageFromExif = condition; return this; }
@@ -2785,6 +2917,14 @@ export class FileUpload extends Field {
     imageEditorEmptyFillColor(color: string | null): this { this._ui.imageEditorEmptyFillColor = color; return this; }
     imageEditorViewportWidth(width: string | number | null): this { this._ui.imageEditorViewportWidth = width === null ? null : String(width); return this; }
     imageEditorViewportHeight(height: string | number | null): this { this._ui.imageEditorViewportHeight = height === null ? null : String(height); return this; }
+    private _autoOpenEditor = true;
+    /** With `imageEditor()` and a single aspect ratio, opens the editor when an uploaded image has another ratio (on by default). */
+    automaticallyOpenImageEditorForAspectRatio(condition = true): this { this._autoOpenEditor = condition; return this; }
+    private autoOpenEditorRatio(): number | null {
+        if (!this._imageEditor || !this._autoOpenEditor) return null;
+        const ratio = this._cropAspectRatio ?? (this._imageAspectRatios?.length === 1 ? this._imageAspectRatios[0] : null);
+        return ratio === null ? null : ratioOf(ratio);
+    }
     /** Circle crop in the image editor (avatars). */
     circleCropper(condition = true): this { this._circleCropper = condition; return this; }
     /** Crops images to this ratio in the browser before upload (`'16:9'`), without opening the editor. */
@@ -2943,6 +3083,8 @@ export class FileUpload extends Field {
                 this.uploads?.remove(file.id);
             } else if (original.has(value)) { out.push(this._storeFiles ? value : { key: value }); if (savedNames[value]) this._storedNames[value] = savedNames[value]; }
         }
+        // `deletable(false)`: a saved file the browser dropped from the state is kept.
+        if (!this._deletable) for (const key of original) if (!out.some((item) => item === key || (typeof item === 'object' && 'key' in item && item.key === key))) { out.push(this._storeFiles ? key : { key }); if (savedNames[key]) this._storedNames[key] = savedNames[key]; }
         return this._multiple ? out : (out[0] ?? null);
     }
 
@@ -2980,7 +3122,7 @@ export class FileUpload extends Field {
         const config = `fileUploadFormComponent({
  acceptedFileTypes: ${this._acceptedFileTypes ? js(this._acceptedFileTypes) : 'null'},
  automaticallyCropImagesAspectRatio: ${js(this._cropAspectRatio)},
- automaticallyOpenImageEditorForAspectRatio: ${js(this._imageEditor && this._cropAspectRatio !== null)},
+ automaticallyOpenImageEditorForAspectRatio: ${js(this.autoOpenEditorRatio())},
  automaticallyResizeImagesMode: ${js(ui('automaticallyResizeImagesMode', null))},
  automaticallyResizeImagesHeight: ${js(ui('automaticallyResizeImagesHeight', null))},
  automaticallyResizeImagesWidth: ${js(ui('automaticallyResizeImagesWidth', null))},
