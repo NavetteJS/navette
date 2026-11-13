@@ -139,3 +139,25 @@ test('ViewColumn and deprecated aliases', async () => {
     assert.equal(await BadgeColumn.make('status').toHtml({ status: 'draft' }), await TextColumn.make('status').badge().toHtml({ status: 'draft' }));
     assert.match(await BooleanColumn.make('ok').toHtml({ ok: 1 }), /fi-ta-icon/);
 });
+
+test('SelectColumn: options per record, disabled options refused on the server, JavaScript select', async () => {
+    const column = SelectColumn.make<Post>('status')
+        .options((record) => (record.title === 'Alpha' ? { draft: 'Draft', reviewing: 'Reviewing' } : { draft: 'Draft', published: 'Published' }))
+        .disableOptionWhen((value, _label, record) => value === 'reviewing' && record.title === 'Alpha');
+    const table = new Table<Post>().columns([column]);
+    const [alpha, beta] = await db('posts').orderBy('id');
+    assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'status', alpha.id, 'published'), { error: 'The selected status is invalid.' });
+    assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'status', alpha.id, 'reviewing'), { error: 'The selected status is invalid.' });
+    assert.equal(await updateTableColumnState(table, host(), adapter, 'status', beta.id, 'published'), 'published');
+    assert.equal(await updateTableColumnState(table, host(), adapter, 'status', alpha.id, 'draft'), 'draft');
+    const native = await column.toHtml(await Post.query().findById(alpha.id) as Post, alpha.id);
+    assert.match(native, /<option disabled value="reviewing">Reviewing<\/option>/);
+    const searchable = await SelectColumn.make<Post>('status').options({ draft: 'Draft', reviewing: 'Rev <i>' }).searchableOptions().placeholder('Pick one').disableOptionWhen((value) => value === 'reviewing').toHtml(await Post.query().findById(alpha.id) as Post, alpha.id);
+    assert.doesNotMatch(searchable, /<select/);
+    assert.match(searchable, /<div x-ref="select"><\/div>/);
+    assert.match(searchable, /isNative: false/);
+    assert.match(searchable, /isSearchable: true/);
+    assert.match(searchable, /placeholder: (&#039;|')Pick one/);
+    assert.ok(searchable.includes(String.raw`\u0022isDisabled\u0022:true`), 'disabled option sent to the JavaScript select');
+    assert.doesNotMatch(searchable, /<i>/, 'option labels are escaped');
+});

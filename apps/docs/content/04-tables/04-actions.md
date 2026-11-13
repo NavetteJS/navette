@@ -194,9 +194,60 @@ Action.make('archive')
 
 Selecting a record does not authorize the operation.
 
-<Aside variant="warning">
-Bulk action notifications, `authorizeIndividualRecords()`, disabling selection for some rows, limiting the number of selectable records and chunked processing are not available yet.
-</Aside>
+### Authorizing each selected record
+
+`authorizeIndividualRecords()` checks a policy ability, or a function, for each selected record. Records that fail are skipped, and counted in the notification. Process the records with `processSelectedRecords()` of the table's page, which loads them in chunks of 100 (change it with `chunkSelectedRecords()`):
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('archive')
+    .authorizeIndividualRecords('update')
+    .successNotificationTitle('Archived')
+    .failureNotificationTitle((success, total) => `Archived ${success} of ${total}`)
+    .missingBulkAuthorizationFailureNotificationMessage((count) => `You may not archive ${count} of them.`)
+    .missingBulkProcessingFailureNotificationMessage((count) => `${count} could not be archived.`)
+    .deselectRecordsAfterCompletion()
+    .action(async ({ livewire, action }) => {
+        await livewire.processSelectedRecords(action, (record) => PostResource.adapter.update(record.id, { is_archived: 1 }));
+    })
+```
+
+The function passed to `processSelectedRecords()` reports a failure by returning `false` or throwing. When every record succeeds, the success notification is sent; otherwise a warning (or a danger notification when nothing succeeded) gives the failure title and the messages. `DeleteBulkAction` uses the same notifications: with `authorizeIndividualRecords('delete')`, it deletes record by record instead of in one query.
+
+### Restoring and force-deleting records in bulk
+
+`RestoreBulkAction` and `ForceDeleteBulkAction` from `@navette-js/panels` restore or permanently delete the selected soft-deleted records. They are only visible when the [trashed filter](/tables/filters/ternary#filtering-soft-deletable-records) shows deleted records, and check the `restore` or `forceDelete` ability for each record. `DeleteBulkAction` is hidden when only deleted records are shown.
+
+### Preventing some records from being selected
+
+Records for which `checkIfRecordIsSelectableUsing()` returns `false` have no checkbox, and are left out of the selection on the server, even if the browser sends their key:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Order>): Table<Order> {
+    return table
+        .checkIfRecordIsSelectableUsing((record) => record.status !== 'shipped');
+}
+```
+
+With "select all", every record of the query is loaded to check it: keep this check cheap.
+
+### Limiting the number of selectable records
+
+`maxSelectableRecords()` limits how many records the user may select. The other checkboxes are disabled once the limit is reached, and the server keeps at most that number of keys:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .maxSelectableRecords(10);
+}
+```
+
+`selectCurrentPageOnly()` makes "select all" select the records of the current page only.
 
 ## Header actions
 
@@ -240,5 +291,23 @@ static table(table: Table<Post>): Table<Post> {
 Actions that are hidden for a record are left out of its dropdown.
 
 <Aside variant="warning">
-Action groups are only supported in `recordActions()`. Positioning record actions before the columns, toolbar actions and column actions are not available yet.
+Action groups are only supported in `recordActions()`. Toolbar actions and column actions are not available yet.
 </Aside>
+
+## Positioning record actions
+
+By default, record actions are displayed after the columns. You may move them before the columns, after the checkbox, with `recordActionsPosition('before-columns')`, or before the checkbox with `'before-cells'`:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .recordActions([
+            // ...
+        ])
+        .recordActionsPosition('before-columns');
+}
+```
+
+`recordActionsAlignment()` aligns them in their cell (`'start'`, `'center'` or `'end'`).

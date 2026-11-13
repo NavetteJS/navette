@@ -45,8 +45,14 @@ export abstract class Field extends Component {
     protected _dehydrated: boolean | null = null;
     protected _hiddenLabel = false;
     protected _helperText: string | null = null;
+    protected _liveMode: 'live' | 'blur' | null = null;
 
     constructor(name: string) { super(); this._name = name; }
+    /** Sends the state to the server as soon as it changes (`onBlur`: when the field loses focus). `false` turns it off. */
+    live(condition: boolean | { onBlur?: boolean } = true): this { this._liveMode = condition === false ? null : typeof condition === 'object' && condition.onBlur ? 'blur' : 'live'; return this; }
+    isLive(): boolean { return this._liveMode !== null; }
+    /** `wire:model` directive of the field, with its live modifiers. */
+    protected wireModel(): string { return `wire:model${this._liveMode ? '.live' : ''}${this._liveMode === 'blur' ? '.blur' : ''}`; }
     hasStatePath(): boolean { return true; }
     getName(): string { return this._name!; }
     getId(): string { return this.getKey()!; }
@@ -712,7 +718,7 @@ export class TimePicker extends Field {
         const input = new Attributes()
             .merge({
                 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
-                required: (await this.isRequired()) && !isDisabled, step: this._seconds ? 1 : null, type: 'time', 'wire:model': this.getStatePath(),
+                required: (await this.isRequired()) && !isDisabled, step: this._seconds ? 1 : null, type: 'time', [this.wireModel()]: this.getStatePath(),
             })
             .class(['fi-input']);
         const wrapper = new Attributes()
@@ -737,7 +743,7 @@ export class DateTimePicker extends Field {
         const input = new Attributes()
             .merge({
                 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
-                required: (await this.isRequired()) && !isDisabled, step: this._seconds ? 1 : null, type: 'datetime-local', 'wire:model': this.getStatePath(),
+                required: (await this.isRequired()) && !isDisabled, step: this._seconds ? 1 : null, type: 'datetime-local', [this.wireModel()]: this.getStatePath(),
             })
             .class(['fi-input']);
         const wrapper = new Attributes()
@@ -793,7 +799,7 @@ export class Textarea extends Field {
         const height = (this._rows ?? 2) * 1.5 + 0.75;
         const textarea = new Attributes().merge({
             'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), maxlength: this._maxLength,
-            required: (await this.isRequired()) && !isDisabled, rows: this._rows, 'wire:model': this.getStatePath(),
+            required: (await this.isRequired()) && !isDisabled, rows: this._rows, [this.wireModel()]: this.getStatePath(),
         });
         const wrapper = new Attributes().class(['fi-fo-textarea', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div wire:ignore.self${height !== null ? ` style="height: ${height}rem"` : ''}><textarea x-load x-load-src="${e(asset('textarea'))}" x-data="textareaFormComponent({
@@ -855,7 +861,7 @@ export class Toggle extends Field {
         const colors = colorManager.getComponentClasses('toggle', 'primary').join(' ');
         const button = new Attributes().merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
         const knob = '<div><div aria-hidden="true"></div><div aria-hidden="true"></div></div>';
-        return this.wrap('', { labelPrefix: `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, false) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${knob}</div>` : ''}` });
+        return this.wrap('', { labelPrefix: `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.isLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${knob}</div>` : ''}` });
     }
 }
 
@@ -1017,7 +1023,7 @@ export class Checkbox extends Field {
     getDefaultState(): unknown { return this._default ?? false; }
     async toHtml(): Promise<string> {
         const input = new Attributes()
-            .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), 'wire:model': this.getStatePath() })
+            .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), [this.wireModel()]: this.getStatePath() })
             .class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
         return this.wrap('', { labelPrefix: `<input ${input.toHtml()} />` });
     }
@@ -1050,7 +1056,7 @@ export class CheckboxList extends Field {
         const isDisabled = await this.isDisabled();
         const key = this.getLivewireKey() ?? '';
         const options = this._options.map(([value, label]) => {
-            const input = new Attributes().merge({ disabled: isDisabled, type: 'checkbox', value, 'wire:model': this.getStatePath() }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
+            const input = new Attributes().merge({ disabled: isDisabled, type: 'checkbox', value, [this.wireModel()]: this.getStatePath() }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             return `<div wire:key="${e(`${key}.options.${value}`)}" class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${e(label)}</span></div></label></div>`;
         });
         const columns = this._optionColumns ?? 1;

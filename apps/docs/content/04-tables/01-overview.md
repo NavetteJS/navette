@@ -229,8 +229,25 @@ static table(table: Table<Post>): Table<Post> {
 
 The options are enforced on the server: a page size sent by the browser that is not one of the options is replaced by the first option.
 
+### Showing all records
+
+Add `'all'` to the options to let the user show every record on one page:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .paginationPageOptions([10, 25, 50, 'all']);
+}
+```
+
+### Disabling pagination
+
+`paginated(false)` removes the pagination: every record is shown. `paginated([10, 25])` is a shorter form of `paginationPageOptions()`.
+
 <Aside variant="warning">
-An `'all'` option and `paginated(false)` are not available yet: a Navette table is always paginated.
+`'all'` and `paginated(false)` load every matching record in one query, up to `MAX_UNPAGINATED_RECORDS` (10,000). Use them for tables that stay small; a large table stays fast only with pagination.
 </Aside>
 
 ### Customizing the default pagination page option
@@ -467,6 +484,14 @@ configureUsing(QueryBuilder, (queryBuilder) => {
 });
 ```
 
-<Aside variant="warning">
-`Table.configureUsing()` is not available yet: configure each table in its `table()` method.
-</Aside>
+To change the defaults of every table, use `Table.configureUsing()`. It runs when a table is created, before its `table()` method, so a table's own options take precedence:
+
+```ts
+import { Table } from '@navette-js/tables';
+
+Table.configureUsing((table) => {
+    table
+        .paginationPageOptions([25, 50, 100])
+        .emptyStateHeading('Nothing here yet');
+});
+```

@@ -14,6 +14,8 @@ import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 export { Notification, Notifications } from './notifications.ts';
+export { MemorySessionStore, type SessionStore } from './session-store.ts';
+import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
@@ -22,7 +24,7 @@ import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertT
 import { t, tc } from '@navette-js/support/i18n';
 import { emptyState } from '@navette-js/support/ui';
 import type { DataAdapter } from '@navette-js/database';
-import { REORDER_LIMIT, Table, initializeTableGrouping, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
+import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
 import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 
@@ -66,6 +68,8 @@ export interface AuthProvider {
     markEmailAsVerified?(user: User): MaybePromise<void>;
     /** A value that changes with the stored password, so a used reset link becomes invalid. */
     getPasswordFingerprint?(user: User): MaybePromise<string>;
+    /** Can this user use this panel? Checked on every request and at login (`false`: 403, or "credentials do not match" at login). */
+    canAccessPanel?(user: User, panel: Panel): MaybePromise<boolean>;
 }
 /**
  * Panel tenants (teams, organizations…). Every panel page then lives under
@@ -86,7 +90,7 @@ export interface TenantProvider<T = any> {
     create?(data: Record<string, unknown>, user: User): MaybePromise<T>;
     update?(tenant: T, data: Record<string, unknown>): MaybePromise<T>;
 }
-export type PanelContext = { req: Request; res: Response; panel: Panel; user: User | null; mailbox: string; tenant?: unknown };
+export type PanelContext = { req: Request; res: Response; panel: Panel; user: User | null; mailbox: string; tenant?: unknown; /** Signed in through the shared session, but not allowed into this panel. */ denied?: boolean };
 
 /**
  * Predefined panel theme: a set of colors (palettes or plain colors), optionally a font and some CSS.
@@ -137,6 +141,10 @@ export class Panel {
     private _login: typeof Login | null = null;
     private _auth: AuthProvider | null = null;
     private _key = 'cle-de-developpement-a-remplacer';
+    private _sessionStore: SessionStore | null = null;
+    /** Where per-browser data is kept (persisted table filters, search and sort): in memory by default. */
+    sessionStore(store: SessionStore): this { this._sessionStore = store; return this; }
+    getSessionStore(): SessionStore { return (this._sessionStore ??= new MemorySessionStore()); }
     private _pages: (typeof Page)[] = [];
     private _resources: (typeof Resource)[] = [];
     private _navigationItems: NavigationItem[] = [];
@@ -198,6 +206,30 @@ export class Panel {
     login(page: typeof Login = Login): this { this._login = page; return this; }
     auth(provider: AuthProvider): this { this._auth = provider; return this; }
     key(key: string): this { this._key = key; return this; }
+    private _authGuard: string | null = 'web';
+    private _canAccess: ((user: User, panel: Panel) => MaybePromise<boolean>) | null = null;
+    /**
+     * Session shared with the other panels that use the same guard (`'web'` by default): signing into one signs into all of
+     * them, and `canAccess()` decides who may enter each one. `null` gives this panel a session of its own.
+     * Panels sharing a guard must use the same key and the same auth provider.
+     */
+    authGuard(guard: string | null): this {
+        if (guard !== null && !/^[a-z0-9_-]{1,40}$/.test(guard)) throw new Error(`Invalid auth guard name: ${guard}`);
+        this._authGuard = guard;
+        return this;
+    }
+    getAuthGuard(): string | null { return this._authGuard; }
+    /** Who may use this panel, e.g. `panel.canAccess((user) => user.role === 'admin')`. Checked on every request and at login. */
+    canAccess(rule: ((user: User, panel: Panel) => MaybePromise<boolean>) | null): this { this._canAccess = rule; return this; }
+    /** True if this user may use this panel: the panel's rule and the provider's `canAccessPanel()`, when set, must both allow it. */
+    async userCanAccess(user: User): Promise<boolean> {
+        if (this._canAccess && !(await this._canAccess(user, this))) return false;
+        const provider = this.getAuth();
+        if (provider.canAccessPanel && !(await provider.canAccessPanel(user, this))) return false;
+        return true;
+    }
+    /** Name of the session cookie: per guard (shared), or per panel. */
+    getSessionCookieName(): string { return this._authGuard !== null ? `navette_${this._authGuard}_session` : `navette_${this._id}_session`; }
     pages(pages: (typeof Page)[]): this { this._pages.push(...pages); return this; }
     /** Registers resources: their pages and navigation items. */
     resources(resources: (typeof Resource)[]): this {
@@ -490,11 +522,11 @@ export class Panel {
     private sign(value: string): string { return createHmac('sha256', this._key).update(value).digest('base64url'); }
     logIn(res: Response, user: User, remember: boolean): void {
         const value = Buffer.from(JSON.stringify({ uid: user.id })).toString('base64url');
-        res.cookie(`navette_${this._id}_session`, `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
+        res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
     }
-    logOut(res: Response): void { res.clearCookie(`navette_${this._id}_session`); }
+    logOut(res: Response): void { res.clearCookie(this.getSessionCookieName()); }
     async user(req: Request): Promise<User | null> {
-        const raw = (req.headers.cookie ?? '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`navette_${this._id}_session=`))?.split('=')[1];
+        const raw = (req.headers.cookie ?? '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`${this.getSessionCookieName()}=`))?.split('=')[1];
         if (!raw) return null;
         const [value, mac] = raw.split('.');
         const a = Buffer.from(mac ?? ''), b = Buffer.from(this.sign(value));
@@ -1301,7 +1333,8 @@ export class Login extends SimplePage {
             return;
         }
         const user = await panel.getAuth().attempt(String(this.data.email), String(this.data.password));
-        if (!user) { this.addError('data.email', t('filament-panels::auth/pages/login.messages.failed')); return; }
+        // As in Filament: a valid account that may not use this panel gets the same message as wrong credentials.
+        if (!user || !(await panel.userCanAccess(user))) { this.addError('data.email', t('filament-panels::auth/pages/login.messages.failed')); return; }
         loginThrottle.clear(`${panel.getId()}:${req.ip ?? ''}`);
         panel.logIn(res, user, Boolean(this.data.remember));
         this.redirect(panel.getUrl());
@@ -2163,10 +2196,48 @@ export class ListRecords extends Page implements TableHost {
         for (const key of order.map(String)) if (allowed.delete(key)) await adapter.update(key, { [column]: ++rank });
     }
 
+    /** Key of this table's persisted state: per page class (and resource or relationship). */
+    protected tableSessionKey(part: string): string {
+        const page = this.constructor as any;
+        return ['tables', page.name, page.resource?.slug ?? '', page.relationship ?? '', part].join(':');
+    }
+    /** Session of the persisted table state: the browser (its CSRF token) and the signed-in user. */
+    private tableSession(): string | null {
+        const ctx = this._ctx as PanelContext | null;
+        return ctx?.mailbox ? `${ctx.panel.getId()}:${ctx.user?.id ?? ''}:${ctx.mailbox}` : null;
+    }
+    async dehydrate(): Promise<void> {
+        await super.dehydrate?.();
+        const table = this.getTable(), session = this.tableSession();
+        if (!session) return;
+        const store = (this._ctx as PanelContext).panel.getSessionStore();
+        if (table.persistsFiltersInSession()) await store.set(session, this.tableSessionKey('filters'), this.tableFilters);
+        if (table.persistsSearchInSession()) await store.set(session, this.tableSessionKey('search'), this.tableSearch);
+        if (table.persistsColumnSearchesInSession()) await store.set(session, this.tableSessionKey('column-searches'), this.tableColumnSearches);
+        if (table.persistsSortInSession()) await store.set(session, this.tableSessionKey('sort'), this.tableSort);
+    }
+    /** Restores the persisted table state; every value is sanitized like browser input. */
+    private async restoreTableSession(table: Table): Promise<void> {
+        const session = this.tableSession();
+        if (!session) return;
+        const store = (this._ctx as PanelContext).panel.getSessionStore();
+        if (table.persistsFiltersInSession()) {
+            const saved = await store.get(session, this.tableSessionKey('filters'));
+            if (saved && typeof saved === 'object') { this.tableFilters = this.sanitizeTableFilters(saved as Record<string, unknown>); this.tableDeferredFilters = JSON.parse(JSON.stringify(this.tableFilters)); }
+        }
+        if (table.persistsSearchInSession()) { const saved = await store.get(session, this.tableSessionKey('search')); if (typeof saved === 'string') this.tableSearch = saved.slice(0, 1000); }
+        if (table.persistsColumnSearchesInSession()) {
+            const saved = await store.get(session, this.tableSessionKey('column-searches'));
+            if (saved && typeof saved === 'object') this.tableColumnSearches = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([name, value]) => typeof value === 'string' && table.getColumn(name)?.isIndividuallySearchable()).map(([name, value]) => [name, (value as string).slice(0, 1000)]));
+        }
+        if (table.persistsSortInSession()) { const saved = await store.get(session, this.tableSessionKey('sort')); if (typeof saved === 'string' || saved === null) this.tableSort = saved as string | null; }
+    }
+
     async mount(_params: Record<string, unknown> = {}): Promise<void> {
         const table = this.getTable();
         this.tableFilters = table.getDefaultFilterState();
         this.tableDeferredFilters = table.getDefaultFilterState();
+        await this.restoreTableSession(table);
         this.tableColumns = table.getDefaultColumnState();
         // Preselect the default group.
         initializeTableGrouping(table, this as any);
@@ -2179,39 +2250,57 @@ export class ListRecords extends Page implements TableHost {
     /** Filters form: one group per filter, bound to `tableDeferredFilters.<filter>`. */
     tableFiltersFormSchema(schema: Schema): Schema {
         const table = this.getTable();
-        // Above the content, filters spread over several columns; in the dropdown, a single one.
-        const columns = table.getFiltersLayout() === 'above-content-collapsible' ? { sm: 2, lg: 3, xl: 4, '2xl': 5 } : 1;
-        return schema.statePath('tableDeferredFilters').columns(columns).partiallyRendered().components(table.getFilters().map((filter) => {
+        // Deferred filters edit a copy applied by the "Apply" button; otherwise the form edits the applied state, field by field.
+        const deferred = table.hasDeferredFilters();
+        const built = schema.statePath(deferred ? 'tableDeferredFilters' : 'tableFilters').columns(table.getFiltersFormColumns()).partiallyRendered().components(table.getFilters().map((filter) => {
             // A filter may provide its own form (query builder); otherwise it is a select.
             const custom = filter.getFormComponents?.() as SchemaComponent[] | undefined;
             if (custom) return StatefulGroup.make(filter.name, custom).columnSpan(filter.getColumnSpan?.() ?? { default: 1, lg: 1 });
             const definition = filter.getFormDefinition();
             return StatefulGroup.make(filter.name, [Select.make('value').label(filter.getLabel()).placeholder(definition.placeholder).options(filter.getFormOptions ? () => filter.getFormOptions!() : definition.options)]).columnSpan({ default: 1, lg: 1 });
         }));
+        if (!deferred) for (const component of built.getFlatComponents()) if (component instanceof Field) component.live();
+        return built;
+    }
+    /** Applied state of every declared filter, sanitized from the given (browser) state. */
+    protected sanitizeTableFilters(source: Record<string, unknown> | undefined): Record<string, FilterState> {
+        return Object.fromEntries(this.getTable().getFilters().map((filter) => {
+            const received = source?.[filter.name];
+            if (filter.sanitizeState) return [filter.name, filter.sanitizeState(received)];
+            return [filter.name, Object.fromEntries(Object.keys(filter.getDefaultState()).map((key) => [key, (received as any)?.[key] ?? null]))];
+        }));
+    }
+    /** Live filters (`deferFilters(false)`): a changed field applies at once. */
+    async updatedTableFilters(value: unknown, key: string | null): Promise<void> {
+        if (this.getTable().hasDeferredFilters()) { this.tableFilters = this.sanitizeTableFilters(this.tableFilters); return; }
+        await this.runFilterFieldHook('tableFilters', key);
+        this.tableFilters = this.sanitizeTableFilters(this.tableFilters);
+        this.tableDeferredFilters = JSON.parse(JSON.stringify(this.tableFilters));
+        this.paginators.page = 1;
+        this.dispatch('deselectAllTableRecords', [], { self: true });
     }
     applyTableFilters(): void {
         // Only filters declared by the table reach the applied state: each sanitizes its own state, or else only its known keys are kept.
-        this.tableFilters = Object.fromEntries(this.getTable().getFilters().map((filter) => {
-            const deferred = this.tableDeferredFilters?.[filter.name];
-            if (filter.sanitizeState) return [filter.name, filter.sanitizeState(deferred)];
-            return [filter.name, Object.fromEntries(Object.keys(filter.getDefaultState()).map((key) => [key, (deferred as any)?.[key] ?? null]))];
-        }));
+        this.tableFilters = this.sanitizeTableFilters(this.tableDeferredFilters);
         this.paginators.page = 1;
     }
     /** Removes an active filter indicator: the field is cleared from both the applied state and the form. */
-    removeTableFilter(filterName: unknown, field: unknown = null): void {
-        const filter = this.getTable().getFilters().find((candidate) => candidate.name === filterName);
-        if (!filter) return;
+    async removeTableFilter(filterName: unknown, field: unknown = null): Promise<void> {
+        const table = this.getTable();
+        const filter = table.getFilters().find((candidate) => candidate.name === filterName);
+        // A filter showing a non-removable indicator cannot be removed by a forged call either.
+        if (!filter || !(await isTableFilterRemovable(table, this as any, filter.name))) return;
         const current = this.tableFilters?.[filter.name];
-        const next = filter.removeIndicator && typeof field === 'string' && current && typeof current === 'object' ? filter.removeIndicator(current, field) : filter.getDefaultState();
+        const next = filter.removeIndicator && typeof field === 'string' && current && typeof current === 'object' ? filter.removeIndicator(current, field) : (filter.getResetState?.() ?? filter.getDefaultState());
         this.tableFilters = { ...this.tableFilters, [filter.name]: next };
         this.tableDeferredFilters = { ...this.tableDeferredFilters, [filter.name]: JSON.parse(JSON.stringify(next)) };
         this.paginators.page = 1;
     }
     /** Live field in the filters form (e.g. a rule's operator changed): runs its `afterStateUpdated`. */
-    async updatedTableDeferredFilters(_value: unknown, key: string | null): Promise<void> {
+    async updatedTableDeferredFilters(_value: unknown, key: string | null): Promise<void> { await this.runFilterFieldHook('tableDeferredFilters', key); }
+    private async runFilterFieldHook(property: 'tableFilters' | 'tableDeferredFilters', key: string | null): Promise<void> {
         if (!key) return;
-        const path = `tableDeferredFilters.${key}`;
+        const path = `${property}.${key}`;
         const field = this.getSchema('tableFiltersForm').getFlatComponents().find((c) => c instanceof Field && c.getStatePath() === path) as Field | undefined;
         if (!field?.hasAfterStateUpdated()) return;
         const container = path.split('.').slice(0, -1);
@@ -2228,7 +2317,20 @@ export class ListRecords extends Page implements TableHost {
         this.paginators.page = 1;
         this.dispatch('deselectAllTableRecords', [], { self: true });
     }
-    removeTableFilters(): void { this.resetTableFiltersForm(); }
+    /** "Remove all": resets every removable filter (to its empty state, not its default), the search and the column searches. */
+    async removeTableFilters(): Promise<void> {
+        const table = this.getTable();
+        for (const filter of table.getFilters()) {
+            if (!(await isTableFilterRemovable(table, this as any, filter.name))) continue;
+            const reset = filter.getResetState?.() ?? filter.getDefaultState();
+            this.tableFilters = { ...this.tableFilters, [filter.name]: reset };
+            this.tableDeferredFilters = { ...this.tableDeferredFilters, [filter.name]: JSON.parse(JSON.stringify(reset)) };
+        }
+        this.tableSearch = '';
+        this.tableColumnSearches = {};
+        this.paginators.page = 1;
+        this.dispatch('deselectAllTableRecords', [], { self: true });
+    }
     applyTableColumnManager(state: unknown = null, _wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state); }
     resetTableColumnManager(): void { this.tableColumns = this.getTable().getDefaultColumnState(); }
 
@@ -2260,7 +2362,7 @@ export class ListRecords extends Page implements TableHost {
         if (typeof context.schemaComponent === 'string') return this.getSchemaComponentActions(context.schemaComponent);
         if (context.table === true && context.bulk === true) return this.getBulkActions();
         if (context.table === true && typeof context.recordKey === 'string') return this.getRecordActions();
-        if (context.table === true) return this.getTable().getHeaderActions();
+        if (context.table === true) return [...this.getTable().getHeaderActions(), ...this.getTable().getEmptyStateActions()];
         return this.getHeaderActions();
     }
     /** Only known context shapes are kept; the record key is checked again in the database on mount. */
@@ -2286,10 +2388,53 @@ export class ListRecords extends Page implements TableHost {
     /** Selected keys: the sent list, or, in "select all" mode, every record of the current query except deselected ones. */
     async getSelectedRecordKeys(): Promise<string[]> {
         const clean = (list: unknown) => (Array.isArray(list) ? list.filter((k) => typeof k === 'string' || typeof k === 'number').map(String) : []);
+        const table = this.getTable(), adapter = this.getDataAdapterForTable();
+        let keys: string[];
         // The selection comes from the browser: it is narrowed to records this table can actually display.
-        if (!this.isTrackingDeselectedTableRecords) return this.resource.adapter.keysInScope(clean(this.selectedTableRecords));
-        const excluded = new Set(clean(this.deselectedTableRecords));
-        return (await this.resource.adapter.listKeys(getTableQuery(this.getTable(), this))).filter((k) => !excluded.has(k));
+        if (!this.isTrackingDeselectedTableRecords) keys = await adapter.keysInScope(clean(this.selectedTableRecords));
+        else {
+            const excluded = new Set(clean(this.deselectedTableRecords));
+            // "Select all" covers the whole query, or only the current page with `selectCurrentPageOnly()`.
+            const all = table.selectsCurrentPageOnly() ? (await getTableRecords(table, this, adapter)).records.map((record) => adapter.getKey(record)) : await adapter.listKeys(getTableQuery(table, this));
+            keys = all.filter((k) => !excluded.has(k));
+        }
+        // Records that cannot be selected, and anything beyond `maxSelectableRecords()`, are dropped whatever the browser sent.
+        keys = await filterSelectableKeys(table, adapter, keys);
+        const max = table.getMaxSelectableRecords();
+        return max !== null ? keys.slice(0, max) : keys;
+    }
+    /**
+     * Runs `process` for each selected record, loaded in chunks of `chunkSelectedRecords()`. Records failing the action's
+     * `authorizeIndividualRecords()` are skipped; `process` reports a failure by returning `false` or throwing. Then sends the
+     * action's success notification, or its failure notification with the number of records skipped and failed.
+     */
+    async processSelectedRecords(action: Action, process: (record: any) => unknown | Promise<unknown>): Promise<{ total: number; success: number; unauthorized: number; failed: number }> {
+        const keys = await this.getSelectedRecordKeys();
+        const adapter = this.getDataAdapterForTable();
+        const authorization = action.getIndividualRecordsAuthorization();
+        const ctx = { livewire: this, record: null, arguments: {}, data: {}, action };
+        let success = 0, unauthorized = 0, failed = 0;
+        const size = action.getSelectedRecordsChunkSize();
+        for (let index = 0; index < keys.length; index += size) {
+            const records = await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)));
+            for (const record of records) {
+                if (!record) { failed++; continue; }
+                const allowed = authorization === null ? true : typeof authorization === 'string' ? await canOn(this, authorization, record) : await authorization(record, { ...ctx, record });
+                if (!allowed) { unauthorized++; continue; }
+                try { if ((await process(record)) === false) failed++; else success++; } catch (error) { failed++; if (failed === 1) console.error(error); }
+            }
+        }
+        const total = keys.length;
+        if (unauthorized + failed === 0) {
+            const title = action.getSuccessNotificationTitle();
+            if (title) Notification.make().success().title(title).send();
+        } else {
+            const body = [action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) && unauthorized ? action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) : null, failed ? action.getMissingBulkProcessingFailureNotificationMessage(failed, total) : null].filter(Boolean).join(' ');
+            const notification = Notification.make().title(action.getFailureNotificationTitle(success, total) ?? action.getSuccessNotificationTitle() ?? '');
+            (success ? notification.warning() : notification.danger()).body(body || null).send();
+        }
+        if (action.shouldDeselectRecordsAfterCompletion()) this.deselectAllTableRecords();
+        return { total, success, unauthorized, failed };
     }
     deselectAllTableRecords(): void {
         this.selectedTableRecords = []; this.deselectedTableRecords = []; this.isTrackingDeselectedTableRecords = false;
@@ -2308,7 +2453,7 @@ export class ListRecords extends Page implements TableHost {
         for (const action of this.getBulkActions()) if (await action.isVisible(ctx)) bulkActions.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
         const table = this.getTable();
         return renderTable(table, this, resource.adapter, {
-            bulkActions, headerActions: await this.renderTableHeaderActions(ctx), after: await this.renderActionModals(),
+            bulkActions, headerActions: await this.renderTableHeaderActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
             filtersForm: table.getFilters().length ? await this.getSchema('tableFiltersForm').toHtml() : null,
             rowActionsHtml: table.getRecordActions().length ? async (record) => {
                 const key = resource.adapter.getKey(record);
@@ -2326,6 +2471,11 @@ export class ListRecords extends Page implements TableHost {
         });
     }
 
+    protected async renderTableEmptyStateActions(ctx: any): Promise<string[]> {
+        const html: string[] = [];
+        for (const action of this.getTable().getEmptyStateActions()) if (await action.isVisible(ctx)) html.push(await action.toHtml(ctx, { table: true }));
+        return html;
+    }
     /** Table header actions (none on a list page: they go in the page header). */
     protected async renderTableHeaderActions(ctx: any): Promise<string[]> {
         const html: string[] = [];
@@ -2817,18 +2967,82 @@ export class ForceDeleteAction {
     }
 }
 
-/** Deletes the records selected in a table. */
+/** Value of the table's trashed filter: `'1'` with deleted records, `'0'` only deleted records, `null` without. */
+const trashedFilterValue = (livewire: any): string | null => {
+    const filter = livewire.getTable?.().getFilters().find((candidate: any) => candidate instanceof TrashedFilter);
+    const value = filter ? livewire.tableFilters?.[filter.name]?.value : null;
+    return value === '1' || value === '0' ? value : null;
+};
+
+/**
+ * Deletes the records selected in a table. Without `authorizeIndividualRecords()`, the selection is deleted in one query;
+ * with it, record by record, and the notification reports the records that could not be deleted.
+ */
 export class DeleteBulkAction {
     static make(): Action {
         return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'deleteAny', record))
             .label(t('filament-actions::delete.multiple.label')).color('danger').icon('m-trash')
             .requiresConfirmation().modalIcon('o-trash')
+            // Showing only deleted records: there is nothing left to delete.
+            .hidden(({ livewire }) => trashedFilterValue(livewire) === '0')
             .modalHeading(({ livewire }) => t('filament-actions::delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
             .modalSubmitActionLabel(t('filament-actions::delete.multiple.modal.actions.delete.label'))
-            .action(async ({ livewire }) => {
-                await livewire.getDataAdapterForTable().deleteMany(await livewire.getSelectedRecordKeys());
-                Notification.make().success().title(t('filament-actions::delete.multiple.notifications.deleted.title')).send();
+            .successNotificationTitle(t('filament-actions::delete.multiple.notifications.deleted.title'))
+            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('filament-actions::delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
+            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
+            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
+            .deselectRecordsAfterCompletion()
+            .action(async ({ livewire, action }) => {
+                const adapter = livewire.getDataAdapterForTable();
+                if (action!.getIndividualRecordsAuthorization() !== null) { await livewire.processSelectedRecords(action, (record: any) => adapter.delete(adapter.getKey(record))); return; }
+                await adapter.deleteMany(await livewire.getSelectedRecordKeys());
+                Notification.make().success().title(action!.getSuccessNotificationTitle() ?? t('filament-actions::delete.multiple.notifications.deleted.title')).send();
                 livewire.deselectAllTableRecords();
+            });
+    }
+}
+
+/** Restores the soft-deleted records selected in a table, each one checked with the `restore` ability. */
+export class RestoreBulkAction {
+    static make(): Action {
+        return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restoreAny', record))
+            .label(t('filament-actions::restore.multiple.label')).color('gray').icon('m-arrow-uturn-left')
+            .requiresConfirmation().modalIcon('o-arrow-uturn-left')
+            .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
+            .modalHeading(({ livewire }) => t('filament-actions::restore.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
+            .modalSubmitActionLabel(t('filament-actions::restore.multiple.modal.actions.restore.label'))
+            .authorizeIndividualRecords('restore')
+            .successNotificationTitle(t('filament-actions::restore.multiple.notifications.restored.title'))
+            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::restore.multiple.notifications.restored_partial.title', success, { count: success, total }) : tc('filament-actions::restore.multiple.notifications.restored_none.title', total, { count: total, total })))
+            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_authorization_failure_message`, count, { count }))
+            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_processing_failure_message`, count, { count }))
+            .deselectRecordsAfterCompletion()
+            .action(async ({ livewire, action }) => {
+                const adapter = livewire.getDataAdapterForTable();
+                // Only deleted records are restored; the others count as failures.
+                await livewire.processSelectedRecords(action, (record: any) => adapter.isTrashed(record) && adapter.restore(adapter.getKey(record)));
+            });
+    }
+}
+
+/** Permanently deletes the soft-deleted records selected in a table, each one checked with the `forceDelete` ability. */
+export class ForceDeleteBulkAction {
+    static make(): Action {
+        return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDeleteAny', record))
+            .label(t('filament-actions::force-delete.multiple.label')).color('danger').icon('m-trash')
+            .requiresConfirmation().modalIcon('o-trash')
+            .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
+            .modalHeading(({ livewire }) => t('filament-actions::force-delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
+            .modalSubmitActionLabel(t('filament-actions::force-delete.multiple.modal.actions.delete.label'))
+            .authorizeIndividualRecords('forceDelete')
+            .successNotificationTitle(t('filament-actions::force-delete.multiple.notifications.deleted.title'))
+            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::force-delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('filament-actions::force-delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
+            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
+            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
+            .deselectRecordsAfterCompletion()
+            .action(async ({ livewire, action }) => {
+                const adapter = livewire.getDataAdapterForTable();
+                await livewire.processSelectedRecords(action, (record: any) => adapter.forceDelete(adapter.getKey(record)));
             });
     }
 }
@@ -3140,7 +3354,19 @@ const runtimePanels = new WeakMap<WireRuntime, Panel>();
 const RESERVED_SEGMENTS = new Set(['login', 'logout', 'register', 'password-reset', 'email-verification', 'profile', 'livewire']);
 
 /** Express router for a panel: assets, runtime endpoint, authentication, tenants, protected pages. */
+/** Panels sharing an auth guard: same key and same auth provider, otherwise a user id of one could be read as a user of the other. */
+const guardOwners = new Map<string, Panel>();
+function checkSharedGuard(panel: Panel): void {
+    const guard = panel.getAuthGuard();
+    if (guard === null) return;
+    const other = guardOwners.get(guard);
+    if (!other || other === panel) { guardOwners.set(guard, panel); return; }
+    if ((other as any)._key !== (panel as any)._key) throw new Error(`Panels "${other.getId()}" and "${panel.getId()}" share the auth guard "${guard}" but not the same key: give them the same key, or a different authGuard().`);
+    if (other.getAuth() !== panel.getAuth()) throw new Error(`Panels "${other.getId()}" and "${panel.getId()}" share the auth guard "${guard}" but not the same auth provider: share the provider, or give one of them authGuard(null) or another guard.`);
+}
+
 export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
+    checkSharedGuard(panel);
     const owner = runtimePanels.get(runtime);
     if (owner && owner !== panel) throw new Error(`This WireRuntime already serves panel "${owner.getId()}": create one WireRuntime per panel.`);
     runtimePanels.set(runtime, panel);
@@ -3171,7 +3397,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const name = (suffix: string) => `navette.${panel.getId()}.${suffix}`;
     const livewire = panel.getLivewirePrefix();
     // The notifications mailbox is per browser: it is keyed by the CSRF token.
-    const context = async (req: Request, res: Response): Promise<PanelContext> => ({ req, res, panel, user: await panel.user(req), mailbox: csrfToken(req, res), tenant: null });
+    const context = async (req: Request, res: Response): Promise<PanelContext> => {
+        const user = await panel.user(req);
+        // Signed in through a shared session, but not allowed into this panel: treated as a guest that gets 403 pages.
+        const denied = user !== null && !(await panel.userCanAccess(user));
+        return { req, res, panel, user: denied ? null : user, denied, mailbox: csrfToken(req, res), tenant: null };
+    };
+    const forbidden = (res: Response) => void res.status(403).send('Forbidden');
 
     /** Tenant designated by a panel URL, if the user is a member. */
     const tenantFromPath = async (path: string, user: User | null): Promise<unknown> => {
@@ -3292,6 +3524,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const guestPage = (path: string, component: string, title: string, params: (req: Request) => Record<string, unknown> = () => ({})) => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
+            if (ctx.denied) return forbidden(res);
             if (ctx.user) return res.redirect((await homeUrl(ctx.user)) ?? panel.getBaseUrl());
             await guarded(res, () => document(req, res, ctx, { title, component, layout: 'simple', params: params(req) }));
         });
@@ -3300,6 +3533,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const userPage = (path: string, component: string, title: string, layout: 'simple' | 'index' = 'simple') => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
+            if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             await guarded(res, () => document(req, res, ctx, { title, component, layout }));
         });
@@ -3323,6 +3557,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         // Emailed link: signed, time-limited, and only valid for the signed-in user it designates.
         router.get(panel.getBaseUrl('email-verification/verify/:id/:hash'), async (req, res) => {
             const ctx = await context(req, res);
+            if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             const id = String(req.params.id), hash = String(req.params.hash);
             const expected = createHash('sha1').update(ctx.user.email).digest('hex');
@@ -3337,6 +3572,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     /** Context of a protected page: login, email verification, tenant. Returns `null` after responding. */
     const pageContext = async (req: Request, res: Response): Promise<PanelContext | null> => {
         const ctx = await context(req, res);
+        if (ctx.denied) { forbidden(res); return null; }
         if (!ctx.user) { res.redirect(panel.getLoginUrl()); return null; }
         if (await panel.mustVerifyEmail(ctx.user)) { res.redirect(panel.getEmailVerificationPromptUrl()); return null; }
         if (panel.hasTenancy()) {
@@ -3350,6 +3586,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         // Panel root: the user's first tenant, otherwise tenant registration.
         router.get(panel.getBaseUrl(), async (req, res) => {
             const ctx = await context(req, res);
+            if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             if (await panel.mustVerifyEmail(ctx.user)) return res.redirect(panel.getEmailVerificationPromptUrl());
             const url = await homeUrl(ctx.user);

@@ -52,6 +52,37 @@ new Table()
 
 The plural label is also used by the [summary](/tables/summaries) headings ("All drafts") and as the accessible name of the table when it has no heading.
 
-<Aside variant="warning">
-Custom empty state headings, descriptions, icons and actions (`emptyStateHeading()`, `emptyStateDescription()`, `emptyStateIcon()`, `emptyStateActions()`) and custom empty state views are not available yet.
-</Aside>
+## Customizing the heading, description and icon
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .emptyStateHeading('No posts yet')
+        .emptyStateDescription('Once you write your first post, it will appear here.')
+        .emptyStateIcon('o-bookmark');
+}
+```
+
+`emptyStateHeading()` and `emptyStateDescription()` also accept a function, evaluated each time the table is rendered.
+
+## Adding actions to the empty state
+
+`emptyStateActions()` adds buttons below the description. They are mounted like the table's header actions:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .emptyStateActions([
+            Action.make('create').label('Create post').url('/posts/create').icon('m-plus'),
+        ]);
+}
+```
+
+## Using a custom empty state
+
+`emptyState()` replaces the whole empty state with your HTML, a string or a function returning one. It is inserted as it is: escape any data with `e()` from `@navette-js/support`.

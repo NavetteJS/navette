@@ -20,7 +20,7 @@ let log = '';
 server.stdout.on('data', (d) => (log += d));
 server.stderr.on('data', (d) => (log += d));
 const value = Buffer.from(JSON.stringify({ uid: 1 })).toString('base64url');
-const cookie = `navette_admin_session=${value}.${createHmac('sha256', KEY).update(value).digest('base64url')}`;
+const cookie = `navette_web_session=${value}.${createHmac('sha256', KEY).update(value).digest('base64url')}`;
 const failures = [];
 try {
     for (let i = 0; ; i++) {

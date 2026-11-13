@@ -49,13 +49,11 @@ ImageColumn.make<Product>('image')
     .alt((record) => record.name)
 ```
 
-<Aside variant="warning">
-Without `alt()`, the image is rendered without an `alt` attribute, and screen readers may announce its URL. When the row is a link, the alt text is also part of the link's accessible name. Always set `alt()`, and return an empty string for a purely decorative image.
-</Aside>
+Without `alt()`, the image gets an empty `alt` attribute, as Filament does: screen readers treat it as decorative. When the row is a link, the alt text is also part of the link's accessible name, so set `alt()` whenever the image carries information.
 
 ## Customizing the size
 
-The default height of images is `2.5rem`. You may customize it by passing a CSS length in `rem`, `px` or `em` to `imageHeight()`:
+The default height of images is `2.5rem` (`2rem` when [stacked](#stacking-images)). You may customize it by passing a CSS length in `rem`, `px`, `em`, `%`, `vh` or `vw`, or a number of pixels, to `imageHeight()`:
 
 ```ts
 import { ImageColumn } from '@navette-js/tables';
@@ -74,7 +72,33 @@ new Table()
     ])
 ```
 
-Any other value is ignored. The width follows the aspect ratio of the image.
+Any other value is ignored, so that a value cannot inject other CSS into the `style` attribute.
+
+You may also set the width with `imageWidth()`, or both with `imageSize()`:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('logo')
+    .imageWidth(200)
+
+ImageColumn.make('avatar_url')
+    .imageSize(48)
+```
+
+Without a width, it follows the aspect ratio of the image.
+
+## Square images
+
+You may display the image using a 1:1 aspect ratio:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('avatar_url')
+    .imageHeight(40)
+    .square()
+```
 
 ## Circular images
 
@@ -106,6 +130,139 @@ ImageColumn.make('avatar_url')
     .circular(settings.roundAvatars)
 ```
 
-<Aside variant="warning">
-Image widths, square images, default image URLs, stacked images, limits and wrapping of multiple images are not available yet.
-</Aside>
+## Adding a default image URL
+
+You can display a placeholder image if one doesn't exist yet, by passing a URL to `defaultImageUrl()`. It may also be a function that receives the record:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('avatar_url')
+    .defaultImageUrl('/images/default-avatar.png')
+```
+
+The same URL rules apply: a path starting with a single `/`, or an `http` or `https` URL.
+
+## Displaying a placeholder
+
+When there is no image and no default image, `placeholder()` displays a text instead:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('avatar_url')
+    .placeholder('No avatar')
+```
+
+## Displaying multiple images
+
+When the state is an array of URLs, every image is displayed. URLs that are not allowed are skipped.
+
+### Stacking images
+
+You may display multiple images as a stack of overlapping images by using `stacked()`:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('members')
+    .circular()
+    .stacked()
+```
+
+```preview
+// records: [{"name": "Platform", "members": ["https://ui-avatars.com/api/?name=Ada+Lovelace&color=FFFFFF&background=2563eb", "https://ui-avatars.com/api/?name=Grace+Hopper&color=FFFFFF&background=16a34a", "https://ui-avatars.com/api/?name=Alan+Turing&color=FFFFFF&background=d97706", "https://ui-avatars.com/api/?name=Linus+T&color=FFFFFF&background=db2777", "https://ui-avatars.com/api/?name=Barbara+L&color=FFFFFF&background=7c3aed"]}, {"name": "Design", "members": ["https://ui-avatars.com/api/?name=Grace+Hopper&color=FFFFFF&background=16a34a", "https://ui-avatars.com/api/?name=Alan+Turing&color=FFFFFF&background=d97706"]}]
+new Table()
+    .pluralModelLabel('teams')
+    .columns([
+        TextColumn.make('name'),
+        ImageColumn.make('members').circular().stacked(),
+    ])
+```
+
+#### Customizing the stacked ring width
+
+A ring separates the stacked images. You may set its width from `0` to `8`:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('members')
+    .circular()
+    .stacked()
+    .ring(5)
+```
+
+#### Customizing the stacked overlap
+
+The images overlap by `2` by default. You may customize it from `0` to `8`:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('members')
+    .stacked()
+    .overlap(2)
+```
+
+### Wrapping multiple images
+
+Images can wrap if they can't fit on one line, by setting `wrap()`:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('members')
+    .circular()
+    .stacked()
+    .wrap()
+```
+
+### Setting a limit
+
+You may limit the maximum number of images you want to display by passing `limit()`:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('members')
+    .circular()
+    .stacked()
+    .limit(3)
+```
+
+#### Showing the remaining images count
+
+When you set a limit you may also display the count of remaining images by passing `limitedRemainingText()`. Its second argument sets the size of the text (`xs`, `sm`, `md` or `lg`):
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make('members')
+    .circular()
+    .stacked()
+    .limit(3)
+    .limitedRemainingText(true, 'lg')
+```
+
+```preview
+// records: [{"name": "Platform", "members": ["https://ui-avatars.com/api/?name=Ada+Lovelace&color=FFFFFF&background=2563eb", "https://ui-avatars.com/api/?name=Grace+Hopper&color=FFFFFF&background=16a34a", "https://ui-avatars.com/api/?name=Alan+Turing&color=FFFFFF&background=d97706", "https://ui-avatars.com/api/?name=Linus+T&color=FFFFFF&background=db2777", "https://ui-avatars.com/api/?name=Barbara+L&color=FFFFFF&background=7c3aed"]}, {"name": "Design", "members": ["https://ui-avatars.com/api/?name=Grace+Hopper&color=FFFFFF&background=16a34a", "https://ui-avatars.com/api/?name=Alan+Turing&color=FFFFFF&background=d97706"]}]
+new Table()
+    .pluralModelLabel('teams')
+    .columns([
+        TextColumn.make('name'),
+        ImageColumn.make('members').circular().stacked().limit(3).limitedRemainingText(),
+    ])
+```
+
+## Adding a tooltip
+
+`tooltip()` accepts a text, or a function that receives the record and the image URL:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make<User>('avatar_url')
+    .circular()
+    .tooltip((record) => record.name)
+```

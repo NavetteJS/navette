@@ -37,8 +37,10 @@ app.listen(3000);
 
 | Method | Description |
 |---|---|
-| `id('admin')` | Identifier of the panel. It names the session and theme cookies (`navette_admin_session`), the components, and the `fi-panel-admin` class of the `<body>`. Defaults to `admin`. |
+| `id('admin')` | Identifier of the panel. It names the theme cookie (`navette_admin_theme`) and, with `authGuard(null)`, the session cookie (`navette_admin_session`), the components, and the `fi-panel-admin` class of the `<body>`. Defaults to `admin`. |
 | `key(secret)` | Secret used to sign the sessions, the password reset links and the email verification links. Required in production: see [deployment](/advanced/deployment#setting-the-application-key). |
+| `authGuard('web')` | Session shared with the panels that use the same guard (`web` by default); `null` gives the panel a session of its own. See [sharing the session between panels](/panels/users#sharing-the-session-between-panels). |
+| `canAccess(fn)` | Who may use the panel. See [authorizing access](/panels/users#authorizing-access-to-the-panel). |
 | `auth(provider)` | The [user provider](/panels/users#providing-users) that checks credentials and finds users. |
 | `login()` | Enables the login page. See [users](/panels/users). |
 | `pages([...])` | Custom pages, including dashboards. |
@@ -180,7 +182,7 @@ app.use(panelRouter(adminPanel, new WireRuntime({ key, uploads: new UploadStore(
 Passing the same runtime to two panels throws an error at startup. Each panel then has:
 
 - its own component endpoint (`/admin/livewire/update`, `/app/livewire/update`);
-- its own session: logging into one panel does not log into the other;
+- a shared session with the other panels by default: see [sharing the session between panels](/panels/users#sharing-the-session-between-panels);
 - its own colors, themes and [render hooks](/advanced/render-hooks), applied to its requests only.
 
 Global settings made with `configureUsing()`, overridden views and the render hooks registered with `renderHooks.register()` are shared by all the panels of the process.

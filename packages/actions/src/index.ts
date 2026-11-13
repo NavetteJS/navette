@@ -19,7 +19,9 @@ let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 
 /** Execution context of a mounted action. */
-export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown> };
+export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action };
+/** Message of a bulk notification, from the number of records concerned and the number of selected records. */
+export type BulkMessage = string | ((count: number, total: number) => string);
 
 export class Action implements Renderable {
     /** Default setup for every instance created afterwards by `make()`, e.g. `Action.configureUsing((action) => action.size('sm'))`. */
@@ -165,8 +167,42 @@ export class Action implements Renderable {
     before(fn: (ctx: ActionCallContext) => unknown | Promise<unknown>): this { this._before = fn; return this; }
     /** Runs after the handler succeeds (logging, extra notification…). */
     after(fn: (ctx: ActionCallContext) => unknown | Promise<unknown>): this { this._after = fn; return this; }
+    // --- bulk actions
+    private _individualAuthorization: string | ((record: any, ctx: ActionCallContext) => boolean | Promise<boolean>) | null = null;
+    private _chunkSize = 100;
+    private _deselectAfterCompletion = false;
+    private _successNotificationTitle: string | null = null;
+    private _failureNotificationTitle: BulkMessage | null = null;
+    private _missingAuthorizationMessage: BulkMessage | null = null;
+    private _missingProcessingMessage: BulkMessage | null = null;
+    /**
+     * Bulk action: each selected record must pass this policy ability (or function), otherwise it is skipped and counted in the
+     * failure notification. Used by `processSelectedRecords()` of the table's page.
+     */
+    authorizeIndividualRecords(ability: string | ((record: any, ctx: ActionCallContext) => boolean | Promise<boolean>) | null): this { this._individualAuthorization = ability; return this; }
+    getIndividualRecordsAuthorization(): string | ((record: any, ctx: ActionCallContext) => boolean | Promise<boolean>) | null { return this._individualAuthorization; }
+    /** Number of selected records loaded at a time by `processSelectedRecords()` (100 by default). */
+    chunkSelectedRecords(size: number): this { this._chunkSize = Math.max(1, Math.floor(size)); return this; }
+    getSelectedRecordsChunkSize(): number { return this._chunkSize; }
+    /** Clears the table selection once the bulk action has run. */
+    deselectRecordsAfterCompletion(condition = true): this { this._deselectAfterCompletion = condition; return this; }
+    shouldDeselectRecordsAfterCompletion(): boolean { return this._deselectAfterCompletion; }
+    /** Notification sent when every selected record was processed. */
+    successNotificationTitle(title: string | null): this { this._successNotificationTitle = title; return this; }
+    getSuccessNotificationTitle(): string | null { return this._successNotificationTitle; }
+    /** Notification title when some records failed: receives the number of processed records and the number selected. */
+    failureNotificationTitle(title: BulkMessage | null): this { this._failureNotificationTitle = title; return this; }
+    getFailureNotificationTitle(success: number, total: number): string | null { const title = this._failureNotificationTitle; return typeof title === 'function' ? title(success, total) : title; }
+    /** Body line for records skipped by `authorizeIndividualRecords()`: receives their number and the number selected. */
+    missingBulkAuthorizationFailureNotificationMessage(message: BulkMessage | null): this { this._missingAuthorizationMessage = message; return this; }
+    getMissingBulkAuthorizationFailureNotificationMessage(count: number, total: number): string | null { const message = this._missingAuthorizationMessage; return typeof message === 'function' ? message(count, total) : message; }
+    /** Body line for records whose processing failed: receives their number and the number selected. */
+    missingBulkProcessingFailureNotificationMessage(message: BulkMessage | null): this { this._missingProcessingMessage = message; return this; }
+    getMissingBulkProcessingFailureNotificationMessage(count: number, total: number): string | null { const message = this._missingProcessingMessage; return typeof message === 'function' ? message(count, total) : message; }
+
     async call(ctx: ActionCallContext): Promise<unknown> {
         if (!this._handler) return null;
+        ctx = { ...ctx, action: this };
         if (this._mutateData) ctx = { ...ctx, data: await this._mutateData(ctx.data ?? {}, ctx) };
         await this._before?.(ctx);
         const result = await this._handler(ctx);

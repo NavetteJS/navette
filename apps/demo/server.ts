@@ -23,7 +23,7 @@ import { TaskResource } from './resources/TaskResource.ts';
 import { TimesheetResource } from './resources/TimesheetResource.ts';
 import { calendarWidgets, hrWidgets } from './widgets/hr.ts';
 import { calendarPages } from './pages/calendar.ts';
-import { appPanel } from './app-panel.ts';
+import { appPanel, demoAuthProvider } from './app-panel.ts';
 import { shopWidgets } from './widgets/shop.ts';
 import { welcomeWidgets } from './widgets/welcome.ts';
 import { STATUSES } from './resources/OrderResource.ts';
@@ -39,6 +39,8 @@ const key = process.env.APP_KEY ?? 'cle-de-developpement-a-remplacer';
 // On first run, the working database is copied from seed.sqlite, which is never modified.
 if (!process.env.NAVETTE_DB && !existsSync(file('./database/database.sqlite'))) copyFileSync(file('./database/seed.sqlite'), file('./database/database.sqlite'));
 sqlite(process.env.NAVETTE_DB ?? file('./database/database.sqlite'));
+
+const accounts = demoAuthProvider(users[0]);
 
 /** Login form prefilled with the demo account. */
 class DemoLogin extends Login {
@@ -125,10 +127,9 @@ const panel = Panel.make()
     ])
     .widgets([...welcomeWidgets, ...shopWidgets, ...hrWidgets, ...calendarWidgets])
     .resources([CustomerResource, DepartmentResource, OrderResource, ProductResource, BrandResource, EmployeeResource, CategoryResource, LeaveRequestResource, ExpenseResource, ProjectResource, TaskResource, TimesheetResource, PostResource, PostCategoryResource, AuthorResource])
-    .auth({
-        attempt: (email, password) => { const u = users.find((x) => x.email === email && x.password === password); return u ? { id: u.id, name: u.name, email: u.email } : null; },
-        find: (id) => { const u = users.find((x) => x.id === id); return u ? { id: u.id, name: u.name, email: u.email } : null; },
-    });
+    // Same accounts and same session as the `/app` panel; only the demo account (the staff) may enter `/admin`.
+    .auth(accounts)
+    .canAccess((user) => String(user.id) === String(users[0].id));
 
 // Render hook probe, for end-to-end tests only.
 if (process.env.NAVETTE_HOOK_PROBE) panel.plugin((await import('./hook-probe.ts')).hookProbe(CustomerResource));
@@ -149,7 +150,7 @@ await PostResource.loadTagNames();
 const port = Number(process.env.PORT ?? 3200);
 // Second panel (`/app`): its own runtime, hence its own Livewire endpoint. Mounted before the main panel, whose routes have parameters.
 const mailLog = process.env.NAVETTE_MAIL_LOG ?? path.join(uploads, 'mail.log');
-const secondPanel = appPanel({ key, login: DemoLogin, demoUser: users[0], mailLog, appUrl: `http://127.0.0.1:${port}`, profile: !process.env.NAVETTE_NO_THEMES });
+const secondPanel = appPanel({ key, login: DemoLogin, auth: accounts, mailLog, appUrl: `http://127.0.0.1:${port}`, profile: !process.env.NAVETTE_NO_THEMES });
 if (process.env.NAVETTE_HOOK_PROBE) secondPanel.plugin((await import('./hook-probe.ts')).hookProbe(CustomerResource));
 app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));

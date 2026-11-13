@@ -231,7 +231,7 @@ new Table()
 ```
 
 <Aside variant="warning">
-`grow()`, `visibleFrom()` and `hiddenFrom()` on columns and stacks, grid layouts (`Grid`), collapsible content (`Panel`), arranging records into a grid (`contentGrid()`) and custom HTML layouts (`View`) are not available yet.
+`grow()`, `visibleFrom()` and `hiddenFrom()` on stacks and splits (they are available on [columns of a regular table](/tables/columns/overview#hiding-columns-responsively)), grid layouts (`Grid`), collapsible content (`Panel`), arranging records into a grid (`contentGrid()`) and custom HTML layouts (`View`) are not available yet.
 </Aside>
 
 ## Grouping column headers

@@ -64,6 +64,81 @@ This is how you filter records by a related record, such as the department of an
 With fixed options, a value that is not one of the options is ignored. With a function, options are not reloaded when the filter is applied: the received value is used as a bound parameter, so an unknown value simply matches no records. Do not rely on the options of a select filter to hide records from a user; [scope the data adapter](/tables/filters/overview#security) instead.
 </Aside>
 
+## Multi-select filter
+
+You may allow the user to select multiple options by adding `multiple()`. Records matching any of the selected options are listed:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('status')
+    .multiple()
+    .options({
+        draft: 'Draft',
+        reviewing: 'Reviewing',
+        published: 'Published',
+    })
+```
+
+The state of a multi-select filter is `{ values: [...] }` instead of `{ value }`. At most 100 values are kept.
+
+## Searching options
+
+`searchable()` adds a search field to the select, which is useful for long lists of options:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('country')
+    .options(COUNTRIES)
+    .searchable()
+```
+
+`preload()` is accepted for compatibility: options are always loaded with the form.
+
+## Disable placeholder selection
+
+You can remove the empty option from the select with `selectablePlaceholder(false)`, and change its label with `placeholder()`:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('status')
+    .options(STATUSES)
+    .default('draft')
+    .selectablePlaceholder(false)
+```
+
+## Applying the select filter by default
+
+You may set the option selected by default with `default()`, or several options for a multi-select filter:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('status')
+    .options(STATUSES)
+    .multiple()
+    .default(['draft', 'reviewing'])
+```
+
+## Customizing the query
+
+To filter on something else than the equality of a column, pass a function to `query()`. It is called with the query and the cleaned data when an option is selected:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('price_range')
+    .options({ low: 'Under $50', high: '$50 and more' })
+    .query((query, data) => {
+        if (data.value === 'low') query.where('price', '<', 5000);
+        if (data.value === 'high') query.where('price', '>=', 5000);
+    })
+```
+
+With fixed options, only offered options reach `query()`.
+
 <Aside variant="warning">
-Multi-select filters, relationship filters with search and preloading (`relationship()`, `searchable()`, `preload()`), filtering empty relationships, disabling the placeholder option and default values are not available yet. For more complex conditions, use the [query builder](/tables/filters/query-builder) or a [custom filter](/tables/filters/custom).
+Relationship filters (`relationship()`) and filtering empty relationships are not available yet: load the options of the related records with a function, as described above.
 </Aside>

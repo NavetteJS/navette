@@ -65,28 +65,104 @@ TernaryFilter.make('is_active')
     .label('Active')
 ```
 
+## Setting a default value
+
+You may set a default value for a filter with `default()`. It is applied when the table opens, and again when the user clicks "Reset":
+
+```ts
+import { SelectFilter, TernaryFilter } from '@navette-js/tables';
+
+SelectFilter.make('status')
+    .options(STATUSES)
+    .default('draft')
+
+TernaryFilter.make('is_active')
+    .default(true)
+```
+
+Removing the filter's indicator, or clicking "Remove all", clears the filter instead of restoring its default.
+
 ## Applying filters
 
-The user changes the values of the filters in the form, then clicks the "Apply" button. Until then, the table does not change: filters are always deferred. Applying the filters returns the table to its first page.
+By default, the user changes the values of the filters in the form, then clicks the "Apply" button. Until then, the table does not change. Applying the filters returns the table to its first page. The "Reset" link restores the [default values](#setting-a-default-value) of all filters.
 
-The "Reset" link in the filters form clears all filters at once. The `deferFilters()` method of the table is accepted, and has no effect.
+### Applying filters as soon as they change
+
+You may apply filters as soon as a field changes, without the "Apply" button, with `deferFilters(false)`:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .filters([
+            // ...
+        ])
+        .deferFilters(false);
+}
+```
+
+Every change sends a request to the server and reloads the table. Keep deferred filters for slow queries, or for forms with text fields.
+
+## Persisting filters in the user's session
+
+To keep the applied filters when the user leaves the page and comes back, use `persistFiltersInSession()`. `persistSearchInSession()`, `persistColumnSearchesInSession()` and `persistSortInSession()` do the same for the search, the column searches and the sort:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .filters([
+            // ...
+        ])
+        .persistFiltersInSession()
+        .persistSearchInSession();
+}
+```
+
+The state is kept per browser and per user, and restored values are cleaned like values coming from the browser. By default, it is kept in the server's memory: it is lost when the server restarts, and it is not shared between several server processes. To keep it elsewhere, give the panel a store with `sessionStore()`:
+
+```ts
+import { Panel, type SessionStore } from '@navette-js/panels';
+
+const store: SessionStore = {
+    get: (session, key) => cache.get(`${session}:${key}`),
+    set: (session, key, value) => cache.set(`${session}:${key}`, value),
+};
+
+Panel.make()
+    .sessionStore(store)
+```
 
 <Aside variant="warning">
-Live filters (applied as soon as a value changes), default filter values, persisting filters in the session and customizing the filter trigger, apply and reset actions are not available yet.
+Customizing the filter trigger, apply and reset actions (`filtersTriggerAction()`, `filtersApplyAction()`, `filtersResetAction()`) is not available yet. You may move the "Reset" button next to "Apply" with `filtersResetActionPosition('footer')`.
 </Aside>
 
 ## Active filter indicators
 
-When filters are applied, the badge of the filters button shows how many are active. Some filters also display indicators above the table, one for each value applied, which the user can remove individually:
+When filters are applied, the badge of the filters button shows how many are active, and indicators are displayed above the table, which the user can remove individually:
 
+- a select filter displays its label and the selected options, such as "Status: Draft & Published";
+- a ternary filter displays its label and the selected option, such as "Is active: Yes"; the trashed filter displays the selected option;
 - the [query builder](/tables/filters/query-builder) displays a summary of each rule;
-- a [custom filter](/tables/filters/custom#active-indicators) displays the indicators returned by its `indicateUsing()` function, or its label if it has none.
+- a [custom filter](/tables/filters/custom#active-indicators) displays its label, or the indicators returned by its `indicateUsing()` function.
 
-Select, ternary and trashed filters are counted in the badge, but do not display indicators yet.
+You may change the label shown before the value with `indicator()`:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('author_id')
+    .options(AUTHORS)
+    .indicator('Author')
+```
+
+To hide the indicators, use `hiddenFilterIndicators()` on the table. The "Remove all" button clears every removable filter, the search and the column searches.
 
 ## Positioning filters
 
-By default, filters are displayed in a dropdown. You may also display them above the table, in a collapsible section. See [filter layout](/tables/filters/layout).
+By default, filters are displayed in a dropdown. You may also display them in a modal, or in a section above, below or beside the table. See [filter layout](/tables/filters/layout).
 
 ## Security
 
@@ -94,7 +170,7 @@ The values of the filters come from the browser. Each built-in filter only keeps
 
 - a select filter with fixed options ignores a value that is not one of the options;
 - a ternary filter only reacts to `'1'` and `'0'`;
-- a custom filter only keeps the fields of its form, as strings, numbers or booleans;
+- a custom filter only keeps the fields of its form, as strings, numbers or booleans; a filter without form only keeps its checkbox, as a boolean;
 - the query builder only keeps rules for its declared constraints and operators.
 
 Values are passed to the database as bound parameters. In your own `query()` functions, do the same: use `query.where(column, value)` or `whereRaw('... ?', [value])`, never string concatenation, and only use column names that you wrote yourself.

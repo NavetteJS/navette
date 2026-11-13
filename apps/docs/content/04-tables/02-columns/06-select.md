@@ -30,8 +30,63 @@ SelectColumn.make<LeaveRequest>('status')
 
 When the user picks an option, the new value is sent to the server, [validated](#validation), and written to the record's attribute with the column's name. The select is disabled while the value is saved, and a validation error is displayed in a tooltip.
 
+### Options depending on the record
+
+You may pass a function that receives the record and returns the options. The value received from the browser is checked against the options of that record:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make<Order>('status')
+    .options((record) => (record.is_paid ? PAID_STATUSES : UNPAID_STATUSES))
+```
+
+## Enabling the JavaScript select
+
+By default, the select column renders the browser's native select. You may use the customizable JavaScript select instead with `native(false)`:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make('status')
+    .options(STATUSES)
+    .native(false)
+```
+
+## Searching options
+
+You may enable a search input to allow easier access to many options with `searchableOptions()`. It always uses the JavaScript select:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make('country')
+    .options(COUNTRIES)
+    .searchableOptions()
+```
+
+The JavaScript select lists at most 50 options at a time: change it with `optionsLimit()`. `allowOptionsLabelsWrap(false)` truncates long labels, `position('top')` or `position('bottom')` forces the side where the dropdown opens, and `placeholder()` changes the empty option's text.
+
+## Disabling specific options
+
+You can disable specific options using `disableOptionWhen()`. It receives the value, the label and the record, and may be called several times:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make<Post>('status')
+    .options({
+        draft: 'Draft',
+        reviewing: 'Reviewing',
+        published: 'Published',
+    })
+    .disableOptionWhen((value, _label, record) => value === 'published' && !record.is_reviewed)
+```
+
+A disabled option cannot be picked, and is also refused on the server: a forged request receives "The selected status is invalid.".
+
 <Aside variant="warning">
-The select column renders a native HTML select. A JavaScript select, searchable options, relationship options, HTML option labels and disabled options are not available yet.
+Relationship options and HTML option labels are not available yet.
 </Aside>
 
 ## Disable placeholder selection
@@ -72,7 +127,7 @@ The rules of all editable columns are described on the [text input column](/tabl
 
 ### Valid options validation (`in` rule)
 
-The select column always checks that the received value is one of its options, before your own rules. A value that is not an option is rejected with "The selected status is invalid.", whatever the browser sends. An empty value is accepted, and saved as `null`, unless the column is required.
+The select column always checks that the received value is one of its options for this record, and not a [disabled option](#disabling-specific-options), before your own rules. A value that is not an option is rejected with "The selected status is invalid.", whatever the browser sends. An empty value is accepted, and saved as `null`, unless the column is required.
 
 ## Disabling the column
 

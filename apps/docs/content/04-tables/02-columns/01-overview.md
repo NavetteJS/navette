@@ -78,9 +78,27 @@ TextColumn.make<Post>('meta.title')
     .getStateUsing(({ record }) => record.meta?.title ?? null)
 ```
 
-<Aside variant="warning">
-`state()` and `default()` methods are not available yet: use `getStateUsing()`, which can return a fallback value.
-</Aside>
+### Setting the state directly
+
+`state()` sets a fixed value, or a function of the record. It is a shorter form of `getStateUsing()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('full_name')
+    .state((record) => `${record.first_name} ${record.last_name}`)
+```
+
+### Setting a default value
+
+`default()` sets the value displayed when the state is empty (`null`, `undefined` or an empty string):
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('status')
+    .default('draft')
+```
 
 #### Adding placeholder text if a column is empty
 
@@ -410,9 +428,52 @@ The first argument is the label of the group, and `columns()` takes the columns 
 
 ## Hiding columns
 
+`hidden()` and `visible()` remove a column from the table: its header, its cells, its search and its sort, and the column manager. They accept a boolean or a function, evaluated each time the table is rendered:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('salary')
+    .visible(() => currentUser()?.role === 'admin')
+```
+
+The function receives no record: a column is shown or hidden for the whole table. Read the current user from your own request context, for example an `AsyncLocalStorage` filled by a middleware.
+
 <Aside variant="warning">
-`hidden()`, `visible()` and `visibleFrom()` methods on columns are not available yet. To show a column only to some users, build the column list conditionally in `table()`.
+Hiding a column is a display choice. A hidden column cannot be sorted or searched, but the record data is still loaded: restrict sensitive data in your [data adapter](/advanced/data-adapters) or your [policies](/resources/overview#authorization).
 </Aside>
+
+### Hiding columns responsively
+
+If you would like to hide a column on some screen sizes, use `visibleFrom()` or `hiddenFrom()` with a breakpoint (`sm`, `md`, `lg`, `xl` or `2xl`):
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('slug')
+    .visibleFrom('md')
+
+TextColumn.make('excerpt')
+    .hiddenFrom('xl')
+```
+
+The column is only hidden with CSS: its data is still sent to the browser.
+
+## Setting a column's width
+
+By default, columns take up as much space as they need. You may set a width with `width()`, a CSS length or a number of pixels, or let a column take the remaining space with `grow()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('name')
+    .width('1%')
+
+TextColumn.make('description')
+    .grow()
+```
+
+`wrapHeader()` lets a long label wrap onto several lines in the header.
 
 ### Allowing users to manage columns
 

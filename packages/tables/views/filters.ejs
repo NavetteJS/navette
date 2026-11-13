@@ -1,0 +1,37 @@
+<%# Filters panel: heading, reset link (header or footer), form, and the apply button of deferred filters. %>
+<% const resetButton = (extra) => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(extra)}" data-table-filter-action="reset" wire:click="resetTableFiltersForm">${loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'resetTableFiltersForm' }))}`; %>
+<div <%- attributes %>>
+    <div class="fi-ta-filters-header">
+        <h2 class="fi-ta-filters-heading">
+            <%= t('filament-tables::table.filters.heading') %>
+        </h2>
+        <% if (resetPosition === 'header') { %>
+
+        <div>
+            <%- resetButton(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...dangerLinkClasses]) %>
+                <span class="fi-link-label">
+                    <%= t('filament-tables::table.filters.actions.reset.label') %>
+                </span>
+            </button>
+        </div>
+        <% } %>
+    </div>
+
+    <%- form %>
+    <% if (deferred || resetPosition === 'footer') { %>
+
+    <div class="fi-ta-filters-actions-ctn">
+        <% if (deferred) { %>
+        <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...primaryButtonClasses]) %>" data-table-filter-action="apply" wire:click="applyTableFilters"<% if (closeModal) { %> x-on:click="$dispatch('close-modal', { id: <%= js(closeModal) %> })"<% } %>>
+            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'applyTableFilters' })) %>
+            <%= t('filament-tables::table.filters.actions.apply.label') %>
+        </button>
+        <% } %>
+        <% if (resetPosition === 'footer') { %>
+        <%- resetButton(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...grayButtonClasses]) %>
+            <%= t('filament-tables::table.filters.actions.reset.label') %>
+        </button>
+        <% } %>
+    </div>
+    <% } %>
+</div>

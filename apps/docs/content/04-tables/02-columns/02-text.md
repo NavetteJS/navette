@@ -205,11 +205,40 @@ new Table()
     ])
 ```
 
-`date()` displays `Nov 9, 2026`, and `dateTime()` displays `Nov 9, 2026 14:30:00`. The state must be a date string such as `2026-11-09` or `2026-11-09 14:30:00`, which is how SQLite returns dates. It is read and displayed in UTC.
+`date()` displays `Nov 9, 2026`, and `dateTime()` displays `Nov 9, 2026 14:30:00`. The state must be a date string such as `2026-11-09` or `2026-11-09 14:30:00`, which is how SQLite returns dates, or a `Date`. A string without a time zone is read as UTC.
 
-<Aside variant="warning">
-Custom date formats, `since()` and time zones are not available yet. To display a date differently, use `formatStateUsing()` with `Intl.DateTimeFormat`.
-</Aside>
+#### Customizing the date format
+
+`date()`, `dateTime()` and `time()` accept a format, written with the PHP date characters that Filament uses: `d`, `j`, `D`, `l`, `S`, `m`, `n`, `M`, `F`, `Y`, `y`, `H`, `G`, `h`, `g`, `i`, `s`, `a`, `A` and `T`. Escape a letter with a backslash to print it as it is:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('created_at')
+    .dateTime('d/m/Y H:i')
+```
+
+#### Displaying dates in a time zone
+
+The second argument of `date()`, `dateTime()` and `time()`, or `timezone()`, displays the date in an IANA time zone:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('created_at')
+    .dateTime('M j, Y H:i', 'Europe/Paris')
+```
+
+#### Displaying a relative date
+
+`since()` displays how long ago the date was, such as `2 days ago`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('created_at')
+    .since()
+```
 
 ### Number formatting
 
@@ -360,16 +389,113 @@ The copied text is the displayed text, for example the formatted amount of a `mo
 This feature only works when SSL is enabled for the app, because browsers only expose the clipboard API in secure contexts (or on `localhost`).
 </Aside>
 
+## Displaying a description
+
+`description()` adds a line of secondary text below the value, or above it with `'above'`. It accepts a string or a function of the record:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('title')
+    .description((record) => record.excerpt)
+```
+
+```preview
+// records: [{"title": "Introducing Navette", "excerpt": "Admin panels for Node.js"}, {"title": "Building your first panel", "excerpt": "From install to the first resource"}]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title').description((record) => record.excerpt),
+    ])
+```
+
+## Listing multiple values
+
+When the state is an array, its values are joined with commas. A string can be split into values with `separator()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('tags')
+    .separator(',')
+```
+
+`listWithLineBreaks()` displays one value per line, and `bulleted()` adds bullets:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('authors')
+    .listWithLineBreaks()
+    .bulleted()
+```
+
+`limitList()` shows the first values only, followed by "and 3 more". With `true` as second argument, or with `expandableLimitedList()`, a link reveals the other values:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('authors')
+    .listWithLineBreaks()
+    .limitList(2, true)
+```
+
+Combined with `badge()`, each value gets its own badge.
+
+## Customizing the text
+
+### Setting the size
+
+`size()` accepts `xs`, `sm` (the default), `md` and `lg`.
+
+### Setting the font family
+
+`fontFamily()` accepts `sans`, `serif` and `mono`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('sku')
+    .fontFamily('mono')
+```
+
+### Wrapping long text
+
+By default, long text stays on one line. `wrap()` lets it wrap, and `lineClamp()` limits it to a number of lines:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('description')
+    .wrap()
+    .lineClamp(2)
+```
+
+### Adding a prefix or a suffix
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('weight')
+    .suffix(' kg')
+```
+
+### Limiting the number of words
+
+`words()` truncates the text to a number of words, like `limit()` does with characters.
+
 ## Combining display options
 
-Some options are not combined yet. Keep these in mind when you chain several of them:
+Every option combines with the others: a badge can have an icon and a tooltip, a formatted date can be copyable, a description can sit below a list. `weight()`, `size()`, `fontFamily()`, `color()`, `icon()`, `iconColor()`, `tooltip()` and `copyable()` also accept a function of the record and of the value, to vary per value of a list:
 
-- A badge displays the formatted state (`formatStateUsing()`, `date()`), its color and its icon, but ignores `money()`, `numeric()`, `limit()` and `tooltip()`.
-- Without `badge()`, a column formatted with `formatStateUsing()`, `date()` or `dateTime()` ignores `color()`, `icon()`, `limit()` and `tooltip()`; with `weight()` or `copyable()` as well, it displays the unformatted state.
-- On plain text, `money()`, `numeric()` and `weight()` combine with every other option. `color()` is ignored when `limit()`, `tooltip()`, `weight()` or `copyable()` is used without an icon; `icon()` is ignored with `limit()` or `tooltip()`; `copyable()` is ignored with `icon()`, `limit()` or `tooltip()`.
+```ts
+import { TextColumn } from '@navette-js/tables';
 
-To combine a formatted value with these options, compute the formatted value with `getStateUsing()` instead of `formatStateUsing()`.
+TextColumn.make('tags')
+    .badge()
+    .color((record, tag) => (tag === 'urgent' ? 'danger' : 'gray'))
+```
 
 <Aside variant="warning">
-Descriptions below the text, lists of values, Markdown and HTML rendering, text size, font family and text wrapping options are not available yet.
+Markdown and HTML rendering are not available yet: the text is always escaped.
 </Aside>

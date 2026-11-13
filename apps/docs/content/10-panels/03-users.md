@@ -95,6 +95,16 @@ Never store a password in clear text, and never log it.
 
 ## Authorizing access to the panel
 
+Use `canAccess()` to choose who may use a panel. It is checked on every request and at login:
+
+```ts
+panel.canAccess((user) => user.role === 'admin');
+```
+
+A signed-in user who may not use the panel gets a `403` response on its pages, and its login form answers "These credentials do not match our records." for their account, as for a wrong password. Your user provider may also implement `canAccessPanel(user, panel)`, to keep the rule next to the users; when both are set, both must allow the user.
+
+The user object passed to `canAccess()` is the one your provider's `find()` returns: add the fields your rules need (role, permissions, team…) there.
+
 `find()` is called on every request: it is your access checkpoint. Return `null` for an account that must not use the panel (deactivated, not an employee…): the user loses access at their next request.
 
 ```ts
@@ -222,9 +232,34 @@ Without it, Navette uses the address of the request, built from the `Host` heade
 
 ## Sessions
 
-When a user logs in, the panel sets a cookie named after its id (`navette_admin_session`). It contains the id of the user, signed with the key of the panel, and is `HttpOnly`, `SameSite=Lax`, and `Secure` when the request is made over HTTPS. With "Remember me", it lasts 30 days; otherwise, until the browser is closed.
+When a user logs in, the panel sets a cookie named after its auth guard (`navette_web_session`). It contains the id of the user, signed with the key of the panel, and is `HttpOnly`, `SameSite=Lax`, and `Secure` when the request is made over HTTPS. With "Remember me", it lasts 30 days; otherwise, until the browser is closed.
 
-On every request, the panel checks the signature and calls `find()` with the id. Each panel has its own session: a user logged into one panel is not logged into another one.
+On every request, the panel checks the signature and calls `find()` with the id.
+
+### Sharing the session between panels
+
+Panels share one session by default: they all use the `web` auth guard. A user who signs into one panel is signed into all of them, logging out of one logs out of all of them, and [`canAccess()`](#authorizing-access-to-the-panel) decides which panels they may enter. This is the usual setup for a customer area next to an admin area:
+
+```ts
+const users = knexAuthProvider((table) => db(table));
+
+const appPanel = Panel.make().id('app').path('app').key(key).auth(users).login().registration();
+const adminPanel = Panel.make().id('admin').path('admin').key(key).auth(users).login()
+    .canAccess((user) => user.role === 'admin');
+```
+
+Customers sign up and sign in on `/app`. Administrators sign in once, on either panel, and reach `/admin` without signing in again. A customer who opens `/admin` gets a `403` response.
+
+Panels that share a guard must use the same key and the same user provider: otherwise the user id stored in the session of one panel would be read as a user of the other. `panelRouter()` throws an error at startup when this is not the case.
+
+To give panels separate sessions, for example when they use different user tables, give them different guards, or `null` for a session of the panel's own (`navette_<id>_session`):
+
+```ts
+const partnerPanel = Panel.make().id('partners').authGuard('partners').auth(partnerUsers);
+const kioskPanel = Panel.make().id('kiosk').authGuard(null).auth(kioskUsers);
+```
+
+Navette does not add links between panels. To let administrators switch from one panel to the other, add an item to the [user menu](/panels/navigation#customizing-the-user-menu) of each panel, shown only to those who may use the other panel.
 
 Logging out is a `POST` request to `/logout`, protected by a CSRF token.
 

@@ -1,7 +1,7 @@
 // The demo's second panel: registration, password reset, email verification,
 // teams (multi-tenancy) and a per-team Settings page.
 import path from 'node:path';
-import { EmailVerificationPrompt, fileMailer, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type User } from '@navette-js/panels';
+import { EmailVerificationPrompt, fileMailer, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type AuthProvider, type User } from '@navette-js/panels';
 import { TextInput } from '@navette-js/forms';
 import type { Schema } from '@navette-js/schemas';
 import { Model } from '@navette-js/database';
@@ -19,10 +19,18 @@ export class Settings extends Page {
     static navigationIcon = 'o-document-text';
 }
 
+/**
+ * Accounts of both panels: the `users` table. The two panels share one session (auth guard `web`), so they must share this
+ * provider. The fixture demo account signs in as database user #1 directly, without checking the stored bcrypt hash.
+ */
+export function demoAuthProvider(demoUser: User & { password: string }): AuthProvider {
+    const users = knexAuthProvider((name: string) => Model.knex()(name));
+    return { ...users, attempt: async (email, password) => (email === demoUser.email && password === demoUser.password ? users.find(demoUser.id) : users.attempt(email, password)) };
+}
+
 /** `profile`: adds the profile page (off for screenshot comparisons). */
-export function appPanel(options: { key: string; login: typeof Login; demoUser: User & { password: string }; mailLog: string; appUrl: string; profile?: boolean }): Panel {
+export function appPanel(options: { key: string; login: typeof Login; auth: AuthProvider; mailLog: string; appUrl: string; profile?: boolean }): Panel {
     const table = (name: string) => Model.knex()(name);
-    const users = knexAuthProvider(table);
     const panel = Panel.make()
         .id('app')
         .path('app')
@@ -37,10 +45,6 @@ export function appPanel(options: { key: string; login: typeof Login; demoUser: 
         .tenant(knexTenantProvider(table, { label: 'Current team' }))
         .tenantRegistration(RegisterTeam)
         .pages([Settings])
-        .auth({
-            ...users,
-            // The fixture demo account signs in as database user #1 directly, without checking the stored bcrypt hash.
-            attempt: async (email, password) => (email === options.demoUser.email && password === options.demoUser.password ? users.find(options.demoUser.id) : users.attempt(email, password)),
-        });
+        .auth(options.auth);
     return options.profile ? panel.profile() : panel;
 }
