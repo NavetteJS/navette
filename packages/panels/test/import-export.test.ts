@@ -112,3 +112,23 @@ test('import: mapping by name or guess, validation, update of existing records, 
     const forged = await run(() => action.call({ livewire: list, record: null, arguments: {}, data: { file: '/etc/passwd' } }));
     assert.equal(forged.pending.length, 0, 'a path sent by the browser is ignored');
 });
+
+test('XLSX writer: valid archive, header row, text cells (formulas never evaluated)', async () => {
+    const { buildXlsx } = await import('../src/xlsx.ts');
+    const { inflateRawSync } = await import('node:zlib');
+    const file = buildXlsx([['Name', 'Note'], ['Ada', '=1+1 <b>&\u0001']]);
+    assert.equal(file.readUInt32LE(0), 0x04034b50);
+    // Read the sheet back from the archive.
+    const name = 'xl/worksheets/sheet1.xml';
+    let offset = 0, sheet = '';
+    while (file.readUInt32LE(offset) === 0x04034b50) {
+        const size = file.readUInt32LE(offset + 18), nameLength = file.readUInt16LE(offset + 26);
+        const entry = file.toString('utf8', offset + 30, offset + 30 + nameLength);
+        const data = file.subarray(offset + 30 + nameLength, offset + 30 + nameLength + size);
+        if (entry === name) sheet = inflateRawSync(data).toString('utf8');
+        offset += 30 + nameLength + size;
+    }
+    assert.match(sheet, /<c r="A1" t="inlineStr" s="1"><is><t xml:space="preserve">Name<\/t><\/is><\/c>/);
+    assert.match(sheet, /<t xml:space="preserve">=1\+1 &lt;b&gt;&amp;<\/t>/);
+    assert.doesNotMatch(sheet, /<f>/);
+});

@@ -4,7 +4,7 @@ title: Export action
 
 ## Introduction
 
-Navette includes an action that exports records to a CSV file. The user picks the columns in a modal, and gets a notification with a download link:
+Navette includes an action that exports records to CSV and Excel (XLSX) files. The user picks the columns in a modal, and gets a notification with download links:
 
 ```ts
 import { ExportAction } from '@navette-js/panels';
@@ -127,6 +127,20 @@ Panel.make()
     .downloads(new DownloadStore({ ttl: 60 * 60 * 1000, maxFiles: 100 }))
 ```
 
+## Customizing the export formats
+
+By default, both a CSV and an XLSX file are offered. `formats()` keeps only some of them:
+
+```ts
+import { ExportAction } from '@navette-js/panels';
+
+ExportAction.make()
+    .exporter(ProductExporter)
+    .formats(['xlsx'])
+```
+
+In the XLSX file, every cell is text: a value starting with `=` is never evaluated as a formula.
+
 ## Security
 
 - The action is authorized with the `viewAny` ability of the resource's policy. Only the records of the table's query are exported: [scope your data adapter](/tables/filters/overview#security) to restrict what a user can see.
@@ -134,5 +148,5 @@ Panel.make()
 - Cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return (except numbers) are prefixed with `'`, so that spreadsheet software does not run them as formulas.
 
 <Aside variant="warning">
-Excel (XLSX) files, queued exports and export history are not available yet.
+Queued exports and export history are not available yet.
 </Aside>

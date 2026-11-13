@@ -1,4 +1,5 @@
 // Import and export actions: CSV files read and written during the request (no queue), and a per-user download store.
+import { buildXlsx } from './xlsx.ts';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { Action } from '@navette-js/actions';
@@ -112,13 +113,15 @@ export type ExportActionInstance = Action & {
     maxRows(count: number): ExportActionInstance;
     /** `false`: no column selection, every column is exported (the modal only confirms). */
     columnMapping(condition: boolean): ExportActionInstance;
+    /** Files offered for download: `['csv', 'xlsx']` (both by default). */
+    formats(formats: ('csv' | 'xlsx')[]): ExportActionInstance;
 };
 
 const DEFAULT_MAX_EXPORT_ROWS = 10000, HARD_MAX_EXPORT_ROWS = 100000, CHUNK = 1000;
 const fileNameOf = (name: string) => name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 120) || 'export';
 
 function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
-    let exporter: typeof Exporter | null = null, maxRows = DEFAULT_MAX_EXPORT_ROWS, mapping = true;
+    let exporter: typeof Exporter | null = null, maxRows = DEFAULT_MAX_EXPORT_ROWS, mapping = true, formats: ('csv' | 'xlsx')[] = ['csv', 'xlsx'];
     const columnsOf = () => { if (!exporter) throw new Error('ExportAction: call exporter() with an Exporter class.'); return exporter.getColumns(); };
     const action = Action.make(name).color('gray').icon('m-arrow-down-tray')
         // Exporting reads the records: the resource's `viewAny` ability (or the host's own checks) applies.
@@ -142,21 +145,25 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             const first = await adapter.paginate({ ...query, page: 1, perPage: CHUNK });
             const limit = Math.min(maxRows, HARD_MAX_EXPORT_ROWS);
             if (first.total > limit) { Notification.make().danger().title(t('filament-actions::export.notifications.max_rows.title')).body(tc('filament-actions::export.notifications.max_rows.body', limit, { count: limit.toLocaleString('en-US') })).send(); return; }
-            const lines = [csvLine(columns.map((column) => column.getLabel()))];
+            const rows: unknown[][] = [columns.map((column) => column.getLabel())];
             for (let page = 1; page <= first.lastPage; page++) {
                 const { records } = page === 1 ? first : await adapter.paginate({ ...query, page, perPage: CHUNK });
-                for (const record of records) lines.push(csvLine(columns.map((column) => column.getValue(record))));
+                for (const record of records) rows.push(columns.map((column) => column.getValue(record)));
             }
-            const count = lines.length - 1;
+            const count = rows.length - 1;
             const user = livewire._ctx?.user;
             const panel = livewire._ctx?.panel;
-            const token = panel.getDownloads().put(user.id, `${fileNameOf(exporter!.getFileName(count))}.csv`, 'text/csv; charset=utf-8', `﻿${lines.join('\r\n')}\r\n`);
+            const fileName = fileNameOf(exporter!.getFileName(count));
+            const links: { label: string; url: string }[] = [];
+            if (formats.includes('csv')) links.push({ label: t('filament-actions::export.notifications.completed.actions.download_csv.label'), url: panel.getDownloadUrl(panel.getDownloads().put(user.id, `${fileName}.csv`, 'text/csv; charset=utf-8', `\uFEFF${rows.map(csvLine).join('\r\n')}\r\n`)) });
+            if (formats.includes('xlsx')) links.push({ label: t('filament-actions::export.notifications.completed.actions.download_xlsx.label'), url: panel.getDownloadUrl(panel.getDownloads().put(user.id, `${fileName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buildXlsx(rows))) });
             Notification.make().success().persistent().title(t('filament-actions::export.notifications.completed.title')).body(exporter!.getCompletedNotificationBody(count))
-                .actions([{ label: t('filament-actions::export.notifications.completed.actions.download_csv.label'), url: panel.getDownloadUrl(token) }]).send();
+                .actions(links).send();
             if (bulk) livewire.deselectAllTableRecords();
         }) as ExportActionInstance;
     action.exporter = (value) => { exporter = value; return action; };
     action.maxRows = (count) => { maxRows = Math.max(1, Math.floor(count)); return action; };
+    action.formats = (list) => { const allowed = list.filter((format) => format === 'csv' || format === 'xlsx'); if (!allowed.length) throw new Error('ExportAction: formats() needs csv and/or xlsx.'); formats = [...new Set(allowed)]; return action; };
     action.columnMapping = (condition) => { mapping = condition; if (!condition) action.requiresConfirmation(); return action; };
     return action;
 }
