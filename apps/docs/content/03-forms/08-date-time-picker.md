@@ -37,6 +37,122 @@ Each field has a fixed format, which is also the format of its value in the form
 
 An empty field is saved as `null`.
 
+### Customizing the storage format
+
+`format()` changes the format of the saved value, written with PHP's date tokens (`Y`, `m`, `d`, `H`, `i`, `s`, `j`, `n`, `g`, `A`, `U`…):
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date_of_birth')
+    .format('d/m/Y')
+```
+
+The record's value is still read in any of the formats above; `format()` only shapes the value written.
+
+## Enabling the JavaScript date picker
+
+By default, the fields use the browser's native inputs. `native(false)` switches to Filament's JavaScript picker, which looks the same in every browser and offers more options:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date_of_birth')
+    .native(false)
+```
+
+```preview
+// state: {"date_of_birth": "2026-03-14 00:00:00"}
+// width: 24rem
+DatePicker.make('date_of_birth')
+    .native(false)
+```
+
+### Customizing the display format
+
+With the JavaScript picker, `displayFormat()` sets how the value is shown, with PHP's date tokens. The defaults are `M j, Y` for dates, `H:i:s` for times, and both for date-times:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date_of_birth')
+    .native(false)
+    .displayFormat('d/m/Y')
+```
+
+`locale()` translates the month and day names (`'fr'`, `'de'`…):
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date_of_birth')
+    .native(false)
+    .displayFormat('j F Y')
+    .locale('fr')
+```
+
+### Configuring the time input intervals
+
+`hoursStep()`, `minutesStep()` and `secondsStep()` set the step of the time inputs:
+
+```ts
+import { DateTimePicker } from '@navette-js/forms';
+
+DateTimePicker.make('published_at')
+    .native(false)
+    .hoursStep(2)
+    .minutesStep(15)
+    .secondsStep(10)
+```
+
+### Configuring the first day of the week
+
+`firstDayOfWeek()` takes a number from 0 (Sunday) to 6 (Saturday); the default is Monday (1). `weekStartsOnMonday()` and `weekStartsOnSunday()` are shortcuts:
+
+```ts
+import { DateTimePicker } from '@navette-js/forms';
+
+DateTimePicker.make('published_at')
+    .native(false)
+    .weekStartsOnSunday()
+```
+
+### Disabling specific dates
+
+`disabledDates()` takes a list of `YYYY-MM-DD` dates, or a function of the field context. They cannot be picked, and the server rejects them too, with "The selected … is invalid.":
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date')
+    .native(false)
+    .disabledDates(['2026-12-25', '2026-12-26'])
+```
+
+### Closing the picker when a date is selected
+
+```ts
+import { DateTimePicker } from '@navette-js/forms';
+
+DateTimePicker.make('date')
+    .native(false)
+    .closeOnDateSelection()
+```
+
+### Focusing a default calendar date
+
+`defaultFocusedDate()` sets the date shown when the picker opens on an empty field:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('custom_starts_at')
+    .native(false)
+    .defaultFocusedDate('2026-01-01')
+```
+
+In the form state, the JavaScript picker uses `YYYY-MM-DD HH:MM:SS` (a time picker uses today's date). The saved value keeps the formats described in [the storage format](#understanding-the-storage-format).
+
 ## Disabling the seconds input
 
 The date-time picker and the time picker let the user enter seconds by default. You may disable the seconds input using the `seconds(false)` method:
@@ -65,7 +181,16 @@ The time picker then saves `HH:MM`. The date-time picker still saves `HH:MM:00`.
 
 ## Timezones
 
-Navette does not convert dates between timezones: the value the user types is the value saved. If your users are in several timezones, convert the value yourself, for example in the page's `mutateFormDataBeforeSave()` and `mutateFormDataBeforeFill()` hooks.
+`timezone()` shows and edits a date-time in a time zone, while it is saved in UTC: the record's value is converted when the form is filled, and the submitted value is converted back before it is validated against `minDate()` / `maxDate()` and saved:
+
+```ts
+import { DateTimePicker } from '@navette-js/forms';
+
+DateTimePicker.make('published_at')
+    .timezone('America/New_York')
+```
+
+The time zone may come from the user, for example `.timezone(user.timezone)`. An invalid time zone name throws an error when the field is declared. Date pickers and time pickers are not converted, since a date or a time alone has no instant.
 
 ## Making the field live
 
@@ -101,7 +226,7 @@ The date-time picker and the time picker also accept `live()` and `live({ onBlur
 
 ## Setting a placeholder
 
-`DatePicker` accepts `placeholder()`. The attribute is set on the input, but most browsers don't display it on a native date input.
+All three pickers accept `placeholder()`. With the JavaScript picker, it is shown in the empty field; most browsers don't display it on native date inputs.
 
 ## Date-time picker validation
 
@@ -109,7 +234,7 @@ As well as all rules listed on the [validation](/forms/validation) page, there a
 
 ### Min and max date validation
 
-You may restrict the minimum and maximum date that can be selected with the picker. The `minDate()` and `maxDate()` methods accept a `YYYY-MM-DD` string, `'today'`, or a function of the [field context](/forms/overview#using-the-field-context):
+You may restrict the minimum and maximum date that can be selected with the picker. The `minDate()` and `maxDate()` methods accept a date (`YYYY-MM-DD`, or `YYYY-MM-DD HH:MM:SS` on a date-time picker, `HH:MM` on a time picker), `'today'`, `'tomorrow'`, `'yesterday'`, or a function of the [field context](/forms/overview#using-the-field-context):
 
 ```ts
 import { DatePicker } from '@navette-js/forms';
@@ -127,6 +252,4 @@ The bounds are set on the input, and checked on the server. A function returning
 `'today'` is computed in UTC on the server. Close to midnight, it may differ from the user's local date.
 </Aside>
 
-<Aside variant="warning">
-A JavaScript date picker (`native(false)`, display formats, disabled dates, first day of the week), timezone handling and `minDate()` / `maxDate()` on the date-time picker are not available yet.
-</Aside>
+The date pickers also check that the value is a valid date.

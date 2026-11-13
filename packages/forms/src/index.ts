@@ -446,46 +446,6 @@ export class TextInput extends Field {
     }
 }
 
-/** Native date picker (`<input type="date">`). */
-export class DatePicker extends Field {
-    private _maxDate: Lazy<string | null, ComponentContext> = null;
-    private _minDate: Lazy<string | null, ComponentContext> = null;
-    private _live = false;
-    static make(name: string): DatePicker { return configured(new DatePicker(name)); }
-    private _datePlaceholder: string | null = null;
-    /** Placeholder attribute (browsers do not display it on a native `date` input). */
-    placeholder(text: string | null): this { this._datePlaceholder = text; return this; }
-    /** Sends the state to the server as soon as it changes (`wire:model.live`). */
-    live(condition = true): this { this._live = condition; return this; }
-    /** The state is a `YYYY-MM-DD` date, whatever the stored precision. */
-    hydrateState(value: unknown): unknown { return typeof value === 'string' && value.length > 10 ? value.slice(0, 10) : value; }
-    private static resolve(date: string): string { return date === 'today' ? new Date().toISOString().slice(0, 10) : date; }
-    private async bound(date: Lazy<string | null, ComponentContext>): Promise<string | null> { const value = await evaluate(date, this.context()); return value ? DatePicker.resolve(value) : null; }
-    /** Latest accepted date: `'today'`, a `YYYY-MM-DD` date, or a context function (`({ get }) => get('endDate') || 'today'`). */
-    maxDate(date: Lazy<string | null, ComponentContext>): this {
-        this._maxDate = date;
-        return this.rule({ name: 'before_or_equal', passes: async (v) => { const max = await this.bound(date); return max === null || String(v).slice(0, 10) <= max; }, message: (a) => `The ${a} field must be a date before or equal to ${typeof date === 'string' ? date : 'the maximum date'}.` });
-    }
-    minDate(date: Lazy<string | null, ComponentContext>): this {
-        this._minDate = date;
-        return this.rule({ name: 'after_or_equal', passes: async (v) => { const min = await this.bound(date); return min === null || String(v).slice(0, 10) >= min; }, message: (a) => `The ${a} field must be a date after or equal to ${typeof date === 'string' ? date : 'the minimum date'}.` });
-    }
-    async toHtml(): Promise<string> {
-        const isDisabled = await this.isDisabled();
-        const input = new Attributes()
-            .merge({
-                'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
-                max: await this.bound(this._maxDate), min: await this.bound(this._minDate), placeholder: this._datePlaceholder,
-                required: (await this.isRequired()) && !isDisabled, type: 'date', [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath(),
-            })
-            .class(['fi-input']);
-        const wrapper = new Attributes()
-            .merge({ 'x-on:focus-input.stop': "$el.querySelector('input:not([type=hidden])')?.focus()" })
-            .class(['fi-fo-date-time-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} /></div></div>`);
-    }
-}
-
 type Options = [string, string][] | Record<string, string>;
 /** Options, possibly grouped: `{ 'In process': { draft: 'Draft', reviewing: 'Reviewing' }, Reviewed: { … } }`. */
 type GroupedOptions = Options | Record<string, string | Record<string, string>> | [string, string | [string, string][]][];
@@ -1269,50 +1229,254 @@ export class Repeater extends Field {
     }
 }
 
-/** Native time input: the state is `HH:MM` with `seconds(false)`, `HH:MM:SS` otherwise. */
-export class TimePicker extends Field {
-    private _seconds = true;
-    static make(name: string): TimePicker { return configured(new TimePicker(name)); }
+/** PHP date format (`M j, Y H:i`) to day.js (`MMM D, YYYY HH:mm`), as Filament's `convert_date_format()`. Escaped characters (`\at`) become literals. */
+export function phpDateFormatToDayjs(format: string): string {
+    const tokens: Record<string, string> = { d: 'DD', D: 'ddd', j: 'D', l: 'dddd', N: 'd', w: 'd', S: '', F: 'MMMM', m: 'MM', M: 'MMM', n: 'M', Y: 'YYYY', y: 'YY', a: 'a', A: 'A', g: 'h', G: 'H', h: 'hh', H: 'HH', i: 'mm', s: 'ss', v: 'SSS', e: 'z', T: 'z', P: 'Z', O: 'ZZ', U: 'X' };
+    let out = '';
+    for (let index = 0; index < format.length; index++) {
+        const char = format[index];
+        if (char === '\\' && index + 1 < format.length) { out += `[${format[++index]}]`; continue; }
+        out += Object.hasOwn(tokens, char) ? tokens[char] : /[a-zA-Z]/.test(char) ? `[${char}]` : char;
+    }
+    return out;
+}
+const pad = (n: number, size = 2) => String(n).padStart(size, '0');
+/** `YYYY-MM-DD HH:MM:SS` of a wall-clock time in a time zone, from a UTC instant. */
+function formatInZone(date: Date, timeZone: string): string {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(date).map((part) => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+/** UTC instant of a wall-clock `YYYY-MM-DD HH:MM:SS` in a time zone. */
+function zonedToUtc(value: string, timeZone: string): Date | null {
+    const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+    if (!match) return null;
+    const asUtc = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +(match[6] ?? 0));
+    // Offset of the zone at that moment (twice, to settle around DST changes).
+    let guess = asUtc;
+    for (let i = 0; i < 2; i++) { const shown = Date.parse(formatInZone(new Date(guess), timeZone).replace(' ', 'T') + 'Z'); guess = asUtc - (shown - guess); }
+    return new Date(guess);
+}
+/** Normalizes a date-like value to `YYYY-MM-DD HH:MM:SS` (or null). */
+function normalizeDateTime(value: unknown): string | null {
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())} ${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}:${pad(value.getUTCSeconds())}`;
+    if (typeof value !== 'string' || value === '') return null;
+    const match = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value);
+    if (match) return `${match[1]} ${match[2] ?? '00'}:${match[3] ?? '00'}:${match[4] ?? '00'}`;
+    const time = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+    return time ? `1970-01-01 ${time[1]}:${time[2]}:${time[3] ?? '00'}` : null;
+}
+
+type DateLimit = Lazy<string | null, ComponentContext>;
+/**
+ * Base of the date, time and date-time pickers: native browser input by default, or Filament's JavaScript picker with
+ * `native(false)` (display format, disabled dates, first day of the week, locale). Limits and disabled dates are checked on the server.
+ */
+abstract class TemporalField extends Field {
+    protected abstract hasDate(): boolean;
+    protected abstract hasTime(): boolean;
+    protected _seconds = true;
+    protected _native = true;
+    protected _maxDate: DateLimit = null;
+    protected _minDate: DateLimit = null;
+    protected _displayFormat: string | null = null;
+    protected _format: string | null = null;
+    protected _firstDayOfWeek = 1;
+    protected _disabledDates: Lazy<string[], ComponentContext> = [];
+    protected _closeOnDateSelection = false;
+    protected _locale: string | null = null;
+    protected _timezone: string | null = null;
+    protected _hoursStep = 1;
+    protected _minutesStep = 1;
+    protected _secondsStep = 1;
+    protected _defaultFocusedDate: string | null = null;
+    protected _temporalPlaceholder: string | null = null;
     seconds(condition = true): this { this._seconds = condition; return this; }
-    hydrateState(value: unknown): unknown { return typeof value === 'string' && value.length >= 5 ? value.slice(value.length > 8 ? 11 : 0).slice(0, this._seconds ? 8 : 5) : value; }
+    hasSeconds(): boolean { return this.hasTime() && this._seconds; }
+    /** `false`: Filament's JavaScript picker instead of the browser's native input. */
+    native(condition = true): this { this._native = condition; return this; }
+    isNative(): boolean { return this._native; }
+    /** Display format of the JavaScript picker, in PHP's notation (`'d/m/Y'`, `'M j, Y H:i'`). */
+    displayFormat(format: string | null): this { this._displayFormat = format; return this; }
+    /** Format of the saved value, in PHP's notation (`'Y-m-d'` by default for dates, `'Y-m-d H:i:s'` with a time). */
+    format(format: string | null): this { this._format = format; return this; }
+    /** First day of the week in the JavaScript picker: 0 (Sunday) to 6. */
+    firstDayOfWeek(day: number): this { this._firstDayOfWeek = Math.min(6, Math.max(0, Math.floor(day))); return this; }
+    weekStartsOnMonday(): this { return this.firstDayOfWeek(1); }
+    weekStartsOnSunday(): this { return this.firstDayOfWeek(0); }
+    /** Dates that cannot be picked (`YYYY-MM-DD`), also rejected on the server. */
+    disabledDates(dates: Lazy<string[], ComponentContext>): this { this._disabledDates = dates; return this; }
+    closeOnDateSelection(condition = true): this { this._closeOnDateSelection = condition; return this; }
+    /** Locale of the JavaScript picker's month and day names (`'fr'`). */
+    locale(locale: string | null): this { this._locale = locale; return this; }
+    /** Shows and edits the value in this time zone, while it is saved in UTC (date-time pickers). */
+    timezone(timezone: string | null): this { if (timezone !== null) new Intl.DateTimeFormat('en', { timeZone: timezone }); this._timezone = timezone; return this; }
+    hoursStep(step: number): this { this._hoursStep = step; return this; }
+    minutesStep(step: number): this { this._minutesStep = step; return this; }
+    secondsStep(step: number): this { this._secondsStep = step; return this; }
+    /** Date focused when the JavaScript picker opens on an empty field. */
+    defaultFocusedDate(date: string | null): this { this._defaultFocusedDate = date; return this; }
+    placeholder(text: string | null): this { this._temporalPlaceholder = text; return this; }
+
+    private static resolveLimit(date: string): string {
+        const day = (offset: number) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+        return date === 'today' ? day(0) : date === 'tomorrow' ? day(1) : date === 'yesterday' ? day(-1) : date;
+    }
+    protected async limit(date: DateLimit): Promise<string | null> { const value = await evaluate(date, this.context()); return value ? TemporalField.resolveLimit(String(value)) : null; }
+    /** Latest accepted date: `'today'`, a date, or a context function (`({ get }) => get('ends_at')`). */
+    maxDate(date: DateLimit): this {
+        this._maxDate = date;
+        return this.rule({ name: 'before_or_equal', passes: async (v) => { const max = await this.limit(date); return max === null || this.comparable(v) <= this.comparable(max); }, message: (a) => `The ${a} field must be a date before or equal to ${typeof date === 'string' ? date : 'the maximum date'}.` });
+    }
+    minDate(date: DateLimit): this {
+        this._minDate = date;
+        return this.rule({ name: 'after_or_equal', passes: async (v) => { const min = await this.limit(date); return min === null || this.comparable(v) >= this.comparable(min); }, message: (a) => `The ${a} field must be a date after or equal to ${typeof date === 'string' ? date : 'the minimum date'}.` });
+    }
+    /** Comparable string of a value: the date only for date pickers, the time only for time pickers. */
+    private comparable(value: unknown): string {
+        const normalized = normalizeDateTime(this.toUtc(value)) ?? String(value);
+        if (!this.hasTime()) return normalized.slice(0, 10);
+        if (!this.hasDate()) return normalized.slice(11, this._seconds ? 19 : 16);
+        return normalized;
+    }
+    async getValidationRules(): Promise<Rule[]> {
+        const rules = await super.getValidationRules();
+        if (!this.hasDate()) return rules;
+        return [...rules,
+            { name: 'date', passes: (v) => normalizeDateTime(v) !== null && !Number.isNaN(Date.parse(normalizeDateTime(v)!.replace(' ', 'T') + 'Z')), message: (a) => `The ${a} field must be a valid date.` },
+            { name: 'not_in', passes: async (v) => { const disabled = (await evaluate(this._disabledDates, this.context())) ?? []; return !disabled.includes(String(normalizeDateTime(this.toUtc(v)) ?? '').slice(0, 10)); }, message: (a) => `The selected ${a} is invalid.` },
+        ];
+    }
+    /** Record value to form state, shown in the field's time zone. */
+    hydrateState(value: unknown): unknown {
+        const normalized = normalizeDateTime(value);
+        if (normalized === null) return value === undefined ? null : value === '' ? null : typeof value === 'string' ? value : null;
+        let local = normalized;
+        if (this._timezone && this.hasDate() && this.hasTime()) local = formatInZone(new Date(normalized.replace(' ', 'T') + 'Z'), this._timezone);
+        return this.stateOf(local);
+    }
+    /** Form state as the input expects it. */
+    protected stateOf(local: string): string {
+        if (!this._native) return this.hasDate() ? local : `${new Date().toISOString().slice(0, 10)} ${local.slice(11)}`;
+        if (!this.hasTime()) return local.slice(0, 10);
+        if (!this.hasDate()) return local.slice(11, this._seconds ? 19 : 16);
+        return local.slice(0, this._seconds ? 19 : 16);
+    }
+    /** Wall-clock value of the field's time zone to UTC. */
+    private toUtc(value: unknown): unknown {
+        if (!this._timezone || !this.hasDate() || !this.hasTime() || typeof value !== 'string') return value;
+        const instant = zonedToUtc(value, this._timezone);
+        return instant ? normalizeDateTime(instant) : value;
+    }
+    /** Saved value: in UTC, in `format()` (or the default format). */
+    dehydrateState(state: unknown): unknown {
+        if (state === '' || state === null || state === undefined) return null;
+        const normalized = normalizeDateTime(this.toUtc(typeof state === 'string' ? state.replace('T', ' ') : state));
+        if (normalized === null) return state;
+        if (this._format) return formatPhpDate(normalized, this._format);
+        if (!this.hasTime()) return normalized.slice(0, 10);
+        if (!this.hasDate()) return normalized.slice(11, this._seconds ? 19 : 16);
+        return normalized;
+    }
+    protected defaultDisplayFormat(): string {
+        if (!this.hasTime()) return 'M j, Y';
+        const time = this._seconds ? 'H:i:s' : 'H:i';
+        return this.hasDate() ? `M j, Y ${time}` : time;
+    }
+    protected nativeType(): string { return !this.hasTime() ? 'date' : !this.hasDate() ? 'time' : 'datetime-local'; }
+
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
-        const input = new Attributes()
-            .merge({
-                'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
-                required: (await this.isRequired()) && !isDisabled, step: this._seconds ? 1 : null, type: 'time', [this.wireModel()]: this.getStatePath(),
-            })
-            .class(['fi-input']);
+        const min = await this.limit(this._minDate), max = await this.limit(this._maxDate);
         const wrapper = new Attributes()
             .merge({ 'x-on:focus-input.stop': "$el.querySelector('input:not([type=hidden])')?.focus()" })
             .class(['fi-fo-date-time-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} /></div></div>`);
+        const model = this.wireModel();
+        if (this._native) {
+            const limit = (value: string | null) => (value === null ? null : !this.hasTime() ? value.slice(0, 10) : !this.hasDate() ? (value.length > 8 ? value.slice(11) : value) : value.replace(' ', 'T'));
+            const input = new Attributes()
+                .merge({
+                    'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
+                    max: limit(max), min: limit(min), placeholder: this._temporalPlaceholder,
+                    required: (await this.isRequired()) && !isDisabled, step: this.hasTime() && this._seconds ? 1 : null, type: this.nativeType(), [model]: this.getStatePath(),
+                })
+                .class(['fi-input']);
+            return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} /></div></div>`);
+        }
+        const id = this.getId();
+        const hasDate = this.hasDate(), hasTime = this.hasTime(), hasSeconds = this.hasSeconds();
+        const disabledDates = (await evaluate(this._disabledDates, this.context())) ?? [];
+        const jsLimit = (value: string | null) => (value === null ? '' : normalizeDateTime(value.length <= 8 ? `1970-01-01 ${value}` : value) ?? value);
+        const livewireKey = this.getLivewireKey() ?? '';
+        const label = await this.getLabel();
+        const tr = (key: string) => t(`filament-forms::components.date_time_picker.${key}`);
+        const describedBy = [this.getHelperTextId(), this.hasError() ? `${id}-error` : null].filter(Boolean).join(' ') || null;
+        const trigger = new Attributes().merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['fi-fo-date-time-picker-trigger', 'fi-fo-date-time-picker-display-text-input']);
+        const config = `dateTimePickerFormComponent({
+ defaultFocusedDate: ${js(this._defaultFocusedDate)},
+ displayFormat: ${js(phpDateFormatToDayjs(this._displayFormat ?? this.defaultDisplayFormat()))},
+ firstDayOfWeek: ${this._firstDayOfWeek},
+ hasDate: ${hasDate ? 'true' : 'false'},
+ isAutofocused: ${this._autofocus && !isDisabled ? 'true' : 'false'},
+ locale: ${js(this._locale ?? 'en')},
+ shouldCloseOnDateSelection: ${this._closeOnDateSelection ? 'true' : 'false'},
+ state: $wire.$entangle(${js(this.getStatePath())}${this.isLive() ? ', true' : ''}),
+ })`;
+        const keyHash = createHash('md5').update(JSON.stringify([disabledDates, isDisabled, max, min, hasDate, hasTime, hasSeconds])).digest('hex');
+        const events = hasDate
+            ? ` x-on:dropdown-escape="if (isOpen()) { closePanel(true); $event.preventDefault() }" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="if (isOpen()) { $event.preventDefault(); $event.stopPropagation(); closePanel(true) }" x-on:click.outside="isOpen() &amp;&amp; closePanel()" x-on:livewire:navigating.window="closePanel()"`
+            : ` x-on:dropdown-escape="if (isOpen()) { $refs.panel.close(); $refs.button.focus(); $event.preventDefault() }" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()"`;
+        const buttonEvents = isDisabled ? (!hasDate ? ' x-on:keydown.enter.prevent.stop="if (false) { isOpen() ? selectDate() : togglePanelVisibility() }"' : '') : [
+            !hasDate ? ' x-on:keydown.enter.prevent.stop="if (true) { isOpen() ? selectDate() : togglePanelVisibility() }"' : '',
+            ' x-on:click="togglePanelVisibility()"',
+            hasDate ? ' x-on:keydown="handleTriggerKeydown($event)" x-bind:aria-expanded="isPanelOpen.toString()"' : ' x-on:keydown.arrow-left.prevent.stop="focusPreviousDay()" x-on:keydown.arrow-right.prevent.stop="focusNextDay()" x-on:keydown.arrow-up.prevent.stop="focusPreviousWeek()" x-on:keydown.arrow-down.prevent.stop="focusNextWeek()"',
+            ' x-on:keydown.backspace.prevent.stop="clearState()" x-on:keydown.clear.prevent.stop="clearState()" x-on:keydown.delete.prevent.stop="clearState()"',
+        ].join('');
+        const calendar = hasDate ? `<div class="fi-fo-date-time-picker-panel-header"><select aria-label="${e(tr('month_select.label'))}" x-model="focusedMonth" class="fi-fo-date-time-picker-month-select"><template x-for="(month, index) in months"><option x-bind:value="index" x-text="month"></option></template></select><input type="number" inputmode="numeric" aria-label="${e(tr('year_input.label'))}" x-model.debounce="focusedYear" class="fi-fo-date-time-picker-year-input" /></div><div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="fi-fo-date-time-picker-calendar-description"></div><div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="fi-fo-date-time-picker-calendar"><div role="row" class="fi-fo-date-time-picker-calendar-header"><template x-for="(day, index) in dayLabels" x-bind:key="index"><div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="fi-fo-date-time-picker-calendar-header-day"></div></template></div><template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex"><div role="row" class="fi-fo-date-time-picker-calendar-week"><template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)"><div role="gridcell" x-text="day" x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null" x-bind:aria-label="day ? getDayLabel(day) : null" x-bind:aria-selected="day &amp;&amp; dayIsSelected(day) ? 'true' : 'false'" x-bind:aria-current="day &amp;&amp; dayIsToday(day) ? 'date' : null" x-bind:aria-disabled="day &amp;&amp; dayIsDisabled(day) ? 'true' : 'false'" x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null" x-on:focus="day &amp;&amp; setFocusedDay(day)" x-on:click="if (day) { $el.focus(); selectDate(day) }" x-bind:class="{ 'fi-fo-date-time-picker-calendar-day': day, 'fi-fo-date-time-picker-calendar-day-today': day &amp;&amp; dayIsToday(day), 'fi-focused': day &amp;&amp; focusedDate.date() === day, 'fi-selected': day &amp;&amp; dayIsSelected(day), 'fi-disabled': day &amp;&amp; dayIsDisabled(day) }"></div></template></div></template></div>` : '';
+        const timeInput = (max: number, step: number, label: string, model: string) => `<input max="${max}" min="0" step="${step}" type="number" inputmode="numeric" aria-label="${e(label)}" x-on:blur="checkTimeInputValidity" x-on:invalid="timeInputInvalid" x-model.debounce="${model}" />`;
+        const time = hasTime ? `<div class="fi-fo-date-time-picker-time-inputs">${timeInput(23, this._hoursStep, tr('hour_input.label'), 'hour')}<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._minutesStep, tr('minute_input.label'), 'minute')}${hasSeconds ? `<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._secondsStep, tr('second_input.label'), 'second')}` : ''}</div>` : '';
+        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}" x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn">${picker}</div></div>`);
     }
 }
 
-/** Native `datetime-local` input: the saved state is `YYYY-MM-DD HH:MM:SS`. */
-export class DateTimePicker extends Field {
-    private _seconds = true;
+/** Formats `YYYY-MM-DD HH:MM:SS` with a PHP date format (the usual tokens). */
+function formatPhpDate(value: string, format: string): string {
+    const [date, time] = value.split(' ');
+    const [year, month, day] = date.split('-').map(Number);
+    const [hour, minute, second] = (time ?? '00:00:00').split(':').map(Number);
+    const tokens: Record<string, () => string> = {
+        Y: () => String(year), y: () => pad(year % 100), m: () => pad(month), n: () => String(month), d: () => pad(day), j: () => String(day),
+        H: () => pad(hour), G: () => String(hour), h: () => pad(hour % 12 || 12), g: () => String(hour % 12 || 12), i: () => pad(minute), s: () => pad(second),
+        A: () => (hour < 12 ? 'AM' : 'PM'), a: () => (hour < 12 ? 'am' : 'pm'), U: () => String(Date.UTC(year, month - 1, day, hour, minute, second) / 1000),
+    };
+    let out = '';
+    for (let index = 0; index < format.length; index++) {
+        const char = format[index];
+        if (char === '\\' && index + 1 < format.length) { out += format[++index]; continue; }
+        out += Object.hasOwn(tokens, char) ? tokens[char]() : char;
+    }
+    return out;
+}
+
+/** Date picker: native `<input type="date">` by default; the saved state is `YYYY-MM-DD`. */
+export class DatePicker extends TemporalField {
+    static make(name: string): DatePicker { return configured(new DatePicker(name)); }
+    protected hasDate(): boolean { return true; }
+    protected hasTime(): boolean { return false; }
+}
+
+/** Time picker: native `<input type="time">` by default; the state is `HH:MM:SS` (`HH:MM` with `seconds(false)`). */
+export class TimePicker extends TemporalField {
+    static make(name: string): TimePicker { return configured(new TimePicker(name)); }
+    protected hasDate(): boolean { return false; }
+    protected hasTime(): boolean { return true; }
+}
+
+/** Date-time picker: native `datetime-local` input by default; the saved state is `YYYY-MM-DD HH:MM:SS`. */
+export class DateTimePicker extends TemporalField {
     static make(name: string): DateTimePicker { return configured(new DateTimePicker(name)); }
-    seconds(condition = true): this { this._seconds = condition; return this; }
-    dehydrateState(state: unknown): unknown {
-        if (typeof state !== 'string' || state === '') return state === '' ? null : state;
-        const value = state.replace('T', ' ');
-        return value.length === 16 ? `${value}:00` : value;
-    }
-    async toHtml(): Promise<string> {
-        const isDisabled = await this.isDisabled();
-        const input = new Attributes()
-            .merge({
-                'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
-                required: (await this.isRequired()) && !isDisabled, step: this._seconds ? 1 : null, type: 'datetime-local', [this.wireModel()]: this.getStatePath(),
-            })
-            .class(['fi-input']);
-        const wrapper = new Attributes()
-            .merge({ 'x-on:focus-input.stop': "$el.querySelector('input:not([type=hidden])')?.focus()" })
-            .class(['fi-fo-date-time-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} /></div></div>`);
-    }
+    protected hasDate(): boolean { return true; }
+    protected hasTime(): boolean { return true; }
 }
 
 /** Single choice as radio buttons. */
