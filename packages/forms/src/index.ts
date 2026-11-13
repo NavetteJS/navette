@@ -16,7 +16,7 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 
 views.namespace('filament-forms', fileURLToPath(new URL('../views', import.meta.url)));
 let colorManager: ColorManager | null = null;
@@ -2446,6 +2446,7 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
         if ((c as any)._dehydrated !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
         const state = await c.dehydrateState(c.context().state);
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
+        for (const [name, value] of Object.entries((c as any).getExtraDehydratedState?.() ?? {})) writePath(data, [...relativePath(schema, c).slice(0, -1), name], value);
         fields.push(c);
     }
     // Deepest first: a container sees its children already shaped.
@@ -2635,11 +2636,47 @@ export type UploadedFileInfo = { name: string; size: number; type: string; url: 
 export type FileUploadEntry = { key: string } | { file: TemporaryUpload };
 /** Where files go once the form is saved. */
 export interface FileStorage {
-    /** Stores a temporary file and returns its key (relative path). */
-    store(file: TemporaryUpload, directory: string | null): Promise<string>;
+    /** Stores a temporary file and returns its key (relative path); `name` is the file name to use instead of a random one. */
+    store(file: TemporaryUpload, directory: string | null, name?: string | null): Promise<string>;
     info(key: string): Promise<UploadedFileInfo | null>;
 }
 /** Local disk storage, served under a public URL. File names are random; the extension comes from the detected type. */
+/**
+ * A file name chosen by the application or the user, made safe for storage: no directory part, only letters, digits, `.`, `_`
+ * and `-`, and always the extension detected from the file's content (an uploaded `shell.php` declared as an image is stored
+ * as `shell.png`).
+ */
+export function safeStorageName(name: string, extension: string): string {
+    const base = (name.split(/[\\/]/).pop() ?? '').replace(/\.[^.]*$/, '').normalize('NFKD').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 180) || randomUUID();
+    return `${base}.${extension.replace(/[^A-Za-z0-9]/g, '') || 'bin'}`;
+}
+/** Width and height of a PNG, GIF, JPEG or WebP image, read from its header; `null` for other files. */
+export function readImageSize(path: string): { width: number; height: number } | null {
+    let buffer: Buffer;
+    try { const fd = openSync(path, 'r'); buffer = Buffer.alloc(65536); const read = readSync(fd, buffer, 0, buffer.length, 0); closeSync(fd); buffer = buffer.subarray(0, read); } catch { return null; }
+    if (buffer.length >= 24 && buffer.readUInt32BE(0) === 0x89504e47) return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+    if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'GIF') return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+    if (buffer.length >= 30 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+        const chunk = buffer.toString('ascii', 12, 16);
+        if (chunk === 'VP8X') return { width: 1 + buffer.readUIntLE(24, 3), height: 1 + buffer.readUIntLE(27, 3) };
+        if (chunk === 'VP8L') { const bits = buffer.readUInt32LE(21); return { width: 1 + (bits & 0x3fff), height: 1 + ((bits >> 14) & 0x3fff) }; }
+        if (chunk === 'VP8 ') return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff };
+        return null;
+    }
+    if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+        let offset = 2;
+        while (offset + 9 < buffer.length) {
+            if (buffer[offset] !== 0xff) { offset++; continue; }
+            const marker = buffer[offset + 1];
+            if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
+            offset += 2 + buffer.readUInt16BE(offset + 2);
+        }
+    }
+    return null;
+}
+const ratioOf = (ratio: string): number | null => { const [width, height] = ratio.split(/[:/]/).map(Number); return width > 0 && height > 0 ? width / height : null; };
+export type ImageDimensions = { minWidth?: number; maxWidth?: number; minHeight?: number; maxHeight?: number; width?: number; height?: number; minRatio?: number; maxRatio?: number; ratio?: number };
+
 export class LocalFileStorage implements FileStorage {
     private root: string;
     private baseUrl: string;
@@ -2648,8 +2685,10 @@ export class LocalFileStorage implements FileStorage {
         if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,250}$/.test(key) || key.split('/').some((part) => part === '..' || part === '.')) return null;
         return nodePath.join(this.root, ...key.split('/'));
     }
-    async store(file: TemporaryUpload, directory: string | null): Promise<string> {
-        const key = [directory, `${randomUUID()}.${file.extension}`].filter(Boolean).join('/');
+    async store(file: TemporaryUpload, directory: string | null, name: string | null = null): Promise<string> {
+        let key = [directory, name === null ? `${randomUUID()}.${file.extension}` : safeStorageName(name, file.extension)].filter(Boolean).join('/');
+        // A chosen name never overwrites another file: a short random suffix is added.
+        if (name !== null && this.resolve(key) && existsSync(this.resolve(key)!)) key = key.replace(/(\.[A-Za-z0-9]+)$/, `-${randomUUID().slice(0, 8)}$1`);
         const target = this.resolve(key);
         if (!target) throw new Error('Invalid upload directory.');
         mkdirSync(nodePath.dirname(target), { recursive: true });
@@ -2683,7 +2722,97 @@ export class FileUpload extends Field {
     private _storeFiles = true;
     private _storage: FileStorage | null = null;
     private _getUploadedFileUsing: ((key: string, ctx: ComponentContext) => UploadedFileInfo | null | Promise<UploadedFileInfo | null>) | null = null;
+    private _minSize: number | null = null;
+    private _ui: Record<string, unknown> = {};
+    private _avatar = false;
+    private _imageEditor = false;
+    private _circleCropper = false;
+    private _editorAspectRatios: (string | null)[] = [];
+    private _cropAspectRatio: string | null = null;
+    private _imageAspectRatios: string[] | null = null;
+    private _dimensions: ImageDimensions | null = null;
+    private _deletable = true;
+    private _preserveFilenames = false;
+    private _fileNameUsing: ((file: TemporaryUpload, ctx: ComponentContext) => string | Promise<string>) | null = null;
+    private _fileNamesField: string | null = null;
+    private _storedNames: Record<string, string> = {};
+    private _alignment: 'start' | 'center' | 'end' | null = null;
+    private _placeholder: string | null = null;
     static make(name: string): FileUpload { return configured(new FileUpload(name)); }
+    /** Minimum file size, in kilobytes. */
+    minSize(kilobytes: number | null): this { this._minSize = kilobytes; return this; }
+    /** Download button on each saved file. */
+    downloadable(condition = true): this { this._ui.isDownloadable = condition; return this; }
+    /** Button opening each saved file in a new tab. */
+    openable(condition = true): this { this._ui.isOpenable = condition; return this; }
+    /** `false`: no preview of images. */
+    previewable(condition = true): this { this._ui.isPreviewable = condition; return this; }
+    /** `false`: files cannot be pasted from the clipboard. */
+    pasteable(condition = true): this { this._ui.isPasteable = condition; return this; }
+    /** New files are added after the existing ones (instead of before). */
+    appendFiles(condition = true): this { this._ui.shouldAppendFiles = condition; return this; }
+    /** `false`: saved files cannot be removed (the remove button is hidden, and removing is refused on the server). */
+    deletable(condition = true): this { this._deletable = condition; return this; }
+    /** `'grid'` (with `multiple()`), `'compact'`, `'integrated'` or `'circle'`. */
+    panelLayout(layout: 'grid' | 'compact' | 'integrated' | 'circle' | string | null): this { this._ui.panelLayout = layout; return this; }
+    panelAspectRatio(ratio: string | null): this { this._ui.panelAspectRatio = ratio; return this; }
+    itemPanelAspectRatio(ratio: string | null): this { this._ui.itemPanelAspectRatio = ratio; return this; }
+    imagePreviewHeight(height: string | null): this { this._ui.imagePreviewHeight = height; return this; }
+    loadingIndicatorPosition(position: string): this { this._ui.loadingIndicatorPosition = position; return this; }
+    removeUploadedFileButtonPosition(position: string): this { this._ui.removeUploadedFileButtonPosition = position; return this; }
+    uploadButtonPosition(position: string): this { this._ui.uploadButtonPosition = position; return this; }
+    uploadProgressIndicatorPosition(position: string): this { this._ui.uploadProgressIndicatorPosition = position; return this; }
+    /** Message shown while a file uploads. */
+    uploadingMessage(message: string): this { this._ui.uploadingMessage = message; return this; }
+    /** Number of files uploaded at the same time. */
+    maxParallelUploads(count: number | null): this { this._ui.maxParallelUploads = count; return this; }
+    /** Extension → MIME type map for files the browser cannot type (`{ 'application/x-zip': ['zip'] }`). */
+    mimeTypeMap(map: Record<string, string>): this { this._ui.mimeTypeMap = map; return this; }
+    /** `false`: images keep their EXIF orientation. */
+    orientImagesFromExif(condition = true): this { this._ui.shouldOrientImageFromExif = condition; return this; }
+    alignment(alignment: 'start' | 'center' | 'end' | null): this { this._alignment = alignment; return this; }
+    /** Text of the drop area. */
+    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    /** Round avatar: one image, cropped to a square and shown as a circle. */
+    avatar(): this { this._avatar = true; this.image(); this._ui.panelLayout ??= 'compact circle'; this._ui.imagePreviewHeight ??= '250'; this._cropAspectRatio ??= '1:1'; this._ui.automaticallyResizeImagesHeight ??= '500'; this._ui.automaticallyResizeImagesWidth ??= '500'; this._ui.loadingIndicatorPosition ??= 'center bottom'; this._ui.removeUploadedFileButtonPosition ??= 'center bottom'; this._ui.uploadButtonPosition ??= 'center bottom'; this._ui.uploadProgressIndicatorPosition ??= 'center bottom'; this._alignment ??= 'center'; return this; }
+    /** Image editor (crop, rotate, flip, zoom) opened from each image, powered by Cropper.js in the browser. */
+    imageEditor(condition = true): this { this._imageEditor = condition; return this; }
+    /** Aspect ratios offered by the image editor (`['16:9', '4:3', '1:1']`; `null` for a free crop). */
+    imageEditorAspectRatioOptions(ratios: (string | null)[]): this { this._editorAspectRatios = ratios; return this; }
+    imageEditorAspectRatios(ratios: (string | null)[]): this { return this.imageEditorAspectRatioOptions(ratios); }
+    /** Cropper.js view mode (1, 2 or 3). */
+    imageEditorMode(mode: 1 | 2 | 3): this { this._ui.imageEditorMode = mode; return this; }
+    imageEditorEmptyFillColor(color: string | null): this { this._ui.imageEditorEmptyFillColor = color; return this; }
+    imageEditorViewportWidth(width: string | number | null): this { this._ui.imageEditorViewportWidth = width === null ? null : String(width); return this; }
+    imageEditorViewportHeight(height: string | number | null): this { this._ui.imageEditorViewportHeight = height === null ? null : String(height); return this; }
+    /** Circle crop in the image editor (avatars). */
+    circleCropper(condition = true): this { this._circleCropper = condition; return this; }
+    /** Crops images to this ratio in the browser before upload (`'16:9'`), without opening the editor. */
+    automaticallyCropImagesToAspectRatio(ratio: string | null): this { this._cropAspectRatio = ratio; return this; }
+    imageCropAspectRatio(ratio: string | null): this { return this.automaticallyCropImagesToAspectRatio(ratio); }
+    /** Resizes images in the browser before upload (`'cover'`, `'contain'` or `'force'`). */
+    automaticallyResizeImagesMode(mode: 'cover' | 'contain' | 'force' | null): this { this._ui.automaticallyResizeImagesMode = mode; return this; }
+    automaticallyResizeImagesToWidth(width: string | number | null): this { this._ui.automaticallyResizeImagesWidth = width === null ? null : String(width); return this; }
+    automaticallyResizeImagesToHeight(height: string | number | null): this { this._ui.automaticallyResizeImagesHeight = height === null ? null : String(height); return this; }
+    automaticallyUpscaleImagesWhenResizing(condition = true): this { this._ui.shouldAutomaticallyUpscaleImagesWhenResizing = condition; return this; }
+    imageResizeMode(mode: 'cover' | 'contain' | 'force' | null): this { return this.automaticallyResizeImagesMode(mode); }
+    imageResizeTargetWidth(width: string | number | null): this { return this.automaticallyResizeImagesToWidth(width); }
+    imageResizeTargetHeight(height: string | number | null): this { return this.automaticallyResizeImagesToHeight(height); }
+    /** Accepted aspect ratio(s) of uploaded images (`'16:9'` or a list), checked on the server. */
+    imageAspectRatio(ratio: string | string[] | null): this { this._imageAspectRatios = ratio === null ? null : [ratio].flat(); return this; }
+    /** Width, height and ratio bounds of uploaded images (`{ minWidth: 800, maxHeight: 1080 }`), checked on the server. */
+    imageDimensions(dimensions: ImageDimensions | null): this { this._dimensions = dimensions; return this; }
+    /** Stores files under their original (sanitized) names. See the security notes in the docs. */
+    preserveFilenames(condition = true): this { this._preserveFilenames = condition; return this; }
+    /** Name of the stored file, from the temporary file; sanitized, and its extension is the detected one. */
+    getUploadedFileNameForStorageUsing(callback: ((file: TemporaryUpload, ctx: ComponentContext) => string | Promise<string>) | null): this { this._fileNameUsing = callback; return this; }
+    /** Saves the original file names (keyed by stored file) in another attribute of the record. */
+    storeFileNamesIn(field: string | null): this { this._fileNamesField = field; return this; }
+    /** Extra saved values, next to the field (the original file names of `storeFileNamesIn()`). */
+    getExtraDehydratedState(): Record<string, unknown> {
+        if (this._fileNamesField === null) return {};
+        return { [this._fileNamesField]: this._multiple ? this._storedNames : (Object.values(this._storedNames)[0] ?? null) };
+    }
     multiple(condition = true): this { this._multiple = condition; return this; }
     maxFiles(count: number | null): this { this._maxFiles = count; return this; }
     /** Maximum file size, in kilobytes. */
@@ -2718,6 +2847,14 @@ export class FileUpload extends Field {
         return new Set(Object.values(this.hydrateState(record?.[this.getName()]) as Record<string, string>));
     }
     private isTemporary(value: string): boolean { return value.startsWith('livewire-file:'); }
+    /** Original names saved by `storeFileNamesIn()`, by stored key. */
+    private savedFileNames(): Record<string, string> {
+        if (this._fileNamesField === null) return {};
+        const record = this.container.getRecord() as Record<string, unknown> | null;
+        let names: unknown = record?.[this._fileNamesField];
+        if (typeof names === 'string') { try { names = JSON.parse(names); } catch { const key = [...this.originalKeys()][0]; return key ? { [key]: names as string } : {}; } }
+        return names && typeof names === 'object' && !Array.isArray(names) ? Object.fromEntries(Object.entries(names as Record<string, unknown>).filter(([, name]) => typeof name === 'string')) as Record<string, string> : {};
+    }
 
     getExposedMethods(): string[] { return ['deleteUploadedFile', 'removeUploadedFile', 'reorderUploadedFiles', 'getUploadedFiles']; }
     async getUploadedFiles(): Promise<Record<string, UploadedFileInfo | null>> {
@@ -2726,6 +2863,8 @@ export class FileUpload extends Field {
         for (const [fileKey, value] of this.entries()) {
             if (this.isTemporary(value) || !original.has(value)) { files[fileKey] = null; continue; }
             const info = this._getUploadedFileUsing ? await this._getUploadedFileUsing(value, this.context()) : await this.getStorage()?.info(value);
+            const savedName = this.savedFileNames()[value];
+            if (info && savedName) info.name = savedName;
             // Only local or http(s) URLs are sent to the browser.
             files[fileKey] = info && /^(\/(?!\/)|https?:\/\/)/.test(info.url) ? info : null;
         }
@@ -2735,6 +2874,8 @@ export class FileUpload extends Field {
     /** Removes a file from the field. A stored file is only deleted by the application when the form is saved. */
     removeUploadedFile(fileKey: unknown): void {
         const removed = this.entries().find(([key]) => key === fileKey);
+        // `deletable(false)`: a saved file stays (a file just uploaded can still be removed).
+        if (removed && !this._deletable && !this.isTemporary(removed[1])) return;
         if (removed && this.isTemporary(removed[1])) this.uploads?.remove(removed[1].slice('livewire-file:'.length));
         this.writeState(this.entries().filter(([key]) => key !== fileKey));
     }
@@ -2757,6 +2898,22 @@ export class FileUpload extends Field {
         if (this._maxFiles !== null) rules.push({ name: 'max_files', passes: () => entries().length <= this._maxFiles!, message: (a) => `The ${a} field must not have more than ${this._maxFiles} items.` });
         if (this._acceptedFileTypes) rules.push({ name: 'mimetypes', passes: () => temporary().every((file) => file !== null && accepts(file.type)), message: (a) => `The ${a} field must be a file of type: ${this._acceptedFileTypes!.join(', ')}.` });
         if (this._maxSize !== null) rules.push({ name: 'max', passes: () => temporary().every((file) => file !== null && file.size <= this._maxSize! * 1024), message: (a) => `The ${a} field must not be greater than ${this._maxSize} kilobytes.` });
+        if (this._minSize !== null) rules.push({ name: 'min', passes: () => temporary().every((file) => file !== null && file.size >= this._minSize! * 1024), message: (a) => `The ${a} field must be at least ${this._minSize} kilobytes.` });
+        // Image rules only apply to new uploads, as in Laravel; a file whose size cannot be read fails them.
+        if (this._dimensions) {
+            const d = this._dimensions;
+            const fits = (size: { width: number; height: number } | null) => size !== null
+                && (d.width === undefined || size.width === d.width) && (d.height === undefined || size.height === d.height)
+                && (d.minWidth === undefined || size.width >= d.minWidth) && (d.maxWidth === undefined || size.width <= d.maxWidth)
+                && (d.minHeight === undefined || size.height >= d.minHeight) && (d.maxHeight === undefined || size.height <= d.maxHeight)
+                && (d.ratio === undefined || Math.abs(size.width / size.height - d.ratio) < 0.01)
+                && (d.minRatio === undefined || size.width / size.height >= d.minRatio - 1e-9) && (d.maxRatio === undefined || size.width / size.height <= d.maxRatio + 1e-9);
+            rules.push({ name: 'dimensions', passes: () => temporary().every((file) => file !== null && fits(readImageSize(file.path))), message: (a) => `The ${a} field has invalid image dimensions.` });
+        }
+        if (this._imageAspectRatios) {
+            const ratios = this._imageAspectRatios.map(ratioOf).filter((ratio): ratio is number => ratio !== null);
+            rules.push({ name: 'dimensions', passes: () => temporary().every((file) => { const size = file && readImageSize(file.path); return !!size && size.height > 0 && ratios.some((ratio) => Math.abs(size.width / size.height - ratio) < 0.01); }), message: (a) => `The ${a} field has invalid image dimensions.` });
+        }
         return rules;
     }
     /** Validates the whole state, even when empty (a required field without files must fail). */
@@ -2769,6 +2926,8 @@ export class FileUpload extends Field {
     /** On save: temporary files are stored, unrecognized existing keys are dropped. */
     async dehydrateState(): Promise<unknown> {
         const original = this.originalKeys();
+        const savedNames = this.savedFileNames();
+        this._storedNames = {};
         const out: (string | FileUploadEntry)[] = [];
         for (const [, value] of this.entries()) {
             if (this.isTemporary(value)) {
@@ -2777,11 +2936,38 @@ export class FileUpload extends Field {
                 if (!this._storeFiles) { out.push({ file }); continue; }
                 const storage = this.getStorage();
                 if (!storage) throw new Error('FileUpload: no storage configured (FileUpload.storage).');
-                out.push(await storage.store(file, this._directory));
+                const name = this._fileNameUsing ? await this._fileNameUsing(file, this.context()) : this._preserveFilenames ? file.name : null;
+                const stored = await storage.store(file, this._directory, name);
+                this._storedNames[stored] = file.name;
+                out.push(stored);
                 this.uploads?.remove(file.id);
-            } else if (original.has(value)) out.push(this._storeFiles ? value : { key: value });
+            } else if (original.has(value)) { out.push(this._storeFiles ? value : { key: value }); if (savedNames[value]) this._storedNames[value] = savedNames[value]; }
         }
         return this._multiple ? out : (out[0] ?? null);
+    }
+
+    /** Filament's image editor dialog (Cropper.js), rendered once per field. */
+    private imageEditorHtml(): string {
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.file_upload.editor.${key}`, replace);
+        const explicit = this._imageEditor;
+        const fields = [
+            ['x_position', 'xPositionInput', 'editor.setData({...editor.getData(true), x: +$el.value})'], ['y_position', 'yPositionInput', 'editor.setData({...editor.getData(true), y: +$el.value})'],
+            ['width', 'widthInput', 'editor.setData({...editor.getData(true), width: +$el.value})'], ['height', 'heightInput', 'editor.setData({...editor.getData(true), height: +$el.value})'],
+            ['rotation', 'rotationInput', 'editor.rotateTo(+$el.value)'],
+        ].map(([name, ref, save]) => `<label><div class="fi-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label"><span class="fi-input-wrp-label">${e(tr(`fields.${name}.label`))}</span></div><div class="fi-input-wrp-content-ctn"><input x-on:keyup.enter.prevent.stop="editor &amp;&amp; ${e(save)}" x-on:blur="editor &amp;&amp; ${e(save)}" x-ref="${ref}" x-on:keydown.enter.prevent type="text" class="fi-input" /></div><div class="fi-input-wrp-suffix fi-input-wrp-suffix-has-label"><span class="fi-input-wrp-label">${e(tr(`fields.${name}.unit`))}</span></div></div></label>`).join('');
+        const groups = [
+            [['drag_move', 'fi-o-arrows-move', "editor.setDragMode('move')"], ['drag_crop', 'fi-o-crop', "editor.setDragMode('crop')"], ['zoom_in', 'o-magnifying-glass-plus', 'editor.zoom(0.1)'], ['zoom_out', 'o-magnifying-glass-minus', 'editor.zoom(-0.1)'], ['zoom_100', 'o-arrows-pointing-out', 'editor.zoomTo(1)']],
+            [['move_left', 'o-arrow-left-circle', 'editor.move(-10, 0)'], ['move_right', 'o-arrow-right-circle', 'editor.move(10, 0)'], ['move_up', 'o-arrow-up-circle', 'editor.move(0, -10)'], ['move_down', 'o-arrow-down-circle', 'editor.move(0, 10)']],
+            [['rotate_left', 'o-arrow-uturn-left', 'editor.rotate(-90)'], ['rotate_right', 'o-arrow-uturn-right', 'editor.rotate(90)'], ['flip_horizontal', 'fi-o-flip-horizontal', 'editor.scaleX(-editor.getData().scaleX || -1)'], ['flip_vertical', 'fi-o-flip-vertical', 'editor.scaleY(-editor.getData().scaleY || -1)']],
+        ].map((group) => `<div class="fi-btn-group">${group.map(([name, iconName, click]) => { const label = tr(`actions.${name}.label`); return `<button aria-label="${e(label)}" type="button" x-on:click.prevent.stop="${e(click)}" x-tooltip="${e(`{ content: ${js(label)}, theme: $store.theme }`)}" class="fi-btn">${icon(iconName)}</button>`; }).join('')}</div>`).join('');
+        const ratioOptions = [...this._editorAspectRatios, ...(this._cropAspectRatio !== null ? [this._cropAspectRatio] : [])].filter((ratio, index, all) => all.indexOf(ratio) === index)
+            .map((ratio): [string, number | 'NaN'] => [ratio === null ? tr('aspect_ratios.no_fixed.label') : ratio.replace('/', ':'), ratio === null ? 'NaN' : (ratioOf(ratio) ?? 'NaN')]);
+        const ratios = ratioOptions.length >= 2 ? `<div class="fi-fo-file-upload-editor-control-panel-group"><div class="fi-fo-file-upload-editor-control-panel-group-title">${e(tr('aspect_ratios.label'))}</div>${Array.from({ length: Math.ceil(ratioOptions.length / 5) }, (_, chunk) => `<div class="fi-btn-group">${ratioOptions.slice(chunk * 5, chunk * 5 + 5).map(([label, ratio]) => `<button type="button" x-on:click.prevent.stop="${e(`currentRatio = ${js(label)}; editor.setAspectRatio(${ratio === 'NaN' ? 'NaN' : ratio})`)}" x-tooltip="${e(`{ content: ${js(tr('actions.set_aspect_ratio.label', { ratio: label }))}, theme: $store.theme }`)}" x-bind:class="${e(`{ 'fi-active': currentRatio === ${js(label)} }`)}" class="fi-btn">${e(label)}</button>`).join('')}</div>`).join('')}</div>` : '';
+        const success = cls(['fi-btn', ...(colorManager?.getComponentClasses('button', 'success') ?? [])]);
+        const cancel = `<button type="button" x-on:click.prevent="pond.imageEditEditor.oncancel" class="fi-btn">${e(tr('actions.cancel.label'))}</button>`;
+        const save = `<button type="button" x-on:click.prevent="saveEditor" class="${success}">${e(tr('actions.save.label'))}</button>`;
+        const main = explicit ? `<div class="fi-fo-file-upload-editor-control-panel-main"><div class="fi-fo-file-upload-editor-control-panel-group">${fields}</div><div class="fi-fo-file-upload-editor-control-panel-group">${groups}</div>${ratios}<div class="fi-fo-file-upload-editor-control-panel-reset-action-ctn"><button type="button" x-on:click.prevent.stop="editor.reset()" class="${cls(['fi-link', 'fi-size-sm', 'fi-fo-file-upload-editor-control-panel-reset-action', ...(colorManager?.getComponentClasses('link', 'danger') ?? [])])}"><span class="fi-link-label">${e(tr('actions.reset.label'))}</span></button></div></div>` : '';
+        return `<div aria-label="${e(tr('label'))}" aria-modal="true" role="dialog" x-show="isEditorOpen" x-cloak x-on:click.stop="" x-trap.noscroll="isEditorOpen" x-on:keydown.escape.prevent.stop="closeEditor" class="${cls(['fi-fo-file-upload-editor', { 'fi-fo-file-upload-editor-circle-cropper': this._circleCropper, 'fi-fo-file-upload-editor-crop-only': !explicit }])}"><div aria-hidden="true" class="fi-fo-file-upload-editor-overlay"></div><div class="fi-fo-file-upload-editor-window"><div class="fi-fo-file-upload-editor-image-ctn"><img alt="" x-ref="editor" class="fi-fo-file-upload-editor-image" /></div><div class="fi-fo-file-upload-editor-control-panel">${main}<div class="fi-fo-file-upload-editor-control-panel-footer">${explicit ? cancel + save : save + cancel}</div></div></div></div>`;
     }
 
     async toHtml(): Promise<string> {
@@ -2789,62 +2975,64 @@ export class FileUpload extends Field {
         const id = this.getId();
         const label = (await this.getLabel()).toLowerCase();
         const tr = (key: string) => t(`filament-forms::components.file_upload.${key}`);
+        const ui = (key: string, fallback: unknown) => (this._ui[key] === undefined ? fallback : this._ui[key]);
+        const hasEditor = (this._imageEditor || this._cropAspectRatio !== null || this._circleCropper) && !isDisabled;
         const config = `fileUploadFormComponent({
  acceptedFileTypes: ${this._acceptedFileTypes ? js(this._acceptedFileTypes) : 'null'},
- automaticallyCropImagesAspectRatio: null,
- automaticallyOpenImageEditorForAspectRatio: null,
- automaticallyResizeImagesMode: null,
- automaticallyResizeImagesHeight: null,
- automaticallyResizeImagesWidth: null,
+ automaticallyCropImagesAspectRatio: ${js(this._cropAspectRatio)},
+ automaticallyOpenImageEditorForAspectRatio: ${js(this._imageEditor && this._cropAspectRatio !== null)},
+ automaticallyResizeImagesMode: ${js(ui('automaticallyResizeImagesMode', null))},
+ automaticallyResizeImagesHeight: ${js(ui('automaticallyResizeImagesHeight', null))},
+ automaticallyResizeImagesWidth: ${js(ui('automaticallyResizeImagesWidth', null))},
  canEditSvgs: true,
  confirmSvgEditingMessage: ${js(tr('editor.svg.messages.confirmation'))},
  disabledSvgEditingMessage: ${js(tr('editor.svg.messages.disabled'))},
- hasCircleCropper: false,
- hasImageEditor: false,
- imageEditorEmptyFillColor: null,
- imageEditorMode: 1,
- imageEditorViewportHeight: null,
- imageEditorViewportWidth: null,
- imagePreviewHeight: null,
- isAvatar: false,
- isDeletable: true,
+ hasCircleCropper: ${js(this._circleCropper)},
+ hasImageEditor: ${js(hasEditor)},
+ imageEditorEmptyFillColor: ${js(ui('imageEditorEmptyFillColor', null))},
+ imageEditorMode: ${js(ui('imageEditorMode', 1))},
+ imageEditorViewportHeight: ${js(ui('imageEditorViewportHeight', null))},
+ imageEditorViewportWidth: ${js(ui('imageEditorViewportWidth', null))},
+ imagePreviewHeight: ${js(ui('imagePreviewHeight', null))},
+ isAvatar: ${js(this._avatar)},
+ isDeletable: ${js(this._deletable)},
  isDisabled: ${isDisabled ? 'true' : 'false'},
- isDownloadable: false,
- isImageEditorExplicitlyEnabled: false,
+ isDownloadable: ${js(ui('isDownloadable', false))},
+ isImageEditorExplicitlyEnabled: ${js(this._imageEditor)},
  isMultiple: ${this._multiple ? 'true' : 'false'},
- isOpenable: false,
- isPasteable: true,
- isPreviewable: true,
+ isOpenable: ${js(ui('isOpenable', false))},
+ isPasteable: ${js(ui('isPasteable', true))},
+ isPreviewable: ${js(ui('isPreviewable', true))},
  isReorderable: ${this._reorderable ? 'true' : 'false'},
  isSvgEditingConfirmed: false,
- itemPanelAspectRatio: null,
- loadingIndicatorPosition: 'right',
+ itemPanelAspectRatio: ${js(ui('itemPanelAspectRatio', null))},
+ loadingIndicatorPosition: ${js(ui('loadingIndicatorPosition', 'right'))},
  locale: 'en',
  maxFiles: ${this._maxFiles ?? 'null'},
  maxFilesValidationMessage: ${this._maxFiles !== null ? js(`The ${label} field must not have more than ${this._maxFiles} items.`) : 'null'},
- maxParallelUploads: null,
+ maxParallelUploads: ${js(ui('maxParallelUploads', null))},
  maxSize: ${this._maxSize !== null ? js(`${this._maxSize}KB`) : 'null'},
- mimeTypeMap: [],
- minSize: null,
- panelAspectRatio: null,
- panelLayout: 'compact',
- placeholder: null,
- removeUploadedFileButtonPosition: 'left',
- shouldAppendFiles: false,
- shouldAutomaticallyUpscaleImagesWhenResizing: true,
- shouldOrientImageFromExif: true,
- shouldTransformImage: false,
+ mimeTypeMap: ${ui('mimeTypeMap', null) ? js(ui('mimeTypeMap', null)) : '[]'},
+ minSize: ${this._minSize !== null ? js(`${this._minSize}KB`) : 'null'},
+ panelAspectRatio: ${js(ui('panelAspectRatio', null))},
+ panelLayout: ${js(ui('panelLayout', 'compact'))},
+ placeholder: ${js(this._placeholder)},
+ removeUploadedFileButtonPosition: ${js(ui('removeUploadedFileButtonPosition', 'left'))},
+ shouldAppendFiles: ${js(ui('shouldAppendFiles', false))},
+ shouldAutomaticallyUpscaleImagesWhenResizing: ${js(ui('shouldAutomaticallyUpscaleImagesWhenResizing', true))},
+ shouldOrientImageFromExif: ${js(ui('shouldOrientImageFromExif', true))},
+ shouldTransformImage: ${js(Boolean(this._cropAspectRatio || ui('automaticallyResizeImagesHeight', null) || ui('automaticallyResizeImagesWidth', null)))},
  state: $wire.$entangle(${js(this.getStatePath())}, false),
  statePath: ${js(this.getStatePath())},
- uploadButtonPosition: 'right',
- uploadingMessage: ${js(t('filament::components/button.messages.uploading_file'))},
+ uploadButtonPosition: ${js(ui('uploadButtonPosition', 'right'))},
+ uploadingMessage: ${js(ui('uploadingMessage', t('filament::components/button.messages.uploading_file')))},
  downloadActionLabel: ${js(tr('actions.download.label'))},
  openActionLabel: ${js(tr('actions.open.label'))},
- uploadProgressIndicatorPosition: 'right',
+ uploadProgressIndicatorPosition: ${js(ui('uploadProgressIndicatorPosition', 'right'))},
  })`;
-        const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([this._acceptedFileTypes, this._maxFiles, this._multiple, isDisabled])).digest('hex')}`;
+        const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([this._acceptedFileTypes, this._maxFiles, this._multiple, isDisabled, this._ui, this._imageEditor, this._cropAspectRatio])).digest('hex')}`;
         const input = new Attributes().merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: this._multiple ? 'multiple' : null, type: 'file' });
-        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="fi-fo-file-upload fi-align-start"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div></div>`, { labelAsDiv: true });
+        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${this._alignment ?? 'start'}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${hasEditor ? this.imageEditorHtml() : ''}</div>`, { labelAsDiv: true });
     }
 }
 

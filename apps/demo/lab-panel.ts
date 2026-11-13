@@ -2,7 +2,7 @@
 // It is kept apart from `/admin`, whose pages are compared with Filament's demo.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
-import { Checkbox, ColorPicker, KeyValue, Radio, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
+import { Checkbox, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
     DeleteBulkAction, EditAction, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, type AuthProvider, type Login,
@@ -165,6 +165,16 @@ class LabFields extends Resource {
                 TagsInput.make('tags').dehydrated(false),
                 KeyValue.make('meta').addable(false).editableKeys(false).dehydrated(false),
             ]).columnSpanFull().columns(2),
+            Section.make('Selects, dates and uploads').schema([
+                Select.make('status').options({ 'In process': { draft: 'Draft', reviewing: 'Reviewing' }, Reviewed: { published: 'Published', rejected: 'Rejected' } }).native(false).dehydrated(false),
+                Select.make('featured_brand').boolean('Featured', 'Regular').dehydrated(false),
+                DatePicker.make('launch_date').native(false).displayFormat('d/m/Y').disabledDates(['2026-12-25']).closeOnDateSelection().dehydrated(false),
+                DateTimePicker.make('launch_at').native(false).seconds(false).timezone('Europe/Paris').dehydrated(false),
+                FileUpload.make('logo').avatar().imageEditor().imageEditorAspectRatioOptions(['1:1', '4:3', null]).dehydrated(false),
+                FileUpload.make('gallery').multiple().image().panelLayout('grid').reorderable().imageDimensions({ minWidth: 200 }).dehydrated(false),
+            ]).columnSpanFull().columns(2),
+            Repeater.make('contacts').schema([TextInput.make('name').required(), TextInput.make('email').email()]).columns(2)
+                .itemLabel(({ state }) => (state.name as string) || null).collapsible().cloneable().reorderableWithButtons().defaultItems(1).columnSpanFull().dehydrated(false),
             TextInput.make('website').url(),
         ]);
     }

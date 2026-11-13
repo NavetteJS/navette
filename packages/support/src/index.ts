@@ -374,7 +374,8 @@ const iconCache = new Map<string, string>();
 export function icon(name: string, options: { size?: string; attributes?: Attributes } = {}): string {
     let svg = iconCache.get(name);
     if (svg === undefined) {
-        const file = here(`../icons/heroicons/${name.replace(/^heroicon-/, '')}.svg`);
+        // `fi-o-crop`: Filament's own icons (MIT), shipped next to Heroicons.
+        const file = name.startsWith('fi-') ? here(`../icons/filament/${name.slice(3).replace(/[^a-z0-9-]/g, '')}.svg`) : here(`../icons/heroicons/${name.replace(/^heroicon-/, '')}.svg`);
         if (!existsSync(file)) throw new Error(`Icon not found: ${name}`);
         svg = readFileSync(file, 'utf8').trim();
         iconCache.set(name, svg);
