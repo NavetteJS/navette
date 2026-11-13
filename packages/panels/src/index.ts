@@ -1,19 +1,26 @@
 // @navette-js/panels: Panel, layouts, pages, resources, navigation, authentication and session.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { Throttle } from './throttle.ts';
+export { Throttle } from './throttle.ts';
 import { checkVerificationUrl, consoleMailer, readToken, signToken, signVerificationUrl, type Mailer, type MailMessage } from './auth.ts';
-export { consoleMailer, fileMailer, hashPassword, knexAuthProvider, knexTenantProvider, mailText, verifyPassword, type Mailer, type MailMessage, type TableQuery } from './auth.ts';
+export { consoleMailer, fileMailer, hashPassword, knexAuthProvider, knexTenantProvider, mailText, multiFactorAuthenticationSchema, verifyPassword, type Mailer, type MailMessage, type TableQuery } from './auth.ts';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
 import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
 import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
-import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
+import { Actions, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 export { Notification, Notifications } from './notifications.ts';
+import { MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
+export { AppAuthentication, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
+export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
+export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
+export { authenticationOptions, decodeCbor, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type AuthenticationResponseJSON, type RegistrationResponseJSON, type StoredCredential, type UserVerification } from './webauthn.ts';
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
 export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, parseCsv, type ExportActionInstance, type ImportActionInstance } from './import-export.ts';
 import { DownloadStore } from './import-export.ts';
@@ -72,6 +79,21 @@ export interface AuthProvider {
     getPasswordFingerprint?(user: User): MaybePromise<string>;
     /** Can this user use this panel? Checked on every request and at login (`false`: 403, or "credentials do not match" at login). */
     canAccessPanel?(user: User, panel: Panel): MaybePromise<boolean>;
+    // --- multi-factor authentication (`AppAuthentication`, `SecurityKeyAuthentication`): `knexAuthProvider` implements them all.
+    /** Stored authenticator app secret (encrypted by Navette), or `null`. */
+    getAppAuthenticationSecret?(user: User): MaybePromise<string | null>;
+    /** Saves the secret; `null` turns app authentication off. */
+    saveAppAuthenticationSecret?(user: User, secret: string | null): MaybePromise<void>;
+    /** Stored recovery codes (hashed by Navette), or `null`. */
+    getAppAuthenticationRecoveryCodes?(user: User): MaybePromise<string[] | null>;
+    saveAppAuthenticationRecoveryCodes?(user: User, codes: string[] | null): MaybePromise<void>;
+    /** The user's security keys. */
+    getSecurityKeys?(user: User): MaybePromise<SecurityKey[]>;
+    createSecurityKey?(user: User, key: Omit<SecurityKey, 'id' | 'createdAt' | 'lastUsedAt'>): MaybePromise<void>;
+    /** Updates a key of this user (counter and last use after a sign-in). */
+    updateSecurityKey?(user: User, id: SecurityKey['id'], changes: { signCount?: number; lastUsedAt?: string; name?: string }): MaybePromise<void>;
+    /** Deletes a key of this user. */
+    deleteSecurityKey?(user: User, id: SecurityKey['id']): MaybePromise<void>;
 }
 /**
  * Panel tenants (teams, organizations…). Every panel page then lives under
@@ -425,6 +447,31 @@ export class Panel {
     profile(page: typeof EditProfile = EditProfile, isSimple = true): this { this._profile = { page, isSimple }; return this; }
     hasProfile(): boolean { return this._profile !== null; }
     getProfile() { return this._profile; }
+    private _multiFactor: { providers: MultiFactorAuthenticationProvider[]; isRequired: boolean; setUpPage: typeof SetUpRequiredMultiFactorAuthentication } | null = null;
+    /**
+     * Multi-factor authentication: after the password, users with a provider set up must pass its challenge. They set providers
+     * up on their profile page (`profile()`). `isRequired`: users without any provider are sent to a setup page first.
+     */
+    multiFactorAuthentication(providers: MultiFactorAuthenticationProvider[], options: { isRequired?: boolean; setUpPage?: typeof SetUpRequiredMultiFactorAuthentication } = {}): this {
+        const ids = providers.map((provider) => provider.getId());
+        for (const id of ids) if (!/^[A-Za-z][A-Za-z0-9_-]{0,40}$/.test(id)) throw new Error(`Invalid multi-factor provider id: ${id}`);
+        if (new Set(ids).size !== ids.length) throw new Error('Two multi-factor providers share the same id: give one another id with id().');
+        this._multiFactor = providers.length ? { providers, isRequired: options.isRequired === true, setUpPage: options.setUpPage ?? SetUpRequiredMultiFactorAuthentication } : null;
+        return this;
+    }
+    hasMultiFactorAuthentication(): boolean { return this._multiFactor !== null; }
+    getMultiFactorAuthenticationProviders(): MultiFactorAuthenticationProvider[] { return this._multiFactor?.providers ?? []; }
+    isMultiFactorAuthenticationRequired(): boolean { return this._multiFactor?.isRequired === true; }
+    getSetUpRequiredMultiFactorAuthenticationPage(): typeof SetUpRequiredMultiFactorAuthentication | null { return this._multiFactor?.isRequired ? this._multiFactor.setUpPage : null; }
+    getSetUpRequiredMultiFactorAuthenticationUrl(): string { return this.getBaseUrl('multi-factor-authentication/set-up'); }
+    /** The login challenge of this panel (enabled providers, rate limiting). */
+    getMultiFactorChallenge(): MultiFactorChallenge { return MultiFactorChallenge.make(this); }
+    /** Whether the user must set up multi-factor authentication before using the panel. */
+    async mustSetUpMultiFactorAuthentication(user: User | null): Promise<boolean> {
+        if (!user || !this.isMultiFactorAuthenticationRequired()) return false;
+        return !(await this.getMultiFactorChallenge().hasEnabledProviders(user));
+    }
+    usesSecurityKeys(): boolean { return this.getMultiFactorAuthenticationProviders().some((provider) => provider instanceof SecurityKeyAuthentication); }
     /** Mailer for password reset and verification emails. Defaults to the console. */
     mailer(mailer: Mailer): this { this._mailer = mailer; return this; }
     async sendMail(message: MailMessage): Promise<void> { await this._mailer.send(message); }
@@ -708,106 +755,8 @@ abstract class BasePage extends Component implements SchemaHost {
         const resource = (this.constructor as any).resource;
         return resource ? [this.constructor, resource] : [this.constructor];
     }
-}
-
-/** A panel page, in the full layout (sidebar, header). */
-export class Page extends BasePage {
-    /** Methods the browser may call. A subclass adds its own: `static callable = ['approve']`. */
-    static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
-    static slug = '';
-    static title: string | null = null;
-    static navigationLabel: string | null = null;
-    static navigationIcon: string | null = null;
-    static navigationGroup: string | null = null;
-    static navigationSort = 0;
-    static navigationBadge: string | number | null = null;
-    static navigationBadgeColor = 'primary';
-    static shouldRegisterNavigation = true;
-    /** Restricts the page to some users: returning `false` hides it from the menu and denies it (403). */
-    static canAccess(_user: User): boolean | Promise<boolean> { return true; }
-    static getTitle(): string { return this.title ?? this.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
-    static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
-
-    /** Every request, including browser updates, requires an authenticated user: a snapshot kept after logout is not enough. */
-    async boot(): Promise<void> {
-        const ctx = this._ctx as PanelContext | null;
-        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
-        // In a multi-tenant panel, every page belongs to a tenant the user is a member of (checked by the router).
-        if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
-        if (await ctx.panel.mustVerifyEmail(ctx.user)) throw new WireError(403, 'Email address not verified.');
-        // Checked on every request, not only on display: a forged request to a forbidden page is denied.
-        if (!(await this.isAccessAuthorized(ctx))) throw new WireError(403, 'Forbidden.');
-    }
-    protected isAccessAuthorized(ctx: PanelContext): boolean | Promise<boolean> { return ctx.panel.canAccessPage(this.constructor as typeof Page, ctx.user); }
-    getTitle(): string { return (this.constructor as typeof Page).getTitle(); }
-    getHeading(): string { return this.getTitle(); }
-    getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
+    /** Actions of the page header (full layout). */
     getHeaderActions(): Action[] { return []; }
-    getPageClasses(): string[] { return []; }
-    /** Page sub-navigation; empty by default. */
-    getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> { return []; }
-    /** Sub-navigation position: `start` (column before the content), `end` (after) or `top` (tabs). Defaults to the resource's, then the panel's. */
-    static subNavigationPosition: 'start' | 'end' | 'top' | null = null;
-    getSubNavigationPosition(): 'start' | 'end' | 'top' {
-        const own = (this.constructor as typeof Page).subNavigationPosition;
-        const resource = (this.constructor as any).resource ?? (this.constructor as any).parentResource;
-        return own ?? resource?.subNavigationPosition ?? this.panel.getSubNavigationPosition();
-    }
-    /** Widgets shown below the page content. */
-    getFooterWidgets(): (typeof Widget)[] { return []; }
-    getFooterWidgetsColumns(): number | Record<string, number> { return 2; }
-    /** Footer widget grid, in the page's `footerWidgets` schema. */
-    protected async renderFooterWidgets(): Promise<string> {
-        const widgets = await this.filterVisibleWidgets(this.getFooterWidgets());
-        if (!widgets.length) return '';
-        const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
-        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
-    }
-    /** Widgets shown above the page content, with the data passed to each (widget properties). */
-    getHeaderWidgets(): (typeof Widget)[] { return []; }
-    getHeaderWidgetsColumns(): number { return 2; }
-    getWidgetData(): Record<string, unknown> { return {}; }
-    /** Header widget grid, in the page's `headerWidgets` schema. */
-    protected async renderHeaderWidgets(): Promise<string> {
-        const widgets = await this.filterVisibleWidgets(this.getHeaderWidgets());
-        if (!widgets.length) return '';
-        const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
-        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
-    }
-    /** Widgets the current user is allowed to see. */
-    protected async filterVisibleWidgets(candidates: (typeof Widget)[]): Promise<(typeof Widget)[]> {
-        const viewer = (this._ctx as PanelContext).user;
-        const widgets: (typeof Widget)[] = [];
-        for (const widget of candidates) if (await this.panel.authorize(viewer, 'view', { widget, rule: () => widget.canView(viewer!) })) widgets.push(widget);
-        return widgets;
-    }
-    /** Widget grid of a schema: each widget is a child component, lazy-loaded by default. */
-    protected async renderWidgetsGrid(widgets: (typeof Widget)[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
-        const items: string[] = [];
-        for (const [index, widget] of widgets.entries()) {
-            const componentName = (this as any)._runtime.nameOf(widget);
-            const key = `${schemaKey}.${componentName}-${index}`;
-            const child = await this.mountChild(componentName, this.getWidgetData(), `${this.id}.${key}`, { lazy: widget.isLazy });
-            items.push(`<div class="fi-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
-        }
-        const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['fi-sc', 'fi-sc-has-gap']);
-        return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
-    }
-    /** Page content: its `content` schema by default. */
-    /**
-     * Content rendered from an EJS view instead of the `content` schema: a namespaced view (`'app::pages.report'`), or a file
-     * (path or `new URL('./report.ejs', import.meta.url)`). The view receives `page` (this page) and `getViewData()`, and may use
-     * component tags (`<x-section>`, `<x-button>`…). Elements calling the server use `wire:click` on a method listed in `static callable`.
-     */
-    static view: string | URL | null = null;
-    /** Extra variables for the page view. */
-    getViewData(): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
-    protected async renderContent(): Promise<string> {
-        const view = (this.constructor as typeof Page).view;
-        if (view === null) return (await this.getSchema('content')).toHtml();
-        const data = { page: this, livewireId: this.id, ...(await this.getViewData()) };
-        return typeof view === 'string' && view.includes('::') ? views.render(view, data) : views.renderFile(view instanceof URL ? fileURLToPath(view) : view, data);
-    }
 
     // --- mounted actions: the stack lives in the component state, modals are rendered server-side
     mountedActions: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }[] = [];
@@ -978,6 +927,24 @@ export class Page extends BasePage {
         this.renderPartial('action-modals', await this.renderActionModals());
         this.syncActionModals();
     }
+    /**
+     * Replaces the action being run with another action of the same component, opened in its place (to show a result, as
+     * the new recovery codes). Call it from the running action; `name` must be mountable in the same context (it may be hidden).
+     */
+    async replaceMountedAction(name: string, args: Record<string, unknown> = {}): Promise<void> {
+        const index = this.mountedActions.length - 1;
+        if (index < 0) return;
+        const context = this.mountedActions[index].context;
+        const action = await this.findMountableAction(name, context);
+        const mounted: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> } = { name, arguments: args, context };
+        this.mountedActions[index] = mounted;
+        this._errors = {};
+        const schema = await this.getMountedActionSchema(index);
+        if (schema) { const data: Record<string, unknown> = {}; mounted.data = data; fillSchema(schema, data); }
+        await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
+        this.renderPartial('action-modals', await this.renderActionModals());
+        this.syncActionModals();
+    }
     unmountAction(_shouldCancelParentActions: unknown = true): void {
         this.cancelModalPartialRender();
         this._errors = {};
@@ -1005,6 +972,8 @@ export class Page extends BasePage {
             if (error.closesModal) { this.mountedActions.pop(); this.syncActionModals(); }
             return;
         }
+        // The action replaced itself with another one (`replaceMountedAction()`): that one stays open.
+        if (this.mountedActions[this.mountedActions.length - 1] !== mounted) return;
         // "… & create another": the modal stays open with a reset form (except the preserved fields).
         if (schema && _args && typeof _args === 'object' && (_args as any).another === true) {
             const preserved = JSON.parse(JSON.stringify(action.getDataPreservedForAnother(callContext.data ?? {})));
@@ -1016,6 +985,107 @@ export class Page extends BasePage {
         }
         this.mountedActions.pop();
         this.syncActionModals();
+    }
+}
+
+/** A panel page, in the full layout (sidebar, header). */
+export class Page extends BasePage {
+    /** Methods the browser may call. A subclass adds its own: `static callable = ['approve']`. */
+    static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
+    static slug = '';
+    static title: string | null = null;
+    static navigationLabel: string | null = null;
+    static navigationIcon: string | null = null;
+    static navigationGroup: string | null = null;
+    static navigationSort = 0;
+    static navigationBadge: string | number | null = null;
+    static navigationBadgeColor = 'primary';
+    static shouldRegisterNavigation = true;
+    /** Restricts the page to some users: returning `false` hides it from the menu and denies it (403). */
+    static canAccess(_user: User): boolean | Promise<boolean> { return true; }
+    static getTitle(): string { return this.title ?? this.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
+    static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
+
+    /** Every request, including browser updates, requires an authenticated user: a snapshot kept after logout is not enough. */
+    async boot(): Promise<void> {
+        const ctx = this._ctx as PanelContext | null;
+        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
+        // In a multi-tenant panel, every page belongs to a tenant the user is a member of (checked by the router).
+        if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
+        if (await ctx.panel.mustVerifyEmail(ctx.user)) throw new WireError(403, 'Email address not verified.');
+        if (await ctx.panel.mustSetUpMultiFactorAuthentication(ctx.user)) throw new WireError(403, 'Multi-factor authentication must be set up.');
+        // Checked on every request, not only on display: a forged request to a forbidden page is denied.
+        if (!(await this.isAccessAuthorized(ctx))) throw new WireError(403, 'Forbidden.');
+    }
+    protected isAccessAuthorized(ctx: PanelContext): boolean | Promise<boolean> { return ctx.panel.canAccessPage(this.constructor as typeof Page, ctx.user); }
+    getTitle(): string { return (this.constructor as typeof Page).getTitle(); }
+    getHeading(): string { return this.getTitle(); }
+    getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
+    getHeaderActions(): Action[] { return []; }
+    getPageClasses(): string[] { return []; }
+    /** Page sub-navigation; empty by default. */
+    getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> { return []; }
+    /** Sub-navigation position: `start` (column before the content), `end` (after) or `top` (tabs). Defaults to the resource's, then the panel's. */
+    static subNavigationPosition: 'start' | 'end' | 'top' | null = null;
+    getSubNavigationPosition(): 'start' | 'end' | 'top' {
+        const own = (this.constructor as typeof Page).subNavigationPosition;
+        const resource = (this.constructor as any).resource ?? (this.constructor as any).parentResource;
+        return own ?? resource?.subNavigationPosition ?? this.panel.getSubNavigationPosition();
+    }
+    /** Widgets shown below the page content. */
+    getFooterWidgets(): (typeof Widget)[] { return []; }
+    getFooterWidgetsColumns(): number | Record<string, number> { return 2; }
+    /** Footer widget grid, in the page's `footerWidgets` schema. */
+    protected async renderFooterWidgets(): Promise<string> {
+        const widgets = await this.filterVisibleWidgets(this.getFooterWidgets());
+        if (!widgets.length) return '';
+        const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
+        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
+    }
+    /** Widgets shown above the page content, with the data passed to each (widget properties). */
+    getHeaderWidgets(): (typeof Widget)[] { return []; }
+    getHeaderWidgetsColumns(): number { return 2; }
+    getWidgetData(): Record<string, unknown> { return {}; }
+    /** Header widget grid, in the page's `headerWidgets` schema. */
+    protected async renderHeaderWidgets(): Promise<string> {
+        const widgets = await this.filterVisibleWidgets(this.getHeaderWidgets());
+        if (!widgets.length) return '';
+        const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
+        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
+    }
+    /** Widgets the current user is allowed to see. */
+    protected async filterVisibleWidgets(candidates: (typeof Widget)[]): Promise<(typeof Widget)[]> {
+        const viewer = (this._ctx as PanelContext).user;
+        const widgets: (typeof Widget)[] = [];
+        for (const widget of candidates) if (await this.panel.authorize(viewer, 'view', { widget, rule: () => widget.canView(viewer!) })) widgets.push(widget);
+        return widgets;
+    }
+    /** Widget grid of a schema: each widget is a child component, lazy-loaded by default. */
+    protected async renderWidgetsGrid(widgets: (typeof Widget)[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
+        const items: string[] = [];
+        for (const [index, widget] of widgets.entries()) {
+            const componentName = (this as any)._runtime.nameOf(widget);
+            const key = `${schemaKey}.${componentName}-${index}`;
+            const child = await this.mountChild(componentName, this.getWidgetData(), `${this.id}.${key}`, { lazy: widget.isLazy });
+            items.push(`<div class="fi-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
+        }
+        const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['fi-sc', 'fi-sc-has-gap']);
+        return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
+    }
+    /** Page content: its `content` schema by default. */
+    /**
+     * Content rendered from an EJS view instead of the `content` schema: a namespaced view (`'app::pages.report'`), or a file
+     * (path or `new URL('./report.ejs', import.meta.url)`). The view receives `page` (this page) and `getViewData()`, and may use
+     * component tags (`<x-section>`, `<x-button>`…). Elements calling the server use `wire:click` on a method listed in `static callable`.
+     */
+    static view: string | URL | null = null;
+    /** Extra variables for the page view. */
+    getViewData(): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
+    protected async renderContent(): Promise<string> {
+        const view = (this.constructor as typeof Page).view;
+        if (view === null) return (await this.getSchema('content')).toHtml();
+        const data = { page: this, livewireId: this.id, ...(await this.getViewData()) };
+        return typeof view === 'string' && view.includes('::') ? views.render(view, data) : views.renderFile(view instanceof URL ? fileURLToPath(view) : view, data);
     }
 
     async render(): Promise<string> {
@@ -1067,24 +1137,6 @@ export class Dashboard extends Page {
     }
 }
 
-/** In-memory rate limiter: `max` attempts per window, per key. Fine for a single instance; use a shared store when running several. */
-export class Throttle {
-    private hits = new Map<string, number[]>();
-    private max: number;
-    private windowMs: number;
-    constructor(max = 5, windowMs = 60_000) { this.max = max; this.windowMs = windowMs; }
-    /** Records an attempt; returns 0 if allowed, otherwise the number of seconds to wait. */
-    hit(key: string, now = Date.now()): number {
-        const recent = (this.hits.get(key) ?? []).filter((at) => at > now - this.windowMs);
-        if (recent.length >= this.max) { this.hits.set(key, recent); return Math.max(1, Math.ceil((recent[0] + this.windowMs - now) / 1000)); }
-        recent.push(now);
-        this.hits.set(key, recent);
-        // Keep the store from growing forever.
-        if (this.hits.size > 10_000) for (const [k, v] of this.hits) if (!v.some((at) => at > now - this.windowMs)) this.hits.delete(k);
-        return 0;
-    }
-    clear(key: string): void { this.hits.delete(key); }
-}
 const loginThrottle = new Throttle();
 
 /** Page with the simple layout (login, registration…). */
@@ -1095,7 +1147,7 @@ export abstract class SimplePage extends BasePage {
     getSubheading(): string | null { return null; }
     hasLogo(): boolean { return true; }
     async render(): Promise<string> {
-        return views.render('filament-panels::pages.simple', { brand: this.panel.getBrand(), heading: this.getHeading(), subheading: this.getSubheading(), hasLogo: this.hasLogo(), content: await this.getSchema('content').toHtml(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes() });
+        return views.render('filament-panels::pages.simple', { brand: this.panel.getBrand(), heading: this.getHeading(), subheading: this.getSubheading(), hasLogo: this.hasLogo(), content: await this.getSchema('content').toHtml(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(), actionModals: await this.renderActionModals() });
     }
 }
 
@@ -1307,7 +1359,7 @@ export class EmailVerificationPrompt extends SimplePage {
 
 /** User profile page: name, email, new password. The current password is required to change the email or password. */
 export class EditProfile extends SimplePage {
-    static callable = ['save', 'callSchemaComponentMethod'];
+    static callable = ['save', 'mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
     static slug = 'profile';
     data: Record<string, unknown> = {};
     static getLabel(): string { return t('filament-panels::auth/pages/edit-profile.label'); }
@@ -1336,11 +1388,17 @@ export class EditProfile extends SimplePage {
         ]);
     }
     contentSchema(schema: Schema): Schema {
-        return schema.components(formContent('save', [
-            Action.make('save').label(t('filament-panels::auth/pages/edit-profile.form.actions.save.label')).submit('save').keyBindings(['mod+s']),
-            Action.make('back').label(t('filament-panels::auth/pages/edit-profile.actions.cancel.label')).color('gray').alpineClickHandler(`document.referrer ? window.history.back() : (window.location.href = ${JSON.stringify(this.panel.getUrl())})`),
-        ], { fullWidth: false, alignment: 'start' }));
+        const { panel, user } = this._ctx as PanelContext;
+        return schema.components([
+            ...formContent('save', [
+                Action.make('save').label(t('filament-panels::auth/pages/edit-profile.form.actions.save.label')).submit('save').keyBindings(['mod+s']),
+                Action.make('back').label(t('filament-panels::auth/pages/edit-profile.actions.cancel.label')).color('gray').alpineClickHandler(`document.referrer ? window.history.back() : (window.location.href = ${JSON.stringify(this.panel.getUrl())})`),
+            ], { fullWidth: false, alignment: 'start' }),
+            ...(panel.hasMultiFactorAuthentication() && user ? [this.multiFactorAuthenticationSection(panel, user)] : []),
+        ]);
     }
+    /** Multi-factor authentication settings: each provider's status and actions (set up, turn off…). */
+    protected multiFactorAuthenticationSection(panel: Panel, user: User): SchemaComponent { return multiFactorManagementSection(panel, user); }
     async save(): Promise<void> {
         const { panel, user } = this._ctx as PanelContext;
         if (!user) throw new WireError(401, 'Unauthenticated.');
@@ -1418,14 +1476,38 @@ export abstract class EditTenantProfile extends Page {
 
 export class Login extends SimplePage {
     static callable = ['authenticate', 'callSchemaComponentMethod'];
+    /** Signed token naming the user undertaking the multi-factor challenge: set by the server only. */
+    static locked = ['userUndertakingMultiFactorAuthentication'];
     data: Record<string, unknown> = {};
+    userUndertakingMultiFactorAuthentication: string | null = null;
+    /** User of the pending challenge, resolved from the token on each request. */
+    protected _multiFactorUser: User | null = null;
+    protected _multiFactorProviders: MultiFactorAuthenticationProvider[] = [];
 
     mount(): void { fillSchema(this.getSchema('form'), this.data); }
+    async boot(): Promise<void> {
+        const payload = this.readMultiFactorToken();
+        const { panel } = this._ctx as PanelContext;
+        this._multiFactorUser = payload ? await panel.getAuth().find(payload.uid as string | number) : null;
+        const ids = Array.isArray(payload?.providers) ? (payload!.providers as unknown[]).map(String) : [];
+        this._multiFactorProviders = this._multiFactorUser ? panel.getMultiFactorAuthenticationProviders().filter((provider) => ids.includes(provider.getId())) : [];
+    }
+    protected readMultiFactorToken(): Record<string, unknown> | null {
+        const { panel } = this._ctx as PanelContext;
+        return this.userUndertakingMultiFactorAuthentication ? readToken(panel.getAuthKey(), `${panel.getId()}.mfa-login`, this.userUndertakingMultiFactorAuthentication) : null;
+    }
+    /** Whether the multi-factor challenge is shown. */
+    isUndertakingMultiFactorAuthentication(): boolean { return this._multiFactorUser !== null && this._multiFactorProviders.length > 0; }
     getTitle(): string { return t('filament-panels::auth/pages/login.title'); }
-    getHeading(): string { return t('filament-panels::auth/pages/login.heading'); }
+    getHeading(): string { return this.isUndertakingMultiFactorAuthentication() ? t('filament-panels::auth/pages/login.multi_factor.heading') : t('filament-panels::auth/pages/login.heading'); }
     getSubheading(): string | null {
+        if (this.isUndertakingMultiFactorAuthentication()) return e(t('filament-panels::auth/pages/login.multi_factor.subheading'));
         if (!this.panel.hasRegistration()) return null;
         return `${e(t('filament-panels::auth/pages/login.actions.register.before'))} ${authLink(this.panel.getRegistrationUrl(), t('filament-panels::auth/pages/login.actions.register.label'))}`;
+    }
+    getSchema(name: string): Schema {
+        if (name === 'multiFactorChallengeForm') return this.multiFactorChallengeFormSchema(Schema.make(this).key(name).statePath('data.multiFactor'));
+        return super.getSchema(name);
     }
 
     formSchema(schema: Schema): Schema {
@@ -1437,20 +1519,45 @@ export class Login extends SimplePage {
             Checkbox.make('remember').label(t('filament-panels::auth/pages/login.form.remember.label')),
         ]);
     }
+    /** Challenge fields of the user's enabled providers (with a picker when there are several). */
+    multiFactorChallengeFormSchema(schema: Schema): Schema {
+        if (!this.isUndertakingMultiFactorAuthentication()) return schema.components([]);
+        return schema.components(this.panel.getMultiFactorChallenge().getFormComponents(this._multiFactorUser!, this._multiFactorProviders));
+    }
     contentSchema(schema: Schema): Schema {
+        const challenging = this.isUndertakingMultiFactorAuthentication();
         return schema.components([
             RenderHook.make(PanelsRenderHook.AUTH_LOGIN_FORM_BEFORE),
             Form.make([EmbeddedSchema.make('form')]).id('form').livewireSubmitHandler('authenticate')
-                .footer([Actions.make([Action.make('authenticate').label(t('filament-panels::auth/pages/login.form.actions.authenticate.label')).submit('authenticate')]).fullWidth().key('form-actions')]),
-            // Multi-factor challenge form: hidden until MFA is implemented.
-            Form.make([]).id('multiFactorChallengeForm').hidden(),
+                .footer([Actions.make([Action.make('authenticate').label(t('filament-panels::auth/pages/login.form.actions.authenticate.label')).submit('authenticate')]).fullWidth().key('form-actions')])
+                .hidden(challenging),
+            Form.make(challenging ? [EmbeddedSchema.make('multiFactorChallengeForm')] : []).id('multiFactorChallengeForm').livewireSubmitHandler('authenticate')
+                .footer(challenging ? [Actions.make([Action.make('authenticate').label(t('filament-panels::auth/pages/login.multi_factor.form.actions.authenticate.label')).submit('authenticate')]).fullWidth()] : [])
+                .hidden(!challenging),
             RenderHook.make(PanelsRenderHook.AUTH_LOGIN_FORM_AFTER),
         ]);
+    }
+    /** Starts a challenge for this user if one of their providers is set up; returns whether it did. */
+    protected async startMultiFactorChallenge(user: User): Promise<boolean> {
+        const { panel } = this._ctx as PanelContext;
+        if (!panel.hasMultiFactorAuthentication()) return false;
+        const challenge = panel.getMultiFactorChallenge();
+        const enabled = await challenge.getEnabledProviders(user);
+        if (!enabled.length) return false;
+        // Ten minutes to answer; the password is checked again when the challenge is answered.
+        this.userUndertakingMultiFactorAuthentication = signToken(panel.getAuthKey(), `${panel.getId()}.mfa-login`, { uid: user.id, providers: enabled.map((provider) => provider.getId()) }, 60 * 10);
+        this._multiFactorUser = user;
+        this._multiFactorProviders = enabled;
+        await challenge.beforeChallenge(user, enabled[0]);
+        const state: Record<string, unknown> = {};
+        this.data = { ...this.data, multiFactor: state };
+        fillSchema(this.getSchema('multiFactorChallengeForm'), state);
+        return true;
     }
 
     async authenticate(): Promise<void> {
         this._errors = await validateSchema(this.getSchema('form'));
-        if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
+        if (Object.keys(this._errors).length) { this.cancelMultiFactorChallenge(); this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         const { req, res, panel } = this._ctx as PanelContext;
         // Five attempts per minute per IP address, then wait.
         const wait = loginThrottle.hit(`${panel.getId()}:${req.ip ?? ''}`);
@@ -1458,13 +1565,68 @@ export class Login extends SimplePage {
             Notification.make().danger().title(t('filament-actions::notifications.throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('filament-actions::notifications.throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
             return;
         }
+        // The password is checked on every submission, the challenge's included: a password changed meanwhile ends it.
         const user = await panel.getAuth().attempt(String(this.data.email), String(this.data.password));
         // As in Filament: a valid account that may not use this panel gets the same message as wrong credentials.
-        if (!user || !(await panel.userCanAccess(user))) { this.addError('data.email', t('filament-panels::auth/pages/login.messages.failed')); return; }
+        if (!user || !(await panel.userCanAccess(user))) { this.cancelMultiFactorChallenge(); this.addError('data.email', t('filament-panels::auth/pages/login.messages.failed')); return; }
+        if (this.isUndertakingMultiFactorAuthentication() && String(this._multiFactorUser!.id) === String(user.id)) {
+            const challenge = panel.getMultiFactorChallenge();
+            const challengeWait = challenge.hitRateLimiter(user);
+            if (challengeWait > 0) {
+                Notification.make().danger().title(t('filament-actions::notifications.throttled.title', { seconds: challengeWait, minutes: Math.ceil(challengeWait / 60) })).body(t('filament-actions::notifications.throttled.body', { seconds: challengeWait, minutes: Math.ceil(challengeWait / 60) })).send();
+                return;
+            }
+            const challengeForm = this.getSchema('multiFactorChallengeForm');
+            this._errors = await validateSchema(challengeForm);
+            if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
+            // Defense in depth: the answered provider is one of the user's, and at least one of its fields was validated.
+            const state = (this.data.multiFactor ?? {}) as Record<string, unknown>;
+            const picked = this._multiFactorProviders.length > 1 ? String(state.provider ?? '') : this._multiFactorProviders[0].getId();
+            const answered = this._multiFactorProviders.some((provider) => provider.getId() === picked)
+                && (await challengeForm.getVisibleFlatComponents()).some((component) => component instanceof Field && component.getStatePath().startsWith(`data.multiFactor.${picked}.`));
+            if (!answered) { this.addError('data.multiFactor.provider', t('filament-panels::auth/pages/login.messages.failed')); return; }
+            challenge.clearRateLimiter(user);
+        } else if (await this.startMultiFactorChallenge(user)) {
+            return;
+        }
         loginThrottle.clear(`${panel.getId()}:${req.ip ?? ''}`);
         panel.logIn(res, user, Boolean(this.data.remember));
+        this.userUndertakingMultiFactorAuthentication = null;
         this.redirect(panel.getUrl());
     }
+    protected cancelMultiFactorChallenge(): void {
+        this.userUndertakingMultiFactorAuthentication = null;
+        this._multiFactorUser = null;
+        this._multiFactorProviders = [];
+    }
+}
+
+/** Shown after sign-in when the panel requires multi-factor authentication and the user has not set any provider up. */
+export class SetUpRequiredMultiFactorAuthentication extends SimplePage {
+    static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
+    async boot(): Promise<void> { if (!(this._ctx as PanelContext | null)?.user) throw new WireError(401, 'Unauthenticated.'); }
+    async mount(): Promise<void> {
+        const { panel, user } = this._ctx as PanelContext;
+        if (!panel.hasMultiFactorAuthentication() || (await panel.getMultiFactorChallenge().hasEnabledProviders(user!))) this.redirect(panel.getUrl());
+    }
+    getTitle(): string { return t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'); }
+    getHeading(): string { return t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.heading'); }
+    getSubheading(): string | null { return e(t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.subheading')); }
+    contentSchema(schema: Schema): Schema {
+        const { panel, user } = this._ctx as PanelContext;
+        return schema.components([
+            multiFactorManagementSection(panel, user!),
+            Actions.make([
+                Action.make('continue').label(t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.actions.continue.label')).url(panel.getUrl())
+                    .visible(() => panel.getMultiFactorChallenge().hasEnabledProviders(user!)),
+            ]).fullWidth().key('footer-actions'),
+        ]);
+    }
+}
+/** Profile section listing the providers: each one's status and actions, under its id. */
+function multiFactorManagementSection(panel: Panel, user: User): SchemaComponent {
+    return Section.make().compact().divided().secondary().key('multi-factor-authentication')
+        .schema(panel.getMultiFactorAuthenticationProviders().map((provider) => Group.make(provider.getManagementSchemaComponents(user, panel)).statePath(provider.getId())));
 }
 
 /** Whether the host component's user has this ability on the component's resource (or relation manager). Use it in your actions' `authorize()`. */
@@ -3673,7 +3835,7 @@ export async function discoverPanels(directory: string | URL): Promise<Panel[]> 
 /** A runtime serves a single panel: each panel has its own Livewire endpoint and components. */
 const runtimePanels = new WeakMap<WireRuntime, Panel>();
 /** Reserved segments right after a multi-tenant panel's path (they are not tenant keys). */
-const RESERVED_SEGMENTS = new Set(['login', 'logout', 'register', 'password-reset', 'email-verification', 'profile', 'livewire']);
+const RESERVED_SEGMENTS = new Set(['login', 'logout', 'register', 'password-reset', 'email-verification', 'multi-factor-authentication', 'profile', 'livewire']);
 
 /** Express router for a panel: assets, runtime endpoint, authentication, tenants, protected pages. */
 /** Panels sharing an auth guard: same key and same auth provider, otherwise a user id of one could be read as a user of the other. */
@@ -3762,6 +3924,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (VerificationPrompt) runtime.register(name('auth.email-verification.prompt'), VerificationPrompt);
     const profile = panel.getProfile();
     if (profile) runtime.register(name('auth.profile'), profile.page);
+    const MultiFactorSetUpPage = panel.getSetUpRequiredMultiFactorAuthenticationPage();
+    if (MultiFactorSetUpPage) runtime.register(name('auth.multi-factor-authentication.set-up-required'), MultiFactorSetUpPage);
     const TenantRegistration = panel.getTenantRegistrationPage();
     if (TenantRegistration) runtime.register(name('tenancy.registration'), TenantRegistration as any);
     const TenantProfile = panel.getTenantProfilePage();
@@ -3830,7 +3994,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             });
         const bodyClass = options.layout === 'index' ? cls([{ 'fi-body-has-navigation': hasNavigation, 'fi-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'fi-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'fi-body-has-topbar': panel.hasTopbar(), 'fi-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
         res.send(views.render('filament-panels::layout.base', {
-            renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
+            renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
@@ -3854,11 +4018,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         });
     };
     /** Simple page for a signed-in user, outside any tenant (profile, email verification, tenant registration). */
-    const userPage = (path: string, component: string, title: string, layout: 'simple' | 'index' = 'simple') => {
+    const userPage = (path: string, component: string, title: string, layout: 'simple' | 'index' = 'simple', options: { beforeMultiFactorSetUp?: boolean } = {}) => {
         router.get(panel.getBaseUrl(path), async (req, res) => {
             const ctx = await context(req, res);
             if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
+            // Required multi-factor authentication: nothing but its setup page (and email verification) until it is set up.
+            if (!options.beforeMultiFactorSetUp && (await panel.mustSetUpMultiFactorAuthentication(ctx.user))) return res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl());
             await guarded(res, () => document(req, res, ctx, { title, component, layout }));
         });
     };
@@ -3890,7 +4056,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         guestPage(panel.getAuthPaths().passwordReset, name('auth.password-reset.reset'), t('filament-panels::auth/pages/password-reset/reset-password.title'), (req) => ({ email: typeof req.query.email === 'string' ? req.query.email : null, token: typeof req.query.token === 'string' ? req.query.token : null }));
     }
     if (VerificationPrompt) {
-        userPage('email-verification/prompt', name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'));
+        userPage('email-verification/prompt', name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'), 'simple', { beforeMultiFactorSetUp: true });
         // Emailed link: signed, time-limited, and only valid for the signed-in user it designates.
         router.get(panel.getBaseUrl('email-verification/verify/:id/:hash'), async (req, res) => {
             const ctx = await context(req, res);
@@ -3905,6 +4071,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     }
     if (profile) userPage(profile.page.slug, name('auth.profile'), profile.page.getLabel(), profile.isSimple || panel.hasTenancy() ? 'simple' : 'index');
     if (TenantRegistration) userPage(TenantRegistration.slug, name('tenancy.registration'), TenantRegistration.getLabel());
+    if (MultiFactorSetUpPage) userPage('multi-factor-authentication/set-up', name('auth.multi-factor-authentication.set-up-required'), t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'), 'simple', { beforeMultiFactorSetUp: true });
 
     /** Context of a protected page: login, email verification, tenant. Returns `null` after responding. */
     const pageContext = async (req: Request, res: Response): Promise<PanelContext | null> => {
@@ -3912,6 +4079,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         if (ctx.denied) { forbidden(res); return null; }
         if (!ctx.user) { res.redirect(panel.getLoginUrl()); return null; }
         if (await panel.mustVerifyEmail(ctx.user)) { res.redirect(panel.getEmailVerificationPromptUrl()); return null; }
+        if (await panel.mustSetUpMultiFactorAuthentication(ctx.user)) { res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl()); return null; }
         if (panel.hasTenancy()) {
             ctx.tenant = await tenantFromPath(req.path, ctx.user);
             if (!ctx.tenant) { res.status(404).send('Not Found'); return null; }
@@ -3926,6 +4094,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             if (await panel.mustVerifyEmail(ctx.user)) return res.redirect(panel.getEmailVerificationPromptUrl());
+            if (await panel.mustSetUpMultiFactorAuthentication(ctx.user)) return res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl());
             const url = await homeUrl(ctx.user);
             if (!url) return void res.status(404).send('Not Found');
             res.redirect(url);
@@ -3959,6 +4128,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
 
 /** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
 function assertAuthCapabilities(panel: Panel): void {
+    for (const provider of panel.getMultiFactorAuthenticationProviders()) provider.checkConfiguration?.(panel);
     if (!panel.hasRegistration() && !panel.hasPasswordReset() && !panel.hasEmailVerification() && !panel.hasProfile()) return;
     const auth = panel.getAuth();
     const missing = (feature: string, methods: (keyof AuthProvider)[]) => {

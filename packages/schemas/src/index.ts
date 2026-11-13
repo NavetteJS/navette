@@ -279,7 +279,14 @@ export class Group extends Component {
     static make(children: Component[] = []): Group { return configured(new Group(children)); }
     schema(components: Component[]): this { this.children = components; return this; }
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
-    getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns)]; }
+    /** State path of the components, relative to the container (`address`: their state lives under `address.*`). */
+    statePath(path: string | null): this { this._name = path; return this; }
+    hasStatePath(): boolean { return this._name !== null; }
+    getChildSchemas(): Schema[] {
+        const schema = childSchema(this, this.children).columns(this._columns);
+        if (this.hasStatePath()) schema.key(this.getKey()!).statePath(this.getStatePath());
+        return [schema];
+    }
     async toHtml(): Promise<string> {
         const attributes = new Attributes().merge({ ...this._extraAttributes }).toHtml();
         return `<div${attributes ? ` ${attributes}` : ''}>${await this.getChildSchemas()[0].toHtml()}</div>`;
@@ -340,6 +347,7 @@ export class Section extends Component {
     private _contentBefore: Lazy<boolean, ComponentContext> = false;
     private _compact: Lazy<boolean, ComponentContext> = false;
     private _secondary: Lazy<boolean, ComponentContext> = false;
+    private _divided: Lazy<boolean, ComponentContext> = false;
     private _contained: Lazy<boolean, ComponentContext> = true;
     private _collapsible: Lazy<boolean, ComponentContext> | null = null;
     private _collapsed: Lazy<boolean, ComponentContext> = false;
@@ -366,6 +374,8 @@ export class Section extends Component {
     compact(condition: Lazy<boolean, ComponentContext> = true): this { this._compact = condition; return this; }
     /** Less contrasting background, for a section on a background of the same color (nested sections…). */
     secondary(condition: Lazy<boolean, ComponentContext> = true): this { this._secondary = condition; return this; }
+    /** Dividing lines between the components of the content. */
+    divided(condition: Lazy<boolean, ComponentContext> = true): this { this._divided = condition; return this; }
     /** `false`: no card around the section. */
     contained(condition: Lazy<boolean, ComponentContext> = true): this { this._contained = condition; return this; }
     /** Collapsible by clicking its header; `collapsed()` starts it collapsed. */
@@ -440,6 +450,7 @@ export class Section extends Component {
             'fi-compact': Boolean(await evaluate(this._compact, ctx)),
             'fi-collapsible': isCollapsible,
             'fi-collapsed': isCollapsible && isCollapsed,
+            'fi-divided': Boolean(await evaluate(this._divided, ctx)),
             'fi-secondary': Boolean(await evaluate(this._secondary, ctx)),
         }]);
         let header = '';
@@ -672,22 +683,54 @@ export class Form extends Component {
 export interface Renderable { isVisible(ctx: ComponentContext): Promise<boolean>; toHtml(ctx: ComponentContext): Promise<string> }
 
 /** Row of actions in a schema. */
+/** Content placed around a component: text, components and actions, or a function of the context returning them. */
+export type ComponentSlot = Lazy<string | HtmlString | InlineItem | (string | HtmlString | InlineItem)[] | null, ComponentContext>;
 export class Actions extends Component {
     private actions: Renderable[];
     private _fullWidth = false;
     private _alignment: string | null = null;
+    private _label: Lazy<string | null, ComponentContext> = null;
+    private _beforeLabel: ComponentSlot = null;
+    private _afterLabel: ComponentSlot = null;
+    private _aboveContent: ComponentSlot = null;
+    private _belowContent: ComponentSlot = null;
     constructor(actions: Renderable[]) { super(); this.actions = actions; }
     static make(actions: Renderable[]): Actions { return configured(new Actions(actions)); }
     fullWidth(condition = true): this { this._fullWidth = condition; return this; }
     alignment(alignment: string | null): this { this._alignment = alignment; return this; }
+    /** Label shown above the actions, like a field label. */
+    label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
+    /** Text, components or actions before the label. */
+    beforeLabel(content: ComponentSlot): this { this._beforeLabel = content; return this; }
+    /** Text, components or actions after the label (a status badge…). */
+    afterLabel(content: ComponentSlot): this { this._afterLabel = content; return this; }
+    /** Text, components or actions between the label and the actions. */
+    aboveContent(content: ComponentSlot): this { this._aboveContent = content; return this; }
+    /** Text, components or actions below the actions. */
+    belowContent(content: ComponentSlot): this { this._belowContent = content; return this; }
+    /** Actions this component exposes for mounting (its key is sent with each of them). */
+    getActions(): Renderable[] { return this.actions; }
     async toHtml(): Promise<string> {
         const ctx = this.context();
+        const key = this.getKey();
+        const mountContext = key !== null ? { ...((this.livewire as any)?.getActionMountContext?.() ?? {}), schemaComponent: key } : null;
         const visible: string[] = [];
-        for (const a of this.actions) if (await a.isVisible(ctx)) visible.push(await a.toHtml(ctx));
-        if (!visible.length) return '';
+        for (const a of this.actions) if (await a.isVisible(ctx)) visible.push(await (a as any).toHtml(ctx, mountContext));
+        const label = await evaluate(this._label, ctx);
+        const slot = (content: ComponentSlot) => renderSlot(this, content, key);
+        const labelHtml = isBlank(label) ? '' : `<div class="fi-sc-actions-label-ctn">${await slot(this._beforeLabel)}<div class="fi-sc-actions-label">${e(label)}</div>${await slot(this._afterLabel)}</div>`;
+        const above = await slot(this._aboveContent), below = await slot(this._belowContent);
+        if (!visible.length && !labelHtml && !above && !below) return '';
         const inner = cls(['fi-ac', { 'fi-width-full': this._fullWidth }, this._alignment ? `fi-align-${this._alignment}` : null]);
-        return `<div ${new Attributes().merge({ id: this.getKey() }).class(['fi-sc-actions']).toHtml()}><div class="${inner}">${visible.join('')}</div></div>`;
+        return `<div ${new Attributes().merge({ id: key, ...this._extraAttributes }).class(['fi-sc-actions']).toHtml()}>${labelHtml}${above}${visible.length ? `<div class="${inner}">${visible.join('')}</div>` : ''}${below}</div>`;
     }
+}
+/** Renders a slot of a component as an inline row: strings become `Text` components. */
+export async function renderSlot(parent: Component, content: ComponentSlot, mountKey: string | null = null): Promise<string> {
+    const value = await evaluate(content, parent.context());
+    if (value === null || value === undefined || value === '') return '';
+    const items = (Array.isArray(value) ? value : [value]).map((item) => (typeof item === 'string' || item instanceof HtmlString ? Text.make(item) : item)) as InlineItem[];
+    return renderInlineItems(parent, items, { mountKey, actionView: 'link' });
 }
 
 let colorManager: ColorManager | null = null;
@@ -931,7 +974,8 @@ export class Image extends Component {
     async toHtml(): Promise<string> {
         const ctx = this.context();
         const url = String((await evaluate(this._url, ctx)) ?? '');
-        if (!/^(\/(?!\/)|https?:\/\/)/i.test(url)) return '';
+        // Relative and http(s) URLs, or an inline image (`data:image/…;base64,`: scripts never run in an <img>).
+        if (!/^(\/(?!\/)|https?:\/\/|data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$)/i.test(url)) return '';
         const tooltip = tooltipExpression(await evaluate(this._tooltip, ctx));
         const attributes = new Attributes(this._extraAttributes)
             .class(['fi-sc-image', this._alignment ? `fi-align-${safeClass(this._alignment)}` : null])

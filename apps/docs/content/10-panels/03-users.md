@@ -125,6 +125,7 @@ Each feature is enabled with one method on the panel. They are served under the 
 | `passwordReset()` | Request a reset link, choose a new password | `/password-reset/request`, `/password-reset/reset` |
 | `emailVerification()` | Prompt to verify the address | `/email-verification/prompt` |
 | `profile()` | Edit the name, email address and password | `/profile` |
+| `multiFactorAuthentication([...])` | A second step after the password: authenticator app or security key ([multi-factor authentication](/panels/multi-factor-authentication)) | `/multi-factor-authentication/set-up` (when required) |
 
 The login page shows a link to the registration page and a "Forgot password?" link when those features are enabled. A logged-in user who opens the login, registration or password reset pages is redirected to the panel.
 
@@ -291,7 +292,8 @@ What Navette does for you:
 - five login attempts per minute and per IP address; two registrations, two reset requests and two password changes per minute and per IP address; two verification emails per minute and per user;
 - password reset and verification links signed with the key of the panel, limited to 60 minutes, and bound to their purpose and to their panel;
 - the same answer to a password reset request whether the account exists or not;
-- the current password required to change the email address or the password on the profile page.
+- the current password required to change the email address or the password on the profile page;
+- an optional second factor: see [multi-factor authentication](/panels/multi-factor-authentication).
 
 What remains for you to do:
 
@@ -318,5 +320,5 @@ Panel.make()
 These segments are reserved: in a multi-tenant panel, they are never read as tenant keys.
 
 <Aside variant="warning">
-Multi-factor authentication, guest access, verification of a new email address before it is changed, and the slugs of the email verification and logout routes are not available yet.
+Guest access, verification of a new email address before it is changed, and the slugs of the email verification and logout routes are not available yet.
 </Aside>

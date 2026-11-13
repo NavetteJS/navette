@@ -123,6 +123,14 @@ export async function up(db: Knex): Promise<void> {
     });
 }
 `;
+    files['src/migrations/0006_add_multi_factor_authentication.ts'] = `import type { Knex } from '@navette-js/database';
+import { multiFactorAuthenticationSchema } from '@navette-js/panels';
+
+// Two-factor authentication: authenticator app secret and recovery codes (users table), and a security_keys table.
+export async function up(db: Knex): Promise<void> {
+    await multiFactorAuthenticationSchema(db);
+}
+`;
     files['src/migrations/0002_create_notifications_table.ts'] = `import type { Knex } from '@navette-js/database';
 
 // Database notifications (the bell).
@@ -232,7 +240,7 @@ ${timestamps}
 
     // ------------------------------------------------------------------ admin panel
     files['src/panels/admin.ts'] = `// The admin panel (/admin): only users with the \`admin\` role can sign in.
-import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, ${sqlite ? 'knexNotificationStore, ' : ''}Panel } from '@navette-js/panels';
+import { AccountWidget, AppAuthentication, discoverPages, discoverResources, discoverWidgets, fileMailer, ${sqlite ? 'knexNotificationStore, ' : ''}Panel, SecurityKeyAuthentication } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
 import { db } from '../database.ts';
 import { users } from '../users.ts';
@@ -247,6 +255,8 @@ export default Panel.make()
     .login()
     .passwordReset()
     .profile()
+    // Two-factor authentication, set up by each user on their profile: an authenticator app (with recovery codes) or a security key.
+    .multiFactorAuthentication([AppAuthentication.make().recoverable(), SecurityKeyAuthentication.make()])
     .mailer(fileMailer(process.env.MAIL_LOG ?? 'storage/mail.log'))
 ${sqlite ? '    .databaseNotifications(knexNotificationStore((table: string) => db(table)))\n' : ''}    .globalSearchKeyBindings(['command+k', 'ctrl+k'])
     // Resources, pages and widgets are discovered from these folders: \`npx navette make:resource\` adds files there.
@@ -402,7 +412,7 @@ export class TaskStats extends StatsOverviewWidget {
     // ------------------------------------------------------------------ user panel
     if (o.userPanel) {
         files['src/panels/app.ts'] = `// The user panel (/app): anyone can sign up${teams ? ', then create or join teams' : ''}.
-import { AccountWidget, discoverPages, discoverResources, discoverWidgets, fileMailer, ${teams ? 'knexTenantProvider, ' : ''}Panel } from '@navette-js/panels';
+import { AccountWidget, AppAuthentication, discoverPages, discoverResources, discoverWidgets, fileMailer, ${teams ? 'knexTenantProvider, ' : ''}Panel, SecurityKeyAuthentication } from '@navette-js/panels';
 import { db } from '../database.ts';
 import { users } from '../users.ts';
 ${teams ? "import { EditTeamProfile, RegisterTeam } from '../app/tenancy.ts';\n" : ''}
@@ -417,6 +427,8 @@ export default Panel.make()
     .passwordReset()
     .emailVerification()
     .profile()
+    // Two-factor authentication, set up by each user on their profile: an authenticator app (with recovery codes) or a security key.
+    .multiFactorAuthentication([AppAuthentication.make().recoverable(), SecurityKeyAuthentication.make()])
     .mailer(fileMailer(process.env.MAIL_LOG ?? 'storage/mail.log'))
 ${teams ? `    // Every page lives under /app/<team>; records with a \`team_id\` column only show to that team's members.
     .tenant(knexTenantProvider((table) => db(table), { label: 'Current team' }), { ownershipColumn: 'team_id' })

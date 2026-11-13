@@ -1,5 +1,5 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, cls, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, type HtmlString, cls, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,7 @@ export class Action implements Renderable {
     private _handler: ((ctx: ActionCallContext) => unknown | Promise<unknown>) | null = null;
     private _requiresConfirmation = false;
     private _modalHeading: Lazy<string | null, ActionCallContext> = null;
-    private _modalDescription: Lazy<string | null, ActionCallContext> = null;
+    private _modalDescription: Lazy<string | HtmlString | null, ActionCallContext> = null;
     private _modalSubmitActionLabel: string | null = null;
     private _modalIcon: string | null = null;
     private _icon: string | null = null;
@@ -89,7 +89,8 @@ export class Action implements Renderable {
     groupedIcon(name: string | null): this { this._groupedIcon = name; return this; }
     requiresConfirmation(condition = true): this { this._requiresConfirmation = condition; return this; }
     modalHeading(heading: Lazy<string | null, ActionCallContext>): this { this._modalHeading = heading; return this; }
-    modalDescription(description: Lazy<string | null, ActionCallContext>): this { this._modalDescription = description; return this; }
+    /** Text under the heading; an `HtmlString` is inserted as is (build it from escaped values). */
+    modalDescription(description: Lazy<string | HtmlString | null, ActionCallContext>): this { this._modalDescription = description; return this; }
     modalSubmitActionLabel(label: string | null): this { this._modalSubmitActionLabel = label; return this; }
     modalIcon(name: string | null): this { this._modalIcon = name; return this; }
     private _badge: string | number | null | (() => string | number | null | Promise<string | number | null>) = null;
@@ -197,10 +198,14 @@ export class Action implements Renderable {
             const submitLabel = this._modalSubmitActionLabel ?? t('filament-actions::modal.actions.submit.label');
             const submit = Action.make('submit').label(submitLabel).color(this._color === 'gray' ? 'primary' : this._color).submit('callMountedAction');
             const cancel = Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
-            return schema.components([Action.stepsRenderer(steps, submit, cancel)]);
+            const wizard = Action.stepsRenderer(steps, submit, cancel);
+            return schema.components([this._modifyWizard?.(wizard) ?? wizard]);
         };
         return this;
     }
+    private _modifyWizard: ((wizard: any) => any) | null = null;
+    /** Changes the wizard built by `steps()` (`(wizard) => wizard.hiddenHeader()`). */
+    modifyWizardUsing(callback: ((wizard: any) => any) | null): this { this._modifyWizard = callback; return this; }
     isWizard(): boolean { return this._steps !== null; }
     /** Runs the action without its modal (e.g. no confirmation for some records). */
     modalHidden(condition: Lazy<boolean, ActionCallContext> = true): this { this._modalHidden = condition; return this; }

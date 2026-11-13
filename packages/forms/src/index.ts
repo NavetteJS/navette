@@ -2,7 +2,7 @@
 import { Attributes, HtmlString, cls, e, evaluate, icon, js, sanitizeHtml, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
-import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, slug, type ComponentContext, type InlineItem } from '@navette-js/schemas';
+import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem } from '@navette-js/schemas';
 import { Action } from '@navette-js/actions';
 import { loadingIndicator } from '@navette-js/support';
 import { randomUUID } from 'node:crypto';
@@ -67,6 +67,9 @@ export abstract class Field extends Component {
     default(value: unknown): this { this._default = value; return this; }
     /** Helper text shown under the field. */
     helperText(text: string | null): this { this._helperText = text; return this; }
+    protected _belowContent: ComponentSlot = null;
+    /** Text, components or actions under the control (after the helper text). Strings are escaped. */
+    belowContent(content: ComponentSlot): this { this._belowContent = content; return this; }
     /** Helper text id, linked to the control through `aria-describedby`. */
     protected getHelperTextId(): string | null { return this._helperText !== null ? `${this.getId()}-helper-text` : null; }
     /** Keeps the label for screen readers only. */
@@ -289,6 +292,7 @@ export abstract class Field extends Component {
         }
         // Helper text: a small inline schema under the control.
         if (this._helperText !== null) html += `<div id="${e(this.getHelperTextId()!)}" class="fi-sc fi-inline fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="fi-sc-component"><span class="fi-sc-text">${e(this._helperText)}</span></div></div></div>`;
+        if (this._belowContent !== null) html += await renderSlot(this, this._belowContent, this.getKey());
         return views.render('filament-forms::components.field-wrapper', {
             id: this.getId(), label: await this.getLabel(), required: (await this.isMarkedAsRequired()) && !(await this.isDisabled()),
             labelPrefix: options.labelPrefix ?? '', hiddenLabel: this._hiddenLabel, after: options.after ?? '', afterLabel: this._hiddenLabel ? '' : await this.renderAfterLabel(), labelAsDiv: options.labelAsDiv === true, focusable: options.focusable === true, html, errorMessage: errors[0] ?? null, wrapperClass: options.wrapperClass ?? null,

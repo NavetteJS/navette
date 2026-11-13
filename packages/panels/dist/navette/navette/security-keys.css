@@ -1,0 +1,11 @@
+/* Navette: SecurityKeyInput field and the list of registered security keys. */
+.nv-security-key { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.nv-security-key-status { font-size: 0.875rem; line-height: 1.25rem; color: var(--gray-600); }
+.dark .nv-security-key-status { color: var(--gray-400); }
+.nv-security-key-status-error { color: var(--danger-600); }
+.dark .nv-security-key-status-error { color: var(--danger-400); }
+.nv-security-keys { display: grid; gap: 0.25rem; font-size: 0.875rem; line-height: 1.25rem; }
+.nv-security-key-name { font-weight: 500; color: var(--gray-950); }
+.dark .nv-security-key-name { color: #fff; }
+.nv-security-key-meta { color: var(--gray-500); }
+.dark .nv-security-key-meta { color: var(--gray-400); }

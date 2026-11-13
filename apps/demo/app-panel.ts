@@ -1,7 +1,7 @@
 // The demo's second panel: registration, password reset, email verification,
 // teams (multi-tenancy) and a per-team Settings page.
 import path from 'node:path';
-import { EmailVerificationPrompt, fileMailer, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type AuthProvider, type User } from '@navette-js/panels';
+import { AppAuthentication, EmailVerificationPrompt, fileMailer, SecurityKeyAuthentication, knexAuthProvider, knexTenantProvider, Login, Page, Panel, RegisterTenant, type AuthProvider, type User } from '@navette-js/panels';
 import { TextInput } from '@navette-js/forms';
 import type { Schema } from '@navette-js/schemas';
 import { Model } from '@navette-js/database';
@@ -45,6 +45,8 @@ export function appPanel(options: { key: string; login: typeof Login; auth: Auth
         .tenant(knexTenantProvider(table, { label: 'Current team' }))
         .tenantRegistration(RegisterTeam)
         .pages([Settings])
+        // Second factor after the password: an authenticator app (with recovery codes) or a security key, set up from the profile.
+        .multiFactorAuthentication([AppAuthentication.make().recoverable(), SecurityKeyAuthentication.make()])
         .auth(options.auth);
     return options.profile ? panel.profile() : panel;
 }

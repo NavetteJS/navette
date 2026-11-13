@@ -98,6 +98,7 @@
 
         <% if (locals.motion) { %><link rel="stylesheet" href="<%- assetUrl('navette/motion.css') %>" data-navigate-track /><% } %>
         <link rel="stylesheet" href="<%- assetUrl('navette/calendar.css') %>" data-navigate-track />
+        <% if (locals.securityKeys) { %><link rel="stylesheet" href="<%- assetUrl('navette/security-keys.css') %>" data-navigate-track /><% } %>
 
         <%- wireStyles %>
         <%- renderHook('panels::head.end', renderHookScopes) %>
@@ -127,6 +128,7 @@
             loadDarkMode()
         </script>
 
+        <% if (locals.securityKeys) { %><script src="<%- assetUrl('navette/security-keys.js') %>" data-navigate-once></script><% } %>
         <%- wireScripts %>
         <%- renderHook('panels::scripts.after', renderHookScopes) %>
         <%- renderHook('panels::body.end', renderHookScopes) %>

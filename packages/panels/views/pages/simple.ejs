@@ -25,8 +25,12 @@
         <%- content %>
     </div>
 
+    <% if (locals.actionModals) { %>
+    <%- actionModals %>
+    <% } else { %>
     <div wire:partial="action-modals" x-data="filamentActionModals({
                     livewireId: <%- js(livewireId) %>,
                 })" style="height: 0"></div>
+    <% } %>
     <%- renderHook('panels::simple-page.end', renderHookScopes) %>
 </div>

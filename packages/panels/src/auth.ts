@@ -2,7 +2,7 @@
 // mailers, and ready-made knex providers (users, tenants).
 import { appendFileSync } from 'node:fs';
 import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
-import type { AuthProvider, TenantProvider, User } from './index.ts';
+import type { AuthProvider, SecurityKey, TenantProvider, User } from './index.ts';
 
 const SCRYPT_COST = { N: 16384, r: 8, p: 1 };
 const scrypt = (password: string, salt: Buffer, length: number, options: { N: number; r: number; p: number }): Promise<Buffer> =>
@@ -78,8 +78,38 @@ const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
  * Passwords are hashed with `hashPassword` (scrypt). To accept other hash formats (bcrypt…), pass
  * `verify(password, hash)`: it is called for any stored hash that is not in scrypt format.
  */
-export function knexAuthProvider(db: TableQuery, options: { table?: string; verify?: (password: string, hash: string) => boolean | Promise<boolean> } = {}): AuthProvider {
+export function knexAuthProvider(db: TableQuery, options: {
+    table?: string; verify?: (password: string, hash: string) => boolean | Promise<boolean>;
+    /** Multi-factor authentication storage: users table columns and security keys table (see `multiFactorAuthenticationSchema()`). */
+    appAuthenticationSecretColumn?: string; appAuthenticationRecoveryCodesColumn?: string; securityKeysTable?: string;
+} = {}): AuthProvider {
     const table = options.table ?? 'users';
+    const secretColumn = options.appAuthenticationSecretColumn ?? 'app_authentication_secret';
+    const recoveryColumn = options.appAuthenticationRecoveryCodesColumn ?? 'app_authentication_recovery_codes';
+    const keysTable = options.securityKeysTable ?? 'security_keys';
+    const parseList = (value: unknown): string[] => { try { const list = JSON.parse(String(value ?? '[]')); return Array.isArray(list) ? list.map(String) : []; } catch { return []; } };
+    const toKey = (row: any): SecurityKey => ({
+        id: row.id, name: row.name, credentialId: row.credential_id, publicKey: row.public_key, algorithm: Number(row.algorithm), signCount: Number(row.sign_count ?? 0),
+        transports: parseList(row.transports), createdAt: row.created_at ? String(row.created_at) : null, lastUsedAt: row.last_used_at ? String(row.last_used_at) : null,
+    });
+    const multiFactor: Partial<AuthProvider> = {
+        async getAppAuthenticationSecret(user) { return (await db(table).where('id', user.id).first())?.[secretColumn] ?? null; },
+        async saveAppAuthenticationSecret(user, secret) { await db(table).where('id', user.id).update({ [secretColumn]: secret, updated_at: now() }); },
+        async getAppAuthenticationRecoveryCodes(user) { const value = (await db(table).where('id', user.id).first())?.[recoveryColumn]; return value === null || value === undefined ? null : parseList(value); },
+        async saveAppAuthenticationRecoveryCodes(user, codes) { await db(table).where('id', user.id).update({ [recoveryColumn]: codes === null ? null : JSON.stringify(codes), updated_at: now() }); },
+        async getSecurityKeys(user) { return (await db(keysTable).where('user_id', user.id).orderBy('id')).map(toKey); },
+        async createSecurityKey(user, key) {
+            await db(keysTable).insert({ user_id: user.id, name: key.name, credential_id: key.credentialId, public_key: key.publicKey, algorithm: key.algorithm, sign_count: key.signCount, transports: JSON.stringify(key.transports ?? []), created_at: now(), updated_at: now() });
+        },
+        async updateSecurityKey(user, id, changes) {
+            const values: Record<string, unknown> = { updated_at: now() };
+            if (changes.signCount !== undefined) values.sign_count = changes.signCount;
+            if (changes.lastUsedAt !== undefined) values.last_used_at = changes.lastUsedAt.slice(0, 19).replace('T', ' ');
+            if (changes.name !== undefined) values.name = changes.name;
+            await db(keysTable).where({ id, user_id: user.id }).update(values);
+        },
+        async deleteSecurityKey(user, id) { await db(keysTable).where({ id, user_id: user.id }).delete(); },
+    };
     const toUser = (row: any): User | null => (row ? { id: row.id, name: row.name, email: row.email, emailVerifiedAt: row.email_verified_at ?? null } : null);
     const byEmail = (email: string) => db(table).where('email', String(email)).first();
     return {
@@ -107,7 +137,33 @@ export function knexAuthProvider(db: TableQuery, options: { table?: string; veri
         async hasVerifiedEmail(user) { return Boolean((await db(table).where('id', user.id).first())?.email_verified_at); },
         async markEmailAsVerified(user) { await db(table).where('id', user.id).update({ email_verified_at: now(), updated_at: now() }); },
         async getPasswordFingerprint(user) { return fingerprint((await db(table).where('id', user.id).first())?.password); },
+        ...multiFactor,
     };
+}
+
+/**
+ * Adds what multi-factor authentication stores, when missing: two columns of the users table (authenticator app secret,
+ * recovery codes) and a `security_keys` table. Call it from a migration; it can run more than once.
+ */
+export async function multiFactorAuthenticationSchema(knex: any, options: { usersTable?: string; securityKeysTable?: string; appAuthenticationSecretColumn?: string; appAuthenticationRecoveryCodesColumn?: string } = {}): Promise<void> {
+    const users = options.usersTable ?? 'users', keys = options.securityKeysTable ?? 'security_keys';
+    const secret = options.appAuthenticationSecretColumn ?? 'app_authentication_secret', codes = options.appAuthenticationRecoveryCodesColumn ?? 'app_authentication_recovery_codes';
+    for (const column of [secret, codes]) if (!(await knex.schema.hasColumn(users, column))) await knex.schema.alterTable(users, (table: any) => { table.text(column).nullable(); });
+    if (!(await knex.schema.hasTable(keys))) {
+        await knex.schema.createTable(keys, (table: any) => {
+            table.increments('id');
+            table.integer('user_id').notNullable().index();
+            table.string('name', 60);
+            // Unique: a credential can only belong to one account.
+            table.string('credential_id', 1400).notNullable().unique();
+            table.text('public_key').notNullable();
+            table.integer('algorithm').notNullable();
+            table.bigInteger('sign_count').defaultTo(0);
+            table.text('transports').nullable();
+            table.timestamp('last_used_at').nullable();
+            table.timestamps();
+        });
+    }
 }
 
 /**

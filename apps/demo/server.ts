@@ -3,7 +3,7 @@ import express from 'express';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Dashboard, knexNotificationStore, Login, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
+import { Dashboard, knexNotificationStore, Login, multiFactorAuthenticationSchema, NavigationItem, Page, Panel, panelRouter, type User } from '@navette-js/panels';
 import { Color } from '@navette-js/support';
 import { UploadStore, WireRuntime } from '@navette-js/wire';
 import { sqlite } from '@navette-js/database';
@@ -40,6 +40,8 @@ const key = process.env.APP_KEY ?? 'cle-de-developpement-a-remplacer';
 // On first run, the working database is copied from seed.sqlite, which is never modified.
 if (!process.env.NAVETTE_DB && !existsSync(file('./database/database.sqlite'))) copyFileSync(file('./database/seed.sqlite'), file('./database/database.sqlite'));
 sqlite(process.env.NAVETTE_DB ?? file('./database/database.sqlite'));
+// Multi-factor authentication storage (authenticator app columns, security keys table), added to the working database.
+await multiFactorAuthenticationSchema(Model.knex());
 
 const accounts = demoAuthProvider(users[0]);
 

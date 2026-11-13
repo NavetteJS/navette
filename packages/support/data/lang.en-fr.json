@@ -956,9 +956,22 @@
    },
    "auth/multi-factor/app/actions/set-up": {
     "label": "Set up",
-    "modal.0": "{{but}}{{you\\}}ll need them if you lose access to your authenticator app:",
     "modal.heading": "Set up authenticator app",
-    "modal.description": "BLADE{{You}}ll need an app like Google Authenticator (<x-filament::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-filament::link>, <x-filament::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-filament::link>) to complete this process.\r\n            BLADE,\r\n\r\n        {{content}} => [\r\n\r\n            {{qr_code}} => [\r\n\r\n                {{instruction}} => {{Scan}}{{this}}{{QR}}{{code}}{{with}}{{your}}{{authenticator}}{{app:}},\r\n\r\n                {{alt}} => {{QR}}{{code}}{{to}}{{scan}}{{with}}{{an}}{{authenticator}}{{app}},\r\n\r\n            ],\r\n\r\n            {{text_code}} => [\r\n\r\n                {{instruction}} => {{Or}}{{enter}}{{this}}{{code}}{{manually:}},\r\n\r\n                {{messages}} => [\r\n                    {{copied}} => {{Copied}},\r\n                ],\r\n\r\n            ],\r\n\r\n            {{recovery_codes}} => [\r\n\r\n                {{instruction}} => {{Please}}{{save}}{{the}}{{following}}{{recovery}}{{codes}}{{in}}{{a}}{{safe}}{{place}}{{They}}{{will}}{{only}}{{be}}{{shown}}{{once}}"
+    "modal.description": "You'll need an app like Google Authenticator (<x-filament::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-filament::link>, <x-filament::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-filament::link>) to complete this process.",
+    "modal.content.qr_code.instruction": "Scan this QR code with your authenticator app:",
+    "modal.content.qr_code.alt": "QR code to scan with an authenticator app",
+    "modal.content.text_code.instruction": "Or enter this code manually:",
+    "modal.content.text_code.messages.copied": "Copied",
+    "modal.content.recovery_codes.instruction": "Please save the following recovery codes in a safe place. They will only be shown once, but you'll need them if you lose access to your authenticator app:",
+    "modal.form.password.label": "Current password",
+    "modal.form.password.validation_attribute": "current password",
+    "modal.form.code.label": "Enter the 6-digit code from the authenticator app",
+    "modal.form.code.validation_attribute": "code",
+    "modal.form.code.below_content": "You will need to enter the 6-digit code from your authenticator app each time you sign in or perform sensitive actions.",
+    "modal.form.code.messages.invalid": "The code you entered is invalid.",
+    "modal.form.code.messages.rate_limited": "Too many attempts. Please try again later.",
+    "modal.actions.submit.label": "Enable authenticator app",
+    "notifications.enabled.title": "Authenticator app has been enabled"
    },
    "auth/multi-factor/app/provider": {
     "management_schema.actions.label": "Authenticator app",
@@ -1210,6 +1223,53 @@
    "widgets/filament-info-widget": {
     "actions.open_documentation.label": "Documentation",
     "actions.open_github.label": "GitHub"
+   },
+   "auth/multi-factor/security-keys/provider": {
+    "login_form.label": "Use a security key",
+    "login_form.credential.label": "Security key",
+    "login_form.credential.validation_attribute": "security key",
+    "login_form.credential.messages.invalid": "The security key could not be verified.",
+    "management_schema.actions.label": "Security keys",
+    "management_schema.actions.below_content": "Use a physical security key or a passkey saved on your device to verify your identity.",
+    "management_schema.actions.messages.enabled": "Enabled",
+    "management_schema.actions.messages.disabled": "Disabled",
+    "management_schema.actions.messages.added": "Added on :date",
+    "management_schema.actions.messages.last_used": "Last used on :date"
+   },
+   "auth/multi-factor/security-keys/actions/register": {
+    "label": "Add a security key",
+    "modal.heading": "Add a security key",
+    "modal.description": "Give the key a name, then follow your browser's instructions.",
+    "modal.form.name.label": "Name",
+    "modal.form.name.placeholder": "My security key",
+    "modal.form.credential.label": "Security key",
+    "modal.form.credential.validation_attribute": "security key",
+    "modal.form.credential.messages.invalid": "The security key could not be registered. Try again.",
+    "modal.form.credential.messages.rate_limited": "Too many attempts. Please try again later.",
+    "modal.form.password.label": "Current password",
+    "modal.form.password.validation_attribute": "current password",
+    "modal.actions.submit.label": "Add security key",
+    "notifications.registered.title": "Security key added"
+   },
+   "auth/multi-factor/security-keys/actions/remove": {
+    "label": "Remove a key",
+    "modal.heading": "Remove a security key",
+    "modal.description": "The key will no longer be accepted to sign in.",
+    "modal.form.key.label": "Key",
+    "modal.form.password.label": "Current password",
+    "modal.form.password.validation_attribute": "current password",
+    "modal.actions.submit.label": "Remove key",
+    "notifications.removed.title": "Security key removed"
+   },
+   "auth/multi-factor/security-keys/field": {
+    "actions.register.label": "Use my security key",
+    "actions.authenticate.label": "Use my security key",
+    "messages.waiting": "Follow your browser's instructions…",
+    "messages.registered": "Security key ready: submit the form to add it.",
+    "messages.verified": "Security key verified.",
+    "messages.cancelled": "The operation was cancelled or timed out.",
+    "messages.unsupported": "This browser does not support security keys.",
+    "messages.failed": "The security key could not be used. Try again."
    }
   },
   "fr": {
@@ -1257,11 +1317,20 @@
    "auth/multi-factor/app/actions/set-up": {
     "label": "Configurer",
     "modal.heading": "Configurer l'application d'authentification",
-    "modal.description": "BLADE{{Vous}}{{aurez}}{{besoin}}{{d}}une application comme Google Authenticator (<x-filament::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-filament::link>, <x-filament::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-filament::link>) pour compléter cette procédure.\r\n            BLADE,\r\n\r\n        {{content}} => [\r\n\r\n            {{qr_code}} => [\r\n\r\n                {{instruction}} => {{Scannez}}{{ce}}{{QR}}{{code}}{{avec}}{{votre}}{{application}}{{d\\}}authentification :",
-    "modal.alt": "QR code à scanner avec une application d'authentification",
-    "text_code.instruction": "Ou entrez ce code manuellement :",
-    "text_code.messages.copied": "Copié",
-    "recovery_codes.instruction": "Veuillez enregistrer les codes de récupération suivants dans un endroit sécurisé. Ils ne seront affichés qu'une fois, mais vous en aurez besoin si vous perdez l'accès à votre application d'authentification :"
+    "modal.description": "Vous aurez besoin d'une application comme Google Authenticator (<x-filament::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-filament::link>, <x-filament::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-filament::link>) pour compléter cette procédure.",
+    "modal.content.qr_code.instruction": "Scannez ce QR code avec votre application d'authentification :",
+    "modal.content.qr_code.alt": "QR code à scanner avec une application d'authentification",
+    "modal.content.text_code.instruction": "Ou entrez ce code manuellement :",
+    "modal.content.text_code.messages.copied": "Copié",
+    "modal.content.recovery_codes.instruction": "Veuillez enregistrer les codes de récupération suivants dans un endroit sécurisé. Ils ne seront affichés qu'une fois, mais vous en aurez besoin si vous perdez l'accès à votre application d'authentification :",
+    "modal.form.password.label": "Mot de passe actuel",
+    "modal.form.password.validation_attribute": "mot de passe actuel",
+    "modal.form.code.label": "Entrez le code à 6 chiffres de l'application d'authentification",
+    "modal.form.code.validation_attribute": "code",
+    "modal.form.code.below_content": "Vous devrez entrer le code à 6 chiffres de votre application d'authentification à chaque fois que vous vous connecterez ou effectuerez des actions sensibles.",
+    "modal.form.code.messages.invalid": "Le code que vous avez entré est invalide.",
+    "modal.actions.submit.label": "Activer l'application d'authentification",
+    "notifications.enabled.title": "L'application d'authentification a été activée"
    },
    "auth/multi-factor/app/provider": {
     "management_schema.actions.label": "Application d'authentification",
@@ -1493,6 +1562,53 @@
    "widgets/filament-info-widget": {
     "actions.open_documentation.label": "Documentation",
     "actions.open_github.label": "GitHub"
+   },
+   "auth/multi-factor/security-keys/provider": {
+    "login_form.label": "Utiliser une clé de sécurité",
+    "login_form.credential.label": "Clé de sécurité",
+    "login_form.credential.validation_attribute": "clé de sécurité",
+    "login_form.credential.messages.invalid": "La clé de sécurité n'a pas pu être vérifiée.",
+    "management_schema.actions.label": "Clés de sécurité",
+    "management_schema.actions.below_content": "Utilisez une clé de sécurité physique ou une clé d'accès enregistrée sur votre appareil pour vérifier votre identité.",
+    "management_schema.actions.messages.enabled": "Activées",
+    "management_schema.actions.messages.disabled": "Désactivées",
+    "management_schema.actions.messages.added": "Ajoutée le :date",
+    "management_schema.actions.messages.last_used": "Utilisée le :date"
+   },
+   "auth/multi-factor/security-keys/actions/register": {
+    "label": "Ajouter une clé de sécurité",
+    "modal.heading": "Ajouter une clé de sécurité",
+    "modal.description": "Donnez un nom à la clé, puis suivez les instructions de votre navigateur.",
+    "modal.form.name.label": "Nom",
+    "modal.form.name.placeholder": "Ma clé de sécurité",
+    "modal.form.credential.label": "Clé de sécurité",
+    "modal.form.credential.validation_attribute": "clé de sécurité",
+    "modal.form.credential.messages.invalid": "La clé de sécurité n'a pas pu être enregistrée. Réessayez.",
+    "modal.form.credential.messages.rate_limited": "Trop de tentatives. Veuillez réessayer plus tard.",
+    "modal.form.password.label": "Mot de passe actuel",
+    "modal.form.password.validation_attribute": "mot de passe actuel",
+    "modal.actions.submit.label": "Ajouter la clé",
+    "notifications.registered.title": "Clé de sécurité ajoutée"
+   },
+   "auth/multi-factor/security-keys/actions/remove": {
+    "label": "Retirer une clé",
+    "modal.heading": "Retirer une clé de sécurité",
+    "modal.description": "La clé ne sera plus acceptée pour se connecter.",
+    "modal.form.key.label": "Clé",
+    "modal.form.password.label": "Mot de passe actuel",
+    "modal.form.password.validation_attribute": "mot de passe actuel",
+    "modal.actions.submit.label": "Retirer la clé",
+    "notifications.removed.title": "Clé de sécurité retirée"
+   },
+   "auth/multi-factor/security-keys/field": {
+    "actions.register.label": "Utiliser ma clé de sécurité",
+    "actions.authenticate.label": "Utiliser ma clé de sécurité",
+    "messages.waiting": "Suivez les instructions de votre navigateur…",
+    "messages.registered": "Clé prête : validez le formulaire pour l'ajouter.",
+    "messages.verified": "Clé de sécurité vérifiée.",
+    "messages.cancelled": "L'opération a été annulée ou a expiré.",
+    "messages.unsupported": "Ce navigateur ne prend pas en charge les clés de sécurité.",
+    "messages.failed": "La clé de sécurité n'a pas pu être utilisée. Réessayez."
    }
   }
  },

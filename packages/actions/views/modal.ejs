@@ -32,7 +32,7 @@
 
                     <% if (description) { %>
                         <p id="<%= id %>.description" class="fi-modal-description">
-                            <%= description %>
+                            <% if (description && typeof description === 'object' && typeof description.html === 'string') { %><%- description.html %><% } else { %><%= description %><% } %>
                         </p>
                     <% } %>
                 </div>
