@@ -1,4 +1,5 @@
-// Rich editor features on the demo's blog posts: custom block, text color, merge tag and mention, saved as HTML.
+// Rich editor features on the demo's blog posts (custom block, text color, merge tag and mention, saved as HTML),
+// and the lazy loaded Image section.
 // Run by e2e/run.mjs, which provides a throwaway instance on a copy of the database.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
@@ -76,6 +77,13 @@ try {
         assert.match(row.content, /data-type="mergeTag" data-id="author"/);
         assert.match(row.content, /data-type="mention" data-id="\d+"/);
         assert.match(row.content, /class="color" data-color="red"/);
+    });
+    await step('the lazy Image section loads when it comes into view', async () => {
+        await page.goto(`${BASE}/blog/posts/create`);
+        const section = page.locator('.fi-section', { has: page.getByRole('heading', { name: 'Image' }) });
+        await section.scrollIntoViewIfNeeded();
+        await section.locator('.fi-fo-file-upload').waitFor({ timeout: 10000 });
+        assert.equal(await section.locator('.fi-sc-loading').count(), 0);
     });
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));
 } finally {

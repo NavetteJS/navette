@@ -763,6 +763,43 @@ abstract class BasePage extends Component implements SchemaHost {
     /** Actions of the page header (full layout). */
     getHeaderActions(): Action[] { return []; }
 
+    // --- lazy loaded schemas (`lazyLoaded()`): loaded when they enter the viewport, then kept loaded
+    static callable = ['loadDeferredSchema'];
+    loadedDeferredSchemas: Record<string, boolean> = {};
+    /** Whether a lazy schema is rendered: loaded already, or holding a field with a validation error (loaded so it shows). */
+    async isDeferredSchemaLoaded(schema: Schema): Promise<boolean> {
+        const key = schema.getLazyKey();
+        if (this.loadedDeferredSchemas[key]) return true;
+        const errorKeys = Object.keys(this._errors ?? {});
+        if (!errorKeys.length) return false;
+        for (const component of schema.getFlatComponents() as any[]) {
+            const path = component.hasStatePath?.() ? component.getStatePath() : '';
+            if (path && errorKeys.some((error) => error === path || error.startsWith(`${path}.`))) { this.loadedDeferredSchemas[key] = true; return true; }
+        }
+        return false;
+    }
+    /** Called by the loading indicator of a lazy schema: renders only that schema. */
+    async loadDeferredSchema(schemaKey: unknown): Promise<void> {
+        if (typeof schemaKey !== 'string' || schemaKey.length > 300 || this.loadedDeferredSchemas[schemaKey]) { this.skipRender(); return; }
+        const rootName = schemaKey.split('.')[0];
+        const mountedIndex = /^mountedActionSchema(\d+)$/.exec(rootName);
+        const root = mountedIndex ? await this.getMountedActionSchema(Number(mountedIndex[1])) : /^[A-Za-z]+$/.test(rootName) && typeof (this as any)[`${rootName}Schema`] === 'function' ? this.getSchema(rootName) : null;
+        // Only a lazy schema reachable through visible components can be loaded.
+        const find = async (schema: Schema): Promise<Schema | null> => {
+            if (schema.getLazyKey() === schemaKey && (await schema.isLazyLoaded())) return schema;
+            for (const component of schema.getComponents() as any[]) {
+                if (!(await component.isVisible())) continue;
+                for (const child of (component.getChildSchemas?.() ?? []) as Schema[]) { const found = await find(child); if (found) return found; }
+            }
+            return null;
+        };
+        const schema = root ? await find(root) : null;
+        if (!schema) { this.skipRender(); return; }
+        this.loadedDeferredSchemas[schemaKey] = true;
+        const html = await schema.toHtml();
+        this.renderPartial(`schema.${schemaKey}`, html || `<div wire:partial="${e(`schema.${schemaKey}`)}" hidden></div>`);
+    }
+
     // --- mounted actions: the stack lives in the component state, modals are rendered server-side
     mountedActions: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }[] = [];
     /** Files uploaded by rich editors (`componentFileAttachments.<state path>.<id>`), stored by the editor when it asks for their URL. */

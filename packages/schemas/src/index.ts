@@ -1,6 +1,6 @@
 // @navette-js/schemas — Schema, Component and the layout components.
 // Each component renders in two steps: async property resolution, then a synchronous EJS view (ADR 0003).
-import { Attributes, HtmlString, cls, e, evaluate, icon, js, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -52,6 +52,13 @@ export abstract class Component {
     protected _keyName: string | null = null;
     protected _hidden: Lazy<boolean, ComponentContext> = false;
     protected _visible: Lazy<boolean, ComponentContext> = true;
+    protected _lazyLoaded: Lazy<boolean, ComponentContext> = false;
+    /**
+     * Renders the component's content (its child schema) only when it enters the viewport, in a separate request: a loading
+     * indicator is shown meanwhile. The component needs a unique key (a heading, or `key()`).
+     */
+    lazyLoaded(condition: Lazy<boolean, ComponentContext> = true): this { this._lazyLoaded = condition; return this; }
+    getLazyLoadedCondition(): Lazy<boolean, ComponentContext> { return this._lazyLoaded; }
     protected _columnSpan: ColumnSpan = { default: 1 };
     protected _extraAttributes: Record<string, string> = {};
     protected _columnStart: ColumnPlacement[] = [];
@@ -170,6 +177,14 @@ export class Schema {
 
     constructor(livewire: SchemaHost) { this.livewire = livewire; }
     static make(livewire: SchemaHost): Schema { return configured(new Schema(livewire)); }
+    private _lazy: boolean | (() => boolean | Promise<boolean>) = false;
+    private _lazyKey: string | null = null;
+    /** Renders the components only when the schema enters the viewport (see `Component.lazyLoaded()`). */
+    lazyLoaded(condition: boolean | (() => boolean | Promise<boolean>) = true): this { this._lazy = condition; return this; }
+    async isLazyLoaded(): Promise<boolean> { return Boolean(typeof this._lazy === 'function' ? await this._lazy() : this._lazy); }
+    /** Key identifying a lazy schema (its own key by default; a layout component's child schema uses the component's key). */
+    lazyKey(key: string | null): this { this._lazyKey = key; return this; }
+    getLazyKey(): string { return this._lazyKey ?? this._key; }
 
     key(key: string): this { this._key = key; return this; }
     components(components: Component[]): this { this._components = components; for (const c of components) c.container = this; return this; }
@@ -232,12 +247,14 @@ export class Schema {
     }
 
     async toHtml(): Promise<string> {
+        const isLazy = await this.isLazyLoaded();
+        if (isLazy && typeof (this.livewire as any).isDeferredSchemaLoaded === 'function' && !(await (this.livewire as any).isDeferredSchemaLoaded(this))) return this.toDeferredLoadingHtml();
         const withVisibility = await Promise.all(this._components.map(async (c) => [c, await c.isVisible()] as const));
         if (!withVisibility.some(([, v]) => v)) return '';
         const attributes = new Attributes(this._extraClass ? { class: this._extraClass } : {})
             .when(!this._inline, (a) => a.grid(this._columns))
             .merge({
-                'wire:partial': this._partialName ?? (this._partial ? `schema.${this._key}` : null),
+                'wire:partial': this._partialName ?? (this._partial ? `schema.${this._key}` : isLazy ? `schema.${this.getLazyKey()}` : null),
                 'x-data': this._root ? `filamentSchema({ livewireId: ${js(this.livewire.id)}, schemaKey: ${js(this._key)} })` : null,
                 'x-on:form-validation-error.window': this._root ? 'handleFormValidationError' : null,
                 'x-on:reset-schema-component-state.window': this._root ? 'handleClientSideStateReset' : null,
@@ -250,12 +267,21 @@ export class Schema {
         }
         return `<div ${attributes.toHtml()}>${parts.join('')}</div>`;
     }
+    /** Placeholder of a lazy schema: a loading indicator that asks for the schema when it enters the viewport. */
+    toDeferredLoadingHtml(): string {
+        const key = this.getLazyKey();
+        const attributes = new Attributes(this._extraClass ? { class: this._extraClass } : {}).merge({ 'wire:partial': `schema.${key}`, 'x-data': `filamentSchema({ livewireId: ${js(this.livewire.id)}, schemaKey: ${js(key)}, isLoadingDeferred: true })`, role: 'status', 'aria-busy': 'true' }).class(['fi-sc', 'fi-sc-loading']);
+        return `<div ${attributes.toHtml()}>${loadingIndicator(new Attributes(), 'lg')}<span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
+    }
 }
 
 /** Child schema of a layout component: shares the parent's key and state path, without being a root. */
 export function childSchema(parent: Component, components: Component[]): Schema {
     const c = parent.container;
-    return new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).parentComponent(parent).components(components);
+    const schema = new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).parentComponent(parent).components(components);
+    const lazy = parent.getLazyLoadedCondition();
+    if (lazy !== false) schema.lazyLoaded(typeof lazy === 'function' ? () => evaluate(lazy, parent.context()) : lazy).lazyKey(parent.getKey());
+    return schema;
 }
 
 /** Stateful group: its children live under `<container path>.<name>` (used by filter forms). */

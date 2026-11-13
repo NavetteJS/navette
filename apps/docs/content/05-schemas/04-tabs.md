@@ -449,5 +449,5 @@ Tabs.make('Settings')
 A value of the query string that is not the key of a visible tab is ignored, both when the page is rendered and in the browser.
 
 <Aside variant="warning">
-Lazy loading tab content and tab badges, and tabs without content panels, are not available in Navette yet.
+Lazy loading tab badges and tabs without content panels are not available in Navette yet. The content of a tab can be [lazy loaded](/schemas/overview#lazy-loading-a-child-schema) with `Tab.make('…').lazyLoaded()`: it loads when the tab is opened.
 </Aside>

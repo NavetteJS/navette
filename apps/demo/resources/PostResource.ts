@@ -305,7 +305,8 @@ export class PostResource extends Resource {
                 DatePicker.make('published_at').label('Publishing date'),
                 TagsInput.make('tags').suggestions(tagNames),
             ]),
-            Section.make('Image').collapsible().schema([
+            // Loaded when it enters the viewport (not for screenshot comparisons).
+            Section.make('Image').collapsible().lazyLoaded(!process.env.NAVETTE_NO_THEMES).schema([
                 FileUpload.make('image').hiddenLabel().acceptedFileTypes(['image/jpeg']).storeFiles(false)
                     .getUploadedFileUsing(async (uuid) => {
                         const media = await knex()('media').where({ uuid, model_type: POST_TYPE }).first();

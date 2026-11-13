@@ -316,6 +316,6 @@ Action.make('create')
 
 See [using a wizard as a modal](/actions/modals#using-a-wizard-as-a-modal) in the actions documentation.
 
-<Aside variant="warning">
-Lazy loading step content is not available in Navette yet.
-</Aside>
+## Lazy loading step content
+
+`Step.make('…').lazyLoaded()` renders a step's content when the step is shown for the first time. See [lazy loading a child schema](/schemas/overview#lazy-loading-a-child-schema).

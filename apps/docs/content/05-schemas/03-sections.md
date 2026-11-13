@@ -478,6 +478,19 @@ Section.make('Expense Details')
     ])
 ```
 
-<Aside variant="warning">
-Lazy loading the content of a section (`lazyLoaded()`) is not available in Navette yet.
-</Aside>
+## Lazy loading the content of a section
+
+If a section contains components that are expensive to render, `lazyLoaded()` renders a loading indicator first, and the content when the section enters the viewport. A collapsed section loads its content when it is expanded:
+
+```ts
+import { Section } from '@navette-js/schemas';
+
+Section.make('Statistics')
+    .schema([
+        // …
+    ])
+    .collapsed()
+    .lazyLoaded()
+```
+
+See [lazy loading a child schema](/schemas/overview#lazy-loading-a-child-schema).

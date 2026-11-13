@@ -333,6 +333,27 @@ import { Section } from '@navette-js/schemas';
 Section.make('Notes').columns(1)
 ```
 
-<Aside variant="warning">
-Lazy loading a child schema (`lazyLoaded()`) is not available in Navette yet.
-</Aside>
+## Lazy loading a child schema
+
+By default, a schema's components are rendered when the page loads. If the content of a layout component is expensive to render, you can load it when it enters the viewport with `lazyLoaded()`:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { Section } from '@navette-js/schemas';
+
+Section.make('Customer details')
+    .key('customerDetails')
+    .schema([
+        TextInput.make('name'),
+        TextInput.make('email').email(),
+    ])
+    .lazyLoaded()
+```
+
+The content first renders a loading indicator. When the indicator enters the viewport, only that content is rendered, in a new request. If one of its fields has a validation error before it has loaded, it is loaded right away so that the error shows. Once loaded, it stays loaded for the lifetime of the page.
+
+A lazy content inside a collapsed section or an inactive tab only loads when it is revealed and enters the viewport. It works for any component with a child schema: sections, fieldsets, groups, grids, tabs, wizard steps…
+
+Every lazy component needs a unique key: a section has one from its heading, otherwise set one with `key()`. A schema you build yourself can be lazy too, with `Schema.lazyLoaded()` and `lazyKey()`. You may also pass a boolean or a function to `lazyLoaded()` to decide when it applies.
+
+The lazy content is still part of the form: its fields are validated and saved even if the user never scrolled to it.
