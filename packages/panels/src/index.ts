@@ -117,6 +117,15 @@ export interface TenantProvider<T = any> {
     /** Creates a tenant (tenant registration page); the user becomes a member. */
     create?(data: Record<string, unknown>, user: User): MaybePromise<T>;
     update?(tenant: T, data: Record<string, unknown>): MaybePromise<T>;
+    /** Tenant the user lands on after signing in (instead of their first one), or `null`. */
+    getDefaultTenant?(user: User): MaybePromise<T | null>;
+}
+/** Subscriptions of tenants (`panel.tenantBillingProvider()`): Stripe, Paddle, your own… */
+export interface TenantBillingProvider<T = any> {
+    /** The billing page of a tenant (`/<tenant>/billing`): usually a redirect to the payment provider's customer portal. */
+    handle(req: Request, res: Response, tenant: T): void | Promise<void>;
+    /** Whether the tenant has an active subscription; required by `panel.requiresTenantSubscription()`. */
+    isSubscribed?(tenant: T): MaybePromise<boolean>;
 }
 export type PanelContext = { req: Request; res: Response; panel: Panel; user: User | null; mailbox: string; tenant?: unknown; /** Signed in through the shared session, but not allowed into this panel. */ denied?: boolean };
 
@@ -638,6 +647,67 @@ export class Panel {
     getTenantProfilePage(): typeof EditTenantProfile | null { return this._tenantProfile; }
     tenantMenu(condition = true): this { this._tenantMenu = condition; return this; }
     hasTenantMenu(): boolean { return this._tenantMenu; }
+    private _searchableTenantMenu: boolean | null = null;
+    /** A search field above the tenants of the menu. By default (`null`), it is shown from ten tenants to switch to. */
+    searchableTenantMenu(condition: boolean | null = true): this { this._searchableTenantMenu = condition; return this; }
+    isTenantMenuSearchable(): boolean | null { return this._searchableTenantMenu; }
+    private _tenantRoutePrefix: string | null = null;
+    /** A segment before the tenant key in URLs: `tenantRoutePrefix('team')` serves `/app/team/1/projects`. */
+    tenantRoutePrefix(prefix: string | null): this {
+        if (prefix !== null && !/^[a-z0-9][a-z0-9-]*$/.test(prefix)) throw new Error(`Invalid tenant route prefix: ${prefix}`);
+        this._tenantRoutePrefix = prefix;
+        return this;
+    }
+    getTenantRoutePrefix(): string | null { return this._tenantRoutePrefix; }
+    private _tenantDomain: string | null = null;
+    /**
+     * Identifies the tenant by the host instead of the path: `tenantDomain('{tenant}.example.com')` serves the tenant `acme` at
+     * `acme.example.com/app/projects`. A port may follow (`{tenant}.localhost:3000`).
+     */
+    tenantDomain(pattern: string | null): this {
+        if (pattern !== null && !pattern.includes('{tenant}')) throw new Error('tenantDomain(): the pattern must contain {tenant}.');
+        this._tenantDomain = pattern;
+        return this;
+    }
+    getTenantDomain(): string | null { return this._tenantDomain; }
+    /** Domain of a tenant, with its port if the pattern has one. */
+    getTenantDomainFor(tenant: unknown): string { return this._tenantDomain!.replace('{tenant}', encodeURIComponent(this.getTenantUrlKey(tenant)).toLowerCase()); }
+    /** Key of the tenant designated by a request (its path, or its host with `tenantDomain()`), unchecked; `null` if none. */
+    getTenantKeyFromRequest(path: string, hostname: string): string | null {
+        if (this._tenantDomain) {
+            const host = this._tenantDomain.replace(/:\d+$/, '').toLowerCase();
+            const [before, after] = host.split('{tenant}').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            const match = new RegExp(`^${before}([^.]+)${after}$`).exec(hostname.toLowerCase());
+            if (!match) return null;
+            try { return decodeURIComponent(match[1]); } catch { return null; }
+        }
+        const base = this.getBaseUrl();
+        const prefix = base === '/' ? '/' : `${base}/`;
+        if (!path.startsWith(prefix)) return null;
+        const segments = path.slice(prefix.length).split('/');
+        if (this._tenantRoutePrefix !== null && segments.shift() !== this._tenantRoutePrefix) return null;
+        let key: string;
+        try { key = decodeURIComponent(segments[0] ?? ''); } catch { return null; }
+        if (!key || key.length > 200) return null;
+        if (this._tenantRoutePrefix === null && (this.getReservedSegments().has(key) || key === this._tenantRegistration?.slug)) return null;
+        return key;
+    }
+    private _tenantBilling: TenantBillingProvider | null = null;
+    private _tenantBillingRouteSlug = 'billing';
+    private _requiresTenantSubscription = false;
+    /** Adds a "Manage subscription" link to the tenant menu, served by the provider at `/<tenant>/billing`. */
+    tenantBillingProvider(provider: TenantBillingProvider | null): this { this._tenantBilling = provider; return this; }
+    getTenantBillingProvider(): TenantBillingProvider | null { return this._tenantBilling; }
+    hasTenantBilling(): boolean { return this._tenantBilling !== null; }
+    tenantBillingRouteSlug(slug: string): this { this._tenantBillingRouteSlug = slug.replace(/^\/|\/$/g, ''); return this; }
+    getTenantBillingRouteSlug(): string { return this._tenantBillingRouteSlug; }
+    getTenantBillingUrl(tenant: unknown = this.getTenant()): string | null { return this._tenantBilling && tenant ? this.getUrl(this._tenantBillingRouteSlug, tenant) : null; }
+    /** The pages of a tenant without an active subscription (`isSubscribed()`) redirect to its billing page. */
+    requiresTenantSubscription(condition = true): this { this._requiresTenantSubscription = condition; return this; }
+    isTenantSubscriptionRequired(): boolean { return this._requiresTenantSubscription && this._tenantBilling !== null; }
+    private _sessionCookieDomain: string | null = null;
+    /** Domain of the session cookie (`.example.com`): with `tenantDomain()`, a sign-in then holds on every tenant's host. */
+    sessionCookieDomain(domain: string | null): this { this._sessionCookieDomain = domain; return this; }
     tenantMenuItems(items: Record<string, Action> | Action[]): this {
         for (const [key, item] of Array.isArray(items) ? items.map((item) => [item.getName(), item] as const) : Object.entries(items)) this._tenantMenuItems[key] = item;
         return this;
@@ -661,7 +731,13 @@ export class Panel {
     getMaxContentWidth(): string { return this._maxContentWidth; }
     /** URL inside the panel; in a multi-tenant panel, prefixed with the current (or given) tenant. */
     getUrl(sub = '', tenant: unknown = this.getTenant()): string {
-        if (this._tenant && tenant) return '/' + [this._path, encodeURIComponent(this.getTenantUrlKey(tenant)), sub.replace(/^\/|\/$/g, '')].filter(Boolean).join('/');
+        if (this._tenant && tenant && this._tenantDomain) {
+            // On the tenant's own host, a path; another tenant's pages are on its host.
+            const current = this.getTenant();
+            const path = this.getBaseUrl(sub);
+            return current && this.getTenantUrlKey(current) === this.getTenantUrlKey(tenant) ? path : `//${this.getTenantDomainFor(tenant)}${path}`;
+        }
+        if (this._tenant && tenant) return '/' + [this._path, this._tenantRoutePrefix, encodeURIComponent(this.getTenantUrlKey(tenant)), sub.replace(/^\/|\/$/g, '')].filter(Boolean).join('/');
         return this.getBaseUrl(sub);
     }
     /** URL outside any tenant (login, registration, profile, tenant registration). */
@@ -760,9 +836,9 @@ export class Panel {
     private sign(value: string): string { return createHmac('sha256', this._key).update(value).digest('base64url'); }
     logIn(res: Response, user: User, remember: boolean): void {
         const value = Buffer.from(JSON.stringify({ uid: user.id })).toString('base64url');
-        res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
+        res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}), ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
     }
-    logOut(res: Response): void { res.clearCookie(this.getSessionCookieName()); }
+    logOut(res: Response): void { res.clearCookie(this.getSessionCookieName(), this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}); }
     async user(req: Request): Promise<User | null> {
         const raw = (req.headers.cookie ?? '').split(';').map((c) => c.trim()).find((c) => c.startsWith(`${this.getSessionCookieName()}=`))?.split('=')[1];
         if (!raw) return null;
@@ -1194,6 +1270,8 @@ export class Page extends BasePage {
     static shouldRegisterNavigation = true;
     /** Restricts the page to some users: returning `false` hides it from the menu and denies it (403). */
     static canAccess(_user: User): boolean | Promise<boolean> { return true; }
+    /** Whether the page needs the tenant's subscription (`panel.requiresTenantSubscription()`); `false` keeps it open. */
+    static isTenantSubscriptionRequired(panel: Panel): boolean { return panel.isTenantSubscriptionRequired(); }
     static getTitle(): string { return this.title ?? this.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
     static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
 
@@ -1203,6 +1281,7 @@ export class Page extends BasePage {
         if (!ctx?.user && !ctx?.panel.allowsGuests()) throw new WireError(401, 'Unauthenticated.');
         // In a multi-tenant panel, every page belongs to a tenant the user is a member of (checked by the router).
         if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
+        if (ctx.tenant && (this.constructor as typeof Page).isTenantSubscriptionRequired(ctx.panel) && !(await ctx.panel.getTenantBillingProvider()!.isSubscribed!(ctx.tenant))) throw new WireError(403, 'Subscription required.');
         if (await ctx.panel.mustVerifyEmail(ctx.user)) throw new WireError(403, 'Email address not verified.');
         if (await ctx.panel.mustSetUpMultiFactorAuthentication(ctx.user)) throw new WireError(403, 'Multi-factor authentication must be set up.');
         // Checked on every request, not only on display: a forged request to a forbidden page is denied.
@@ -4161,6 +4240,8 @@ async function renderTenantMenu(component: Component, options: { teleport: boole
     const custom = panel.getTenantMenuItems();
     const ProfilePage = panel.getTenantProfilePage();
     if (ProfilePage && provider.update && !custom.profile) items.push(Action.make('profile').label(ProfilePage.getLabel()).icon('m-cog-6-tooth').url(panel.getUrl(ProfilePage.slug)).color('gray').sort(-1));
+    const billingUrl = panel.getTenantBillingUrl(tenant);
+    if (billingUrl && !custom.billing) items.push(Action.make('billing').label(t('filament-panels::layout.actions.billing.label')).icon('m-credit-card').url(billingUrl).color('gray').sort(-1));
     const RegistrationPage = panel.getTenantRegistrationPage();
     if (RegistrationPage && !custom.register && (await RegistrationPage.canView(panel, user))) items.push(Action.make('register').label(RegistrationPage.getLabel()).icon('m-plus').url(panel.getBaseUrl(RegistrationPage.slug)).color('gray').sort(Number.MAX_SAFE_INTEGER));
     items.push(...Object.values(custom));
@@ -4176,6 +4257,7 @@ async function renderTenantMenu(component: Component, options: { teleport: boole
         itemsBefore: canSwitch ? await html(visible.filter((item) => item.getSort() < 0)) : [],
         itemsAfter: await html(canSwitch ? visible.filter((item) => item.getSort() >= 0) : visible),
         switchable: others.map((other) => ({ name: provider.getName(other), url: panel.getUrl('', other), avatarUrl: panel.getTenantAvatarUrl(other) })),
+        isSearchable: canSwitch && (panel.isTenantMenuSearchable() ?? others.length >= 10),
     });
 }
 
@@ -4354,24 +4436,22 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     };
     const forbidden = (res: Response) => void res.status(403).send('Forbidden');
 
-    /** Tenant designated by a panel URL, if the user is a member. */
-    const tenantFromPath = async (path: string, user: User | null): Promise<unknown> => {
+    /** Tenant designated by a panel URL (or its host, with `tenantDomain()`), if the user is a member. */
+    const tenantFromPath = async (path: string, user: User | null, hostname = ''): Promise<unknown> => {
         if (!panel.hasTenancy() || !user) return null;
-        const base = panel.getBaseUrl();
-        const prefix = base === '/' ? '/' : `${base}/`;
-        if (!path.startsWith(prefix)) return null;
-        let key: string;
-        try { key = decodeURIComponent(path.slice(prefix.length).split('/')[0] ?? ''); } catch { return null; }
-        const registration = panel.getTenantRegistrationPage();
-        if (!key || panel.getReservedSegments().has(key) || key === registration?.slug || key.length > 200) return null;
+        const key = panel.getTenantKeyFromRequest(path, hostname);
+        if (key === null) return null;
         const provider = panel.getTenantProvider();
         const tenant = await provider.find(key);
         return tenant && (await provider.canAccess(user, tenant)) ? tenant : null;
     };
-    /** User's home: the panel root or, in a multi-tenant panel, their first tenant's root (otherwise tenant registration). */
+    /** User's home: the panel root or, in a multi-tenant panel, their default tenant's root, their first one's, or tenant registration. */
     const homeUrl = async (user: User): Promise<string | null> => {
         if (!panel.hasTenancy()) return panel.getUrl();
-        const [first] = await panel.getTenantProvider().getTenants(user);
+        const provider = panel.getTenantProvider();
+        const preferred = (await provider.getDefaultTenant?.(user)) ?? null;
+        if (preferred && (await provider.canAccess(user, preferred))) return panel.getUrl('', preferred);
+        const [first] = await provider.getTenants(user);
         if (first) return panel.getUrl('', first);
         const registration = panel.getTenantRegistrationPage();
         return registration && (await registration.canView(panel, user)) ? panel.getBaseUrl(registration.slug) : null;
@@ -4426,7 +4506,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const ctx = await context(req, res);
         let path = '';
         try { path = String(JSON.parse(req.body?.components?.[0]?.snapshot ?? '{}')?.memo?.path ?? ''); } catch { path = ''; }
-        ctx.tenant = await tenantFromPath(path, ctx.user);
+        ctx.tenant = await tenantFromPath(path, ctx.user, req.hostname);
         return ctx;
     };
     // Notifications sent during the request go into a batch announced to the browser.
@@ -4606,12 +4686,19 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         if (await panel.mustVerifyEmail(ctx.user)) { res.redirect(panel.getEmailVerificationPromptUrl()); return null; }
         if (await panel.mustSetUpMultiFactorAuthentication(ctx.user)) { res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl()); return null; }
         if (panel.hasTenancy()) {
-            ctx.tenant = await tenantFromPath(req.path, ctx.user);
+            ctx.tenant = await tenantFromPath(req.path, ctx.user, req.hostname);
             if (!ctx.tenant) { res.status(404).send('Not Found'); return null; }
         }
         return ctx;
     };
-    const tenantSegment = panel.hasTenancy() ? ':tenant/' : '';
+    // The tenant's segment in page routes: none on tenant domains, `<prefix>/:tenant/` with a route prefix.
+    const tenantRoot = !panel.hasTenancy() || panel.getTenantDomain() ? '' : [panel.getTenantRoutePrefix(), ':tenant'].filter(Boolean).join('/');
+    const tenantSegment = tenantRoot ? `${tenantRoot}/` : '';
+    /** Whether a `:tenant` route parameter is really another route's segment (`login`…), without a route prefix. */
+    const notATenant = (req: Request) => panel.hasTenancy() && tenantRoot !== '' && panel.getTenantRoutePrefix() === null && (panel.getReservedSegments().has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug);
+    /** A tenant page whose tenant has no subscription goes to the billing page. */
+    const requiresSubscription = async (PageClass: typeof Page, ctx: PanelContext): Promise<boolean> =>
+        Boolean(ctx.tenant) && PageClass.isTenantSubscriptionRequired(panel) && !(await panel.getTenantBillingProvider()!.isSubscribed!(ctx.tenant));
     if (!panel.hasTenancy() && !panel.getPages().some((page) => page.slug === '')) {
         // Panel root without a dashboard: the first menu page, as in Filament.
         router.get(panel.getBaseUrl(), async (req, res) => {
@@ -4623,8 +4710,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         });
     }
     if (panel.hasTenancy()) {
-        // Panel root: the user's first tenant, otherwise tenant registration.
-        router.get(panel.getBaseUrl(), async (req, res) => {
+        // Panel root: the user's first tenant, otherwise tenant registration (on a tenant's own host: its pages).
+        router.get(panel.getBaseUrl(), async (req, res, next) => {
+            if (panel.getTenantDomain() && panel.getTenantKeyFromRequest(req.path, req.hostname) !== null) return next();
             const ctx = await context(req, res);
             if (ctx.denied) return forbidden(res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
@@ -4636,8 +4724,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         });
         // Tenant root without a dashboard: the first menu page.
         if (!panel.getPages().some((page) => page.slug === '')) {
-            router.get(panel.getBaseUrl(':tenant'), async (req, res, next) => {
-                if (panel.getReservedSegments().has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug) return next();
+            router.get(panel.getBaseUrl(tenantRoot), async (req, res, next) => {
+                if (notATenant(req)) return next();
                 const ctx = await pageContext(req, res);
                 if (!ctx) return;
                 const url = await panel.withTenant(ctx.tenant, async () => panel.getNavigation(req.path, new Map(), await panel.resolveInaccessiblePages(ctx.user))[0]?.items[0]?.url ?? null);
@@ -4646,14 +4734,26 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             });
         }
     }
+    // Billing page of a tenant, served by the billing provider.
+    const billing = panel.getTenantBillingProvider();
+    if (panel.hasTenancy() && billing) {
+        if (panel.isTenantSubscriptionRequired() && typeof billing.isSubscribed !== 'function') throw new Error('requiresTenantSubscription(): the billing provider must implement isSubscribed().');
+        router.get(panel.getBaseUrl(tenantSegment + panel.getTenantBillingRouteSlug()), async (req, res, next) => {
+            if (notATenant(req)) return next();
+            const ctx = await pageContext(req, res);
+            if (!ctx) return;
+            await panel.withTenant(ctx.tenant, () => billing.handle(req, res, ctx.tenant));
+        });
+    }
     for (const PageClass of panel.getPages()) {
         const component = name(`pages.${(PageClass.slug || 'dashboard').replace(/[{}]/g, '')}`);
         runtime.register(component, PageClass);
         // `{record}` in the slug becomes a route parameter, passed to mount().
         router.get(panel.getBaseUrl(tenantSegment + PageClass.slug).replace(/\{(\w+)\}/g, ':$1'), async (req, res, next) => {
-            if (panel.hasTenancy() && (panel.getReservedSegments().has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug)) return next();
+            if (notATenant(req)) return next();
             const ctx = await pageContext(req, res);
             if (!ctx) return;
+            if (await requiresSubscription(PageClass, ctx)) return res.redirect(panel.getTenantBillingUrl(ctx.tenant)!);
             const { tenant: _tenant, ...params } = req.params;
             await guarded(res, () => document(req, res, ctx, { title: PageClass.getTitle(), component, layout: 'index', params }));
         });

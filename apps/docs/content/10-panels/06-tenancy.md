@@ -83,7 +83,7 @@ Every option has the default shown above, except `label`, which is `null`. The k
 
 | URL | Page |
 |---|---|
-| `/app` | Redirects to the first tenant of the user, or to the tenant registration page if they have none. |
+| `/app` | Redirects to the [default tenant](#setting-a-default-tenant) of the user, otherwise their first tenant, or to the tenant registration page if they have none. |
 | `/app/new` | [Tenant registration](#adding-a-tenant-registration-page). |
 | `/app/1` | The dashboard of tenant `1`, or the first item of the navigation when the panel has no page at the root. |
 | `/app/1/projects` | A resource page, in tenant `1`. |
@@ -91,6 +91,52 @@ Every option has the default shown above, except `label`, which is `null`. The k
 | `/app/login`, `/app/register`, `/app/profile`… | Authentication pages, outside of any tenant. |
 
 A URL with an unknown tenant key, or the key of a tenant the user is not a member of, answers 404. `getUrl()` on a resource, and `panel.getUrl()`, include the key of the current tenant.
+
+### Adding a prefix to tenant URLs
+
+`tenantRoutePrefix()` adds a segment before the key of the tenant:
+
+```ts
+panel.tenantRoutePrefix('team');
+```
+
+The pages of tenant `1` are then at `/app/team/1`, `/app/team/1/projects`. The authentication pages are unchanged.
+
+### Using a domain per tenant
+
+A tenant may be identified by the host instead of the path: with `tenantDomain()`, the tenant `acme` is served at `acme.example.com/app`:
+
+```ts
+panel
+    .tenantDomain('{tenant}.example.com')
+    // The session cookie is shared by the subdomains, so that a sign-in holds on every tenant.
+    .sessionCookieDomain('.example.com');
+```
+
+`{tenant}` is replaced with the key of the tenant (`getKey()` of the provider), in lowercase: use keys that are valid host labels, such as slugs. A port may follow the pattern in development (`{tenant}.localhost:3000`). On a host outside the pattern (`example.com`), the panel root redirects to the user's tenant. Any host matching the pattern designates a tenant, `www` included: a key that does not exist answers 404.
+
+Links within a tenant are paths; links to another tenant, such as those of the tenant menu, are protocol-relative URLs to its host (`//globex.example.com/app`). Express reads the host from `req.hostname`: behind a proxy, set `trust proxy`.
+
+<Aside variant="warning">
+Point every tenant subdomain to the application (a wildcard DNS record and TLS certificate). Membership is checked on every request as for path-based tenants: a forged `Host` header cannot open the pages of a tenant the user does not belong to.
+</Aside>
+
+## Setting a default tenant
+
+After signing in, users land on their first tenant. To choose another one (the last tenant they used, for example), implement `getDefaultTenant()` in the tenant provider:
+
+```ts
+const provider: TenantProvider<Team> = {
+    // ...
+    getDefaultTenant: (user) => findTeam(user.latest_team_id),
+};
+```
+
+The tenant is only used if the user may still access it. `knexTenantProvider()` reads it from a column of the user with `defaultTenantAttribute`:
+
+```ts
+knexTenantProvider(knex, { defaultTenantAttribute: 'latest_team_id' });
+```
 
 ## Adding a tenant registration page
 
@@ -182,7 +228,7 @@ To add items, pass actions with a URL to `tenantMenuItems()`. A negative `sort()
 import { Action } from '@navette-js/actions';
 
 panel.tenantMenuItems([
-    Action.make('billing').label('Billing').icon('m-credit-card').url('/billing').sort(-1),
+    Action.make('support').label('Support').icon('m-lifebuoy').url('https://support.example.com').sort(-1),
 ]);
 ```
 
@@ -197,10 +243,55 @@ panel.tenantMenuItems({
 });
 ```
 
+### Searching tenants in the menu
+
+From ten tenants to switch to, the menu has a search field. To always show it, or never:
+
+```ts
+panel.searchableTenantMenu();      // always
+panel.searchableTenantMenu(false); // never
+```
+
 ### Hiding the tenant menu
 
 ```ts
 panel.tenantMenu(false);
+```
+
+## Adding billing
+
+A billing provider handles the subscriptions of tenants: it serves the billing page of a tenant (`/app/1/billing`), usually a redirect to the customer portal of your payment provider, and the tenant menu gets a "Manage subscription" link to it.
+
+```ts
+import type { TenantBillingProvider } from '@navette-js/panels';
+
+const billing: TenantBillingProvider<Team> = {
+    async handle(req, res, team) {
+        const session = await stripe.billingPortal.sessions.create({ customer: team.stripe_id, return_url: panel.getUrl('', team) });
+        res.redirect(session.url);
+    },
+    isSubscribed: (team) => team.subscription_status === 'active',
+};
+
+panel.tenantBillingProvider(billing);
+```
+
+Change the URL segment with `tenantBillingRouteSlug('subscription')`. Replace the link by registering an item under the `billing` key in `tenantMenuItems()`.
+
+### Requiring a subscription
+
+With `requiresTenantSubscription()`, the pages of a tenant without an active subscription (`isSubscribed()` returns `false`) redirect to its billing page, and their updates are refused:
+
+```ts
+panel.tenantBillingProvider(billing).requiresTenantSubscription();
+```
+
+The provider must then implement `isSubscribed()`. A page can stay open without a subscription:
+
+```ts
+export class Help extends Page {
+    static isTenantSubscriptionRequired(): boolean { return false; }
+}
 ```
 
 ## Disabling tenancy for a resource
@@ -240,7 +331,3 @@ The tenant of a request sent by a page is the tenant of the URL of that page, ch
 ### `unique` validation
 
 The `unique()` rule of a field checks the whole table, not only the records of the tenant. When a value only needs to be unique within a tenant, write your own rule.
-
-<Aside variant="warning">
-Billing, tenant search in the menu, a default tenant, tenant route prefixes and domains are not available yet.
-</Aside>

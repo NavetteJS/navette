@@ -175,7 +175,7 @@ export async function multiFactorAuthenticationSchema(knex: any, options: { user
  * Tenants (teams) stored in a table and linked to users through a pivot table (`teams` and `team_user` by default).
  * `label`: text shown above the tenant name in the menu ("Current team").
  */
-export function knexTenantProvider(db: TableQuery, options: { table?: string; pivot?: string; foreignKey?: string; userKey?: string; nameAttribute?: string; label?: string | null } = {}): TenantProvider {
+export function knexTenantProvider(db: TableQuery, options: { table?: string; pivot?: string; foreignKey?: string; userKey?: string; nameAttribute?: string; label?: string | null; defaultTenantAttribute?: string } = {}): TenantProvider {
     const table = options.table ?? 'teams', pivot = options.pivot ?? 'team_user';
     const foreignKey = options.foreignKey ?? 'team_id', userKey = options.userKey ?? 'user_id', nameAttribute = options.nameAttribute ?? 'name';
     return {
@@ -185,6 +185,8 @@ export function knexTenantProvider(db: TableQuery, options: { table?: string; pi
         getKey: (tenant) => String((tenant as any).id),
         getName: (tenant) => String((tenant as any)[nameAttribute] ?? ''),
         getCurrentTenantLabel: () => options.label ?? null,
+        // The user's column holding their default tenant (`latest_team_id`): the tenant they land on after signing in.
+        async getDefaultTenant(user) { const key = options.defaultTenantAttribute ? (user as any)[options.defaultTenantAttribute] : null; return key === null || key === undefined ? null : this.find(String(key)); },
         async create(data, user) {
             const [id] = await db(table).insert({ ...data, created_at: now(), updated_at: now() });
             const tenantId = typeof id === 'object' ? (id as any).id : id;
