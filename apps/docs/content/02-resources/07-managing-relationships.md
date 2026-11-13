@@ -203,6 +203,54 @@ The attach modal contains a searchable select. Its options come from `searchAtta
 `AttachAction`, `DetachAction` and `DetachBulkAction` do not consult the policy of the manager. Add `authorize()` to them when not every user may attach or detach.
 </Aside>
 
+## Associating and dissociating records
+
+For a one-to-many relationship, an existing record can be associated with the owner (its foreign key is set), or dissociated from it (the foreign key is cleared) without being deleted. Define four static methods on the manager, then add `AssociateAction`, `DissociateAction` and `DissociateBulkAction` to the table:
+
+```ts
+import { AssociateAction, DissociateAction, DissociateBulkAction, RelationManager } from '@navette-js/panels';
+
+export class TeamMembersRelationManager extends RelationManager {
+    static relationship = 'members';
+    static modelLabel = 'member';
+
+    static adapterFor(ownerKey: string) {
+        return new ObjectionAdapter(User, { modify: (query) => { query.where('users.team_id', ownerKey); } });
+    }
+
+    // Records without a team, matching the search: [key, label] pairs.
+    static async searchAssociable(ownerKey: string, search: string): Promise<[string, string][]> {
+        const rows = await User.query().whereNull('team_id').whereRaw('lower(name) like ?', [`%${search.toLowerCase()}%`]).limit(50);
+
+        return rows.map((row) => [String(row.id), row.name]);
+    }
+
+    // Label of an associable record, or null if it cannot be associated.
+    static async associableLabel(ownerKey: string, recordKey: string): Promise<string | null> {
+        return (await User.query().whereNull('team_id').findById(recordKey))?.name ?? null;
+    }
+
+    static async associate(ownerKey: string, recordKey: string): Promise<void> {
+        if (!(await this.associableLabel(ownerKey, recordKey))) return;
+        await User.query().findById(recordKey).patch({ team_id: Number(ownerKey) });
+    }
+
+    static async dissociate(ownerKey: string, recordKeys: string[]): Promise<void> {
+        await User.query().where('team_id', ownerKey).whereIn('id', recordKeys).patch({ team_id: null });
+    }
+
+    static table(table: Table): Table {
+        return table
+            .columns([TextColumn.make('name')])
+            .headerActions([AssociateAction.make()])
+            .recordActions([DissociateAction.make()])
+            .groupedBulkActions([DissociateBulkAction.make()]);
+    }
+}
+```
+
+As with attaching, the chosen key is checked again with `associableLabel()` before `associate()` is called, and `DissociateBulkAction` only receives keys of the manager's records. These actions do not consult the policy of the manager: add `authorize()` to them when not every user may use them.
+
 ## Deleting related records
 
 `DeleteAction` and `DeleteBulkAction` call `delete()` and `deleteMany()` on the manager's adapter. When deleting must also remove a pivot row, override those methods in the adapter, after checking that the record is in scope:
@@ -327,5 +375,5 @@ static recordSubNavigation = ['view', 'edit', 'comments'];
 ```
 
 <Aside variant="warning">
-Associate and dissociate actions, pivot attributes, grouping relation managers, combining them with the form in tabs, and tab badges are not available yet.
+Pivot attributes, grouping relation managers, combining them with the form in tabs, and tab badges are not available yet.
 </Aside>

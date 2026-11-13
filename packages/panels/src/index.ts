@@ -2717,6 +2717,15 @@ export class RelationManager extends ListRecords {
     static searchAttachable(_ownerKey: string, _search: string): Promise<[string, string][]> { throw new Error('RelationManager.searchAttachable() must be defined.'); }
     /** Label of an attachable record, or `null` if it is not attachable (also used as validation). */
     static attachableLabel(_ownerKey: string, _recordKey: string): Promise<string | null> { throw new Error('RelationManager.attachableLabel() must be defined.'); }
+    // --- one-to-many: to be defined by managers offering Associate / Dissociate
+    /** Sets the owner of an existing record (its foreign key). */
+    static associate(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('RelationManager.associate() must be defined.'); }
+    /** Clears the owner of records (their foreign key), without deleting them. */
+    static dissociate(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('RelationManager.dissociate() must be defined.'); }
+    /** Associable records matching the search: [key, label]. */
+    static searchAssociable(_ownerKey: string, _search: string): Promise<[string, string][]> { throw new Error('RelationManager.searchAssociable() must be defined.'); }
+    /** Label of an associable record, or `null` if it is not associable (also used as validation). */
+    static associableLabel(_ownerKey: string, _recordKey: string): Promise<string | null> { throw new Error('RelationManager.associableLabel() must be defined.'); }
     getHeaderActions(): Action[] { return []; }
     placeholder(): string {
         return `<div role="status" aria-busy="true" style="height: 8rem; ;" class="fi-section fi-loading-section fi-grid-col"><span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
@@ -3134,6 +3143,57 @@ export class DetachBulkAction {
                 // Selected keys come from the manager's current query, so they belong to the owner.
                 await managerOf(livewire).detach(livewire.ownerRecord, await livewire.getSelectedRecordKeys());
                 Notification.make().success().title(t('filament-actions::detach.multiple.notifications.detached.title')).send();
+                livewire.deselectAllTableRecords();
+            });
+    }
+}
+
+/** Gives an existing record to the owner of a one-to-many relation manager (its foreign key). */
+export class AssociateAction {
+    static make(): Action {
+        return Action.make('associate')
+            .label(t('filament-actions::associate.single.label')).color('gray').modalWidth('lg')
+            .modalHeading(({ livewire }) => t('filament-actions::associate.single.modal.heading', { label: String(livewire.resource.modelLabel).split(' ').map(ucfirst).join(' ') }))
+            .modalSubmitActionLabel(t('filament-actions::associate.single.modal.actions.associate.label'))
+            .extraModalFooterActions([Action.make('associateAnother').label(t('filament-actions::associate.single.modal.actions.associate_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
+            .schema((schema: Schema) => {
+                const livewire = schema.livewire as any;
+                return [Select.make('recordId').label(t('filament-actions::associate.single.modal.fields.record_id.label')).hiddenLabel().required()
+                    .getSearchResultsUsing((search) => managerOf(livewire).searchAssociable(livewire.ownerRecord, search))
+                    .getOptionLabelUsing((value) => managerOf(livewire).associableLabel(livewire.ownerRecord, value))];
+            })
+            .action(async ({ livewire, data }) => {
+                await managerOf(livewire).associate(livewire.ownerRecord, String(data.recordId));
+                Notification.make().success().title(t('filament-actions::associate.single.notifications.associated.title')).send();
+            });
+    }
+}
+/** Removes a row from the owner (clears its foreign key) without deleting it. */
+export class DissociateAction {
+    static make(): Action {
+        return Action.make('dissociate')
+            .label(t('filament-actions::dissociate.single.label')).color('danger').icon('c-x-mark').groupedIcon('m-x-mark')
+            .requiresConfirmation().modalIcon('o-x-mark')
+            .modalHeading(({ livewire, record }) => t('filament-actions::dissociate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
+            .modalSubmitActionLabel(t('filament-actions::dissociate.single.modal.actions.dissociate.label'))
+            .action(async ({ livewire, record }) => {
+                await managerOf(livewire).dissociate(livewire.ownerRecord, [livewire.resource.adapter.getKey(record)]);
+                Notification.make().success().title(t('filament-actions::dissociate.single.notifications.dissociated.title')).send();
+            });
+    }
+}
+/** Dissociates the selected rows. */
+export class DissociateBulkAction {
+    static make(): Action {
+        return Action.make('dissociate')
+            .label(t('filament-actions::dissociate.multiple.label')).color('danger').icon('m-x-mark')
+            .requiresConfirmation().modalIcon('o-x-mark')
+            .modalHeading(({ livewire }) => t('filament-actions::dissociate.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
+            .modalSubmitActionLabel(t('filament-actions::dissociate.multiple.modal.actions.dissociate.label'))
+            .action(async ({ livewire }) => {
+                // Selected keys come from the manager's current query, so they belong to the owner.
+                await managerOf(livewire).dissociate(livewire.ownerRecord, await livewire.getSelectedRecordKeys());
+                Notification.make().success().title(t('filament-actions::dissociate.multiple.notifications.dissociated.title')).send();
                 livewire.deselectAllTableRecords();
             });
     }
