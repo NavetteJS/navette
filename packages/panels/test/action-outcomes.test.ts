@@ -155,3 +155,16 @@ test('modal wizard: `steps()` renders a wizard without footer, the last step sub
     await run(() => list.callMountedAction());
     assert.deepEqual(received, [{ email: 'a@b.test', name: 'Ada' }]);
 });
+
+test('notification actions: links with safe URLs, buttons that dispatch an event and close the notification', async () => {
+    const { Notification, renderNotification } = await import('../src/notifications.ts');
+    const html = renderNotification(Notification.make().title('Deleted').actions([
+        { label: 'Undo', dispatch: { event: 'undoDelete', data: { id: 5 } }, close: true, button: true },
+        { label: 'View', url: '/posts/5' },
+        { label: 'Evil', url: 'javascript:alert(1)' },
+    ]).getData());
+    assert.match(html, /<button type="button" x-on:click="Livewire\.dispatch\(&#039;undoDelete&#039;, [^"]+\); close\(\)" class="fi-ac-btn-action fi-btn fi-size-sm">Undo<\/button>/);
+    assert.match(html, /<a href="\/posts\/5"/);
+    assert.doesNotMatch(html, /javascript:|Evil/);
+    assert.throws(() => Notification.make().actions([{ label: 'x', dispatch: { event: 'a" onclick="b' } }]), /Invalid notification event name/);
+});

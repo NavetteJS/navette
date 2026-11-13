@@ -159,6 +159,24 @@ Notification.make()
 
 At most ten actions are kept. Only a relative path (`/…`) or an `http://` / `https://` address becomes a link.
 
+### Closing the notification and dispatching events
+
+An action without a URL is a button. `close: true` closes the notification, and `dispatch` sends a Livewire event, received by the listeners of the page's components. `button: true` displays a button instead of a link:
+
+```ts
+import { Notification } from '@navette-js/panels';
+
+Notification.make()
+    .title('Post deleted')
+    .actions([
+        { label: 'Undo', dispatch: { event: 'undoDelete', data: { id: post.id } }, close: true, button: true },
+        { label: 'Dismiss', close: true },
+    ])
+    .send()
+```
+
+The event name may only contain letters, digits and `_ . : -`. Its data comes back from the browser like any other request data: check it in the listener.
+
 <Aside variant="warning">
-Notification actions are links, displayed in flash notifications and in [database notifications](/notifications/database-notifications). Action buttons that dispatch events or close the notification, sending notifications from JavaScript, closing a notification with JavaScript, and changing the position of notifications are not available yet.
+Buttons are only displayed in flash notifications: [database notifications](/notifications/database-notifications) show the links. Sending notifications from JavaScript, closing a notification with JavaScript, and changing the position of notifications are not available yet.
 </Aside>

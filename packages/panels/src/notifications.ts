@@ -5,7 +5,7 @@ import { Attributes, e, icon, js } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
 
-export type NotificationActionData = { label: string; url: string | null; openUrlInNewTab: boolean };
+export type NotificationActionData = { label: string; url: string | null; openUrlInNewTab: boolean; close?: boolean; dispatch?: { event: string; data: Record<string, unknown> } | null; color?: string | null; button?: boolean };
 export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionData[] };
 /** The part of a notification store needed to write to it (see `DatabaseNotificationStore`). */
 type NotificationSink = { send(user: string | number, notification: NotificationData): Promise<void> };
@@ -57,8 +57,23 @@ export class Notification {
     iconColor(color: string): this { this.data.iconColor = color; return this; }
     duration(ms: number): this { this.data.duration = ms; return this; }
     persistent(): this { this.data.duration = 'persistent'; return this; }
-    /** Links shown under the text. Only displayed in the database notifications panel. */
-    actions(actions: { label: string; url?: string | null; openUrlInNewTab?: boolean }[]): this { this.data.actions = actions.slice(0, 10).map((action) => ({ label: String(action.label), url: action.url ?? null, openUrlInNewTab: action.openUrlInNewTab === true })); return this; }
+    /**
+     * Actions under the text: links (`url`), or buttons that `close` the notification and/or `dispatch` a Livewire event
+     * (`{ event: 'undoDelete', data: { id: 5 } }`). `button: true` renders a button instead of a link. Buttons are only shown in
+     * flash notifications; the database notifications panel shows the links.
+     */
+    actions(actions: { label: string; url?: string | null; openUrlInNewTab?: boolean; close?: boolean; dispatch?: { event: string; data?: Record<string, unknown> } | null; color?: string | null; button?: boolean }[]): this {
+        this.data.actions = actions.slice(0, 10).map((action) => {
+            const event = action.dispatch?.event;
+            if (event !== undefined && !/^[A-Za-z0-9_.:-]{1,100}$/.test(event)) throw new Error(`Invalid notification event name: ${event}`);
+            return {
+                label: String(action.label), url: action.url ?? null, openUrlInNewTab: action.openUrlInNewTab === true, close: action.close === true,
+                dispatch: event ? { event, data: action.dispatch?.data ?? {} } : null,
+                color: action.color && /^[a-z]+$/.test(action.color) ? action.color : null, button: action.button === true,
+            };
+        });
+        return this;
+    }
     getData(): NotificationData { return { ...this.data }; }
     /** Stores the notification for this user (panel bell): `await Notification.make()….sendToDatabase(panel.getDatabaseNotifications(), user.id)`. Does nothing without a store. */
     async sendToDatabase(store: NotificationSink | null, user: string | number): Promise<this> { if (store) await store.send(user, { ...this.data, id: randomUUID() }); return this; }
@@ -71,10 +86,18 @@ export class Notification {
     }
 }
 
-/** Links of a notification: only local or http(s) URLs. */
+/** Actions of a notification: links (only local or http(s) URLs) and buttons closing it or dispatching a Livewire event. */
 function notificationActionsHtml(n: NotificationData): string {
-    const links = (n.actions ?? []).filter((action) => action.label !== '' && typeof action.url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(action.url)).map((action) => `<a href="${e(action.url!)}"${action.openUrlInNewTab ? ' target="_blank" rel="noopener noreferrer"' : ''} class="fi-ac-link-action fi-link fi-size-sm fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400"><span class="fi-link-label">${e(action.label)}</span></a>`);
-    return links.length ? `<div class="fi-ac fi-no-notification-actions">${links.join('')}</div>` : '';
+    const safeUrl = (url: string | null) => typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url);
+    const items = (n.actions ?? []).filter((action) => action.label !== '' && (safeUrl(action.url) || action.close || action.dispatch)).map((action) => {
+        const color = action.color ?? 'primary';
+        const classes = action.button ? `fi-ac-btn-action fi-btn fi-size-sm` : `fi-ac-link-action fi-link fi-size-sm fi-color fi-color-${color} fi-text-color-600 dark:fi-text-color-400`;
+        const label = action.button ? e(action.label) : `<span class="fi-link-label">${e(action.label)}</span>`;
+        const clicks = [action.dispatch ? `Livewire.dispatch(${js(action.dispatch.event)}, ${js(action.dispatch.data)})` : null, action.close ? 'close()' : null].filter(Boolean).join('; ');
+        if (safeUrl(action.url)) return `<a href="${e(action.url!)}"${action.openUrlInNewTab ? ' target="_blank" rel="noopener noreferrer"' : ''}${clicks ? ` x-on:click="${e(clicks)}"` : ''} class="${classes}">${label}</a>`;
+        return `<button type="button" x-on:click="${e(clicks)}" class="${classes}">${label}</button>`;
+    });
+    return items.length ? `<div class="fi-ac fi-no-notification-actions">${items.join('')}</div>` : '';
 }
 
 /** Renders a flash notification (no date or inline mode). Title, body and action labels are escaped. */
