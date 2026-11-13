@@ -116,7 +116,9 @@ The hooks run in this order when the user submits the form:
 
 | Step | Method |
 |---|---|
+| Before validation | `beforeValidate()` |
 | The form is validated on the server | none: invalid fields stop the process |
+| After a successful validation | `afterValidate()` |
 | The data is transformed | `mutateFormDataBeforeCreate(data)` |
 | Before the creation | `beforeCreate(data)` |
 | The record is created | `handleRecordCreation(data)` |
@@ -124,9 +126,21 @@ The hooks run in this order when the user submits the form:
 | The notification is sent | `getCreatedNotificationTitle()` |
 | The user is redirected | `getRedirectUrl(record)` |
 
-<Aside variant="warning">
-`beforeFill`, `afterFill`, `beforeValidate` and `afterValidate` are not available yet.
-</Aside>
+When the page opens, `beforeFill()` runs before the form is filled with its defaults, and `afterFill()` after. The edit page runs the same hooks around filling the form with the record.
+
+```ts
+import { CreateRecord } from '@navette-js/panels';
+
+class CreatePost extends CreateRecord {
+    protected async beforeValidate(): Promise<void> {
+        // Runs before the form is validated.
+    }
+
+    protected async afterFill(): Promise<void> {
+        this.data.published_at ??= new Date().toISOString().slice(0, 10);
+    }
+}
+```
 
 ## Halting the creation process
 

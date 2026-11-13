@@ -110,13 +110,17 @@ The hooks run in this order when the user saves the form:
 
 | Step | Method |
 |---|---|
+| Before validation | `beforeValidate()` |
 | The form is validated on the server | none: invalid fields stop the process |
+| After a successful validation | `afterValidate()` |
 | The data is transformed | `mutateFormDataBeforeSave(data)` |
 | Before the update | `beforeSave(data)` |
 | The record is updated | `handleRecordUpdate(record, data)` |
 | After the update | `afterSave(record)` |
 | The notification is sent | `getSavedNotificationTitle()` |
 | The user is redirected, if a URL is returned | `getRedirectUrl(record)` |
+
+When the page opens, `beforeFill()` and `afterFill()` run around filling the form with the record (after `mutateFormDataBeforeFill()`).
 
 ## Halting the saving process
 

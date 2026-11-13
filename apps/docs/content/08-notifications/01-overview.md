@@ -160,5 +160,5 @@ Notification.make()
 At most ten actions are kept. Only a relative path (`/…`) or an `http://` / `https://` address becomes a link.
 
 <Aside variant="warning">
-Notification actions are only displayed in [database notifications](/notifications/database-notifications) for now, not in flash notifications. Action buttons that dispatch events or close the notification, sending notifications from JavaScript, closing a notification with JavaScript, and changing the position of notifications are not available yet.
+Notification actions are links, displayed in flash notifications and in [database notifications](/notifications/database-notifications). Action buttons that dispatch events or close the notification, sending notifications from JavaScript, closing a notification with JavaScript, and changing the position of notifications are not available yet.
 </Aside>

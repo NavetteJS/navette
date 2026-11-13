@@ -66,8 +66,27 @@ class EditProject extends EditRecord {
 }
 ```
 
+### Restoring and force-deleting in bulk
+
+`RestoreBulkAction` and `ForceDeleteBulkAction` restore or permanently delete the selected trashed records. They appear when the trashed filter shows deleted records, and check the `restore` / `forceDelete` ability of each record:
+
+```ts
+import { DeleteBulkAction, ForceDeleteBulkAction, RestoreBulkAction } from '@navette-js/panels';
+import { BulkActionGroup, TrashedFilter } from '@navette-js/tables';
+
+table
+    .filters([TrashedFilter.make()])
+    .toolbarActions([
+        BulkActionGroup.make([
+            DeleteBulkAction.make(),
+            RestoreBulkAction.make(),
+            ForceDeleteBulkAction.make(),
+        ]),
+    ])
+```
+
 <Aside variant="warning">
-`RestoreAction` and `ForceDeleteAction` only work in the header of a record page. Row versions and the `RestoreBulkAction` and `ForceDeleteBulkAction` bulk actions are not available yet.
+`RestoreAction` and `ForceDeleteAction` only work in the header of a record page. Row versions are not available yet.
 </Aside>
 
 ## Deleting records on the List page

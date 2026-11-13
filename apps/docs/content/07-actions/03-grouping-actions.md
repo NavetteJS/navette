@@ -148,5 +148,5 @@ ActionGroup.make([
 Action groups may also be used in the header actions of a page, and in the header and toolbar actions of a table. The actions of a group are mounted and authorized like any other action.
 
 <Aside variant="warning">
-Bulk action groups other than the default "Bulk actions" menu are not available yet.
+Several `BulkActionGroup`s are merged into the single "Bulk actions" menu of the table: separate bulk menus with their own label and icon are not available yet.
 </Aside>

@@ -2811,10 +2811,20 @@ abstract class ResourceFormPage extends Page {
         return Action.make('cancel').label(t(`filament-panels::resources/pages/${this.getOperation()}-record.form.actions.cancel.label`)).color('gray')
             .alpineClickHandler(`document.referrer ? window.history.back() : Livewire.navigate(${js(this.getCancelUrl())})`);
     }
+    // --- lifecycle hooks around filling and validation (to override; none can be called from the browser)
+    /** Before the form is filled (with defaults, or with the record on the edit page). */
+    protected beforeFill(): void | Promise<void> {}
+    /** After the form is filled. */
+    protected afterFill(): void | Promise<void> {}
+    /** Before the form is validated, when it is submitted. */
+    protected beforeValidate(): void | Promise<void> {}
+    /** After the form is validated successfully, before the data is transformed and saved. */
+    protected afterValidate(): void | Promise<void> {}
     /** Validates the form; on error, sets the errors on the component and notifies the browser. */
     protected async validateForm(): Promise<boolean> {
+        await this.beforeValidate();
         this._errors = await validateSchema(this.getSchema('form'));
-        if (!Object.keys(this._errors).length) return true;
+        if (!Object.keys(this._errors).length) { await this.afterValidate(); return true; }
         this.dispatch('form-validation-error', { livewireId: this.id });
         return false;
     }
@@ -2823,7 +2833,7 @@ abstract class ResourceFormPage extends Page {
 /** Record creation page. */
 export class CreateRecord extends ResourceFormPage {
     static callable = ['create', 'createAnother'];
-    mount(): void { fillSchema(this.getSchema('form'), this.data); }
+    async mount(): Promise<void> { await this.beforeFill(); fillSchema(this.getSchema('form'), this.data); await this.afterFill(); }
     getOperation(): 'create' { return 'create'; }
     getSubmitMethod(): string { return 'create'; }
     getTitle(): string { return t('filament-panels::resources/pages/create-record.title', { label: this.resource.modelLabel.split(' ').map(ucfirst).join(' ') }); }
@@ -3189,8 +3199,10 @@ export class EditRecord extends ResourceFormPage {
         this.recordKey = String(params.record ?? '');
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
         await this.hydrate();
+        await this.beforeFill();
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
         await loadSchemaRelationships(this.getSchema('form'), this.data, this._record);
+        await this.afterFill();
     }
     /** The record is reloaded on every request (no route model binding). */
     async hydrate(): Promise<void> {
