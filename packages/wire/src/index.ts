@@ -80,6 +80,11 @@ export abstract class Component {
     }
     skipRender(): void { this._skipRender = true; }
     /** Partial render: only the `wire:partial="<name>"` fragment is sent back (effects.partials), the component is not re-rendered. */
+/**
+     * JavaScript run once in the browser for this component, with `$wire` in scope (Livewire's `@script`). Call it while rendering;
+     * `key` identifies the script: it is sent again only if the browser has not run it yet.
+     */
+    addScript(key: string, js: string): void { ((this._effects.scripts ??= {}) as Record<string, string>)[key] = `<script>${js}</script>`; }
     renderPartial(name: string, html: string): void { (this._effects.partials ??= {})[name] = html; this._skipRender = true; }
     addError(path: string, message: string): void { (this._errors[path] ??= []).push(message); }
     resetErrorBag(): void { this._errors = {}; }
@@ -99,6 +104,15 @@ export function callableMethods(component: Component): Set<string> {
     for (let cls: any = component.constructor; cls && cls !== Component; cls = Object.getPrototypeOf(cls)) {
         if (!Object.prototype.hasOwnProperty.call(cls, 'callable') || !Array.isArray(cls.callable)) continue;
         for (const name of cls.callable) if (typeof name === 'string' && !isLifecycleHook(name) && typeof (component as any)[name] === 'function') out.add(name);
+    }
+    return out;
+}
+
+/** Properties the browser may not change: those the class or any parent class lists in `static locked`. */
+export function lockedProperties(component: Component): Set<string> {
+    const out = new Set<string>();
+    for (let cls: any = component.constructor; cls && cls !== Component; cls = Object.getPrototypeOf(cls)) {
+        if (Object.prototype.hasOwnProperty.call(cls, 'locked') && Array.isArray(cls.locked)) for (const name of cls.locked) out.add(name);
     }
     return out;
 }
@@ -250,7 +264,7 @@ export class WireRuntime {
         }
         await component.dehydrate();
         const snapshot = this.snapshot(component, name, {
-            path: request.path ?? '/', method: request.method ?? 'GET', release: 'a-a-a', children: Object.keys(component._children).length ? component._children : [], scripts: [], assets: [],
+            path: request.path ?? '/', method: request.method ?? 'GET', release: 'a-a-a', children: Object.keys(component._children).length ? component._children : [], scripts: Object.keys((component._effects.scripts as Record<string, string> | undefined) ?? {}), assets: [],
             ...(request.lazy ? { lazyLoaded: false, lazyIsolated: true } : {}), ...(reactiveProps(component).length ? { props: reactiveProps(component) } : {}), locale: this.options.locale ?? 'en', islands: [],
         });
         const { html: _h, ...effects } = component._effects;
@@ -291,11 +305,12 @@ export class WireRuntime {
         await component.boot();
         await component.hydrate();
 
+        const locked = lockedProperties(component);
         const applyUpdate = async (path: string, value: unknown): Promise<void> => {
             const segments = path.split('.');
             const prop = segments[0];
             if (!known.has(prop)) throw new WireError(404, `Public property not found: ${prop}`);
-            if (cls.locked?.includes(prop)) throw new WireError(403, `Locked property: ${prop}`);
+            if (locked.has(prop)) throw new WireError(403, `Locked property: ${prop}`);
             if (reactive.has(prop)) throw new WireError(403, `Reactive property, set by the parent component: ${prop}`);
             // A segment such as `__proto__` would write into the prototype shared by every object on the server.
             if (segments.some((segment) => segment === '__proto__' || segment === 'constructor' || segment === 'prototype')) throw new WireError(403, `State path rejected: ${path}`);
@@ -377,6 +392,12 @@ export class WireRuntime {
         // After a full render, the children list is the one just rendered; otherwise it is kept.
         if (rendered) memo.children = Object.keys(component._children).length ? component._children : [];
         if (lazyLoaded) { memo.lazyLoaded = true; delete memo.lazyIsolated; }
+        // Scripts already run by the browser are not sent again.
+        if (effects.scripts) {
+            const known = new Set<string>(Array.isArray(memo.scripts) ? memo.scripts : []);
+            const fresh = Object.fromEntries(Object.entries(effects.scripts as Record<string, string>).filter(([key]) => !known.has(key)));
+            if (Object.keys(fresh).length) { effects.scripts = fresh; memo.scripts = [...known, ...Object.keys(fresh)]; } else delete effects.scripts;
+        }
         return { snapshot: this.snapshot(component, name, memo), effects };
     }
 

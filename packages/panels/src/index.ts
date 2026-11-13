@@ -338,6 +338,9 @@ export class Panel {
         if (!user && !this._guestAccess) return false;
         const decided = await this._authorizer?.({ user: user as User, ability, resource: subject.resource ?? null, record: subject.record ?? null, page: subject.page ?? null, widget: subject.widget ?? null });
         if (typeof decided === 'boolean') return decided;
+        if (!subject.rule && subject.resource && !subject.page && !subject.widget && this._strictAuthorization) {
+            throw new Error(`Strict authorization mode is enabled, but ${(subject.resource as { name?: string }).name ?? 'the resource'} has no "${ability}" rule in its policy.`);
+        }
         return subject.rule ? Boolean(await subject.rule()) : true;
     }
     /** Whether the user can open a page. List: `viewAny`; create: `create`; edit: checked against the record; custom page: `canAccess`. */
@@ -638,9 +641,39 @@ export class Panel {
     /** Tenant avatar: from the tenant provider (`getAvatarUrl`), otherwise its initials. */
     getTenantAvatarUrl(tenant: unknown): string { return this.getTenantProvider().getAvatarUrl?.(tenant) ?? this.getAvatarUrlFor(this.getTenantProvider().getName(tenant)); }
     private _spa = false;
-    /** SPA mode: navigate between panel pages without full reloads (`wire:navigate`). */
-    spa(condition = true): this { this._spa = condition; return this; }
+    private _spaPrefetching = false;
+    /**
+     * SPA mode: navigate between panel pages without full reloads (`wire:navigate`). `{ prefetch: true }` loads a page as soon
+     * as its link is hovered (`wire:navigate.hover`).
+     */
+    spa(condition = true, options: { prefetch?: boolean } = {}): this { this._spa = condition; this._spaPrefetching = options.prefetch === true; return this; }
     hasSpaMode(): boolean { return this._spa; }
+    hasSpaPrefetching(): boolean { return this._spa && this._spaPrefetching; }
+    private _domains: string[] = [];
+    /** Serves the panel on this domain only (`admin.example.com`): requests for other hosts go to the next routes. */
+    domain(host: string | null): this { this._domains = host ? [host] : []; return this; }
+    /** Serves the panel on these domains only. */
+    domains(hosts: string[]): this { this._domains = [...hosts]; return this; }
+    getDomains(): string[] { return this._domains; }
+    private _unsavedChangesAlerts = false;
+    /** Warns the user before leaving a create or edit page whose form has unsaved changes. */
+    unsavedChangesAlerts(condition = true): this { this._unsavedChangesAlerts = condition; return this; }
+    hasUnsavedChangesAlerts(): boolean { return this._unsavedChangesAlerts; }
+    private _databaseTransactions = false;
+    /**
+     * Wraps the creation and the saving of records (from `beforeCreate()` / `beforeSave()` to `afterCreate()` / `afterSave()`)
+     * in a database transaction, rolled back when anything throws. Pages can opt in or out with `static hasDatabaseTransactions`.
+     */
+    databaseTransactions(condition = true): this { this._databaseTransactions = condition; return this; }
+    hasDatabaseTransactions(): boolean { return this._databaseTransactions; }
+    private _strictAuthorization = false;
+    /** Throws when a resource is checked for an ability its policy does not define, instead of allowing it. */
+    strictAuthorization(condition = true): this { this._strictAuthorization = condition; return this; }
+    isAuthorizationStrict(): boolean { return this._strictAuthorization; }
+    private _bootCallbacks: ((panel: Panel, req: Request) => void | Promise<void>)[] = [];
+    /** Runs on every request handled by the panel (its pages and their updates), before them. */
+    bootUsing(callback: (panel: Panel, req: Request) => void | Promise<void>): this { this._bootCallbacks.push(callback); return this; }
+    async boot(req: Request): Promise<void> { for (const callback of this._bootCallbacks) await callback(this, req); }
     getAvatarUrlFor(name: string): string {
         const initials = name.trim().split(' ').map((s) => s.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 1)).join(' ');
         const background = '#' + convertToRgb(this.colors.getColor('gray')![950]).map((n) => n.toString(16).padStart(2, '0')).join('');
@@ -3283,6 +3316,33 @@ abstract class ResourceFormPage extends Page {
     }
     static resource: typeof Resource;
     data: Record<string, unknown> = {};
+    /** Hash of the form data as last saved: the browser compares it with the current data (unsaved changes alert). */
+    savedDataHash = '';
+    static locked = ['savedDataHash'];
+    /** `true` / `false` overrides the panel's `databaseTransactions()` for this page. */
+    static hasDatabaseTransactions: boolean | null = null;
+    /** `true` / `false` overrides the panel's `unsavedChangesAlerts()` for this page. */
+    static hasUnsavedDataChangesAlert: boolean | null = null;
+    protected hasDatabaseTransactions(): boolean { return (this.constructor as typeof ResourceFormPage).hasDatabaseTransactions ?? this.panel.hasDatabaseTransactions(); }
+    protected hasUnsavedDataChangesAlert(): boolean { return (this.constructor as typeof ResourceFormPage).hasUnsavedDataChangesAlert ?? this.panel.hasUnsavedChangesAlerts(); }
+    /** Runs `fn` in a database transaction of the resource's adapter, when the page uses them. */
+    protected wrapInDatabaseTransaction<T>(fn: () => Promise<T>): Promise<T> {
+        const adapter = this.getDataAdapter();
+        return this.hasDatabaseTransactions() && typeof adapter.transaction === 'function' ? adapter.transaction(fn) : fn();
+    }
+    /** Remembers the form data as saved: leaving the page with other data asks for confirmation. */
+    protected rememberData(): void {
+        if (!this.hasUnsavedDataChangesAlert()) return;
+        this.savedDataHash = createHash('md5').update(JSON.stringify(this.data).replace(/\\/g, '')).digest('hex');
+    }
+    async render(): Promise<string> {
+        if (this.hasUnsavedDataChangesAlert()) {
+            this.addScript('unsaved-data-changes-alert', this.panel.hasSpaMode()
+                ? `setUpFilamentSpaModeUnsavedDataChangesAlert({ body: ${js(t('filament-panels::unsaved-changes-alert.body'))}, resolveLivewireComponentUsing: () => window.Livewire.find(${js(this.id)}), $wire })`
+                : 'setUpFilamentUnsavedDataChangesAlert({ $wire })');
+        }
+        return super.render();
+    }
     get resource(): typeof Resource { return (this.constructor as typeof ResourceFormPage).resource; }
     getDataAdapter(): DataAdapter { return this.resource.adapter; }
     getRecordKey(): string | null { return null; }
@@ -3349,7 +3409,7 @@ abstract class ResourceFormPage extends Page {
 /** Record creation page. */
 export class CreateRecord extends ResourceFormPage {
     static callable = ['create', 'createAnother'];
-    async mount(): Promise<void> { await this.beforeFill(); fillSchema(this.getSchema('form'), this.data); await this.afterFill(); }
+    async mount(): Promise<void> { await this.beforeFill(); fillSchema(this.getSchema('form'), this.data); await this.afterFill(); this.rememberData(); }
     getOperation(): 'create' { return 'create'; }
     getSubmitMethod(): string { return 'create'; }
     getTitle(): string { return t('filament-panels::resources/pages/create-record.title', { label: this.resource.modelLabel.split(' ').map(ucfirst).join(' ') }); }
@@ -3381,13 +3441,17 @@ export class CreateRecord extends ResourceFormPage {
     async create(another = false): Promise<void> {
         if (!(await this.validateForm())) return;
         const data = await this.mutateFormDataBeforeCreate(await getSchemaState(this.getSchema('form')));
-        await this.beforeCreate(data);
-        const record = await this.handleRecordCreation(data);
-        await saveSchemaRelationships(this.getSchema('form'), record);
-        await this.afterCreate(record);
+        const record = await this.wrapInDatabaseTransaction(async () => {
+            await this.beforeCreate(data);
+            const created = await this.handleRecordCreation(data);
+            await saveSchemaRelationships(this.getSchema('form'), created);
+            await this.afterCreate(created);
+            return created;
+        });
+        this.rememberData();
         const title = this.getCreatedNotificationTitle();
         if (title !== null) Notification.make().success().title(title).send();
-        if (another === true) { this.data = {}; fillSchema(this.getSchema('form'), this.data); return; }
+        if (another === true) { this.data = {}; fillSchema(this.getSchema('form'), this.data); this.rememberData(); return; }
         this.redirect(this.getRedirectUrl(record), true);
     }
     createAnother(): Promise<void> { return this.create(true); }
@@ -3803,8 +3867,11 @@ export class EditRecord extends ResourceFormPage {
         if (Object.keys(errors).length) { this._errors = errors; this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         this._errors = {};
         const data = await this.mutateFormDataBeforeSave(await getSchemaState(part));
-        this._record = await this.handleRecordUpdate(this._record, data);
-        await saveSchemaRelationships(part, this._record);
+        this._record = await this.wrapInDatabaseTransaction(async () => {
+            const record = await this.handleRecordUpdate(this._record, data);
+            await saveSchemaRelationships(part, record);
+            return record;
+        });
         const title = notificationTitle ?? this.getSavedNotificationTitle();
         if (title !== null) Notification.make().success().title(title).send();
     }
@@ -3821,6 +3888,7 @@ export class EditRecord extends ResourceFormPage {
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
         await loadSchemaRelationships(this.getSchema('form'), this.data, this._record);
         await this.afterFill();
+        this.rememberData();
     }
     /** The record is reloaded on every request (no route model binding). */
     async hydrate(): Promise<void> {
@@ -3873,10 +3941,14 @@ export class EditRecord extends ResourceFormPage {
     async save(): Promise<void> {
         if (!(await this.validateForm())) return;
         const data = await this.mutateFormDataBeforeSave(await getSchemaState(this.getSchema('form')));
-        await this.beforeSave(data);
-        this._record = await this.handleRecordUpdate(this._record, data);
-        await saveSchemaRelationships(this.getSchema('form'), this._record);
-        await this.afterSave(this._record);
+        this._record = await this.wrapInDatabaseTransaction(async () => {
+            await this.beforeSave(data);
+            const record = await this.handleRecordUpdate(this._record, data);
+            await saveSchemaRelationships(this.getSchema('form'), record);
+            await this.afterSave(record);
+            return record;
+        });
+        this.rememberData();
         const title = this.getSavedNotificationTitle();
         if (title !== null) Notification.make().success().title(title).send();
         const url = this.getRedirectUrl(this._record);
@@ -4224,9 +4296,18 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         for (const manager of managers) runtime.register(name(`relation-managers.${resource.slug.replace(/\//g, '.')}.${manager.relationship}`), manager);
     }
 
+    // A panel on its own domains: other hosts go to the next routes (another panel, the application).
+    const domains = panel.getDomains();
+    if (domains.length) router.use((req, _res, next) => next(domains.includes(req.hostname) ? undefined : 'router'));
     router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
     // Navette's own front-end files.
     router.use(express.static(dir('../dist/navette')));
+    // `bootUsing()`: before every request of the panel (its pages, their updates).
+    const panelBase = panel.getBaseUrl();
+    const belongsToPanel = (path: string) => panelBase === '/' || path === panelBase || path.startsWith(`${panelBase}/`) || path.startsWith(`${livewire}/`);
+    router.use((req, _res, next) => { if (!belongsToPanel(req.path)) return next(); panel.boot(req).then(() => next(), next); });
+    // SPA prefetching: links load their page as soon as they are hovered.
+    const prefetch = (html: string): string => (panel.hasSpaPrefetching() ? html.replace(/ wire:navigate(?=[\s>/])/g, ' wire:navigate.hover') : html);
     // An update's tenant is the one of the page sending it (from the signed snapshot URL), if the user is a member.
     const wireContext = async (req: Request, res: Response): Promise<PanelContext> => {
         const ctx = await context(req, res);
@@ -4238,6 +4319,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // Notifications sent during the request go into a batch announced to the browser.
     router.use(wireRouter(runtime, livewire, wireContext, async (ctx: PanelContext, _req, res, handle) => {
         const { result, pending } = await runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle)));
+        if (panel.hasSpaPrefetching()) {
+            for (const component of result.components as { effects: Record<string, any> }[]) {
+                if (typeof component.effects.html === 'string') component.effects.html = prefetch(component.effects.html);
+                for (const [key, html] of Object.entries(component.effects.partials ?? {})) if (typeof html === 'string') component.effects.partials[key] = prefetch(html);
+            }
+        }
         if (pending.length) {
             const batch = publish(ctx.mailbox, pending);
             result.filamentNotificationBatch = batch;
@@ -4277,12 +4364,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
                 sidebar: hasNavigation ? (await runtime.mount(name('sidebar'), { path: req.path }, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-1" ') : '',
             });
         const bodyClass = options.layout === 'index' ? cls([{ 'fi-body-has-navigation': hasNavigation, 'fi-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'fi-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'fi-body-has-topbar': panel.hasTopbar(), 'fi-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
-        res.send(views.render('filament-panels::layout.base', {
+        res.send(prefetch(views.render('filament-panels::layout.base', {
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
-        }));
+        })));
     };
     /** Page access errors: 404 and 403 are answered directly, anything else is rethrown. */
     const guarded = async (res: Response, render: () => Promise<void>) => {

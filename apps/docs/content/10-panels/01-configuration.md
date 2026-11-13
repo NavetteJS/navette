@@ -70,6 +70,16 @@ panel.path('admin');
 
 The pages are then at `/admin/login`, `/admin/customers`, and the component endpoint at `/admin/livewire/update`.
 
+## Setting a domain
+
+A panel may be served on its own domain. Requests for any other host go to the next routes of the application, as if the panel did not exist:
+
+```ts
+panel.domain('admin.example.com');
+```
+
+`domains()` accepts several of them. The host is read from `req.hostname`: behind a proxy, set `app.set('trust proxy', …)` so that Express trusts the `X-Forwarded-Host` header.
+
 ## Setting the brand
 
 The brand name is displayed in the sidebar or topbar, on the login page, and at the end of every page title:
@@ -132,6 +142,81 @@ SPA mode uses the navigation of Livewire (`wire:navigate`): links between pages 
 panel.spa();
 ```
 
+### SPA prefetching
+
+Prefetching loads a page as soon as the user hovers its link, so that it is often ready when they click (`wire:navigate.hover`):
+
+```ts
+panel.spa(true, { prefetch: true });
+```
+
+Prefetched pages are requested like any other page: each hovered link makes a request, even if the user does not click it.
+
+## Unsaved changes alerts
+
+The user may be warned before leaving a create or edit page whose form has changes that are not saved yet:
+
+```ts
+panel.unsavedChangesAlerts();
+```
+
+Closing the tab or reloading asks the browser's confirmation; in SPA mode, following a link of the panel asks first too. The comparison is made with the form data as last saved (`savedDataHash`). A page may opt in or out with its static `hasUnsavedDataChangesAlert` property:
+
+```ts
+import { EditRecord } from '@navette-js/panels';
+
+export class EditSettings extends EditRecord {
+    static hasUnsavedDataChangesAlert = false;
+}
+```
+
+A field whose value is reformatted as the page loads (a [mask](/forms/text-input#input-masking)) counts as a change.
+
+## Enabling database transactions
+
+The creation and the saving of a record may run in a database transaction: if anything throws between `beforeCreate()` and `afterCreate()` (or `beforeSave()` and `afterSave()`), every query of the operation is rolled back, relationships included:
+
+```ts
+panel.databaseTransactions();
+```
+
+A page may opt in or out with its static `hasDatabaseTransactions` property. The transaction is opened by the resource's data adapter (`DataAdapter.transaction()`): `ObjectionAdapter` supports it, and a custom adapter without this method saves as before.
+
+Every query made through a connection created with `createConnection()` or `sqlite()` joins the open transaction, whether it comes from an Objection model or from `knex(table)`. Your own code can open one with `transaction()`:
+
+```ts
+import { transaction } from '@navette-js/database';
+
+await transaction(knex, async () => {
+    await knex('accounts').where('id', from).decrement('balance', amount);
+    await knex('accounts').where('id', to).increment('balance', amount);
+});
+```
+
+Called inside an open transaction, `transaction()` joins it. With SQLite, a single connection is shared: a query sent from a Knex instance created outside `createConnection()` would wait for the transaction to end.
+
+## Strict authorization mode
+
+Without a rule for an ability in its [policy](/resources/authorization), a resource allows it. In strict mode, checking an ability that the policy does not define throws an error, which shows the missing rules while developing:
+
+```ts
+panel.strictAuthorization();
+```
+
+The panel's `authorizeUsing()` hook is still consulted first: when it decides, no rule is needed.
+
+## Lifecycle hooks
+
+`bootUsing()` runs a function on every request handled by the panel (its pages and their component updates), before them:
+
+```ts
+panel.bootUsing(async (panel, req) => {
+    // Per-request setup: a locale, a feature flag…
+});
+```
+
+An error thrown by the function is passed to the Express error handler.
+
 ## Configuring the topbar and the sidebar
 
 By default, the panel has a topbar, with the user menu and global search, and a sidebar with the navigation. Several methods change this layout:
@@ -189,6 +274,3 @@ Global settings made with `configureUsing()`, overridden views and the render ho
 
 At most one panel may be served at the root. Mount the panels that have a path before the one at the root, whose routes would otherwise catch their URLs. The demo application (`apps/demo/server.ts` and `apps/demo/app-panel.ts`) runs two panels this way.
 
-<Aside variant="warning">
-Setting a domain, SPA prefetching, unsaved changes alerts, database transactions, strict authorization mode and panel lifecycle hooks are not available yet. A [plugin](/panels/plugins) may run code when the router is created.
-</Aside>

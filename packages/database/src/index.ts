@@ -1,4 +1,5 @@
 // @navette-js/database — data access contract and its Knex + Objection adapter.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import knexFactory, { type Knex } from 'knex';
 import { Model, type ModelClass, type QueryBuilder } from 'objection';
 
@@ -56,10 +57,49 @@ export interface DataAdapter<T = any> {
     deleteMany(keys: (string | number)[]): Promise<number>;
     /** True if another record already has this value (`unique` rule). */
     exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
+    /** Runs `fn` in a database transaction (`panel.databaseTransactions()`); without it, `fn` runs as is. */
+    transaction?<T>(fn: () => Promise<T>): Promise<T>;
+}
+
+/** Transactions open in the current async context, by connection. */
+const openTransactions = new AsyncLocalStorage<Map<Knex, Knex.Transaction>>();
+const RAW = Symbol('navette.rawKnex');
+const rawOf = (knex: Knex): Knex => ((knex as any)[RAW] as Knex | undefined) ?? knex;
+
+/** The transaction open on this connection in the current async context (`transaction()`), or `null`. */
+export function currentTransaction(knex: Knex = Model.knex()): Knex.Transaction | null {
+    return openTransactions.getStore()?.get(rawOf(knex)) ?? null;
+}
+
+/**
+ * Runs `fn` in a database transaction: committed when it resolves, rolled back when it throws. Every query made in the
+ * meantime through the connection (`createConnection()`, `sqlite()`: Objection models and `knex(table)` alike) joins it.
+ * Called inside an open transaction, `fn` simply joins it.
+ */
+export async function transaction<T>(knex: Knex | (() => Promise<T>), fn?: () => Promise<T>): Promise<T> {
+    if (typeof fn !== 'function') { fn = knex as () => Promise<T>; knex = Model.knex(); }
+    const raw = rawOf(knex as Knex);
+    const open = openTransactions.getStore();
+    if (open?.has(raw)) return fn();
+    return raw.transaction((trx) => openTransactions.run(new Map(open ?? []).set(raw, trx), fn!));
+}
+
+/** The connection, routed to the transaction open in the current async context (`transaction()`), if any. */
+function transactionAware(knex: Knex): Knex {
+    const target = () => openTransactions.getStore()?.get(knex) ?? knex;
+    return new Proxy(knex, {
+        apply: (_target, thisArg, args) => Reflect.apply(target() as any, thisArg, args),
+        get: (_target, property) => {
+            if (property === RAW) return knex;
+            const current = target();
+            const value = Reflect.get(current, property);
+            return typeof value === 'function' && current !== knex && property !== 'constructor' ? value.bind(current) : value;
+        },
+    }) as Knex;
 }
 
 export function createConnection(config: Knex.Config): Knex {
-    const knex = knexFactory(config);
+    const knex = transactionAware(knexFactory(config));
     Model.knex(knex);
     return knex;
 }
@@ -89,8 +129,12 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
      * (the request's tenant; `null` means no filter). Set by the panel (`panel.tenant()`).
      */
     scopeToTenant(column: string, key: () => string | number | null): this { this.tenantScope = { column, key }; return this; }
+    /** A query of the model, in the open transaction if any. */
+    private query(): QueryBuilder<M, M[]> { return this.model.query(currentTransaction(this.model.knex()) ?? undefined); }
+    /** Runs `fn` in a transaction of the model's connection. */
+    transaction<T>(fn: () => Promise<T>): Promise<T> { return transaction(this.model.knex(), fn); }
     private base(trashed: 'without' | 'with' | 'only' = 'without'): QueryBuilder<M, M[]> {
-        const q = this.model.query();
+        const q = this.query();
         const tenantKey = this.tenantScope?.key() ?? null;
         if (tenantKey !== null) q.where(`${this.model.tableName}.${this.tenantScope!.column}`, tenantKey);
         if (this.modify) this.modify(q);
@@ -168,8 +212,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async deleteMany(keys: (string | number)[]): Promise<number> {
         keys = await this.keysInScope(keys);
         if (!keys.length) return 0;
-        if (this.softDeletes) return this.model.query().whereIn(this.keyColumn, keys).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any);
-        return this.model.query().delete().whereIn(this.keyColumn, keys);
+        if (this.softDeletes) return this.query().whereIn(this.keyColumn, keys).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any);
+        return this.query().delete().whereIn(this.keyColumn, keys);
     }
 
     async paginate(query: ListQuery): Promise<Page<M>> {
@@ -215,7 +259,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async findWithTrashed(key: string | number): Promise<M | null> { return ((await this.base('with').findById(key)) as M | undefined) ?? null; }
     async create(data: Record<string, unknown>): Promise<M> {
         const tenantKey = this.tenantScope?.key() ?? null;
-        return (await this.model.query().insertAndFetch((tenantKey !== null ? { ...data, [this.tenantScope!.column]: tenantKey } : data) as any)) as unknown as M;
+        return (await this.query().insertAndFetch((tenantKey !== null ? { ...data, [this.tenantScope!.column]: tenantKey } : data) as any)) as unknown as M;
     }
     async update(key: string | number, data: Record<string, unknown>): Promise<M | null> {
         // Records outside the current tenant cannot be updated, and the tenant column never changes.
@@ -223,22 +267,22 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
             if (!(await this.base('with').findById(key))) return null;
             data = Object.fromEntries(Object.entries(data).filter(([column]) => column !== this.tenantScope!.column));
         }
-        return ((await this.model.query().patchAndFetchById(key, data as any)) as unknown as M | undefined) ?? null;
+        return ((await this.query().patchAndFetchById(key, data as any)) as unknown as M | undefined) ?? null;
     }
     /** With soft deletes, the record is timestamped instead of removed. */
     async delete(key: string | number): Promise<boolean> {
-        if (this.softDeletes) return (await this.model.query().findById(key).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any)) > 0;
-        return (await this.model.query().deleteById(key)) > 0;
+        if (this.softDeletes) return (await this.query().findById(key).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any)) > 0;
+        return (await this.query().deleteById(key)) > 0;
     }
     supportsSoftDeletes(): boolean { return this.softDeletes !== null; }
     isTrashed(record: M): boolean { return this.softDeletes !== null && (record as any)?.[this.softDeletes] != null; }
     async restore(key: string | number): Promise<boolean> {
         if (!this.softDeletes) return false;
-        return (await this.model.query().findById(key).whereNotNull(this.softDeletes).patch({ [this.softDeletes]: null } as any)) > 0;
+        return (await this.query().findById(key).whereNotNull(this.softDeletes).patch({ [this.softDeletes]: null } as any)) > 0;
     }
-    async forceDelete(key: string | number): Promise<boolean> { return (await this.model.query().deleteById(key)) > 0; }
+    async forceDelete(key: string | number): Promise<boolean> { return (await this.query().deleteById(key)) > 0; }
     async exists(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
-        const q = this.model.query().where(column, value as any);
+        const q = this.query().where(column, value as any);
         if (exceptKey !== null) q.whereNot(this.keyColumn, exceptKey);
         return (await q.resultSize()) > 0;
     }
