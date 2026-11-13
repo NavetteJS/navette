@@ -115,3 +115,20 @@ test('Builder: block maxItems(), searchable picker, collapsible, addable/deletab
     await call('add', { block: 'paragraph' });
     assert.deepEqual(Object.values(livewire.data.content as object).map((item: any) => item.type), ['heading', 'paragraph']);
 });
+
+test('Repeater: reorderable(false) stops all reordering; unsafe item links are dropped in the table layout', async () => {
+    const livewire = host({ rows: { a: { name: 'x' }, b: { name: 'y' } } });
+    const field = Repeater.make('rows').schema([TextInput.make('name')]).reorderable(false).reorderableWithButtons();
+    form(livewire, [field]);
+    await act(field, 'moveDown', { item: 'a' });
+    await act(field, 'reorder', { items: ['b', 'a'] });
+    assert.deepEqual(Object.keys(livewire.data.rows as object), ['a', 'b']);
+    const dragOnly = Repeater.make('rows').schema([TextInput.make('name')]).reorderableWithDragAndDrop(false).reorderableWithButtons();
+    form(livewire, [dragOnly]);
+    await act(dragOnly, 'reorder', { items: ['b', 'a'] });
+    assert.deepEqual(Object.keys(livewire.data.rows as object), ['a', 'b']);
+    await act(dragOnly, 'moveDown', { item: 'a' });
+    assert.deepEqual(Object.keys(livewire.data.rows as object), ['b', 'a']);
+    const table = await form(host({ rows: { a: { name: 'javascript:alert(1)' } } }), [Repeater.make('rows').table([TableColumn.make('Name')]).schema([TextInput.make('name')]).extraItemLink(({ item }) => ({ label: 'Open', icon: 'm-link', url: String(item.name) }))]).toHtml();
+    assert.doesNotMatch(table, /href="javascript:/);
+});

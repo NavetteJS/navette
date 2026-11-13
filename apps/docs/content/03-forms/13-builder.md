@@ -71,6 +71,10 @@ The saved value is a list of blocks. Store it in a JSON column:
 
 When the form is filled, the builder accepts this list, the same list as a JSON string, or an object of items keyed by item key. Items with an unknown block type are dropped. If you prefer to save the object of items keyed by item key, use `storedAsList(false)`.
 
+<Aside variant="warning">
+Block previews, labelling items based on their content, customizing the search prompt of the block picker, customizing the item actions, adding extra item actions and confirming item actions with a modal are not available yet.
+</Aside>
+
 ## Setting a block's label
 
 By default, the label of the block is generated from its name: `task_group` becomes "Task group". You may override it with the `label()` method:
@@ -272,13 +276,129 @@ return Builder.make('content')
     ])
 ```
 
+### Preventing the user from adding items
+
+You may prevent the user from adding items to the builder using the `addable(false)` method. The block pickers are removed, and the server refuses additions:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .addable(false)
+```
+
 ## Deleting items
 
 An action button is displayed on each item header to allow the user to delete it.
 
+### Preventing the user from deleting items
+
+You may prevent the user from deleting items from the builder using the `deletable(false)` method. The button is removed, and the server refuses deletions:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .deletable(false)
+```
+
 ## Reordering items
 
 A handle on each item header allows the user to reorder the items by drag and drop. Keyboard users can move an item up or down with buttons revealed to assistive technology. The server only accepts a new order that is a permutation of the existing items.
+
+### Preventing the user from reordering items
+
+You may prevent the user from reordering items from the builder using the `reorderable(false)` method:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .reorderable(false)
+```
+
+### Reordering items with buttons
+
+You may use `reorderableWithButtons()` to display move up and move down buttons in the header of each item:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .reorderableWithButtons()
+```
+
+### Preventing reordering with drag and drop
+
+You may use the `reorderableWithDragAndDrop(false)` method to prevent items from being ordered with drag and drop. Combined with `reorderableWithButtons()`, items can only be moved with the buttons:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .reorderableWithDragAndDrop(false)
+    .reorderableWithButtons()
+```
+
+`reorderable(false)` turns off all reordering, buttons included. `reorderableWithDragAndDrop(false)` only removes drag and drop: with `reorderableWithButtons()`, the move buttons stay available. Both are enforced on the server.
+
+## Collapsing items
+
+The builder may be `collapsible()` to optionally hide content in long forms. A button in the header of each item collapses or expands it, and "Collapse all" and "Expand all" links are displayed above the items:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .collapsible()
+```
+
+You may also collapse all items by default:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .collapsed()
+```
+
+`collapsed()` also makes the builder collapsible. Collapsing happens in the browser: the fields of a collapsed item are still rendered and validated. The collapse button is in the item header, so it is not available with [`blockHeaders(false)`](#hiding-the-block-headers).
+
+### Remembering collapsed items
+
+`persistCollapsed()` keeps the collapsed state of each item in the browser's local storage, so it is restored on the next visit. The state is stored per item key: it is only restored for items whose key does not change between visits, which is the case with `storedAsList(false)`.
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .collapsible()
+    .persistCollapsed()
+```
 
 ## Cloning items
 
@@ -320,6 +440,31 @@ You may also change the tag of the header label with `blockLabelHeadingTag()` (`
 
 ## Customizing the block picker
 
+### Grouping blocks
+
+You may group blocks under headings by passing an object of block lists to `blocks()`, keyed by group label:
+
+```ts
+import { Textarea, TextInput } from '@navette-js/forms';
+import { Block, Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks({
+        Content: [
+            Block.make('heading')
+                .schema(() => [TextInput.make('text')]),
+            Block.make('paragraph')
+                .schema(() => [Textarea.make('text')]),
+        ],
+        Media: [
+            Block.make('video')
+                .schema(() => [TextInput.make('url').url()]),
+        ],
+    })
+```
+
+Groups appear in the order they are defined. You may also set the group of a block with `Block.pickerGroup()`; blocks without a group appear first, without a heading. Grouping only affects the picker, not the order or stored state of the blocks you add.
+
 ### Changing the number of columns in the block picker
 
 The block picker has only 1 column. You may customize it by passing a number of columns, which apply from the `lg` breakpoint, to `blockPickerColumns()`:
@@ -343,14 +488,57 @@ Builder.make('content')
     .blockPickerWidth('2xl')
 ```
 
+### Searching blocks
+
+If you have many blocks, you may allow users to search them in the block picker using the `searchable()` method:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .searchable()
+    .blocks([
+        // ...
+    ])
+```
+
+The search matches block labels in the browser, without making a server request, and is case-insensitive.
+
+## Limiting the number of times a block can be used
+
+By default, each block can be used in the builder an unlimited number of times. You may limit this using the `maxItems()` method on a block. Once the limit is reached, the block is removed from the block picker, and the server refuses to add or clone more items of this block:
+
+```ts
+import { Block } from '@navette-js/forms/builder';
+
+Block.make('heading')
+    .schema(() => [
+        // ...
+    ])
+    .maxItems(1)
+```
+
 ## Accessing parent field values
 
 Inside a block, `get()` and `set()` are relative to the item's data: `get('title')` reads the title of the same block. To read a field outside of the item, use the host component's state, as explained for the [repeater](/forms/repeater#accessing-parent-field-values).
 
 ## Builder validation
 
-As well as all rules listed on the [validation](/forms/validation) page, each field of each block is validated with its own rules. You may limit the number of items with `maxItems()` (100 by default): the add buttons disappear once the limit is reached, and the server ignores further additions.
+As well as all rules listed on the [validation](/forms/validation) page, a `required()` builder needs at least one item, and each field of each block is validated with its own rules.
 
-<Aside variant="warning">
-Block previews, collapsing items, grouping and searching blocks, limiting how many times a block can be used and confirming item actions with a modal are not available yet.
-</Aside>
+### Number of items validation
+
+You can set the minimum and maximum number of items that you can have in a builder with the `minItems()` and `maxItems()` methods:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .minItems(1)
+    .maxItems(5)
+```
+
+`minItems()` is checked on the server when the form is validated. `maxItems()` (100 by default) is a limit rather than a validation rule: the add buttons disappear once it is reached, the server ignores further additions and clones, and items beyond it are dropped.

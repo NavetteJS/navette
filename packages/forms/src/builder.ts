@@ -135,7 +135,11 @@ export class Builder extends Field {
     deletable(condition = true): this { this._deletable = condition; return this; }
     /** `false`: items keep their order. */
     reorderable(condition = true): this { this._reorderable = condition; return this; }
-    reorderableWithDragAndDrop(condition = true): this { this._reorderable = condition; return this; }
+    private _dragAndDrop = true;
+    /** `false`: no drag and drop (buttons may still reorder, with `reorderableWithButtons()`). */
+    reorderableWithDragAndDrop(condition = true): this { this._dragAndDrop = condition; return this; }
+    private canDrag(): boolean { return this._reorderable && this._dragAndDrop; }
+    private canMove(): boolean { return this._reorderable && (this._dragAndDrop || this._reorderableWithButtons); }
     /** Move up / move down buttons in each item header. */
     reorderableWithButtons(condition = true): this { this._reorderableWithButtons = condition; return this; }
     /** Items can be collapsed from their header; `collapsed()` collapses them on load. */
@@ -150,6 +154,8 @@ export class Builder extends Field {
         const rules: Rule[] = [];
         if (await this.isRequired()) rules.push({ name: 'required', passes: () => count() > 0, message: (a) => `The ${a} field is required.` });
         if (this._minItems !== null) rules.push({ name: 'min', implicit: true, passes: () => count() >= this._minItems!, message: (a) => `The ${a} field must have at least ${this._minItems} items.` });
+        const items = () => Object.values(this.getItems());
+        for (const block of this.getBlocks()) if (block.getMaxItems() !== null) rules.push({ name: 'max', implicit: true, passes: () => items().filter((item) => item.type === block.name).length <= block.getMaxItems()!, message: (a) => `The ${a} field must not have more than ${block.getMaxItems()} ${block.getLabel()} items.` });
         return [...rules, ...this._rules];
     }
     /** Class added to the root (e.g. `fi-fo-builder-not-contained`). */
@@ -230,7 +236,7 @@ export class Builder extends Field {
             return Object.fromEntries(Object.entries(items).flatMap(([k, v]) => (k === after ? [[k, v], [key, item]] : [[k, v]])));
         };
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
-            if (!this._reorderable && !this._reorderableWithButtons) return;
+            if (!this.canMove()) return;
             const items = this.getItems();
             const keys = Object.keys(items);
             const from = keys.indexOf(String(args.item));
@@ -263,7 +269,7 @@ export class Builder extends Field {
             Action.make('moveDown').action(move(1)),
             // Drag and drop: the new order is only accepted if it is a permutation of the existing keys.
             Action.make('reorder').action(({ arguments: args }) => {
-                if (!this._reorderable) return;
+                if (!this.canDrag()) return;
                 const items = this.getItems();
                 const keys = Object.keys(items);
                 const order = Array.isArray(args.items) ? args.items.map(String) : [];
@@ -341,8 +347,8 @@ export class Builder extends Field {
                 const blockIcon = block.getIcon();
                 const gray = colorsOf(this.livewire)?.getComponentClasses('icon-button', 'gray') ?? [];
                 const collapse = this._collapsible ? `<li class="fi-fo-builder-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-builder-item-header-collapse-action"><button title="${e(tr('actions.collapse.label'))}" aria-label="${e(tr('actions.collapse.label'))}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon('m-chevron-up')}</button></div><div class="fi-fo-builder-item-header-expand-action"><button title="${e(tr('actions.expand.label'))}" aria-label="${e(tr('actions.expand.label'))}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon('m-chevron-down')}</button></div></li>` : '';
-                const reorder = this._reorderable ? `<li x-on:click.stop><button title="${e(tr('actions.reorder.label'))}" aria-label="${e(tr('actions.reorder.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-sortable-handle="x-sortable-handle">${icon('m-arrows-up-down')}</button></li>` : '';
-                const moves = this._reorderable || this._reorderableWithButtons ? `${moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', index === 0)}${moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', index === keys.length - 1)}` : '';
+                const reorder = this.canDrag() ? `<li x-on:click.stop><button title="${e(tr('actions.reorder.label'))}" aria-label="${e(tr('actions.reorder.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-sortable-handle="x-sortable-handle">${icon('m-arrows-up-down')}</button></li>` : '';
+                const moves = this.canMove() ? `${moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', index === 0)}${moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', index === keys.length - 1)}` : '';
                 header = `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="fi-fo-builder-item-header">${reorder || moves ? `<ul class="fi-fo-builder-item-header-start-actions">${reorder}${moves}</ul>` : ''}${this._blockIcons && blockIcon ? icon(blockIcon, { attributes: new Attributes().class(['fi-fo-builder-item-header-icon']) }) : ''}<${this._headingTag} class="fi-fo-builder-item-header-label fi-truncated">${e(block.getLabel())}${this._blockNumbers ? ` ${index + 1}` : ''}</${this._headingTag}><ul class="fi-fo-builder-item-header-end-actions">${this._cloneable ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: tr('actions.clone.label'), icon: 'm-square-2-stack', expression: this.actionExpression('clone', { item: itemKey }) })}</li>` : ''}${this._deletable ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: tr('actions.delete.label'), icon: 'm-trash', expression: this.actionExpression('delete', { item: itemKey }), colorClasses: danger })}</li>` : ''}${collapse}</ul></div>`;
             }
             rows.push(`<li wire:ignore.self wire:key="${e(livewireKey)}.${e(itemKey)}.data.item" x-data="item(${e(js({ isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `filament:builder:collapsed:${key}-${itemKey}` : null }))})" x-on:builder-expand.window="expandFromEvent" x-on:builder-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['fi-fo-builder-item', { 'fi-fo-builder-item-has-header': this._blockHeaders }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="fi-fo-builder-item-content">${await this.itemSchema(itemKey, item).toHtml()}</div></li>`);

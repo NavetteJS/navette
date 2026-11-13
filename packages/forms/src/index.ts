@@ -935,9 +935,15 @@ export class Repeater extends Field {
     private _reorderable = true;
     /** `false`: items keep their order (e.g. a relationship without an order column). */
     reorderable(condition = true): this { this._reorderable = condition; return this; }
+    private _dragAndDrop = true;
     /** Move up / move down buttons in each item header, besides drag and drop. */
     reorderableWithButtons(condition = true): this { this._reorderableWithButtons = condition; return this; }
-    reorderableWithDragAndDrop(condition = true): this { this._reorderable = condition; return this; }
+    /** `false`: no drag and drop (buttons may still reorder, with `reorderableWithButtons()`). */
+    reorderableWithDragAndDrop(condition = true): this { this._dragAndDrop = condition; return this; }
+    /** Reordering is off with `reorderable(false)`, and for a relationship without `orderColumn()` (the order could not be saved). */
+    private isReorderable(): boolean { return this._reorderable && !(this._relationship !== null && this._relationship.orderColumn === null && this._orderColumnPending === null); }
+    private canDrag(): boolean { return this.isReorderable() && this._dragAndDrop; }
+    private canMove(): boolean { return this.isReorderable() && (this._dragAndDrop || this._reorderableWithButtons); }
     /** Link shown on each row (an item action pointing to a URL). */
     extraItemLink(resolver: (ctx: { item: Record<string, unknown>; key: string }) => ItemLink | null): this { this._itemLinks.push(resolver); return this; }
     /** Items laid out in a grid (`2`, or `{ md: 2, xl: 3 }`). */
@@ -1073,7 +1079,7 @@ export class Repeater extends Field {
 
     getActions(): Action[] {
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
-            if (!this._reorderable && !this._reorderableWithButtons) return;
+            if (!this.canMove()) return;
             const items = this.getItems();
             const keys = Object.keys(items);
             const from = keys.indexOf(String(args.item));
@@ -1097,7 +1103,7 @@ export class Repeater extends Field {
             Action.make('moveDown').action(move(1)),
             // Drag and drop: the browser sends the new order, only accepted if it is a permutation of the existing keys.
             Action.make('reorder').action(({ arguments: args }) => {
-                if (!this._reorderable) return;
+                if (!this.canDrag()) return;
                 const items = this.getItems();
                 const keys = Object.keys(items);
                 const order = Array.isArray(args.items) ? args.items.map(String) : [];
@@ -1130,7 +1136,6 @@ export class Repeater extends Field {
             const loading = options.expression ? `${icon(options.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': options.expression }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': options.expression }))}` : icon(options.icon);
             return `<button title="${e(options.label)}"${options.disabled ? ' aria-disabled="true"' : ''} aria-label="${e(options.label)}"${options.disabled ? ' disabled="disabled"' : ''} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': options.disabled === true }, 'fi-size-sm', ...(options.colors ?? [])])}"${options.extra ?? ''}${options.expression ? ` wire:click="${e(options.expression)}"` : ''}>${loading}</button>`;
         };
-        const reorderButtons = this._reorderable && this._addable !== null;
         const rows: string[] = [];
         for (const [index, itemKey] of keys.entries()) {
             const isFirst = index === 0, isLast = index === keys.length - 1;
@@ -1141,8 +1146,8 @@ export class Repeater extends Field {
             const content = await schemas[index].toHtml();
             if (this._simple) {
                 const actions = [
-                    ...(this._reorderable && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
-                    ...(reorderButtons && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
+                    ...(this.canDrag() && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
+                    ...(this.canMove() && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
                     ...(this._cloneable ? [`<li x-on:click.stop>${button({ label: tr('actions.clone.label'), icon: 'm-square-2-stack', expression: expression('clone', { item: itemKey }), colors: gray })}</li>`] : []),
                     ...(this._deletable ? [`<li x-on:click.stop>${button({ label: tr('actions.delete.label'), icon: 'm-trash', expression: expression('delete', { item: itemKey }), colors: danger })}</li>`] : []),
                 ];
@@ -1151,8 +1156,8 @@ export class Repeater extends Field {
             }
             const label = await this.itemLabelOf(itemKey, index, items[itemKey]);
             const start = [
-                ...(this._reorderable && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
-                ...((this._reorderable || this._reorderableWithButtons) && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
+                ...(this.canDrag() && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
+                ...(this.canMove() && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
             ];
             const links = this._itemLinks.map((resolve) => resolve({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
                 .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
@@ -1202,7 +1207,7 @@ export class Repeater extends Field {
         const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
         const rows: string[] = [];
         // No reorder column while there is only one row.
-        const hasReorderColumn = this._reorderable && keys.length > 1;
+        const hasReorderColumn = this.canDrag() && keys.length > 1;
         for (const [index, itemKey] of keys.entries()) {
             const moveButton = (action: 'moveUp' | 'moveDown', label: string, iconName: string, direction: string, disabled: boolean) => {
                 const expr = expression(action, { item: itemKey });
@@ -1210,7 +1215,8 @@ export class Repeater extends Field {
             };
             const cells: string[] = [];
             for (const field of schemas[index].getComponents()) cells.push(`<td>${await field.toSchemaHtml(await field.isVisible())}</td>`);
-            const links = this._itemLinks.map((resolve) => resolve({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null)
+            // Only local or http(s) URLs: a link built from item data cannot become a `javascript:` URL.
+            const links = this._itemLinks.map((resolve) => resolve({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
                 .map((link) => `<div x-on:click.stop><a href="${e(link.url)}" target="_blank" x-tooltip="{
  content: ${e(js(link.label))},
  theme: $store.theme,
@@ -1224,7 +1230,7 @@ export class Repeater extends Field {
         const label = await this.getLabel();
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: false };
         const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
-        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : ''}${descriptions}</div>`;
+        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(this._addActionLabel ?? tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : ''}${descriptions}</div>`;
         return this.wrap(table, { labelAsDiv: true });
     }
 }
