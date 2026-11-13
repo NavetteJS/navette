@@ -71,7 +71,13 @@ export class Notification {
     }
 }
 
-/** Renders a flash notification (no date, actions or inline mode). Title and body are escaped. */
+/** Links of a notification: only local or http(s) URLs. */
+function notificationActionsHtml(n: NotificationData): string {
+    const links = (n.actions ?? []).filter((action) => action.label !== '' && typeof action.url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(action.url)).map((action) => `<a href="${e(action.url!)}"${action.openUrlInNewTab ? ' target="_blank" rel="noopener noreferrer"' : ''} class="fi-ac-link-action fi-link fi-size-sm fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400"><span class="fi-link-label">${e(action.label)}</span></a>`);
+    return links.length ? `<div class="fi-ac fi-no-notification-actions">${links.join('')}</div>` : '';
+}
+
+/** Renders a flash notification (no date or inline mode). Title, body and action labels are escaped. */
 export function renderNotification(n: NotificationData): string {
     const closeLabel = t('filament-notifications::notification.actions.close.label');
     const attributes = new Attributes()
@@ -80,7 +86,7 @@ export function renderNotification(n: NotificationData): string {
     const iconName = n.icon ?? (n.status ? STATUS_ICON[n.status] : null);
     const iconColor = n.iconColor ?? n.status;
     const iconHtml = iconName ? icon(iconName, { size: 'lg', attributes: new Attributes().class([...(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${iconColor}`] : []), 'fi-no-notification-icon']) }) : '';
-    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${e(n.body)}</div>` : ''}</div>` : ''}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark')}</button></div>`;
+    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${e(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark')}</button></div>`;
 }
 
 /** Container component for flash notifications. */

@@ -1,20 +1,29 @@
-<%# Text input with its prefix/suffix wrapper. %>
+<%# Text input with its prefix/suffix wrapper: labels, icons and actions. %>
 <div <%- wrapper %>>
-    <% if (prefix !== null) { %>
-        <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label">
+    <% if (hasPrefix) { %>
+        <div<% if (prefix !== null || prefixIcon) { %> x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')"<% } %> class="<%- cls(['fi-input-wrp-prefix', 'fi-input-wrp-prefix-has-content', { 'fi-inline': prefixInline, 'fi-input-wrp-prefix-has-label': prefix !== null }]) %>">
+            <% if (prefixActions.length) { %><div class="fi-input-wrp-actions"><%- prefixActions.join('') %></div><% } %>
+            <%- prefixIcon %>
+            <% if (prefix !== null) { %>
             <span class="fi-input-wrp-label">
                 <%= prefix %>
             </span>
+            <% } %>
         </div>
     <% } %>
     <div class="fi-input-wrp-content-ctn">
         <input <%- input %> />
+        <% if (datalist) { %><datalist id="<%= datalist.id %>"><% for (const option of datalist.options) { %><option value="<%= option %>"></option><% } %></datalist><% } %>
     </div>
-    <% if (suffix !== null) { %>
-        <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-suffix fi-input-wrp-suffix-has-label">
+    <% if (hasSuffix) { %>
+        <div<% if (suffix !== null || suffixIcon) { %> x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')"<% } %> class="<%- cls(['fi-input-wrp-suffix', { 'fi-inline': suffixInline, 'fi-input-wrp-suffix-has-label': suffix !== null }]) %>">
+            <% if (suffix !== null) { %>
             <span class="fi-input-wrp-label">
                 <%= suffix %>
             </span>
+            <% } %>
+            <%- suffixIcon %>
+            <% if (suffixActions.length) { %><div class="fi-input-wrp-actions"><%- suffixActions.join('') %></div><% } %>
         </div>
     <% } %>
     <% if (revealable) { %>

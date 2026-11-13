@@ -762,6 +762,14 @@ export class Page extends BasePage {
      * Actions owned by a schema component (Repeater: add, delete, move; Section: header actions).
      * The key comes from the browser: it must match a real component of the schema, or the schema itself.
      */
+    /** Visible component of a schema of this page (or of a mounted action's form) with this key. */
+    protected async findSchemaComponent(key: string): Promise<any | null> {
+        const name = key.split('.')[0];
+        const mountedIndex = /^mountedActionSchema(\d+)$/.exec(name);
+        if (!mountedIndex && (!/^[A-Za-z]+$/.test(name) || typeof (this as any)[`${name}Schema`] !== 'function')) return null;
+        const schema = mountedIndex ? await this.getMountedActionSchema(Number(mountedIndex[1])) : this.getSchema(name);
+        return schema ? ((await schema.getVisibleFlatComponents()) as any[]).find((c) => c.getKey() === key) ?? null : null;
+    }
     protected async getSchemaComponentActions(key: string): Promise<Action[]> {
         const name = key.split('.')[0];
         // The component may belong to the form of an already mounted action (rich editor in a modal).
@@ -797,7 +805,22 @@ export class Page extends BasePage {
         const parentIndex = mounted.context.parentAction;
         const parent = typeof parentIndex === 'number' ? this.mountedActions[parentIndex] : undefined;
         const parentData = parent ? (parent.data ??= {}) : undefined;
-        return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}), ...(parentData ? { parentData } : {}) };
+        // An action of a form field (affix action): its state, and access to the other fields of the same form.
+        let fieldAccess: Record<string, unknown> = {};
+        if (typeof mounted.context.schemaComponent === 'string') {
+            const component = await this.findSchemaComponent(mounted.context.schemaComponent);
+            const path = typeof component?.getStatePath === 'function' && component.hasStatePath() ? String(component.getStatePath()) : null;
+            if (path) {
+                const container = path.split('.').slice(0, -1);
+                const nodeOf = () => container.reduce((node: any, segment) => (node && typeof node === 'object' ? node[segment] : undefined), this as any);
+                fieldAccess = {
+                    state: path.split('.').reduce((node: any, segment) => (node && typeof node === 'object' ? node[segment] : undefined), this as any),
+                    get: (name: string) => nodeOf()?.[name],
+                    set: (name: string, value: unknown) => { const node = nodeOf(); if (node && typeof node === 'object' && /^[A-Za-z0-9_]+$/.test(name)) node[name] = value; },
+                };
+            }
+        }
+        return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}), ...(parentData ? { parentData } : {}), ...fieldAccess };
     }
     /** Form schema of a mounted action: key `mountedActionSchema<n>`, state under `mountedActions.<n>.data`. */
     async getMountedActionSchema(index: number): Promise<Schema | null> {

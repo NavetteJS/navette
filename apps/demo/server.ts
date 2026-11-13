@@ -24,6 +24,7 @@ import { TimesheetResource } from './resources/TimesheetResource.ts';
 import { calendarWidgets, hrWidgets } from './widgets/hr.ts';
 import { calendarPages } from './pages/calendar.ts';
 import { appPanel, demoAuthProvider } from './app-panel.ts';
+import { labPanel } from './lab-panel.ts';
 import { shopWidgets } from './widgets/shop.ts';
 import { welcomeWidgets } from './widgets/welcome.ts';
 import { STATUSES } from './resources/OrderResource.ts';
@@ -153,5 +154,7 @@ const mailLog = process.env.NAVETTE_MAIL_LOG ?? path.join(uploads, 'mail.log');
 const secondPanel = appPanel({ key, login: DemoLogin, auth: accounts, mailLog, appUrl: `http://127.0.0.1:${port}`, profile: !process.env.NAVETTE_NO_THEMES });
 if (process.env.NAVETTE_HOOK_PROBE) secondPanel.plugin((await import('./hook-probe.ts')).hookProbe(CustomerResource));
 app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
+// Third panel (`/lab`): recent features on the demo data, outside the pages compared with Filament. NAVETTE_NO_LAB turns it off.
+if (!process.env.NAVETTE_NO_LAB) app.use(panelRouter(labPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.listen(port, '127.0.0.1', () => console.log(`Navette demo: http://127.0.0.1:${port}/login`));

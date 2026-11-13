@@ -206,11 +206,54 @@ export class TextInput extends Field {
     step(step: number | 'any' | null): this { this._step = step; return this; }
     minValue(value: number): this { this._minValue = value; return this.rule({ name: 'min', passes: (v) => Number(v) >= value, message: (a) => `The ${a} field must be at least ${value}.` }); }
     maxValue(value: number): this { this._maxValue = value; return this.rule({ name: 'max', passes: (v) => Number(v) <= value, message: (a) => `The ${a} field must not be greater than ${value}.` }); }
-    /** Label shown before the input (e.g. `$`). */
-    prefix(label: string | null): this { this._prefix = label; return this; }
+    /** Label shown before the input (e.g. `$`); `isInline`: inside the input instead of a separate box. */
+    prefix(label: string | null, isInline = false): this { this._prefix = label; this._prefixInline = isInline; return this; }
     private _suffix: string | null = null;
     /** Label shown after the input ("hours", "kg"…). */
-    suffix(label: string | null): this { this._suffix = label; return this; }
+    suffix(label: string | null, isInline = false): this { this._suffix = label; this._suffixInline = isInline; return this; }
+    private _prefixInline = false;
+    private _suffixInline = false;
+    private _prefixIcon: string | null = null;
+    private _suffixIcon: string | null = null;
+    private _prefixIconColor: string | null = null;
+    private _suffixIconColor: string | null = null;
+    private _prefixActions: Action[] = [];
+    private _suffixActions: Action[] = [];
+    prefixIcon(icon: string | null, isInline = false): this { this._prefixIcon = icon; this._prefixInline = isInline; return this; }
+    suffixIcon(icon: string | null, isInline = false): this { this._suffixIcon = icon; this._suffixInline = isInline; return this; }
+    prefixIconColor(color: string | null): this { this._prefixIconColor = color; return this; }
+    suffixIconColor(color: string | null): this { this._suffixIconColor = color; return this; }
+    /**
+     * Icon button before the input, running an action. The action gets the field's `state`, and `set(name, value)` to change a
+     * field of the same form.
+     */
+    prefixAction(action: Action, isInline = false): this { this._prefixActions = [...this._prefixActions, action]; this._prefixInline = isInline; return this; }
+    prefixActions(actions: Action[]): this { this._prefixActions = actions; return this; }
+    suffixAction(action: Action, isInline = false): this { this._suffixActions = [...this._suffixActions, action]; this._suffixInline = isInline; return this; }
+    suffixActions(actions: Action[]): this { this._suffixActions = actions; return this; }
+    /** Affix actions, mounted through the schema component. */
+    getActions(): Action[] { return [...this.getHintActions(), ...this._prefixActions, ...this._suffixActions]; }
+    /** Exact length: `minlength` and `maxlength`, and the matching rule. */
+    length(length: number): this { this.minLength(length); this.maxLength(length); return this; }
+    private _datalist: string[] = [];
+    /** Suggestions offered by the browser while typing (`<datalist>`). */
+    datalist(options: string[]): this { this._datalist = options.map(String); return this; }
+    private _readOnly = false;
+    /** The value is shown and sent, but cannot be changed (`readonly`). */
+    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    private _copyable: { message: string | null; duration: number } | null = null;
+    /** A button after the input copies its value (the browser only allows it on HTTPS or `localhost`). */
+    copyable(condition = true, copyMessage: string | null = null, copyMessageDuration = 2000): this { this._copyable = condition ? { message: copyMessage, duration: copyMessageDuration } : null; return this; }
+    private _trim = false;
+    /** Removes the spaces around the value before it is validated and saved. */
+    trim(condition = true): this { this._trim = condition; return this; }
+    hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
+    private _inputMode: string | null = null;
+    private _autocapitalize: string | null = null;
+    /** Virtual keyboard: `none`, `text`, `decimal`, `numeric`, `tel`, `search`, `email` or `url`. */
+    inputMode(mode: string | null): this { this._inputMode = mode; return this; }
+    /** `none`, `sentences`, `words` or `characters` (`true` / `false` for `on` / `off`). */
+    autocapitalize(mode: string | boolean | null = true): this { this._autocapitalize = mode === true ? 'on' : mode === false ? 'off' : mode; return this; }
     /** Sends the state to the server on every keystroke, or on blur with `onBlur`. */
     live(options: { onBlur?: boolean } = {}): this { this._live = options.onBlur ? 'blur' : 'live'; return this; }
     type(type: string): this { this._type = type; return this; }
@@ -237,6 +280,16 @@ export class TextInput extends Field {
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         const revealable = this._isPassword && this._isRevealable;
+        // Affixes: label, icon and actions (only visible actions, mounted through this component).
+        const ctx = this.context();
+        const key = this.getKey();
+        const visibleActions = async (actions: Action[]) => { const html: string[] = []; for (const action of actions) if (await action.isVisible(ctx)) html.push(await action.iconButton().size('sm').toHtml(ctx, { schemaComponent: key })); return html; };
+        const prefixActions = await visibleActions(this._prefixActions);
+        const copyLabel = t('filament-forms::components.text_input.actions.copy.label');
+        const copyMessage = this._copyable?.message ?? t('filament-forms::components.text_input.actions.copy.message');
+        const suffixActions = [...(await visibleActions(this._suffixActions)), ...(this._copyable ? [`<button title="${e(copyLabel)}" aria-label="${e(copyLabel)}" type="button" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-on:click="${e(`window.navigator.clipboard.writeText($el.closest('.fi-input-wrp').querySelector('input').value)\n$tooltip(${js(copyMessage)}, { theme: $store.theme, timeout: ${this._copyable.duration} })`)}">${icon('m-clipboard-document-list')}</button>`] : [])];
+        const hasPrefix = this._prefix !== null || this._prefixIcon !== null || prefixActions.length > 0;
+        const hasSuffix = this._suffix !== null || this._suffixIcon !== null || suffixActions.length > 0;
         const type = revealable ? 'password' : this._mask !== null ? 'text' : (this._type ?? (this._isPassword ? 'password' : this._numeric ? 'number' : 'text'));
         const model = `wire:model${this._live ? '.live' : ''}${this._live === 'blur' ? '.blur' : ''}`;
         const input = new Attributes()
@@ -244,16 +297,19 @@ export class TextInput extends Field {
                 'aria-invalid': this.hasError() ? 'true' : null,
                 'aria-describedby': this.getHelperTextId(),
                 autocomplete: this._autocomplete, autofocus: this._autofocus, disabled: isDisabled, id: this.getId(),
-                inputmode: this._numeric === 'decimal' ? 'decimal' : this._numeric === 'integer' ? 'numeric' : null,
+                autocapitalize: this._autocapitalize,
+                inputmode: this._inputMode ?? (this._numeric === 'decimal' ? 'decimal' : this._numeric === 'integer' ? 'numeric' : null),
+                list: this._datalist.length && !isDisabled && !this._readOnly ? `${this.getId()}-list` : null,
+                readonly: this._readOnly,
                 max: phpNumber(this._maxValue), min: phpNumber(this._minValue),
                 maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder,
-                required: (await this.isRequired()) && !isDisabled, step: this._step ?? (this._numeric === 'decimal' ? 'any' : this._numeric === 'integer' ? 1 : null), type,
+                required: (await this.isRequired()) && !isDisabled && !this._readOnly, step: this._step ?? (this._numeric === 'decimal' ? 'any' : this._numeric === 'integer' ? 1 : null), type,
                 // Modifiers (`.live`, `.blur`) also apply to `wire:model.fill`.
                 [revealable ? model.replace('wire:model', 'wire:model.fill') : model]: this.getStatePath(),
                 'x-bind:type': revealable ? "isPasswordRevealed ? 'text' : 'password'" : null,
                 'x-mask': this._mask,
             })
-            .class(['fi-input', { 'fi-revealable': revealable }]);
+            .class(['fi-input', { 'fi-input-has-inline-prefix': this._prefixInline && hasPrefix, 'fi-input-has-inline-suffix': this._suffixInline && hasSuffix, 'fi-revealable': revealable }]);
         const wrapper = new Attributes()
             .merge({
                 'x-data': revealable ? 'passwordRevealFormComponent()' : this._mask !== null ? '{}' : null,
@@ -264,6 +320,10 @@ export class TextInput extends Field {
             .class(['fi-fo-text-input', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         return this.wrap(views.render('filament-forms::components.text-input', {
             input: input.toHtml(), wrapper: wrapper.toHtml(), revealable, prefix: this._prefix, suffix: this._suffix,
+            prefixIcon: this._prefixIcon ? icon(this._prefixIcon, { attributes: new Attributes().class(this._prefixIconColor && this._prefixIconColor !== 'gray' ? ['fi-color', `fi-color-${this._prefixIconColor}`] : []) }) : '',
+            suffixIcon: this._suffixIcon ? icon(this._suffixIcon, { attributes: new Attributes().class(this._suffixIconColor && this._suffixIconColor !== 'gray' ? ['fi-color', `fi-color-${this._suffixIconColor}`] : []) }) : '',
+            prefixActions, suffixActions, hasPrefix, hasSuffix, prefixInline: this._prefixInline, suffixInline: this._suffixInline,
+            datalist: this._datalist.length && !isDisabled && !this._readOnly ? { id: `${this.getId()}-list`, options: this._datalist } : null,
             showLabel: t('filament-forms::components.text_input.actions.show_password.label'),
             hideLabel: t('filament-forms::components.text_input.actions.hide_password.label'),
         }));
@@ -766,8 +826,16 @@ export class Radio extends Field {
     /** Options side by side. */
     inline(condition = true): this { this._inline = condition; return this; }
     live(condition = true): this { this._live = condition; return this; }
+    private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
+    /** Options that cannot be picked; they are refused on the server too. */
+    disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
+    isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
+    /** "Yes" (`1`) and "No" (`0`) options. */
+    boolean(trueLabel: string | null = null, falseLabel: string | null = null): this {
+        return this.options([['1', trueLabel ?? t('filament-forms::components.radio.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.radio.boolean.false')]]);
+    }
     async getValidationRules(): Promise<Rule[]> {
-        return [...(await super.getValidationRules()), { name: 'in', passes: (v) => this._options.some(([value]) => value === String(v)), message: (a) => `The selected ${a} is invalid.` }];
+        return [...(await super.getValidationRules()), { name: 'in', passes: (v) => this._options.some(([value, label]) => value === String(v) && !this.isOptionDisabled(value, label)), message: (a) => `The selected ${a} is invalid.` }];
     }
     async toHtml(): Promise<string> {
         const id = this.getId();
@@ -778,7 +846,7 @@ export class Radio extends Field {
             .class(['fi-fo-radio', this._inline ? 'fi-inline' : null]);
         const items = this._options.map(([value, label]) => {
             const input = new Attributes()
-                .merge({ type: 'radio', disabled: isDisabled, id: `${id}-${value}`, name: id, required: isRequired, value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
+                .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
                 .class(['fi-radio-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             const description = this._descriptions[value] ? `<p class="fi-fo-radio-label-description">${e(this._descriptions[value])}</p>` : '';
             return `<label class="fi-fo-radio-label"><input ${input.toHtml()} /><div class="fi-fo-radio-label-text"><p>${e(label)}</p>${description}</div></label>`;
@@ -793,18 +861,37 @@ export class Textarea extends Field {
     static make(name: string): Textarea { return configured(new Textarea(name)); }
     rows(rows: number): this { this._rows = rows; return this; }
     maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
+    private _minLength: number | null = null;
+    private _placeholder: string | null = null;
+    private _readOnly = false;
+    private _autosize = false;
+    private _grammarly = true;
+    private _trim = false;
+    minLength(length: number): this { this._minLength = length; return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    /** Exact length. */
+    length(length: number): this { this.minLength(length); return this.maxLength(length); }
+    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    /** The textarea grows with its content. */
+    autosize(condition = true): this { this._autosize = condition; return this; }
+    /** Stops the Grammarly extension from analyzing the content. */
+    disableGrammarly(condition = true): this { this._grammarly = !condition; return this; }
+    /** Removes the spaces around the value before it is validated and saved. */
+    trim(condition = true): this { this._trim = condition; return this; }
+    hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         // Initial height: 1.5rem per row plus padding.
         const height = (this._rows ?? 2) * 1.5 + 0.75;
         const textarea = new Attributes().merge({
-            'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), maxlength: this._maxLength,
-            required: (await this.isRequired()) && !isDisabled, rows: this._rows, [this.wireModel()]: this.getStatePath(),
+            'aria-invalid': this.hasError() ? 'true' : null, 'data-gramm': this._grammarly ? null : 'false', 'data-gramm_editor': this._grammarly ? null : 'false', 'data-enable-grammarly': this._grammarly ? null : 'false',
+            disabled: isDisabled, id: this.getId(), maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder, readonly: this._readOnly,
+            required: (await this.isRequired()) && !isDisabled && !this._readOnly, rows: this._rows, [this.wireModel()]: this.getStatePath(),
         });
         const wrapper = new Attributes().class(['fi-fo-textarea', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div wire:ignore.self${height !== null ? ` style="height: ${height}rem"` : ''}><textarea x-load x-load-src="${e(asset('textarea'))}" x-data="textareaFormComponent({
  initialHeight: ${height ?? 'null'},
- shouldAutosize: false,
+ shouldAutosize: ${this._autosize ? 'true' : 'false'},
  state: $wire.$entangle(${e(js(this.getStatePath()))}),
  })" x-model="state" ${textarea.toHtml()}></textarea></div></div></div>`, { wrapperClass: 'fi-fo-textarea-wrp' });
     }
@@ -855,13 +942,31 @@ export class Toggle extends Field {
     static make(name: string): Toggle { return configured(new Toggle(name)); }
     getDefaultState(): unknown { return this._default ?? false; }
     hydrateState(value: unknown): unknown { return value === true || value === 1 || value === '1'; }
+    private _onIcon: string | null = null;
+    private _offIcon: string | null = null;
+    private _onColor: string | null = null;
+    private _offColor: string | null = null;
+    private _inline = true;
+    /** Icons inside the switch's knob. */
+    onIcon(icon: string | null): this { this._onIcon = icon; return this; }
+    offIcon(icon: string | null): this { this._offIcon = icon; return this; }
+    /** Colors when on (`primary` by default) and off (`gray`). */
+    onColor(color: string | null): this { this._onColor = color; return this; }
+    offColor(color: string | null): this { this._offColor = color; return this; }
+    /** `false`: the label goes above the switch instead of beside it. */
+    inline(condition = true): this { this._inline = condition; return this; }
     async toHtml(): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const on = this.context().state === true;
-        const colors = colorManager.getComponentClasses('toggle', 'primary').join(' ');
+        const colors = colorManager.getComponentClasses('toggle', this._onColor ?? 'primary').join(' ');
+        const offColors = this._offColor && this._offColor !== 'gray' ? ` ${colorManager.getComponentClasses('toggle', this._offColor).join(' ')}` : '';
+        const onIconHtml = this._onIcon ? icon(this._onIcon, { size: 'xs' }) : '';
+        const offIconHtml = this._offIcon ? icon(this._offIcon, { size: 'xs' }) : '';
         const button = new Attributes().merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
-        const knob = '<div><div aria-hidden="true"></div><div aria-hidden="true"></div></div>';
-        return this.wrap('', { labelPrefix: `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.isLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${knob}</div>` : ''}` });
+        const knob = `<div><div aria-hidden="true">${offIconHtml}</div><div aria-hidden="true">${onIconHtml}</div></div>`;
+        const placeholderKnob = `<div><div aria-hidden="true"></div><div aria-hidden="true">${onIconHtml}</div></div>`;
+        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.isLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
+        return this._inline ? this.wrap('', { labelPrefix: control }) : this.wrap(control);
     }
 }
 
@@ -885,8 +990,50 @@ export class ToggleButtons extends Field {
     inline(condition = true): this { this._inline = condition; return this; }
     /** Buttons joined into a single group. */
     grouped(condition = true): this { this._grouped = condition; return this; }
+    private _multiple = false;
+    private _tooltips: Record<string, string> = {};
+    private _size: string | null = null;
+    private _labelsHidden = false;
+    private _fullWidth = false;
+    private _columns: number | null = null;
+    private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
+    /** Several buttons can be selected: the state is a list of values. */
+    multiple(condition = true): this { this._multiple = condition; return this; }
+    /** Tooltip per value. */
+    tooltips(tooltips: Record<string, string>): this { this._tooltips = tooltips; return this; }
+    /** Button size: `xs`, `sm`, `md` (default), `lg` or `xl`. */
+    size(size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | null): this { this._size = size; return this; }
+    /** Icons only: the labels stay for screen readers. */
+    hiddenButtonLabels(condition = true): this { this._labelsHidden = condition; return this; }
+    /** Buttons stretch to the width of the field. */
+    fullWidth(condition = true): this { this._fullWidth = condition; return this; }
+    /** Number of columns the buttons are spread over (from `lg`), when not inline. */
+    columns(columns: number | null): this { this._columns = columns; return this; }
+    /** Options that cannot be selected; they are refused on the server too. */
+    disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
+    isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
+    /** "Yes" (`1`) and "No" (`0`) buttons, green and red, with check and cross icons. */
+    boolean(trueLabel: string | null = null, falseLabel: string | null = null): this {
+        this.options([['1', trueLabel ?? t('filament-forms::components.toggle_buttons.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.toggle_buttons.boolean.false')]]);
+        this._colors = { 1: 'success', 0: 'danger', ...this._colors };
+        this._icons = { 1: 'o-check', 0: 'o-x-mark', ...this._icons };
+        return this;
+    }
+    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    hydrateState(value: unknown): unknown {
+        if (!this._multiple) return value;
+        if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
+        return (Array.isArray(value) ? value : []).map(String);
+    }
+    /** Multiple: only offered values, in option order. */
+    dehydrateState(state: unknown): unknown {
+        if (!this._multiple) return state;
+        const chosen = new Set((Array.isArray(state) ? state : []).map(String));
+        return this._options.map(([value]) => value).filter((value) => chosen.has(value));
+    }
     async getValidationRules(): Promise<Rule[]> {
-        return [...(await super.getValidationRules()), { name: 'in', passes: (v) => this._options.some(([value]) => value === String(v)), message: (a) => `The selected ${a} is invalid.` }];
+        const allowed = (v: unknown) => this._options.some(([value, label]) => value === String(v) && !this.isOptionDisabled(value, label));
+        return [...(await super.getValidationRules()), { name: 'in', passes: (v) => (this._multiple ? Array.isArray(v) && v.every(allowed) : allowed(v)), message: (a) => `The selected ${a} is invalid.` }];
     }
     async toHtml(): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager().');
@@ -896,16 +1043,21 @@ export class ToggleButtons extends Field {
         const describedBy = [isRequired ? `${id}-required` : null, this.hasError() ? `${id}-error` : null].filter(Boolean).join(' ') || null;
         const container = new Attributes()
             .merge({ 'aria-describedby': describedBy, 'aria-labelledby': `${id}-label`, 'aria-required': isRequired ? 'true' : null, role: 'radiogroup', 'wire:key': `${this.getLivewireKey()}.inputs` })
-            .class(['fi-fo-toggle-buttons', this._grouped ? 'fi-btn-group' : null, !this._grouped && this._inline ? 'fi-inline' : null]);
+            .class(['fi-fo-toggle-buttons', this._grouped ? 'fi-btn-group' : null, !this._grouped && this._inline ? 'fi-inline' : null, { 'fi-width-full': this._fullWidth }]);
+        if (this._multiple) container.merge({ role: 'group', 'aria-required': null });
+        const grid = !this._grouped && !this._inline && this._columns && this._columns > 1 ? ` class="fi-grid fi-grid-direction-col lg:fi-grid-cols" style="--cols-lg: ${Math.floor(this._columns)}; --cols-default: 1;"` : '';
         const manager = colorManager;
-        const button = (value: string) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, 'fi-size-md', ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
+        const button = (value: string, disabled: boolean) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, `fi-size-${this._size ?? 'md'}`, disabled ? 'fi-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
         const items = this._options.map(([value, label]) => {
-            const input = new Attributes().merge({ id: `${id}-${value}`, name: id, type: 'radio', value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath(), disabled: isDisabled, required: isRequired, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
-            const html = `<input ${input.toHtml()} /><label for="${e(`${id}-${value}`)}" class="${button(value)}">${this._icons[value] ? icon(this._icons[value]) : ''}${e(label)}</label>`;
+            const optionDisabled = this.isOptionDisabled(value, label);
+            const input = new Attributes().merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
+            const tooltip = this._tooltips[value] ? ` x-tooltip="${e(`{ content: ${js(this._tooltips[value])}, theme: $store.theme, allowHTML: false }`)}"` : '';
+            const iconSize = this._size === 'xs' || this._size === 'sm' ? 'sm' : undefined;
+            const html = `<input ${input.toHtml()} /><label for="${e(`${id}-${value}`)}"${tooltip}${this._labelsHidden ? ` aria-label="${e(label)}"` : ''} class="${button(value, optionDisabled)}">${this._icons[value] ? icon(this._icons[value], iconSize ? { size: iconSize } : {}) : ''}${this._labelsHidden ? '' : e(label)}</label>`;
             return this._grouped ? html : `<div class="fi-fo-toggle-buttons-btn-ctn">${html}</div>`;
         });
         const after = isRequired ? `<span id="${e(id)}-required" class="fi-sr-only">${e(t('filament-forms::components.toggle_buttons.required_description'))}</span>` : '';
-        return this.wrap(`<div ${container.toHtml()}>${items.join('')}</div>`, { wrapperClass: 'fi-fo-toggle-buttons-wrp', labelAsDiv: true, focusable: true, after });
+        return this.wrap(`<div ${container.toHtml()}>${grid ? `<div${grid}>${items.join('')}</div>` : items.join('')}</div>`, { wrapperClass: 'fi-fo-toggle-buttons-wrp', labelAsDiv: true, focusable: true, after });
     }
 }
 
@@ -986,11 +1138,22 @@ export class RichEditor extends Field {
 /** Color picker (hex format). */
 export class ColorPicker extends Field {
     static make(name: string): ColorPicker { return configured(new ColorPicker(name)); }
-    /** Hex format: the only one supported, kept for API compatibility. */
-    hex(): this { return this; }
-    constructor(name: string) {
-        super(name);
-        this.rule({ name: 'hex_color', passes: (v) => /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(String(v)), message: (a) => `The ${a} field must be a valid hexadecimal color.` });
+    private _format: 'hex' | 'rgb' | 'rgba' | 'hsl' = 'hex';
+    /** Color format of the state: `#ff0000` (default), `rgb(255, 0, 0)`, `rgba(255, 0, 0, 1)` or `hsl(0, 100%, 50%)`. */
+    format(format: 'hex' | 'rgb' | 'rgba' | 'hsl'): this { this._format = format; return this; }
+    hex(): this { return this.format('hex'); }
+    rgb(): this { return this.format('rgb'); }
+    rgba(): this { return this.format('rgba'); }
+    hsl(): this { return this.format('hsl'); }
+    async getValidationRules(): Promise<Rule[]> {
+        const patterns = {
+            hex: /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/,
+            rgb: /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/,
+            rgba: /^rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*(0|1|0?\.\d+)\s*\)$/,
+            hsl: /^hsl\(\s*\d{1,3}(\.\d+)?\s*,\s*\d{1,3}(\.\d+)?%\s*,\s*\d{1,3}(\.\d+)?%\s*\)$/,
+        };
+        const pattern = patterns[this._format];
+        return [...(await super.getValidationRules()), { name: this._format === 'hex' ? 'hex_color' : 'regex', passes: (v) => pattern.test(String(v)), message: (a) => (this._format === 'hex' ? `The ${a} field must be a valid hexadecimal color.` : `The ${a} field format is invalid.`) }];
     }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
@@ -1014,18 +1177,21 @@ export class ColorPicker extends Field {
  state: $wire.$entangle(${e(js(this.getStatePath()))}),
  })" x-on:dropdown-escape="if (isOpen()) { closePanelAndRestoreFocus(); $event.preventDefault() }" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" wire:key="${e(key)}.${hash}" class="fi-input-wrp-content"><input x-on:focus="$refs.panel.open($refs.input)" x-on:keydown.enter.prevent.stop="togglePanelVisibility()" x-ref="input" ${input.toHtml()} /><div aria-hidden="true" class="fi-fo-color-picker-preview my-auto me-3 size-5 shrink-0 rounded-full select-none" x-on:click="togglePanelVisibility()" x-bind:class="{
  'fi-empty': ! state,
- }" x-bind:style="{ 'background-color': state }"></div><div wire:ignore.self wire:key="${e(key)}.panel" x-cloak x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }" x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(t('filament-forms::components.color_picker.panel_label'))}" class="fi-fo-color-picker-panel"><hex-color-picker x-ref="picker" color="${e(typeof state === 'string' ? state : '')}" /></div></div></div></div>`);
+ }" x-bind:style="{ 'background-color': state }"></div><div wire:ignore.self wire:key="${e(key)}.panel" x-cloak x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }" x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(t('filament-forms::components.color_picker.panel_label'))}" class="fi-fo-color-picker-panel"><${({ hex: 'hex', rgb: 'rgb-string', rgba: 'rgba-string', hsl: 'hsl-string' })[this._format]}-color-picker x-ref="picker" color="${e(typeof state === 'string' ? state : '')}" /></div></div></div></div>`);
     }
 }
 
 export class Checkbox extends Field {
+    private _inline = true;
     static make(name: string): Checkbox { return configured(new Checkbox(name)); }
     getDefaultState(): unknown { return this._default ?? false; }
+    /** `false`: the label goes above the checkbox instead of beside it. */
+    inline(condition = true): this { this._inline = condition; return this; }
     async toHtml(): Promise<string> {
         const input = new Attributes()
             .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), [this.wireModel()]: this.getStatePath() })
             .class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
-        return this.wrap('', { labelPrefix: `<input ${input.toHtml()} />` });
+        return this._inline ? this.wrap('', { labelPrefix: `<input ${input.toHtml()} />` }) : this.wrap(`<input ${input.toHtml()} />`);
     }
 }
 
@@ -1037,6 +1203,23 @@ export class CheckboxList extends Field {
     options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
     /** Number of columns the options are spread over (from `lg`). */
     columns(columns: number | null): this { this._optionColumns = columns; return this; }
+    private _descriptions: Record<string, string> = {};
+    private _searchable = false;
+    private _bulkToggleable = false;
+    private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
+    /** Helper text per value, under the option label. */
+    descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
+    /** A search field filters the options in the browser. */
+    searchable(condition = true): this { this._searchable = condition; return this; }
+    private _searchPrompt = 'Search';
+    private _noSearchResultsMessage = 'No search results.';
+    searchPrompt(prompt: string): this { this._searchPrompt = prompt; return this; }
+    noSearchResultsMessage(message: string): this { this._noSearchResultsMessage = message; return this; }
+    /** "Select all" / "Deselect all" links. */
+    bulkToggleable(condition = true): this { this._bulkToggleable = condition; return this; }
+    /** Options that cannot be checked; they are refused on the server too. */
+    disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
+    isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
     getDefaultState(): unknown { return this._default ?? []; }
     hydrateState(value: unknown): unknown {
         let list = value;
@@ -1049,21 +1232,28 @@ export class CheckboxList extends Field {
         return this._options.map(([value]) => value).filter((value) => chosen.has(value));
     }
     async getValidationRules(): Promise<Rule[]> {
-        const known = new Set(this._options.map(([value]) => value));
+        // A disabled option cannot be checked, even by a forged request.
+        const known = new Set(this._options.filter(([value, label]) => !this.isOptionDisabled(value, label)).map(([value]) => value));
         return [...(await super.getValidationRules()), { name: 'in', passes: (v) => Array.isArray(v) && v.every((value) => known.has(String(value))), message: (a) => `The selected ${a} is invalid.` }];
     }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         const key = this.getLivewireKey() ?? '';
         const options = this._options.map(([value, label]) => {
-            const input = new Attributes().merge({ disabled: isDisabled, type: 'checkbox', value, [this.wireModel()]: this.getStatePath() }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
-            return `<div wire:key="${e(`${key}.options.${value}`)}" class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${e(label)}</span></div></label></div>`;
+            const input = new Attributes().merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
+            const description = this._descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(this._descriptions[value])}</p>` : '';
+            return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${e(label)}</span>${description}</div></label></div>`;
         });
         const columns = this._optionColumns ?? 1;
         const grid = columns > 1 ? `class="fi-grid fi-grid-direction-col lg:fi-grid-cols fi-fo-checkbox-list-options" style="--cols-lg: ${Math.floor(columns)}; --cols-default: 1;"` : 'class="fi-grid fi-grid-direction-col fi-fo-checkbox-list-options" style="--cols-default: 1;"';
+        const searchPrompt = this._searchPrompt;
+        const search = this._searchable ? `<div class="fi-input-wrp fi-fo-checkbox-list-search-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass')}</div><div class="fi-input-wrp-content-ctn"><input aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" type="search" x-model.debounce.1000="search" class="fi-input fi-input-has-inline-prefix" /></div></div>` : '';
+        const link = (label: string) => `<button type="button" class="fi-ac-link-action fi-link fi-size-sm ${colorManager ? colorManager.getComponentClasses('link', 'primary').join(' ') : ''}"><span class="fi-link-label">${e(label)}</span></button>`;
+        const bulk = this._bulkToggleable && !isDisabled && this._options.length ? `<div x-cloak class="fi-fo-checkbox-list-actions" wire:key="${e(key)}.actions"><span x-show="! areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.select-all">${link(t('filament-forms::components.checkbox_list.actions.select_all.label'))}</span><span x-show="areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.deselect-all">${link(t('filament-forms::components.checkbox_list.actions.deselect_all.label'))}</span></div>` : '';
+        const noResults = this._searchable ? `<div x-cloak x-show="search && ! visibleCheckboxListOptions.length" role="status" aria-live="polite" class="fi-fo-checkbox-list-no-search-results-message">${e(this._noSearchResultsMessage)}</div>` : '';
         return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}" x-data="checkboxListFormComponent({
  livewireId: ${e(js(this.livewire.id))},
- })" aria-labelledby="${e(this.getId())}-label" class="fi-fo-checkbox-list"><div wire:key="${e(key)}.options" ${grid}>${options.join('')}</div></div>`, { labelAsDiv: true });
+ })" aria-labelledby="${e(this.getId())}-label" class="fi-fo-checkbox-list">${search}${bulk}<div wire:key="${e(key)}.options"${this._searchable ? ' x-show="visibleCheckboxListOptions.length"' : ''} ${grid}>${options.join('')}</div>${noResults}</div>`, { labelAsDiv: true });
     }
 }
 
@@ -1076,6 +1266,26 @@ export class KeyValue extends Field {
     keyLabel(label: string): this { this._keyLabel = label; return this; }
     valueLabel(label: string): this { this._valueLabel = label; return this; }
     reorderable(condition = true): this { this._reorderable = condition; return this; }
+    private _addable = true;
+    private _deletable = true;
+    private _editableKeys = true;
+    private _editableValues = true;
+    private _keyPlaceholder: string | null = null;
+    private _valuePlaceholder: string | null = null;
+    private _addLabel: string | null = null;
+    private _deleteLabel: string | null = null;
+    /** `false`: no "Add row" button. */
+    addable(condition = true): this { this._addable = condition; return this; }
+    /** `false`: rows cannot be deleted. */
+    deletable(condition = true): this { this._deletable = condition; return this; }
+    /** `false`: keys cannot be changed. The server keeps the saved keys. */
+    editableKeys(condition = true): this { this._editableKeys = condition; return this; }
+    /** `false`: values cannot be changed. */
+    editableValues(condition = true): this { this._editableValues = condition; return this; }
+    keyPlaceholder(text: string | null): this { this._keyPlaceholder = text; return this; }
+    valuePlaceholder(text: string | null): this { this._valuePlaceholder = text; return this; }
+    addActionLabel(label: string | null): this { this._addLabel = label; return this; }
+    deleteActionLabel(label: string | null): this { this._deleteLabel = label; return this; }
     // In the form, the state is a list of `{ key, value }` pairs (what the browser component expects, and it keeps order);
     // it becomes an object again when saved.
     getDefaultState(): unknown { return KeyValue.toPairs(this._default); }
@@ -1084,10 +1294,22 @@ export class KeyValue extends Field {
         if (typeof value === 'string') { try { object = JSON.parse(value); } catch { object = {}; } }
         return object && typeof object === 'object' && !Array.isArray(object) ? Object.entries(object).map(([key, v]) => ({ key, value: v })) : [];
     }
-    hydrateState(value: unknown): unknown { return KeyValue.toPairs(value); }
+    private _originalValue: unknown = null;
+    hydrateState(value: unknown): unknown { this._originalValue = value; return KeyValue.toPairs(value); }
     /** Flat object of strings: empty keys, nested objects and dangerous keys are dropped; 200 pairs at most. */
     dehydrateState(state: unknown): unknown {
         const out: Record<string, string | null> = {};
+        // Restrictions set on the field are enforced on the server: a forged state cannot add, delete or edit what the UI forbids.
+        const saved = KeyValue.toPairs(this._originalValue);
+        if (!this._addable || !this._deletable || !this._editableKeys || !this._editableValues) {
+            const received = Array.isArray(state) ? state.filter((pair: any) => pair && typeof pair === 'object' && typeof pair.key === 'string') : [];
+            const byKey = new Map(received.map((pair: any) => [String(pair.key).trim(), pair]));
+            let rows: { key: string; value: unknown }[] = this._editableKeys ? received.map((pair: any) => ({ key: String(pair.key), value: pair.value })) : saved.map((pair, index) => ({ key: pair.key, value: (received[index] as any)?.value ?? pair.value }));
+            if (!this._editableValues) rows = rows.map((row) => ({ ...row, value: saved.find((pair) => pair.key === row.key)?.value ?? null }));
+            if (!this._addable) rows = rows.filter((row) => saved.some((pair) => pair.key === row.key));
+            if (!this._deletable) for (const pair of saved) if (!rows.some((row) => row.key === pair.key)) rows.push({ key: pair.key, value: byKey.get(pair.key)?.value ?? pair.value });
+            state = rows;
+        }
         if (!Array.isArray(state)) return out;
         for (const pair of state.slice(0, 200)) {
             if (!pair || typeof pair !== 'object' || typeof (pair as any).key !== 'string') continue;
@@ -1110,7 +1332,7 @@ export class KeyValue extends Field {
         return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}" x-id="['key-value-row']" x-data="keyValueFormComponent({
  state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
  reordering: ${e(js(reordering))},
- })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${this._reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th><th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody${this._reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${this._reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="" type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="" type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(tr('actions.delete.label'))}" aria-label="${e(tr('actions.delete.label'))}" ${iconButton} class="${dangerClasses}">${icon('m-trash')}</button></div></td></tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="fi-ac-link-action fi-link fi-size-md"><span class="fi-link-label">${e(tr('actions.add.label'))}</span></button></div></div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
+ })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${this._reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${this._deletable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${this._reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${this._reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td>${this._deletable ? `<td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(this._deleteLabel ?? tr('actions.delete.label'))}" aria-label="${e(this._deleteLabel ?? tr('actions.delete.label'))}" ${iconButton} class="${dangerClasses}">${icon('m-trash')}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${this._addable ? `<div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="fi-ac-link-action fi-link fi-size-md"><span class="fi-link-label">${e(this._addLabel ?? tr('actions.add.label'))}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
     }
 }
 
