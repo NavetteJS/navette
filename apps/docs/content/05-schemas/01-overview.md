@@ -49,7 +49,7 @@ For displaying arbitrary content, Navette includes [prime](/schemas/primes) comp
 - [Unordered list](/schemas/primes#unordered-list-component)
 - [Html](/schemas/primes#html-component)
 
-You can also insert [action](/actions/overview) buttons into some components, such as the header of a [section](/schemas/sections#inserting-actions-in-the-header-of-a-section), the footer of a [callout](/schemas/callouts#adding-actions-to-the-callout-footer) or of an [empty state](/schemas/empty-states#inserting-actions-and-other-components-in-the-footer-of-an-empty-state).
+You can also insert [action](/actions/overview) buttons into some components, such as the header of a [section](/schemas/sections#inserting-actions-and-other-components-in-the-header-of-a-section), the footer of a [callout](/schemas/callouts#adding-actions-to-the-callout-footer) or of an [empty state](/schemas/empty-states#inserting-actions-and-other-components-in-the-footer-of-an-empty-state).
 
 ## An example schema
 
@@ -292,8 +292,28 @@ These methods of `Schema` are available when you build or configure a schema:
 | `record(record)` | Sets the record passed to component functions, and read by infolist entries. |
 | `statePath('data')` | Sets the property of the host component where field values live. |
 | `key('settings')` | Sets the key of the schema, used to build the keys of its components. |
-| `dense()` | Halves the space between components. |
-| `gap(false)` | Removes the space between components. |
+| `dense()` | Halves the space between components, in this schema and in the layout components inside it. |
+| `gap(false)` | Removes the space between components, in this schema and in the layout components inside it. |
+| `rootHeadingLevel(3)` | Sets the level of the schema's top-level headings. See [setting the root heading level](#setting-the-root-heading-level). |
+
+## Setting the root heading level
+
+By default, headings in a schema start at level two (`<h2>`), since schemas are usually rendered below a page's level-one heading. If you render a schema elsewhere in the document hierarchy, you can change its root heading level using the `rootHeadingLevel()` method:
+
+```ts
+import { Section, type Schema } from '@navette-js/schemas';
+
+static infolist(schema: Schema): Schema {
+    return schema
+        .rootHeadingLevel(3)
+        .components([
+            Section.make('Product'), // Rendered as an <h3>
+            // ...
+        ]);
+}
+```
+
+In this example, the schema is rendered below a level-two heading, so its headings start at level three. Nested section headings automatically use the next level: a section inside a section with a heading is an `<h4>` here. Beyond level six, headings are rendered as paragraphs. Empty states follow the same levels, unless you set their `headingTag()`.
 
 ## Global settings
 
@@ -314,5 +334,5 @@ Section.make('Notes').columns(1)
 ```
 
 <Aside variant="warning">
-Lazy loading a child schema (`lazyLoaded()`) and setting the root heading level of a schema (`rootHeadingLevel()`) are not available in Navette yet.
+Lazy loading a child schema (`lazyLoaded()`) is not available in Navette yet.
 </Aside>

@@ -136,7 +136,7 @@ EmptyState.make('No comments')
 
 ## Changing the heading level
 
-The heading of an empty state is an `<h2>` element by default. If the empty state is rendered below another heading, such as a section's, you may change it using `headingTag()`:
+The heading of an empty state follows the heading level of the schema: it is an `<h2>` element at the root of a schema, and an `<h3>` inside a section with a heading (see [setting the root heading level](/schemas/overview#setting-the-root-heading-level)). You may set the tag yourself using `headingTag()`:
 
 ```ts
 import { EmptyState } from '@navette-js/schemas';

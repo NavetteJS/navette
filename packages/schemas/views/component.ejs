@@ -1,2 +1,2 @@
 <%# Grid column wrapper of a schema component. %>
-<div<% if (key !== null) { %> wire:partial="schema-component::<%- key %>"<% } %><% if (isVisible) { %> x-data="<%- alpine %>"<% } %> <%- attributes %>><% if (isVisible) { %><div class="fi-sc-component"><%- html %></div><% } %></div>
+<div<% if (key !== null) { %> wire:partial="schema-component::<%- key %>"<% } %><% if (isVisible) { %> x-data="<%- alpine %>"<% } %> <%- attributes %>><% if (isVisible) { %><div class="fi-sc-component<% if (locals.gridContainer) { %> fi-grid-ctn<% } %>"><%- html %></div><% } %></div>

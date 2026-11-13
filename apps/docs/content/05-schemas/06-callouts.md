@@ -312,9 +312,46 @@ Callout.make('New version available')
 
 A control action with `iconButton()` is rendered as an icon button, using its label as its accessible name; other control actions are rendered as small buttons.
 
-<Aside variant="warning">
-Custom control content (`controls()`) is not available in Navette yet: use `controlActions()`.
-</Aside>
+## Adding custom control content
+
+You can add custom content to the controls (top-right corner) using the `controls()` method. This accepts an array of schema components and actions:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Callout, Text } from '@navette-js/schemas';
+
+Callout.make('Backup complete')
+    .description('Your data has been successfully backed up to the cloud.')
+    .success()
+    .controls([
+        Text.make('5 minutes ago').color('gray'),
+        Action.make('dismiss')
+            .label('Dismiss')
+            .icon('m-x-mark')
+            .iconButton()
+            .color('gray')
+            .action(() => {
+                // ...
+            }),
+    ])
+```
+
+```preview
+Callout.make('Backup complete')
+    .description('Your data has been successfully backed up to the cloud.')
+    .success()
+    .controls([
+        Text.make('5 minutes ago'),
+        Action.make('dismiss')
+            .label('Dismiss')
+            .icon('m-x-mark')
+            .iconButton()
+            .color('gray')
+            .action(() => {}),
+    ])
+```
+
+`controls()` replaces the control actions. Actions are rendered as with `controlActions()`.
 
 ## Announcing dynamically revealed callouts
 

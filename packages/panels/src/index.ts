@@ -569,7 +569,7 @@ export class Panel {
         return [...new Set(order)].map((label) => {
             const own = items.filter((i) => i._group === label).map((i) => ({ label: i.label, url: i._url, icon: i._icon, isActive: i.isActive(path), badge: i._badge, badgeColorClasses: this.colors.getComponentClasses('badge', i._badgeColor) }));
             const options = label ? this._navigationGroupOptions.get(label) : undefined;
-            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: label !== null && (options?.collapsible ?? true) };
+            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
         }).filter((g) => g.items.length);
     }
 

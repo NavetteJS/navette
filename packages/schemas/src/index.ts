@@ -16,6 +16,30 @@ export interface SchemaHost {
 export type ComponentContext = { livewire: SchemaHost; component: Component; operation: string | null; record: unknown; get: (path: string) => unknown; state: unknown };
 type SpanValue = number | string | ((ctx: ComponentContext) => number | string | Promise<number | string>);
 type ColumnSpan = Record<string, SpanValue> | number | string;
+type GridValue = number | null | ((ctx: ComponentContext) => number | null | Promise<number | null>);
+/** Column start or order: a number (from `lg`), an object of breakpoints, or a function returning either (a number then applies to every screen size). */
+export type ColumnPlacement = Record<string, GridValue> | number | null | ((ctx: ComponentContext) => Record<string, number | null> | number | null | Promise<Record<string, number | null> | number | null>);
+
+/** Breakpoints accepted in grid objects: viewport (`sm`…`2xl`), container (`@3xs`…`@7xl`) and fallback (`!@sm`…`!@2xl`). */
+const GRID_BREAKPOINT = /^(default|sm|md|lg|xl|2xl|@(3xs|2xs|xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl)|!@(sm|md|lg|xl|2xl))$/;
+/** CSS variable suffix of a breakpoint (`@md` → `cmd`, `!@md` → `ncmd`). */
+const breakpointVariable = (breakpoint: string) => breakpoint.replace(/@/g, 'c').replace(/!/g, 'n');
+/** Resolves a column start or order: successive calls merge, a function's number result applies to `default`. */
+async function resolvePlacement(entries: ColumnPlacement[], ctx: ComponentContext, keepZero: boolean): Promise<Record<string, number>> {
+    const out: Record<string, number | null> = {};
+    for (const entry of entries) {
+        const value = typeof entry === 'function' ? await entry(ctx) : entry;
+        if (value === null || value === undefined) continue;
+        if (typeof value === 'number') { out[typeof entry === 'function' ? 'default' : 'lg'] = value; continue; }
+        for (const [breakpoint, item] of Object.entries(value)) out[breakpoint] = await evaluate(item as GridValue, ctx);
+    }
+    const result: Record<string, number> = {};
+    for (const [breakpoint, value] of Object.entries(out)) {
+        if (!GRID_BREAKPOINT.test(breakpoint) || typeof value !== 'number' || !Number.isInteger(value) || (!keepZero && value === 0)) continue;
+        result[breakpoint] = value;
+    }
+    return result;
+}
 
 export abstract class Component {
     private _grow = true;
@@ -30,7 +54,11 @@ export abstract class Component {
     protected _visible: Lazy<boolean, ComponentContext> = true;
     protected _columnSpan: ColumnSpan = { default: 1 };
     protected _extraAttributes: Record<string, string> = {};
-    protected _columnStart: number | null = null;
+    protected _columnStart: ColumnPlacement[] = [];
+    protected _columnOrder: ColumnPlacement[] = [];
+    protected _gridContainer: Lazy<boolean, ComponentContext> = false;
+    protected _dense: boolean | null = null;
+    protected _gap: boolean | null = null;
     container!: Schema;
 
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
@@ -42,8 +70,25 @@ export abstract class Component {
     visibleOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.visible(({ operation }) => operation !== null && list.includes(operation)); }
     /** A number applies from the `lg` breakpoint; an object replaces the default entirely. Values may be closures. */
     columnSpan(span: ColumnSpan): this { this._columnSpan = typeof span === 'object' ? span : { default: 1, lg: span }; return this; }
-    /** Starting grid column, from the `lg` breakpoint. */
-    columnStart(start: number | null): this { this._columnStart = start; return this; }
+    /** Starting grid column: a number applies from the `lg` breakpoint; an object sets it per breakpoint. Successive calls merge; `null` resets it. */
+    columnStart(start: ColumnPlacement): this { this._columnStart = start === null ? [] : [...this._columnStart, start]; return this; }
+    /** Visual order in the grid, without changing the markup order: a number applies from `lg`; an object sets it per breakpoint. */
+    columnOrder(order: ColumnPlacement): this { this._columnOrder = order === null ? [] : [...this._columnOrder, order]; return this; }
+    /** Makes the component a CSS container, so that grids inside it may use container breakpoints (`@md`, `@xl`…). */
+    gridContainer(condition: Lazy<boolean, ComponentContext> = true): this { this._gridContainer = condition; return this; }
+    /** Tighter spacing between the components of its child schemas (inherited by nested layouts). */
+    dense(condition: boolean | null = true): this { this._dense = condition; return this; }
+    /** `false`: no space between the components of its child schemas (inherited by nested layouts). */
+    gap(condition: boolean | null = true): this { this._gap = condition; return this; }
+    isDense(): boolean { return this._dense ?? this.container.isDense(); }
+    hasGap(): boolean { return this._gap ?? this.container.hasGap(); }
+    /** Heading level of the component's own headings (`index` for a second heading). */
+    getHeadingLevel(index = 0): number { return Math.max(1, this.container.getRootHeadingLevel() + index); }
+    /** `h1`…`h6`, or `p` beyond level 6. */
+    getHeadingTag(index = 0): string { const level = this.getHeadingLevel(index); return level > 6 ? 'p' : `h${level}`; }
+    /** Number of heading levels the component adds above its child schemas (1 for a section with a heading). */
+    getHeadingsCount(): number { return 0; }
+    getChildSchemaRootHeadingLevel(): number { return this.getHeadingLevel() + this.getHeadingsCount(); }
     /** Full grid width on every screen size (`columnSpan('full')` only applies from `lg`). */
     columnSpanFull(): this { return this.columnSpan({ default: 'full' } as any); }
     extraAttributes(attributes: Record<string, string>): this { Object.assign(this._extraAttributes, attributes); return this; }
@@ -87,15 +132,22 @@ export abstract class Component {
         const key = this.getKey();
         const span: Record<string, number | string> = {};
         const rawSpan = typeof this._columnSpan === 'object' ? this._columnSpan : { default: 1, lg: this._columnSpan };
-        for (const [breakpoint, value] of Object.entries(rawSpan)) span[breakpoint] = await evaluate(value as any, this.context());
+        const ctx = this.context();
+        for (const [breakpoint, value] of Object.entries(rawSpan)) span[breakpoint] = await evaluate(value as any, ctx);
+        const start = await resolvePlacement(this._columnStart, ctx, false);
+        const order = await resolvePlacement(this._columnOrder, ctx, true);
+        const placementClass = (name: string, values: Record<string, number>) => Object.keys(values).map((breakpoint) => (breakpoint === 'default' ? `fi-grid-col-${name}` : `${breakpoint}:fi-grid-col-${name}`));
+        const placementStyle = (name: string, values: Record<string, number>) => Object.entries(values).map(([breakpoint, value]) => `--col-${name}-${breakpointVariable(breakpoint)}: ${value}`);
         const attributes = new Attributes()
-            .when(!this.container.isInline(), (a) => a.gridColumn(span, !isVisible))
-            .when(!this.container.isInline() && this._columnStart !== null, (a) => a.class(['lg:fi-grid-col-start']).style([`--col-start-lg: ${this._columnStart}`]))
+            .when(!this.container.isInline(), (a) => a.gridColumn(span, !isVisible)
+                .class([...placementClass('start', start), ...placementClass('order', order)])
+                .style([...placementStyle('start', start), ...placementStyle('order', order)]))
             .merge({ 'wire:key': this.getLivewireKey() });
         return views.render('filament-schemas::component', {
             key, isVisible, attributes: attributes.toHtml(),
             alpine: isVisible ? `filamentSchemaComponent(${js(this.getAlpineScopeConfiguration())})` : null,
             html: isVisible ? await this.toHtml() : '',
+            gridContainer: isVisible && Boolean(await evaluate(this._gridContainer, ctx)),
         });
     }
 }
@@ -112,7 +164,9 @@ export class Schema {
     private _record: unknown = null;
     private _extraClass: string | null = null;
     private _partial = false;
-    private _dense = false;
+    private _dense: boolean | null = null;
+    private _parentComponent: Component | null = null;
+    private _rootHeadingLevel = 2;
 
     constructor(livewire: SchemaHost) { this.livewire = livewire; }
     static make(livewire: SchemaHost): Schema { return configured(new Schema(livewire)); }
@@ -128,16 +182,24 @@ export class Schema {
     record(record: unknown): this { this._record = record; return this; }
     /** Class placed before the grid classes (e.g. `fi-section-content`). */
     extraClass(name: string | null): this { this._extraClass = name; return this; }
-    /** Tighter spacing between components (`fi-sc-dense`). */
-    dense(condition = true): this { this._dense = condition; return this; }
+    /** Tighter spacing between components (`fi-sc-dense`). Without a value set, a child schema follows its parent component. */
+    dense(condition: boolean | null = true): this { this._dense = condition; return this; }
+    /** Layout component the schema belongs to: spacing and heading levels are inherited from it. */
+    parentComponent(component: Component | null): this { this._parentComponent = component; return this; }
+    getParentComponent(): Component | null { return this._parentComponent; }
+    /** Heading level of the schema's top-level headings (`2` by default: `<h2>`); nested schemas follow their parent. */
+    rootHeadingLevel(level: number): this { if (Number.isInteger(level) && level >= 1) this._rootHeadingLevel = level; return this; }
+    getRootHeadingLevel(): number { return this._parentComponent ? this._parentComponent.getChildSchemaRootHeadingLevel() : this._rootHeadingLevel; }
+    isDense(): boolean { return this._dense ?? (this._inline || (this._parentComponent?.isDense() ?? false)); }
+    hasGap(): boolean { return this._gap ?? this._parentComponent?.hasGap() ?? true; }
     /** Partially rendered schema: its root carries `wire:partial="schema.<key>"`. */
     partiallyRendered(condition = true): this { this._partial = condition; return this; }
     private _partialName: string | null = null;
     /** Root `wire:partial` name when it differs from the schema key (filters form: `table-filters-form`). */
     partialName(name: string | null): this { this._partialName = name; return this; }
-    private _gap = true;
+    private _gap: boolean | null = null;
     /** `false`: components touch, with no gap (no `fi-sc-has-gap`), as in a FusedGroup. */
-    gap(condition = true): this { this._gap = condition; return this; }
+    gap(condition: boolean | null = true): this { this._gap = condition; return this; }
     private _fieldWrapperView: string | null = null;
     /**
      * Field wrapper for this schema: `'filament-forms::plain-field-wrapper'` keeps only a screen-reader label
@@ -180,7 +242,7 @@ export class Schema {
                 'x-on:form-validation-error.window': this._root ? 'handleFormValidationError' : null,
                 'x-on:reset-schema-component-state.window': this._root ? 'handleClientSideStateReset' : null,
             })
-            .class(['fi-sc', { 'fi-inline': this._inline }, { 'fi-sc-has-gap': this._gap }, { 'fi-sc-dense': this._dense }]);
+            .class(['fi-sc', { 'fi-inline': this._inline }, { 'fi-sc-has-gap': this.hasGap() }, { 'fi-sc-dense': this.isDense() }]);
         const parts: string[] = [];
         for (const [component, isVisible] of withVisibility) {
             if (!component.isLiberatedFromContainerGrid()) parts.push(await component.toSchemaHtml(isVisible));
@@ -193,7 +255,7 @@ export class Schema {
 /** Child schema of a layout component: shares the parent's key and state path, without being a root. */
 export function childSchema(parent: Component, components: Component[]): Schema {
     const c = parent.container;
-    return new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).components(components);
+    return new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).parentComponent(parent).components(components);
 }
 
 /** Stateful group: its children live under `<container path>.<name>` (used by filter forms). */
@@ -204,7 +266,7 @@ export class StatefulGroup extends Component {
     hasStatePath(): boolean { return true; }
     getChildSchemas(): Schema[] {
         const c = this.container;
-        return [new Schema(c.livewire).key(this.getKey()!).statePath(this.getStatePath()).operation(c.getOperation()).record(c.getRecord()).root(false).components(this.children)];
+        return [new Schema(c.livewire).key(this.getKey()!).statePath(this.getStatePath()).operation(c.getOperation()).record(c.getRecord()).root(false).parentComponent(this).components(this.children)];
     }
     async toHtml(): Promise<string> { return `<div id="${e(this.getKey()!)}">${await this.getChildSchemas()[0].toHtml()}</div>`; }
 }
@@ -218,7 +280,10 @@ export class Group extends Component {
     schema(components: Component[]): this { this.children = components; return this; }
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns)]; }
-    async toHtml(): Promise<string> { return `<div>${await this.getChildSchemas()[0].toHtml()}</div>`; }
+    async toHtml(): Promise<string> {
+        const attributes = new Attributes().merge({ ...this._extraAttributes }).toHtml();
+        return `<div${attributes ? ` ${attributes}` : ''}>${await this.getChildSchemas()[0].toHtml()}</div>`;
+    }
 }
 
 /** Column grid: two columns from `lg` by default. */
@@ -251,51 +316,146 @@ export class Flex extends Component {
 
 export const slug = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-/** Card grouping components, with an optional header (heading, actions). */
+/** Footer alignment (`start`, `center`, `end`, `between`; `right` and `justify` are aliases) as an inline schema alignment. */
+const footerAlignment = (alignment: string): string => (['right', 'end'].includes(alignment) ? 'end' : alignment === 'justify' ? 'between' : ['start', 'center', 'between'].includes(alignment) ? alignment : 'start');
+
+/**
+ * Card grouping components, with an optional header (icon, heading, description, components after the header)
+ * and footer (actions or components).
+ */
 export class Section extends Component {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = {};
-    private _heading: string | null;
-    private _afterHeader: Renderable[] = [];
-    constructor(heading: string | null = null) {
-        super();
-        this._heading = heading;
-        // A section with a heading gets a key derived from it.
-        if (heading !== null) this._keyName = `${slug(heading)}::data::section`;
-    }
-    static make(heading: string | null = null): Section { return configured(new Section(heading)); }
+    private _heading: Lazy<string | null, ComponentContext>;
+    private _description: Lazy<string | null, ComponentContext> = null;
+    private _icon: Lazy<string | null, ComponentContext> = null;
+    private _iconColor: Lazy<string | null, ComponentContext> = null;
+    private _iconSize: string | null = null;
+    private _afterHeader: InlineItem[] | null = null;
+    private _headerActions: Renderable[] = [];
+    private _footer: InlineItem[] | null = null;
+    private _footerActions: Renderable[] = [];
+    private _footerActionsAlignment = 'start';
+    private _aside: Lazy<boolean, ComponentContext> = false;
+    private _contentBefore: Lazy<boolean, ComponentContext> = false;
+    private _compact: Lazy<boolean, ComponentContext> = false;
+    private _secondary: Lazy<boolean, ComponentContext> = false;
+    private _contained: Lazy<boolean, ComponentContext> = true;
+    private _collapsible: Lazy<boolean, ComponentContext> | null = null;
+    private _collapsed: Lazy<boolean, ComponentContext> = false;
+    private _persistCollapsed: Lazy<boolean, ComponentContext> = false;
+    constructor(heading: Lazy<string | null, ComponentContext> = null) { super(); this._heading = heading; }
+    static make(heading: Lazy<string | null, ComponentContext> = null): Section { return configured(new Section(heading)); }
     schema(components: Component[]): this { this.children = components; return this; }
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
-    private _collapsible = false;
-    private _collapsed = false;
+    /** Heading: a string or a function of the context object. */
+    heading(heading: Lazy<string | null, ComponentContext>): this { this._heading = heading; return this; }
+    /** Text under the heading. */
+    description(description: Lazy<string | null, ComponentContext>): this { this._description = description; return this; }
+    /** Header icon (Heroicons name). */
+    icon(name: Lazy<string | null, ComponentContext>): this { this._icon = name; return this; }
+    /** Header icon color (`gray` by default). */
+    iconColor(color: Lazy<string | null, ComponentContext>): this { this._iconColor = color; return this; }
+    /** Header icon size (`lg` by default). */
+    iconSize(size: string | null): this { this._iconSize = size; return this; }
+    /** Heading and description on the left, the content in a card on the right (from the `md` breakpoint). */
+    aside(condition: Lazy<boolean, ComponentContext> = true): this { this._aside = condition; return this; }
+    /** With `aside()`: the content before the heading and description. */
+    contentBefore(condition: Lazy<boolean, ComponentContext> = true): this { this._contentBefore = condition; return this; }
+    /** Smaller paddings, for nested sections. */
+    compact(condition: Lazy<boolean, ComponentContext> = true): this { this._compact = condition; return this; }
+    /** Less contrasting background, for a section on a background of the same color (nested sections…). */
+    secondary(condition: Lazy<boolean, ComponentContext> = true): this { this._secondary = condition; return this; }
+    /** `false`: no card around the section. */
+    contained(condition: Lazy<boolean, ComponentContext> = true): this { this._contained = condition; return this; }
     /** Collapsible by clicking its header; `collapsed()` starts it collapsed. */
-    collapsible(condition = true): this { this._collapsible = condition; return this; }
-    collapsed(condition = true): this { this._collapsed = condition; if (condition) this._collapsible = true; return this; }
-    /** Actions shown to the right of the heading. */
-    afterHeader(actions: Renderable[]): this { this._afterHeader = actions; return this; }
-    /** Actions the section exposes for mounting. */
-    getActions(): Renderable[] { return this._afterHeader; }
+    collapsible(condition: Lazy<boolean, ComponentContext> = true): this { this._collapsible = condition; return this; }
+    collapsed(condition: Lazy<boolean, ComponentContext> = true): this { this._collapsed = condition; if (this._collapsible === null) this._collapsible = condition; return this; }
+    /** Keeps the collapsed state in the browser's local storage, under the section's key. */
+    persistCollapsed(condition: Lazy<boolean, ComponentContext> = true): this { this._persistCollapsed = condition; return this; }
+    /** Components and actions shown after the heading; replaces `headerActions()`. */
+    afterHeader(items: InlineItem[] | null): this { this._afterHeader = items; return this; }
+    /** Actions shown after the heading (when `afterHeader()` is not used). */
+    headerActions(actions: Renderable[]): this { this._headerActions = [...this._headerActions, ...actions]; return this; }
+    /** Components and actions in the footer; replaces `footerActions()`. */
+    footer(items: InlineItem[] | null): this { this._footer = items; return this; }
+    /** Actions in the footer (when `footer()` is not used). */
+    footerActions(actions: Renderable[]): this { this._footerActions = [...this._footerActions, ...actions]; return this; }
+    /** Footer actions alignment (`start`, `center`, `end`, `between`). */
+    footerActionsAlignment(alignment: string): this { this._footerActionsAlignment = alignment; return this; }
+    private getHeaderItems(): InlineItem[] { return this._afterHeader ?? this._headerActions; }
+    private getFooterItems(): InlineItem[] { return this._footer ?? this._footerActions; }
+    /** Actions the section exposes for mounting (header and footer). */
+    getActions(): Renderable[] { return [...actionsOf(this.getHeaderItems()), ...actionsOf(this.getFooterItems())]; }
+    /** Heading used for the key: a function heading is only used when it returns a string synchronously. */
+    private getHeadingForKey(): string | null {
+        if (typeof this._heading !== 'function') return this._heading;
+        let value: unknown;
+        try { value = (this._heading as (ctx: ComponentContext) => unknown)(this.context()); } catch { return null; }
+        // An async heading is not awaited here: its failure is reported when the section renders.
+        if (value instanceof Promise) value.catch(() => {});
+        return typeof value === 'string' ? value : null;
+    }
+    /** Key derived from the heading (`rate-limiting::data::section`), unless a `key()` is set. */
+    getKey(): string | null {
+        if (this._keyName !== null) return super.getKey();
+        const heading = this.getHeadingForKey();
+        if (isBlank(heading)) return null;
+        const statePath = this.container.getStatePath();
+        return `${this.container.getKey()}.${slug(heading!)}::${statePath ? `${statePath}::` : ''}section`;
+    }
+    getHeadingsCount(): number { return typeof this._heading === 'function' || !isBlank(this._heading) ? 1 : 0; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).extraClass('fi-section-content')]; }
     async toHtml(): Promise<string> {
-        const [content] = this.getChildSchemas();
-        if (this._heading === null) {
-            return `<div class="fi-sc-section"><section x-data="{
-                isCollapsed: false,
-            }" class="fi-section"><div class="fi-section-content-ctn">${await content.toHtml()}</div></section></div>`;
-        }
-        const key = this.getKey()!;
         const ctx = this.context();
-        const after: string[] = [];
-        // Mount context: the host's, plus the schema the section belongs to.
-        const mountContext = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: this.container.getKey() };
-        for (const action of this._afterHeader) if (await action.isVisible(ctx)) after.push(`<div class="fi-sc-action">${await (action as any).toHtml(ctx, mountContext)}</div>`);
+        const [content] = this.getChildSchemas();
+        const id = this.getKey();
+        const heading = await evaluate(this._heading, ctx);
+        const description = await evaluate(this._description, ctx);
+        const iconName = await evaluate(this._icon, ctx);
+        const isAside = Boolean(await evaluate(this._aside, ctx));
+        const isCollapsible = Boolean(await evaluate(this._collapsible ?? false, ctx)) && !isAside;
+        const isCollapsed = Boolean(await evaluate(this._collapsed, ctx));
+        const shouldPersistCollapsed = Boolean(await evaluate(this._persistCollapsed, ctx));
+        const hasHeading = !isBlank(heading), hasDescription = !isBlank(description), hasIcon = !isBlank(iconName);
+        const afterHeader = await renderInlineItems(this, this.getHeaderItems(), { alignment: 'end' });
+        const footer = await renderInlineItems(this, this.getFooterItems(), { alignment: this._footer === null ? footerAlignment(this._footerActionsAlignment) : null });
+        const contentHtml = await content.toHtml();
+        const hasHeader = hasIcon || hasHeading || hasDescription || isCollapsible || afterHeader !== '';
+        const hasContent = contentHtml !== '' || footer !== '';
+        const contentId = id !== null && hasContent ? `${id}-content` : null;
+        const headingId = id !== null && hasHeading ? `${id}-heading` : null;
+        const descriptionId = id !== null && hasDescription ? `${id}-description` : null;
+        const outer = new Attributes().merge({ id, ...this._extraAttributes }).class(['fi-sc-section']);
         // Collapsible section: listens to `collapse-section` / `expand-section`… window events, with a toggle button in the header.
-        const idTest = `if ($event.detail.id == (${js(key)} ?? $el.id))`;
-        const collapse = this._collapsible ? ` x-on:collapse-section.window="${e(`${idTest} isCollapsed = true`)}" x-on:expand="isCollapsed = false" x-on:expand-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:open-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:toggle-section.window="${e(`${idTest} isCollapsed = ! isCollapsed`)}" x-on:reset-schema-component-state.window="${e(`if (($event.detail.livewireId === ${js(this.livewire.id)}) && ($event.detail.schemaKey === ${js(key.split('.')[0])})) $nextTick(() => isCollapsed = ${this._collapsed ? 'true' : 'false'})`)}" x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : '';
-        const collapseButton = this._collapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(this._collapsed ? 'filament::components/section.actions.expand.label' : 'filament::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-expanded="${this._collapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()" aria-controls="${e(key)}-content" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up')}</button>` : '';
-        return `<div id="${e(key)}" class="fi-sc-section"><section x-data="{
-                isCollapsed: ${this._collapsed ? 'true' : 'false'},
-            }"${collapse} aria-labelledby="${e(key)}-heading" class="${cls(['fi-section', 'fi-section-has-header', { 'fi-collapsible': this._collapsible, 'fi-collapsed': this._collapsed }])}"><header${this._collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header"><div class="fi-section-header-content fi-section-header-content-has-heading"><div class="fi-section-header-text-ctn"><h2 id="${e(key)}-heading" class="fi-section-header-heading">${e(this._heading)}</h2></div>${after.length ? `<div class="fi-section-header-after-ctn"><div class="fi-sc fi-inline fi-align-end fi-sc-has-gap fi-sc-dense">${after.join('')}</div></div>` : ''}</div>${collapseButton}</header><div id="${e(key)}-content" class="fi-section-content-ctn">${await content.toHtml()}</div></section></div>`;
+        // A persisted state lives in local storage, under the section's key (or its element id).
+        const idTest = `if ($event.detail.id == (${js(id)} ?? $el.id))`;
+        const collapse = isCollapsible ? ` x-on:collapse-section.window="${e(`${idTest} isCollapsed = true`)}" x-on:expand="isCollapsed = false" x-on:expand-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:open-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:toggle-section.window="${e(`${idTest} isCollapsed = ! isCollapsed`)}"${shouldPersistCollapsed ? '' : ` x-on:reset-schema-component-state.window="${e(`if (($event.detail.livewireId === ${js(this.livewire.id)}) && ($event.detail.schemaKey === ${js(this.container.getKey().split('.')[0])})) $nextTick(() => isCollapsed = ${isCollapsed ? 'true' : 'false'})`)}"`} x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : '';
+        const collapsedState = shouldPersistCollapsed ? e(`$persist(${isCollapsed ? 'true' : 'false'}).as(\`filament:section:collapsed:\${${js(id)} ?? $el.id}\`)`) : (isCollapsed ? 'true' : 'false');
+        const sectionClass = cls(['fi-section', {
+            'fi-section-not-contained': !(await evaluate(this._contained, ctx)),
+            'fi-section-has-content-before': Boolean(await evaluate(this._contentBefore, ctx)),
+            'fi-section-has-header': hasHeader,
+            'fi-aside': isAside,
+            'fi-compact': Boolean(await evaluate(this._compact, ctx)),
+            'fi-collapsible': isCollapsible,
+            'fi-collapsed': isCollapsible && isCollapsed,
+            'fi-secondary': Boolean(await evaluate(this._secondary, ctx)),
+        }]);
+        let header = '';
+        if (hasHeader) {
+            const iconColor = (await evaluate(this._iconColor, ctx)) ?? 'gray';
+            const iconHtml = hasIcon ? icon(iconName!, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes().class(plainColorClasses(iconColor)) }) : '';
+            const tag = this.getHeadingTag();
+            const text = hasHeading || hasDescription ? `<div class="fi-section-header-text-ctn">${hasHeading ? `<${tag}${headingId ? ` id="${e(headingId)}"` : ''} class="fi-section-header-heading">${e(heading)}</${tag}>` : ''}${hasDescription ? `<p${descriptionId ? ` id="${e(descriptionId)}"` : ''} class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : '';
+            const headerContent = hasHeading || hasDescription || afterHeader ? `<div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasHeading || hasDescription }])}">${text}${afterHeader ? `<div class="fi-section-header-after-ctn">${afterHeader}</div>` : ''}</div>` : '';
+            const collapseButton = isCollapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(isCollapsed ? 'filament::components/section.actions.expand.label' : 'filament::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-expanded="${isCollapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()"${contentId ? ` aria-controls="${e(contentId)}"` : ''} class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up')}</button>` : '';
+            header = `<header${isCollapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header">${iconHtml}${headerContent}${collapseButton}</header>`;
+        }
+        const body = hasContent ? `<div${contentId ? ` id="${e(contentId)}"` : ''}${isCollapsible && (isCollapsed || shouldPersistCollapsed) ? ' x-cloak' : ''} class="fi-section-content-ctn">${contentHtml}${footer ? `<footer class="fi-section-footer">${footer}</footer>` : ''}</div>` : '';
+        return `<div ${outer.toHtml()}><section x-data="{
+                isCollapsed: ${collapsedState},
+            }"${collapse}${headingId ? ` aria-labelledby="${e(headingId)}"` : ''}${descriptionId ? ` aria-describedby="${e(descriptionId)}"` : ''} class="${sectionClass}">${header}${body}</section></div>`;
     }
 }
 
@@ -310,70 +470,165 @@ export class Html extends Component {
     async toHtml(): Promise<string> { return typeof this.content === 'function' ? this.content(this.context()) : this.content; }
 }
 
-/** A tab of a Tabs component: a label, an optional icon and its own schema. */
+/** A tab of a Tabs component: a label, an optional icon and badge, and its own schema. */
 export class Tab extends Component {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = {};
     private _icon: string | null = null;
+    private _iconPosition: 'before' | 'after' = 'before';
+    private _badge: Lazy<string | number | null, ComponentContext> = null;
+    private _badgeColor: Lazy<string | null, ComponentContext> = null;
+    private _badgeIcon: string | null = null;
+    private _badgeIconPosition: 'before' | 'after' = 'before';
+    private _badgeTooltip: Lazy<string | null, ComponentContext> = null;
     private label: string;
     constructor(label: string) { super(); this.label = label; this._keyName = `${slug(label)}::data::tab`; }
     static make(label: string): Tab { return configured(new Tab(label)); }
     schema(components: Component[]): this { this.children = components; return this; }
     columns(columns: Record<string, number> | number | null): this { this._columns = columns; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
+    /** Icon before (default) or after the label. */
+    iconPosition(position: 'before' | 'after'): this { this._iconPosition = position === 'after' ? 'after' : 'before'; return this; }
+    /** Badge after the label (a count…); a function receives the context object. */
+    badge(badge: Lazy<string | number | null, ComponentContext>): this { this._badge = badge; return this; }
+    /** Badge color (`primary` by default). */
+    badgeColor(color: Lazy<string | null, ComponentContext>): this { this._badgeColor = color; return this; }
+    badgeIcon(name: string | null): this { this._badgeIcon = name; return this; }
+    badgeIconPosition(position: 'before' | 'after'): this { this._badgeIconPosition = position === 'after' ? 'after' : 'before'; return this; }
+    /** Tooltip of the badge (plain text). */
+    badgeTooltip(text: Lazy<string | null, ComponentContext>): this { this._badgeTooltip = text; return this; }
     getLabel(): string { return this.label; }
     getIcon(): string | null { return this._icon; }
+    getIconPosition(): 'before' | 'after' { return this._iconPosition; }
+    async getBadge(): Promise<{ label: string; color: string; icon: string | null; iconPosition: 'before' | 'after'; tooltip: string | null } | null> {
+        const ctx = this.context();
+        const badge = await evaluate(this._badge, ctx);
+        if (isBlank(badge)) return null;
+        return { label: String(badge), color: (await evaluate(this._badgeColor, ctx)) ?? 'primary', icon: this._badgeIcon, iconPosition: this._badgeIconPosition, tooltip: await evaluate(this._badgeTooltip, ctx) };
+    }
     /** Browser-side tab key (no schema prefix): `::data::` follows the schema state path, and is dropped in infolists. */
     getTabKey(): string { const statePath = this.container.getStatePath(); return this._keyName!.replace('::data::', statePath ? `::${statePath}::` : '::'); }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns)]; }
     async toHtml(): Promise<string> { return this.getChildSchemas()[0].toHtml(); }
 }
 
-/** Layout tabs: every panel is rendered, the browser only shows the active one. */
+/** Badge colors of a tab: computed shades when a color manager is available. */
+const badgeColorClasses = (component: Component, color: string): string[] => colorsFor(component)?.getComponentClasses('badge', color) ?? plainColorClasses(color);
+const badgeTooltipAttribute = (tooltip: string | null): string => (tooltip ? ` x-tooltip="${e(`{ content: ${js(tooltip)}, theme: $store.theme, allowHTML: false }`)}"` : '');
+
+/**
+ * Layout tabs: every panel is rendered, the browser only shows the active one.
+ * The active tab may be persisted in local storage (`persistTab()`) or in the URL (`persistTabInQueryString()`):
+ * the browser only selects a persisted key when it matches an existing tab.
+ */
 export class Tabs extends Component {
     private tabs: Tab[] = [];
     private label: string;
+    private _activeTab: Lazy<number, ComponentContext> = 1;
+    private _persistTab: Lazy<boolean, ComponentContext> = false;
+    private _tabQueryStringKey: string | null = null;
+    private _vertical: Lazy<boolean, ComponentContext> = false;
+    private _contained: Lazy<boolean, ComponentContext> = true;
+    private _scrollable: Lazy<boolean, ComponentContext> = true;
     constructor(label: string) { super(); this.label = label; this._keyName = `${slug(label)}::data::tabs`; }
     static make(label: string): Tabs { return configured(new Tabs(label)); }
     schema(tabs: Tab[]): this { this.tabs = tabs; return this; }
+    /** Tab active when the page loads (1-based, among the visible tabs). */
+    activeTab(tab: Lazy<number, ComponentContext>): this { this._activeTab = tab; return this; }
+    /** Remembers the active tab in the browser's local storage, under the key of the tabs. */
+    persistTab(condition: Lazy<boolean, ComponentContext> = true): this { this._persistTab = condition; return this; }
+    /** Keeps the active tab in the URL's query string (`?tab=…`); `null` disables it. */
+    persistTabInQueryString(key: string | null = 'tab'): this { this._tabQueryStringKey = key === null || key.trim() === '' ? null : key; return this; }
+    /** Tab headers on the side of the panels (from the `md` breakpoint). */
+    vertical(condition: Lazy<boolean, ComponentContext> = true): this { this._vertical = condition; return this; }
+    /** `false`: no card around the tabs. */
+    contained(condition: Lazy<boolean, ComponentContext> = true): this { this._contained = condition; return this; }
+    /** `false`: tabs that do not fit are moved to a "more" dropdown instead of scrolling. */
+    scrollable(condition: Lazy<boolean, ComponentContext> = true): this { this._scrollable = condition; return this; }
     getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
     getLazyLoadedTabBadges(): Record<string, unknown> { return {}; }
     getDeferredTabBadges(): Record<string, unknown> { return {}; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.tabs)]; }
+    /** Active tab (1-based): the query string's tab when it names a visible tab, otherwise `activeTab()`. */
+    private async getActiveTab(visible: Tab[]): Promise<number> {
+        if (this._tabQueryStringKey !== null) {
+            const requested = (this.livewire as any)._ctx?.req?.query?.[this._tabQueryStringKey];
+            const index = typeof requested === 'string' ? visible.findIndex((tab) => tab.getTabKey() === requested) : -1;
+            if (index !== -1) return index + 1;
+        }
+        const active = await evaluate(this._activeTab, this.context());
+        return Number.isInteger(active) && active >= 1 ? active : 1;
+    }
     async toHtml(): Promise<string> {
         // Building the child schema attaches the tabs to their container, which is what gives them their keys.
         this.getChildSchemas();
+        const ctx = this.context();
         const key = this.getKey()!;
         const id = this.livewire.id;
-        const q = (k: string) => `'${k.replace(/[^A-Za-z0-9:_-]/g, '')}'`;
+        const q = (k: string) => js(k);
         const tabId = (tab: Tab) => `fi-sc-tab-${createHash('md5').update(tab.getKey()!).digest('hex')}`;
         const visible: Tab[] = [];
         for (const tab of this.tabs) if (await tab.isVisible()) visible.push(tab);
-        const buttons = visible.map((tab) => {
+        const isContained = Boolean(await evaluate(this._contained, ctx));
+        const isVertical = Boolean(await evaluate(this._vertical, ctx));
+        const isScrollable = Boolean(await evaluate(this._scrollable, ctx));
+        const isTabPersisted = Boolean(await evaluate(this._persistTab, ctx));
+        const activeTab = await this.getActiveTab(visible);
+        const badges = await Promise.all(visible.map((tab) => tab.getBadge()));
+        const badgeHtml = (badge: NonNullable<Awaited<ReturnType<Tab['getBadge']>>>, withIcon: boolean) => {
+            const badgeIcon = withIcon && badge.icon ? icon(badge.icon, { size: 'sm' }) : '';
+            return `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', 'fi-size-sm', ...badgeColorClasses(this, badge.color)])}">${badge.iconPosition === 'before' ? badgeIcon : ''}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(badge.label)}</span></span>${badge.iconPosition === 'after' ? badgeIcon : ''}</span>`;
+        };
+        const buttons = visible.map((tab, index) => {
             const k = tab.getTabKey();
+            const tabIcon = tab.getIcon() ? icon(tab.getIcon()!) : '';
+            const badge = badges[index];
             return `<button type="button" x-bind:class="{
  'fi-active': isTabSelected(${q(k)}),
  'fi-sc-tabs-header-overflow': overflowTabs.includes(${q(k)}),
  'fi-sc-tabs-header-overflow-open': isOverflowOpen &amp;&amp; overflowTabs.includes(${q(k)}),
- }" id="${tabId(tab)}" role="tab" aria-controls="${e(tab.getKey()!)}" tabindex="-1" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-bind:aria-selected="isTabSelected(${q(k)})" x-on:click="selectTab(${q(k)}, $event)" x-show="true" class="fi-tabs-item">${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span></button>`;
+ }" id="${tabId(tab)}" role="tab" aria-controls="${e(tab.getKey()!)}" tabindex="-1" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-bind:aria-selected="isTabSelected(${q(k)})" x-on:click="selectTab(${q(k)}, $event)" x-show="true" class="fi-tabs-item">${tab.getIconPosition() === 'before' ? tabIcon : ''}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${tab.getIconPosition() === 'after' ? tabIcon : ''}${badge ? badgeHtml(badge, true) : ''}</button>`;
         });
+        // Not scrollable: tabs that do not fit move to an overflow dropdown, opened from a "more" trigger.
+        let overflow = '';
+        if (!isScrollable) {
+            const more = t('filament-schemas::components.tabs.actions.more.label');
+            const triggers = visible.map((tab, index) => {
+                const k = tab.getTabKey();
+                const badge = badges[index];
+                return `<button type="button" tabindex="-1" aria-hidden="true" data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="fi-tabs-item fi-active">${icon('m-chevron-down')}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${badge ? badgeHtml(badge, false) : ''}</button>`;
+            });
+            const items = visible.map((tab, index) => {
+                const k = tab.getTabKey();
+                const badge = badges[index];
+                const listBadge = badge ? `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', ...badgeColorClasses(this, badge.color)])}">${e(badge.label)}</span>` : '';
+                return `<div data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item fi-sc-tabs-overflow-placeholder">${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="fi-dropdown-list-item-label">${e(tab.getLabel())}</span>${listBadge}</div>`;
+            });
+            overflow = `<div aria-hidden="true" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { $event.preventDefault(); toggleOverflow() }" class="fi-dropdown-trigger">${triggers.join('')}<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis tabindex="-1" aria-hidden="true" aria-label="${e(more)}" class="fi-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="fi-tabs-item-label">${icon('m-ellipsis-horizontal')}</span></button></div><div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.fi-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="fi-dropdown-panel fi-sc-tabs-overflow-panel"><div class="fi-dropdown-list">${items.join('')}</div></div></div>`;
+        }
         const panels: string[] = [];
         for (const tab of visible) {
             const k = tab.getTabKey();
             panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="fi-sc-tabs-tab">${await tab.toHtml()}</div>`);
         }
+        const outer = new Attributes().merge({ id: key, 'wire:key': `${id}.${key}.container`, ...this._extraAttributes }).class(['fi-sc-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }]);
+        const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['fi-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }])
+            .when(!isScrollable, (a) => a.merge({ 'x-bind:class': "{ 'fi-invisible': ! overflowReady }" }))
+            .merge({ 'x-cloak': true });
+        const tablistExtra = `${isVertical ? ` x-bind:aria-orientation="hasVisibleTabHeaders ? 'vertical' : null"` : ''} x-on:keydown="handleKeydown($event)"${isScrollable ? '' : ` x-on:dropdown-escape="if (isOverflowOpen) { $event.preventDefault(); $event.stopPropagation(); dismissOverflow() }" x-on:wheel="scrollOverflow($event)" x-on:touchstart="scrollOverflow($event)" x-on:touchmove="scrollOverflow($event)"`}`;
+        const persistedTab = isTabPersisted ? e(`$persist(null).as(${js(`filament:tabs:active:${key}`)})`) : 'null';
         return `<div x-data="tabsSchemaComponent({
- activeTab: 1,
+ activeTab: ${activeTab},
  hasTabPanels: true,
- isScrollable: true,
- isVertical: false,
- isTabPersisted: false,
- isTabPersistedInQueryString: false,
+ isScrollable: ${isScrollable ? 'true' : 'false'},
+ isVertical: ${isVertical ? 'true' : 'false'},
+ isTabPersisted: ${isTabPersisted ? 'true' : 'false'},
+ isTabPersistedInQueryString: ${this._tabQueryStringKey !== null ? 'true' : 'false'},
  livewireId: ${e(js(id))},
  schemaKey: ${e(js(key.split('.')[0]))},
- tab: null,
- tabQueryStringKey: null,
- })" x-load x-load-src="${e(views.render('filament-schemas::asset', { path: 'tabs' }).trim())}" wire:ignore.self id="${e(key)}" wire:key="${e(`${id}.${key}`)}.container" class="fi-sc-tabs fi-contained"><div x-cloak="x-cloak" x-ref="tabsHeader" class="fi-tabs fi-contained"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(this.label)}" x-on:keydown="handleKeydown($event)" class="fi-sc-tabs-tablist">${buttons.join('')}</div></div>${panels.join('')}</div>`;
+ tab: ${persistedTab},
+ tabQueryStringKey: ${e(js(this._tabQueryStringKey))},
+ })" x-load x-load-src="${e(views.render('filament-schemas::asset', { path: 'tabs' }).trim())}"${isScrollable ? '' : ' x-on:resize.window="scheduleUpdate(true)"'} wire:ignore.self ${outer.toHtml()}><div ${nav.toHtml()}><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(this.label)}"${tablistExtra} class="fi-sc-tabs-tablist">${buttons.join('')}</div>${overflow}</div>${panels.join('')}</div>`;
     }
 }
 
@@ -557,6 +812,7 @@ export class Text extends Component {
     private _copyableState: Lazy<string | null, ComponentContext> = null;
     private _copyMessage: string | null = null;
     private _copyMessageDuration = 2000;
+    private _isJs = false;
     constructor(content: Lazy<string | HtmlString | null, ComponentContext>) { super(); this._content = content; }
     static make(content: Lazy<string | HtmlString | null, ComponentContext>): Text { return configured(new Text(content)); }
     content(content: Lazy<string | HtmlString | null, ComponentContext>): this { this._content = content; return this; }
@@ -580,7 +836,16 @@ export class Text extends Component {
     copyableState(state: Lazy<string | null, ComponentContext>): this { this._copyableState = state; return this; }
     copyMessage(message: string | null): this { this._copyMessage = message; return this; }
     copyMessageDuration(milliseconds: number): this { this._copyMessageDuration = milliseconds; return this; }
-    async getContent(): Promise<string | HtmlString | null> { return evaluate(this._content, this.context()); }
+    /**
+     * The content is a JavaScript expression evaluated in the browser (`$get()` and `$state` are available), re-evaluated when the state changes.
+     * Only use it with expressions written by the developer, never with user input.
+     */
+    js(condition = true): this { this._isJs = condition; return this; }
+    async getContent(): Promise<string | HtmlString | null> {
+        const content = await evaluate(this._content, this.context());
+        if (!this._isJs || content === null) return content;
+        return new HtmlString(`<span x-text="() => eval(${js(content instanceof HtmlString ? content.html : content)})"></span>`);
+    }
     async toHtml(): Promise<string> {
         const ctx = this.context();
         const content = await this.getContent();
@@ -707,7 +972,7 @@ export class EmptyState extends Component {
     private _iconSize: string | null = null;
     private _compact = false;
     private _contained = true;
-    private _headingTag = 'h2';
+    private _headingTag: string | null = null;
     private _footer: InlineItem[] = [];
     constructor(heading: Lazy<string, ComponentContext>) { super(); this._heading = heading; }
     static make(heading: Lazy<string, ComponentContext>): EmptyState { return configured(new EmptyState(heading)); }
@@ -722,7 +987,8 @@ export class EmptyState extends Component {
     /** `false`: no surrounding card. */
     contained(condition = true): this { this._contained = condition; return this; }
     /** Heading tag (`h2` by default). */
-    headingTag(tag: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'): this { this._headingTag = tag; return this; }
+    /** Heading tag; by default it follows the heading level of the schema (`h2` at the root). */
+    headingTag(tag: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | null): this { this._headingTag = tag; return this; }
     /** Footer: inline actions and components. */
     footer(items: InlineItem[]): this { this._footer = items; return this; }
     /** Footer actions, mounted on the root schema. */
@@ -732,8 +998,9 @@ export class EmptyState extends Component {
         const description = await evaluate(this._description, ctx);
         const footer = await renderInlineItems(this, this._footer);
         const iconColor = this._iconColor ?? 'primary';
+        const headingTag = this._headingTag ?? this.getHeadingTag();
         const iconHtml = this._icon ? `<div class="${cls(['fi-empty-state-icon-bg', ...plainColorClasses(iconColor)])}">${icon(this._icon, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes().class(plainColorClasses(iconColor)) })}</div>` : '';
-        return `<div ${new Attributes(this._extraAttributes).class(['fi-sc-empty-state']).toHtml()}><section class="${cls(['fi-empty-state', { 'fi-compact': this._compact, 'fi-empty-state-not-contained': !this._contained }])}"><div class="fi-empty-state-content">${iconHtml}<div class="fi-empty-state-text-ctn"><${this._headingTag} class="fi-empty-state-heading">${e(await evaluate(this._heading, ctx))}</${this._headingTag}>${isBlank(description) ? '' : `<p class="fi-empty-state-description">${e(description)}</p>`}${footer ? `<footer class="fi-empty-state-footer">${footer}</footer>` : ''}</div></div></section></div>`;
+        return `<div ${new Attributes(this._extraAttributes).class(['fi-sc-empty-state']).toHtml()}><section class="${cls(['fi-empty-state', { 'fi-compact': this._compact, 'fi-empty-state-not-contained': !this._contained }])}"><div class="fi-empty-state-content">${iconHtml}<div class="fi-empty-state-text-ctn"><${headingTag} class="fi-empty-state-heading">${e(await evaluate(this._heading, ctx))}</${headingTag}>${isBlank(description) ? '' : `<p class="fi-empty-state-description">${e(description)}</p>`}${footer ? `<footer class="fi-empty-state-footer">${footer}</footer>` : ''}</div></div></section></div>`;
     }
 }
 
@@ -755,6 +1022,7 @@ export class Callout extends Component {
     private _footerActionsAlignment = 'start';
     private _footer: InlineItem[] | null = null;
     private _controlActions: Renderable[] = [];
+    private _controls: InlineItem[] | null = null;
     constructor(heading: Lazy<string | null, ComponentContext> = null) { super(); this._heading = heading; }
     static make(heading: Lazy<string | null, ComponentContext> = null): Callout { return configured(new Callout(heading)); }
     heading(heading: Lazy<string | null, ComponentContext>): this { this._heading = heading; return this; }
@@ -780,10 +1048,12 @@ export class Callout extends Component {
     footer(items: InlineItem[] | null): this { this._footer = items; return this; }
     /** Small actions on the right of the callout (dismiss…). */
     controlActions(actions: Renderable[]): this { this._controlActions = [...this._controlActions, ...actions]; return this; }
+    /** Free-form controls (components and actions) on the right of the callout, replacing the control actions. */
+    controls(items: InlineItem[] | null): this { this._controls = items; return this; }
     getColor(): string | null { return this._hasColor ? this._color : (this._color ?? this._status); }
     getIcon(): string | null { return this._icon ?? (this._status ? (CALLOUT_ICONS[this._status] ?? null) : null); }
     /** Callout actions, mounted on the root schema. */
-    getActions(): Renderable[] { return [...(this._footer ? actionsOf(this._footer) : this._footerActions), ...this._controlActions]; }
+    getActions(): Renderable[] { return [...(this._footer ? actionsOf(this._footer) : this._footerActions), ...(this._controls ? actionsOf(this._controls) : this._controlActions)]; }
     async toHtml(): Promise<string> {
         const ctx = this.context();
         const heading = await evaluate(this._heading, ctx);
@@ -792,7 +1062,7 @@ export class Callout extends Component {
         const iconName = this.getIcon();
         const iconColor = this._iconColor ?? this._status ?? color;
         const footer = this._footer ? await renderInlineItems(this, this._footer, { actionView: 'link' }) : await renderInlineItems(this, this._footerActions, { alignment: ['right', 'end'].includes(this._footerActionsAlignment) ? 'end' : this._footerActionsAlignment === 'justify' ? 'between' : this._footerActionsAlignment, actionView: 'link' });
-        const controls = await renderInlineItems(this, this._controlActions, { alignment: 'start', actionView: 'auto' });
+        const controls = this._controls ? await renderInlineItems(this, this._controls, { actionView: 'auto' }) : await renderInlineItems(this, this._controlActions, { alignment: 'start', actionView: 'auto' });
         const statusKey = this._status ? `filament-schemas::components.callout.statuses.${this._status}` : null;
         const statusLabel = statusKey && t(statusKey) !== statusKey ? t(statusKey) : null;
         const statusHtml = statusLabel ? `<span class="fi-sr-only">${e(statusLabel)} </span>` : '';

@@ -290,6 +290,32 @@ Wizard.make([
     .contained(false)
 ```
 
+## Using a wizard in an action modal
+
+An [action](/actions/overview) can open its modal as a wizard: pass the steps to its `steps()` method instead of a form. Each step is validated before the next one, and the last step submits the action:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Step, TextInput, Toggle } from '@navette-js/forms';
+
+Action.make('create')
+    .steps([
+        Step.make('Name')
+            .schema([
+                TextInput.make('name').required(),
+            ]),
+        Step.make('Visibility')
+            .schema([
+                Toggle.make('is_visible'),
+            ]),
+    ])
+    .action(async ({ data }) => {
+        // ...
+    })
+```
+
+See [using a wizard as a modal](/actions/modals#using-a-wizard-as-a-modal) in the actions documentation.
+
 <Aside variant="warning">
-Wizards in action modals (`steps()` on an action) and lazy loading step content are not available in Navette yet.
+Lazy loading step content is not available in Navette yet.
 </Aside>

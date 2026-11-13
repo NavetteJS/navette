@@ -26,7 +26,7 @@ Layout components that contain a grid, as well as the `Schema` object itself, ha
 - You can pass a number like `columns(2)`. This number is the number of columns used on the `lg` breakpoint and higher. All smaller devices will have just 1 column.
 - You can pass an object, where the key is the breakpoint and the value is the number of columns. For example, `columns({ md: 2, xl: 4 })` will create a 2 column layout on medium devices, and a 4 column layout on extra large devices. The default breakpoint for smaller devices uses 1 column, unless you use a `default` key.
 
-Breakpoints (`sm`, `md`, `lg`, `xl`, `2xl`) are the same as Tailwind's, and can be found in the [Tailwind documentation](https://tailwindcss.com/docs/responsive-design#overview).
+Breakpoints (`sm`, `md`, `lg`, `xl`, `2xl`) are the same as Tailwind's, and can be found in the [Tailwind documentation](https://tailwindcss.com/docs/responsive-design#overview). You may also use [container breakpoints](#using-container-queries) such as `@md`.
 
 The `columns()` method is available on `Schema`, `Grid`, `Group`, `Section`, `Fieldset`, `FusedGroup`, `Tab`, `Step` and `UnorderedList`. It only accepts static values.
 
@@ -82,7 +82,10 @@ Grid.make(3).schema([
 
 ### Grid column starts
 
-If you want to start a component in a grid at a specific column, you can use the `columnStart()` method. It accepts a number, which is the column that the component will start on for the `lg` breakpoint and higher. All smaller devices start the component on the first column:
+If you want to start a component in a grid at a specific column, you can use the `columnStart()` method. This method accepts a number, or an object of breakpoints and which column the component should start at:
+
+- You can pass a number like `columnStart(2)`. This number is the column that the component will start on for the `lg` breakpoint and higher. All smaller devices start the component on the first column.
+- `columnStart({ md: 2, xl: 4 })` will make the component start at column 2 on medium devices, and at column 4 on extra large devices. Smaller devices start the component on the first column, unless you use a `default` key.
 
 ```ts
 import { Toggle } from '@navette-js/forms';
@@ -102,9 +105,98 @@ Grid.make(3).schema([
 
 In this example, the toggle always starts a new row of the grid on large devices, even when the previous row has free space.
 
-<Aside variant="warning">
-`columnStart()` does not accept an object of breakpoints yet, and `columnOrder()` is not available in Navette yet.
-</Aside>
+With an object, the component may start at a different column on each breakpoint:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { Grid } from '@navette-js/schemas';
+
+Grid.make({
+    sm: 3,
+    xl: 6,
+    '2xl': 8,
+})
+    .schema([
+        TextInput.make('name')
+            .columnStart({
+                sm: 2,
+                xl: 3,
+                '2xl': 4,
+            }),
+        // ...
+    ])
+```
+
+In this example, the grid has 3 columns on small devices, 6 columns on extra large devices, and 8 columns on extra extra large devices. The text input will start at column 2 on small devices, column 3 on extra large devices, and column 4 on extra extra large devices. This is essentially producing a layout whereby the text input always starts halfway through the grid, regardless of how many columns the grid has.
+
+Calling `columnStart()` several times merges the breakpoints, and `columnStart(null)` removes them. The values of the object may be functions, which receive the [context object](/schemas/overview#component-utility-injection). You may also pass a function to `columnStart()` itself: if it returns a number, that number applies to every screen size. Unknown breakpoints and values that are not whole numbers are ignored.
+
+### Grid column ordering
+
+If you want to control the visual order of components in a grid without changing their position in the markup, you can use the `columnOrder()` method. This method accepts a number, a function, or an object of breakpoints and order values:
+
+- You can pass a number like `columnOrder(2)`. This number is the order that the component will appear in for the `lg` breakpoint and higher. All smaller devices use the default order, unless you use a `default` key.
+- `columnOrder({ md: 2, xl: 4 })` will set the component's order to 2 on medium devices, and to 4 on extra large devices.
+- `columnOrder(({ operation }) => (operation === 'create' ? 1 : 2))` will calculate the order with a function. A number returned by the function applies to every screen size.
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { Grid } from '@navette-js/schemas';
+
+Grid.make(3)
+    .schema([
+        TextInput.make('first')
+            .columnOrder(3), // This will appear last
+        TextInput.make('second')
+            .columnOrder(1), // This will appear first
+        TextInput.make('third')
+            .columnOrder(2), // This will appear second
+    ])
+```
+
+```preview
+// state: {"first": "First", "second": "Second", "third": "Third"}
+// viewport: 1100
+Grid.make(3)
+    .schema([
+        TextInput.make('first').columnOrder(3),
+        TextInput.make('second').columnOrder(1),
+        TextInput.make('third').columnOrder(2),
+    ])
+```
+
+You can also use responsive ordering to change the visual order of components based on the screen size:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { Grid } from '@navette-js/schemas';
+
+Grid.make({
+    sm: 2,
+    lg: 3,
+})
+    .schema([
+        TextInput.make('title')
+            .columnOrder({
+                default: 1,
+                lg: 3,
+            }),
+        TextInput.make('description')
+            .columnOrder({
+                default: 2,
+                lg: 1,
+            }),
+        TextInput.make('category')
+            .columnOrder({
+                default: 3,
+                lg: 2,
+            }),
+    ])
+```
+
+In this example, on small screens the order will be: title, description, category. On large screens, the order will be: description, category, title.
+
+The order only changes what is displayed: keyboard navigation and screen readers still follow the order of the markup, so keep the visual order close to it.
 
 ### An example of a responsive grid layout
 
@@ -483,7 +575,32 @@ Give the group a `key()` so that its label and error message are linked to it fo
 
 ### Reducing space between components
 
-The `dense()` method of the `Schema` object creates a more compact layout by reducing the spacing between its components by 50%:
+The `dense()` method creates a more compact layout by reducing the spacing between components by 50%:
+
+```ts
+import { Fieldset } from '@navette-js/schemas';
+
+Fieldset.make('Dense')
+    .dense()
+    .schema([
+        // ...
+    ])
+```
+
+```preview
+// state: {"street": "12 Baker Street", "city": "London", "postcode": "NW1 6XE", "country": "United Kingdom"}
+// viewport: 1100
+Fieldset.make('Dense')
+    .dense()
+    .schema([
+        TextInput.make('street'),
+        TextInput.make('city'),
+        TextInput.make('postcode'),
+        TextInput.make('country'),
+    ])
+```
+
+`dense()` is available on every layout component (`Grid`, `Group`, `Section`, `Fieldset`, `Tab`…) and on the `Schema` object. It also applies to the layout components nested inside, unless they set their own `dense(false)`:
 
 ```ts
 import { type Schema } from '@navette-js/schemas';
@@ -499,11 +616,126 @@ static infolist(schema: Schema): Schema {
 
 ### Removing space between components
 
-The `gap(false)` method of the `Schema` object removes the space between its components.
+The `gap(false)` method removes space between components:
 
-<Aside variant="warning">
-`dense()` and `gap()` are only available on the `Schema` object, not on layout components such as `Fieldset`. Container queries (`gridContainer()` and `@md` breakpoints) are not available in Navette yet.
-</Aside>
+```ts
+import { Fieldset } from '@navette-js/schemas';
+
+Fieldset.make('No gap')
+    .gap(false)
+    .schema([
+        // ...
+    ])
+```
+
+```preview
+// state: {"street": "12 Baker Street", "city": "London"}
+// viewport: 1100
+Fieldset.make('No gap')
+    .gap(false)
+    .schema([
+        TextInput.make('street'),
+        TextInput.make('city'),
+    ])
+```
+
+Like `dense()`, `gap()` is available on layout components and on the `Schema` object, and is inherited by nested layout components.
+
+## Using container queries
+
+In addition to traditional breakpoints based on the size of the viewport, you can also use [container queries](https://tailwindcss.com/docs/responsive-design#container-queries) to create responsive layouts based on the size of a parent container. This is particularly useful when the size of the parent container is not directly tied to the size of the viewport. For example, when using a collapsible sidebar alongside the content, the content area dynamically adjusts its size depending on the collapse state of the sidebar.
+
+The foundation of a container query is the container itself. The container is the element whose width determines the layout. To designate an element as a container, use the `gridContainer()` method on it. For instance, if you want to define the number of grid columns in a [`Grid` component](#grid-component) based on its width:
+
+```ts
+import { Grid } from '@navette-js/schemas';
+
+Grid.make()
+    .gridContainer()
+    .columns({
+        // ...
+    })
+    .schema([
+        // ...
+    ])
+```
+
+Once an element is specified as a grid container, the element or any of its children can utilize [container breakpoints](https://tailwindcss.com/docs/responsive-design#container-size-reference) instead of standard breakpoints. For example, you could use `@md` to define the number of grid columns when the container's width is at least `448px`, and `@xl` for when the width is at least `576px`.
+
+```ts
+import { Grid } from '@navette-js/schemas';
+
+Grid.make()
+    .gridContainer()
+    .columns({
+        '@md': 3,
+        '@xl': 4,
+    })
+    .schema([
+        // ...
+    ])
+```
+
+The container breakpoints are `@3xs`, `@2xs`, `@xs`, `@sm`, `@md`, `@lg`, `@xl`, `@2xl`, `@3xl`, `@4xl`, `@5xl`, `@6xl` and `@7xl`. You can also use them in the `columnSpan()`, `columnStart()`, and `columnOrder()` methods:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { Grid } from '@navette-js/schemas';
+
+Grid.make()
+    .gridContainer()
+    .columns({
+        '@md': 3,
+        '@xl': 4,
+    })
+    .schema([
+        TextInput.make('name')
+            .columnSpan({
+                '@md': 2,
+                '@xl': 3,
+            })
+            .columnOrder({
+                default: 2,
+                '@xl': 1,
+            }),
+        TextInput.make('email')
+            .columnSpan({
+                default: 1,
+                '@xl': 1,
+            })
+            .columnOrder({
+                default: 1,
+                '@xl': 2,
+            }),
+        // ...
+    ])
+```
+
+In this example, when the container width is smaller than the `@xl` breakpoint (576px), the email field will appear first followed by the name field. When the container width is at least 576px, the order is reversed with the name field appearing first followed by the email field.
+
+### Supporting container queries on older browsers
+
+Container queries are not supported by some older browsers. To support them, you can define an additional layer of breakpoints alongside the container breakpoints. By prefixing the traditional breakpoint with `!@`, you can specify that the fallback breakpoint should be used when container queries are not supported in the browser. The fallback breakpoints are `!@sm`, `!@md`, `!@lg`, `!@xl` and `!@2xl`.
+
+For example, if you want to use the `@md` container breakpoint for the grid columns but also support older browsers, you can define the `!@md` fallback breakpoint, which will be applied when container queries are unavailable:
+
+```ts
+import { Grid } from '@navette-js/schemas';
+
+Grid.make()
+    .gridContainer()
+    .columns({
+        '@md': 3,
+        '@xl': 4,
+        '!@md': 2,
+        '!@xl': 3,
+    })
+    .schema([
+        // ...
+    ])
+```
+
+You can also use `!@` fallback breakpoints in the `columnSpan()`, `columnStart()`, and `columnOrder()` methods.
 
 ## Adding extra HTML attributes to a layout component
 
@@ -519,5 +751,5 @@ Fieldset.make('Address')
 Calling `extraAttributes()` several times merges the attributes.
 
 <Aside variant="warning">
-Among layout components, only `Fieldset`, `FusedGroup`, `Callout` and `EmptyState` render extra attributes. `Section`, `Grid`, `Group`, `Flex` and `Tabs` ignore them for now.
+`Flex` ignores extra attributes for now.
 </Aside>

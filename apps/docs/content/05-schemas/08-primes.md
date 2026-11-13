@@ -255,7 +255,24 @@ Text.make('28o.-AK%D~xh*.:[4"3)zPiC')
 By default, the content of the text is copied. You may copy another value with `copyableState()`.
 
 <Aside variant="warning">
-Browsers only allow copying to the clipboard on secure origins, so this feature only works when the panel is served over HTTPS (or on `localhost`). Using JavaScript to determine the content of the text (`js()`) is not available in Navette yet.
+Browsers only allow copying to the clipboard on secure origins, so this feature only works when the panel is served over HTTPS (or on `localhost`).
+</Aside>
+
+### Using JavaScript to determine the content of the text
+
+You can use JavaScript to determine the content of the text. This is useful if you want to display a different message depending on the state of a [form field](/forms/overview), without making a request to the server to re-render the schema. To allow this, you can use the `js()` method:
+
+```ts
+import { Text } from '@navette-js/schemas';
+
+Text.make('$get("name") ? `Hello, ${$get("name")}` : "Please enter your name."')
+    .js()
+```
+
+The `$state` and `$get()` utilities are available in the JavaScript context, so you can use them to get the state of fields in the schema. `$get()` reads the field names relative to the schema, like [`get()`](/schemas/overview#injecting-the-state-of-another-component) on the server. The expression is evaluated again when the state changes, and its result is displayed as text, never as HTML.
+
+<Aside variant="danger">
+The content of a `js()` text is run as JavaScript in the browser. Only write it yourself: never build it from a value that comes from a user or from the database, otherwise your application will be vulnerable to XSS attacks. Use `$get()` to read user values instead.
 </Aside>
 
 ## Icon component
