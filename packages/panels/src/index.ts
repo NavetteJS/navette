@@ -2255,13 +2255,17 @@ export class ListRecords extends Page implements TableHost {
         const table = this.getTable();
         // Deferred filters edit a copy applied by the "Apply" button; otherwise the form edits the applied state, field by field.
         const deferred = table.hasDeferredFilters();
-        const built = schema.statePath(deferred ? 'tableDeferredFilters' : 'tableFilters').columns(table.getFiltersFormColumns()).partiallyRendered().components(table.getFilters().map((filter) => {
+        const groups = table.getFilters().map((filter) => {
             // A filter may provide its own form (query builder); otherwise it is a select.
             const custom = filter.getFormComponents?.() as SchemaComponent[] | undefined;
             if (custom) return StatefulGroup.make(filter.name, custom).columnSpan(filter.getColumnSpan?.() ?? { default: 1, lg: 1 });
             const definition = filter.getFormDefinition();
             return StatefulGroup.make(filter.name, [Select.make('value').label(filter.getLabel()).placeholder(definition.placeholder).options(filter.getFormOptions ? () => filter.getFormOptions!() : definition.options)]).columnSpan({ default: 1, lg: 1 });
-        }));
+        });
+        // `filtersFormSchema()`: the application arranges the filter groups (sections, columns...).
+        const arrange = table.getFiltersFormSchema();
+        const components = arrange ? arrange(Object.fromEntries(table.getFilters().map((filter, index) => [filter.name, groups[index]]))) : groups;
+        const built = schema.statePath(deferred ? 'tableDeferredFilters' : 'tableFilters').columns(table.getFiltersFormColumns()).partiallyRendered().components(components);
         if (!deferred) for (const component of built.getFlatComponents()) if (component instanceof Field) component.live();
         return built;
     }

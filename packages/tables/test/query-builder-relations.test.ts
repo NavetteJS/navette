@@ -3,7 +3,7 @@ import { after, before, test } from 'node:test';
 import knexFactory from 'knex';
 import { Model, sqlite, type Knex } from '@navette-js/database';
 import {
-    BooleanConstraint, DateConstraint, IsRelatedToOperator, NumberConstraint, QueryBuilder, RelationshipConstraint, SelectConstraint, TextConstraint,
+    BooleanConstraint, DateConstraint, IsRelatedToOperator, NumberConstraint, QueryBuilder, RelationshipConstraint, SelectColumn, SelectConstraint, SelectFilter, Table, TextConstraint, getFilterIndicators, getTableRecords, updateTableColumnState,
     applyConditions, compileRules, resolveRuleDate, sanitizeRules, sqlDialectOf, type Constraint, type ConditionNode,
 } from '../src/index.ts';
 
@@ -147,4 +147,68 @@ test('operators offered by each constraint, in order', () => {
     assert.deepEqual(DateConstraint.make('a').getOperators().map((o) => o.name), ['isAfter', 'isBefore', 'isDate', 'isMonth', 'isYear']);
     assert.deepEqual(RelationshipConstraint.make('tags').multiple().selectable(IsRelatedToOperator.make()).getOperators().map((o) => o.name), ['isRelatedTo', 'hasMin', 'hasMax', 'equals', 'isEmpty']);
     assert.deepEqual(SelectConstraint.make('s').multiple().getListSettingNames(), ['values']);
+});
+
+test('relationship select filter: options, related records, "None" option, labels', async () => {
+    const { ObjectionAdapter } = await import("@navette-js/database");
+    const adapter = new ObjectionAdapter(Post);
+    const host = (tableFilters: any) => ({ id: 'R', tableSearch: '', tableSort: null, tableColumnSearches: {}, tableRecordsPerPage: 10, paginators: { page: 1 }, tableFilters, getDataAdapterForTable: () => adapter });
+    const author = SelectFilter.make('author').relationship('author', 'name', null, true);
+    const tags = SelectFilter.make('tags').multiple().relationship('tags', 'name', (query: any) => query.whereNot('name', 'sql'));
+    const table = new Table().filters([author, tags]);
+    assert.deepEqual(await author.getFormOptions(host({})), [['__empty', 'None'], ['1', 'Ada'], ['2', 'Linus']]);
+    assert.deepEqual(await tags.getFormOptions(host({})), [['1', 'js'], ['2', 'php']], 'modified query');
+    const titles = async (filters: any) => (await getTableRecords(table, host(filters) as any, adapter)).records.map((record: any) => record.title).sort();
+    assert.deepEqual(await titles({ author: { value: '2' } }), ['B']);
+    assert.deepEqual(await titles({ tags: { values: ['1', '3'] } }), ['A'], 'tag 3 is out of the modified query');
+    await db('posts').insert({ title: 'D', status: 'draft', author_id: null });
+    try {
+        assert.deepEqual(await titles({ author: { value: '__empty' } }), ['D']);
+        assert.deepEqual(await titles({ author: { value: '999' } }), [], 'an unknown key matches nothing');
+        const filters = { author: { value: '1' }, tags: { values: ['2'] } };
+        for (const filter of table.getFilters()) await filter.loadIndicatorData!(filters[filter.name as 'author'], host(filters) as any);
+        assert.deepEqual(getFilterIndicators(table, host(filters) as any).map((indicator) => indicator.label), ['Author: Ada', 'Tags: php']);
+    } finally {
+        await db('posts').where('title', 'D').delete();
+    }
+});
+
+test('select column `optionsRelationship()`: options from the related model, keys checked on save', async () => {
+    const { ObjectionAdapter } = await import('@navette-js/database');
+    const adapter = new ObjectionAdapter(Post);
+    const column = SelectColumn.make('author_id').optionsRelationship('author', 'name');
+    const table = new Table().columns([column]);
+    const host = { id: 'R', tableSearch: '', tableSort: null, tableColumnSearches: {}, tableRecordsPerPage: 10, paginators: { page: 1 } };
+    const post = await Post.query().findById(1);
+    assert.deepEqual(await column.getOptionsFor(post as any), [['1', 'Ada'], ['2', 'Linus']]);
+    assert.deepEqual(await updateTableColumnState(table, host as any, adapter, 'author_id', 1, '99'), { error: 'The selected author id is invalid.' });
+    assert.equal(await updateTableColumnState(table, host as any, adapter, 'author_id', 1, '2'), '2');
+    await db('posts').where('id', 1).update({ author_id: 1 });
+});
+
+test('number constraint on a relationship: sum, average, minimum and maximum of the related records', async () => {
+    class Comment extends Model { static tableName = 'comments'; }
+    class Article extends Model {
+        static tableName = 'posts';
+        static get relationMappings() { return { comments: { relation: Model.HasManyRelation, modelClass: Comment, join: { from: 'posts.id', to: 'comments.post_id' } } }; }
+    }
+    await db.schema.createTable('comments', (t) => { t.increments('id'); t.integer('post_id'); t.integer('score'); });
+    try {
+        await db('comments').insert([{ post_id: 1, score: 5 }, { post_id: 1, score: 7 }, { post_id: 2, score: 9 }]);
+        const constraints = [NumberConstraint.make('commentScore').label('Comment score').relationship('comments', 'score')];
+        const run = async (rules: unknown) => {
+            const { nodes, summaries } = compileRules(constraints, sanitizeRules(constraints, rules));
+            const rows = await Article.query().where((query: any) => applyConditions(query, nodes)).orderBy('id');
+            return { titles: rows.map((row: any) => row.title), summaries: Object.values(summaries) };
+        };
+        const rule = (operator: string, settings: Record<string, unknown>) => ({ r: { type: 'commentScore', data: { operator, settings } } });
+        assert.deepEqual(await run(rule('isMin', { number: 10, aggregate: 'sum' })), { titles: ['A'], summaries: ['Sum of Comment score is minimum 10'] });
+        assert.deepEqual((await run(rule('isMin', { number: 8, aggregate: 'avg' }))).titles, ['B']);
+        assert.deepEqual((await run(rule('isMax', { number: 5, aggregate: 'min' }))).titles, ['A']);
+        assert.deepEqual((await run(rule('equals', { number: 9, aggregate: 'max' }))).titles, ['B']);
+        assert.deepEqual((await run(rule('isMin', { number: 9, aggregate: null }))).titles, ['B'], 'no aggregate: any related record');
+        assert.deepEqual((await run(rule('isMin', { number: 9, aggregate: 'count; drop table posts' }))).titles, ['B'], 'an unknown aggregate is ignored');
+    } finally {
+        await db.schema.dropTable('comments');
+    }
 });

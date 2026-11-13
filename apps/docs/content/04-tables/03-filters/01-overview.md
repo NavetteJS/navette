@@ -135,9 +135,25 @@ Panel.make()
     .sessionStore(store)
 ```
 
-<Aside variant="warning">
-Customizing the filter trigger, apply and reset actions (`filtersTriggerAction()`, `filtersApplyAction()`, `filtersResetAction()`) is not available yet. You may move the "Reset" button next to "Apply" with `filtersResetActionPosition('footer')`.
-</Aside>
+## Customizing the filters actions
+
+`filtersTriggerAction()`, `filtersApplyAction()` and `filtersResetAction()` customize the button that opens the filters, the "Apply" button and the "Reset" button. Each receives a `FiltersAction` with `label()`, `icon()`, `color()`, `button()`, `link()`, `iconButton()` and `hidden()`:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .filters([
+            // ...
+        ])
+        .filtersTriggerAction((action) => action.button().label('Filter'))
+        .filtersApplyAction((action) => action.label('Show results'))
+        .filtersResetAction((action) => action.hidden());
+}
+```
+
+You may also move the "Reset" button next to "Apply" with `filtersResetActionPosition('footer')`.
 
 ## Active filter indicators
 

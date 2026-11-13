@@ -32,14 +32,17 @@
 <% }; %>
 <%
     // Filters trigger button (funnel icon and active filter count) and filters panel, shared by every filters layout.
-    const filtersTrigger = () => `<button title="${e(t('filament-tables::table.actions.filter.label'))}" aria-label="${e(t('filament-tables::table.actions.filter.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">${icon('m-funnel')}<div class="fi-icon-btn-badge-ctn"><span class="${cls([...badgeClasses, 'fi-badge', 'fi-size-xs'])}">${activeFiltersCount}</span></div></button>`;
+    const filtersTriggerDefault = () => `<button title="${e(t('filament-tables::table.actions.filter.label'))}" aria-label="${e(t('filament-tables::table.actions.filter.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">${icon('m-funnel')}<div class="fi-icon-btn-badge-ctn"><span class="${cls([...badgeClasses, 'fi-badge', 'fi-size-xs'])}">${activeFiltersCount}</span></div></button>`;
+    const filtersTrigger = () => filterActions.trigger.customized
+        ? filterActionHtml(filterActions.trigger, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"', `<span class="${cls([...badgeClasses, 'fi-badge', 'fi-size-xs'])}">${activeFiltersCount}</span>`)
+        : filtersTriggerDefault();
     const filterButton = (action, colorClasses, label, extra = '') => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...colorClasses])}" data-table-filter-action="${action}" wire:click="${action === 'apply' ? 'applyTableFilters' : 'resetTableFiltersForm'}"${extra}>${e(label)}</button>`;
     // Modal layout: "Apply" (deferred filters) closes the modal; "Reset" stays in the footer.
     const filtersModalFooter = (modalId) => [
-        ...(filtersDeferred ? [filterButton('apply', primaryButtonClasses, t('filament-tables::table.filters.actions.apply.label'), ` x-on:click="${e("$dispatch('close-modal', { id: " + js(modalId) + ' })')}"`)] : []),
-        filterButton('reset', grayButtonClasses, t('filament-tables::table.filters.actions.reset.label')),
+        ...(filtersDeferred && !filterActions.apply.hidden ? [filterButton('apply', primaryButtonClasses, filterActions.apply.label, ` x-on:click="${e("$dispatch('close-modal', { id: " + js(modalId) + ' })')}"`)] : []),
+        ...(filterActions.reset.hidden ? [] : [filterButton('reset', grayButtonClasses, filterActions.reset.label)]),
     ];
-    const filtersPanel = (classes, extra = {}, closeModal = null) => view('filament-tables::filters', { attributes: attrs(extra).class(['fi-ta-filters', ...classes]).toHtml(), form: filtersForm, deferred: filtersDeferred, resetPosition: filtersResetPosition, closeModal, dangerLinkClasses, primaryButtonClasses, grayButtonClasses });
+    const filtersPanel = (classes, extra = {}, closeModal = null) => view('filament-tables::filters', { attributes: attrs(extra).class(['fi-ta-filters', ...classes]).toHtml(), form: filtersForm, deferred: filtersDeferred, resetPosition: filtersResetPosition, closeModal, dangerLinkClasses, primaryButtonClasses, grayButtonClasses, filterActions, filterActionHtml });
 %>
 <div x-data="filamentTable({
                 areGroupsCollapsedByDefault: <%- grouping.collapsedByDefault ? 'true' : 'false' %>,

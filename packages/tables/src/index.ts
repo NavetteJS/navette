@@ -4,6 +4,7 @@ import { Attributes, cls, e, hasRenderHook, icon, js, markdownToHtml, renderHook
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
+import { applyConditions, loadRelationshipOptions, modelOfHost, type RelationshipQueryModifier } from './query-builder.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -462,6 +463,13 @@ export class Summarizer {
     protected _labelHidden = false;
     protected _hidden: boolean | (() => boolean) = false;
     protected _using: ((dataset: SummaryDataset) => unknown) | null = null;
+    protected _scope: ((query: any) => void) | null = null;
+    /**
+     * Restricts the records summarized by this summarizer (all records, the page, or a group), e.g.
+     * `Count.make().query((query) => query.where('is_published', 1))`. The function receives the data adapter's query builder.
+     */
+    query(scope: ((query: any) => void) | null): this { this._scope = scope; return this; }
+    getQueryScope(): ((query: any) => void) | null { return this._scope; }
     static make(): Summarizer { return configured(new Summarizer()); }
     label(label: string | null): this { this._label = label; return this; }
     money(currency = 'usd'): this { this._money = currency.toUpperCase(); return this; }
@@ -1120,7 +1128,22 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     options(options: SelectColumnOptions | ((record: R) => SelectColumnOptions | Promise<SelectColumnOptions>)): this { this._options = typeof options === 'function' ? options : normalizeSelectOptions(options); return this; }
     /** Static options (empty when they depend on the record: use `getOptionsFor()`). */
     getOptions(): [string, string][] { return typeof this._options === 'function' ? [] : this._options; }
-    async getOptionsFor(record: R): Promise<[string, string][]> { return typeof this._options === 'function' ? normalizeSelectOptions(await this._options(record)) : this._options; }
+    async getOptionsFor(record: R): Promise<[string, string][]> {
+        if (this._optionsRelationship) return (this._relationshipOptions ??= loadRelationshipOptions((record as any)?.constructor, this._optionsRelationship.name, this._optionsRelationship.title, this._optionsRelationship.modify));
+        return typeof this._options === 'function' ? normalizeSelectOptions(await this._options(record)) : this._options;
+    }
+    private _optionsRelationship: { name: string; title: string | null; modify: RelationshipQueryModifier | null } | null = null;
+    private _relationshipOptions: Promise<[string, string][]> | null = null;
+    /**
+     * Options from the records of a relationship of the record's model (an Objection model with `relationMappings`): the
+     * column stores the picked record's key, e.g. `SelectColumn.make('author_id').optionsRelationship('author', 'name')`.
+     * Up to 1,000 options are listed; any related record's key is accepted when saving.
+     */
+    optionsRelationship(name: string, titleAttribute: string | null = null, modifyQueryUsing: RelationshipQueryModifier | null = null): this {
+        this._optionsRelationship = { name, title: titleAttribute, modify: modifyQueryUsing };
+        this._relationshipOptions = null;
+        return this;
+    }
     selectablePlaceholder(condition = true): this { this._selectablePlaceholder = condition; return this; }
     /** `false`: a JavaScript select instead of the browser's native one. */
     native(condition = true): this { this._native = condition; return this; }
@@ -1140,14 +1163,17 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     inline(condition = true): this { this._inline = condition; return this; }
     protected getImplicitRules(): ColumnValidationRule[] {
         // Options that depend on the record are checked by `validateFor()`.
-        if (typeof this._options === 'function') return [];
+        if (typeof this._options === 'function' || this._optionsRelationship) return [];
         const options = this._options;
         return [{ name: 'in', passes: (v) => (typeof v === 'string' || typeof v === 'number') && options.some(([value]) => value === String(v)), message: (a) => `The selected ${a} is invalid.` }];
     }
     /** The value must be one of the record's options, and not a disabled one. */
     async validateFor(record: R, input: unknown): Promise<string | null> {
         if (!isBlank(input)) {
-            const options = await this.getOptionsFor(record);
+            // Relationship options: the received key must be one of the related model's records (in the modified query).
+            const options = this._optionsRelationship && (typeof input === 'string' || typeof input === 'number')
+                ? await loadRelationshipOptions((record as any)?.constructor, this._optionsRelationship.name, this._optionsRelationship.title, this._optionsRelationship.modify, [String(input)])
+                : await this.getOptionsFor(record);
             const option = (typeof input === 'string' || typeof input === 'number') ? options.find(([value]) => value === String(input)) : undefined;
             if (!option || this.isOptionDisabled(option[0], option[1], record)) return this._validationMessages.in ?? `The selected ${this.getValidationAttribute()} is invalid.`;
         }
@@ -1492,6 +1518,9 @@ abstract class BaseFilter implements TableFilter {
     }
 }
 
+/** Value of the "None" option of a relationship select filter. */
+const EMPTY_RELATIONSHIP_OPTION = '__empty';
+
 /** Filters on a column value picked from a list. */
 export class SelectFilter extends BaseFilter {
     private _column: string | null = null;
@@ -1520,12 +1549,35 @@ export class SelectFilter extends BaseFilter {
     placeholder(placeholder: string | null): this { this._placeholder = placeholder; return this; }
     /** No-op: options are always loaded with the form. */
     preload(): this { return this; }
-    getFormDefinition() { return { placeholder: this._placeholder ?? t('filament-tables::table.filters.select.placeholder'), options: Array.isArray(this._options) ? this._options : [] }; }
-    getFormOptions(): Promise<[string, string][]> { return typeof this._options === 'function' ? this._options() : Promise.resolve(this._options); }
+    private _relationship: { name: string; title: string | null; modify: RelationshipQueryModifier | null; empty: boolean } | null = null;
+    private _emptyOptionLabel: string | null = null;
+    private _host: unknown = null;
+    /**
+     * Options from the records of a relationship of the table's model (an Objection model with `relationMappings`); records
+     * related to the picked ones are shown. `hasEmptyOption` adds a "None" option for records without related records.
+     */
+    relationship(name: string, titleAttribute: string | null = null, modifyQueryUsing: RelationshipQueryModifier | null = null, hasEmptyOption = false): this {
+        this._relationship = { name, title: titleAttribute, modify: modifyQueryUsing, empty: hasEmptyOption };
+        return this;
+    }
+    hasRelationship(): boolean { return this._relationship !== null; }
+    /** Label of the "None" option of `relationship(..., hasEmptyOption: true)`. */
+    emptyRelationshipOptionLabel(label: string | null): this { this._emptyOptionLabel = label; return this; }
+    getEmptyRelationshipOptionLabel(): string { return this._emptyOptionLabel ?? t('filament-tables::table.filters.select.relationship.empty_option_label'); }
+    getFormDefinition() { return { placeholder: this._placeholder ?? t('filament-tables::table.filters.select.placeholder'), options: Array.isArray(this._options) && !this._relationship ? this._options : [] }; }
+    getFormOptions(host: unknown = this._host): Promise<[string, string][]> {
+        if (this._relationship) return this.loadRelationshipOptions(host, null);
+        return typeof this._options === 'function' ? this._options() : Promise.resolve(this._options);
+    }
+    private async loadRelationshipOptions(host: unknown, keys: string[] | null): Promise<[string, string][]> {
+        const relation = this._relationship!;
+        const options = await loadRelationshipOptions(modelOfHost(host), relation.name, relation.title, relation.modify, keys === null ? null : keys.filter((key) => key !== EMPTY_RELATIONSHIP_OPTION));
+        return relation.empty && (keys === null || keys.includes(EMPTY_RELATIONSHIP_OPTION)) ? [[EMPTY_RELATIONSHIP_OPTION, this.getEmptyRelationshipOptionLabel()], ...options] : options;
+    }
     /** Options are evaluated on every render, so the select gets a key derived from them (forces a re-render when they change). */
     readonly hasDynamicOptions = true;
     getFormComponents(): unknown[] {
-        const select = Select.make(this._multiple ? 'values' : 'value').label(this.getLabel()).placeholder(this.getFormDefinition().placeholder).options(() => this.getFormOptions());
+        const select = Select.make(this._multiple ? 'values' : 'value').label(this.getLabel()).placeholder(this.getFormDefinition().placeholder).options((ctx: any) => this.getFormOptions(ctx?.livewire));
         if (this._multiple) select.multiple();
         if (this._searchable) select.searchable();
         if (!this._selectablePlaceholder) select.selectablePlaceholder(false);
@@ -1544,7 +1596,8 @@ export class SelectFilter extends BaseFilter {
     private values(state: FilterState): string[] {
         const data = this.sanitizeState(state);
         const values = this._multiple ? (data.values as string[]) : data.value === null ? [] : [data.value as string];
-        return Array.isArray(this._options) ? values.filter((value) => (this._options as [string, string][]).some(([option]) => option === value)) : values;
+        // Relationship or loaded options: the keys are bound parameters, an unknown key matches nothing.
+        return Array.isArray(this._options) && !this._relationship ? values.filter((value) => (this._options as [string, string][]).some(([option]) => option === value)) : values;
     }
     isActive(state: FilterState): boolean { return this.values(state).length > 0; }
     apply(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void {
@@ -1552,12 +1605,27 @@ export class SelectFilter extends BaseFilter {
         if (!values.length) return;
         const data = this.sanitizeState(state);
         if (this._query) { (query.modifiers ??= []).push((q) => { this._query!(q, data); }); return; }
+        if (this._relationship) {
+            const { name, modify } = this._relationship;
+            const keys = values.filter((value) => value !== EMPTY_RELATIONSHIP_OPTION);
+            const empty = this._relationship.empty && values.includes(EMPTY_RELATIONSHIP_OPTION);
+            // Records related to one of the picked records, or (the "None" option) without related records.
+            (query.modifiers ??= []).push((q) => {
+                q.where((inner: any) => {
+                    if (keys.length) inner.orWhere((related: any) => applyConditions(related, [{ kind: 'related', relationship: name, keys, negate: false, ...(modify ? { modify } : {}) }]));
+                    if (empty) inner.orWhere((none: any) => applyConditions(none, [{ kind: 'related', relationship: name, keys: null, negate: true, ...(modify ? { modify } : {}) }]));
+                });
+            });
+            return;
+        }
         const column = this.getColumn();
         (query.modifiers ??= []).push((q) => { if (this._multiple) q.whereIn(column, values); else q.where(column, values[0]); });
     }
     /** Labels of the applied values, loaded before the indicators are computed. */
-    async loadIndicatorData(state: FilterState): Promise<void> {
-        if (this.values(state).length) this._optionLabels = new Map(await this.getFormOptions());
+    async loadIndicatorData(state: FilterState, host?: TableHost): Promise<void> {
+        const values = this.values(state);
+        if (!values.length) return;
+        this._optionLabels = new Map(this._relationship ? await this.loadRelationshipOptions(host, values) : await this.getFormOptions());
     }
     protected defaultIndicators(data: FilterState): IndicatorResult {
         const labels = this.values(data).map((value) => this._optionLabels.get(value) ?? (Array.isArray(this._options) ? this._options.find(([option]) => option === value)?.[1] : undefined)).filter((label): label is string => label !== undefined);
@@ -1686,6 +1754,28 @@ export class Filter extends BaseFilter {
 
 // ------------------------------------------------------------------ table
 export type ColumnState = { type: 'column'; name: string; label: string; isHidden: boolean; isToggled: boolean; isToggleable: boolean; isToggledHiddenByDefault: boolean | null };
+
+/** Look of a filters action (trigger, apply, reset), changed with `filtersTriggerAction()`, `filtersApplyAction()` and `filtersResetAction()`. */
+export class FiltersAction {
+    private _label: string | null = null;
+    private _icon: string | null | undefined = undefined;
+    private _color: string | null = null;
+    private _view: 'button' | 'link' | 'icon-button' | null = null;
+    private _hidden = false;
+    label(label: string | null): this { this._label = label; return this; }
+    icon(icon: string | null): this { this._icon = icon; return this; }
+    color(color: string | null): this { this._color = color; return this; }
+    /** Labeled button. */
+    button(): this { this._view = 'button'; return this; }
+    link(): this { this._view = 'link'; return this; }
+    /** Icon only, the label becomes the tooltip and accessible name. */
+    iconButton(): this { this._view = 'icon-button'; return this; }
+    hidden(condition = true): this { this._hidden = condition; return this; }
+    resolve(defaults: { label: string; icon: string | null; color: string; view: 'button' | 'link' | 'icon-button' }) {
+        return { label: this._label ?? defaults.label, icon: this._icon === undefined ? defaults.icon : this._icon, color: this._color ?? defaults.color, view: this._view ?? defaults.view, hidden: this._hidden };
+    }
+}
+type FiltersActionView = ReturnType<FiltersAction['resolve']> & { customized: boolean };
 
 /** Bulk actions grouped in the "Bulk actions" dropdown of the toolbar (`toolbarActions([BulkActionGroup.make([...])])`). */
 export class BulkActionGroup {
@@ -1848,6 +1938,31 @@ export class Table<R = any> {
     selectsCurrentPageOnly(): boolean { return this._selectsCurrentPageOnly; }
     /** `false`: filters apply as soon as a field changes, without the "Apply" button. */
     deferFilters(condition = true): this { this._deferFilters = condition; return this; }
+    private _filterActions: Partial<Record<'trigger' | 'apply' | 'reset', (action: FiltersAction) => FiltersAction | void>> = {};
+    /** Customizes the button that opens the filters: `filtersTriggerAction((action) => action.button().label('Filter'))`. */
+    filtersTriggerAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.trigger = configure; return this; }
+    /** Customizes the "Apply" button of deferred filters. */
+    filtersApplyAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.apply = configure; return this; }
+    /** Customizes the "Reset" button (`hidden()` removes it). */
+    filtersResetAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.reset = configure; return this; }
+    getFiltersActionView(kind: 'trigger' | 'apply' | 'reset'): FiltersActionView {
+        const defaults = {
+            trigger: { label: t('filament-tables::table.actions.filter.label'), icon: 'm-funnel', color: 'gray', view: 'icon-button' as const },
+            apply: { label: t('filament-tables::table.filters.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const },
+            reset: { label: t('filament-tables::table.filters.actions.reset.label'), icon: null, color: this._filtersResetPosition === 'footer' ? 'gray' : 'danger', view: this._filtersResetPosition === 'footer' ? 'button' as const : 'link' as const },
+        }[kind];
+        const configure = this._filterActions[kind];
+        if (!configure) return { ...defaults, hidden: false, customized: false };
+        const action = new FiltersAction();
+        return { ...(configure(action) ?? action).resolve(defaults), customized: true };
+    }
+    private _filtersFormSchema: ((filters: Record<string, any>) => any[]) | null = null;
+    /**
+     * Arranges the filters form yourself: the function receives each filter's form group, keyed by filter name, and returns
+     * the form components (e.g. sections). Filters left out are not shown.
+     */
+    filtersFormSchema(schema: ((filters: Record<string, any>) => any[]) | null): this { this._filtersFormSchema = schema; return this; }
+    getFiltersFormSchema(): ((filters: Record<string, any>) => any[]) | null { return this._filtersFormSchema; }
     hasDeferredFilters(): boolean { return this._deferFilters; }
     /** Columns of the filters form grid (1 in a dropdown or modal, up to 5 above or below the content by default). */
     filtersFormColumns(columns: number | Record<string, number> | null): this { this._filtersFormColumns = columns; return this; }
@@ -2020,6 +2135,15 @@ export async function isTableFilterRemovable<R>(table: Table<R>, host: TableHost
     return filter.getIndicators(state).every((indicator) => indicator.removable !== false);
 }
 
+/** Markup of a customized filters action: an icon button, a button or a link, with an optional badge. */
+function filterActionHtml(view: FiltersActionView, attributes: string, badge: string | null): string {
+    const colors = (component: 'button' | 'link' | 'icon-button') => (view.color && view.color !== 'gray' ? (colorManager?.getComponentClasses(component, view.color) ?? []) : []);
+    const iconHtml = view.icon ? icon(view.icon) : '';
+    if (view.view === 'icon-button') return `<button title="${e(view.label)}" aria-label="${e(view.label)}" ${attributes} class="${cls(['fi-force-enabled', 'fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-md', ...colors('icon-button')])}">${iconHtml}${badge !== null ? `<div class="fi-icon-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+    if (view.view === 'link') return `<button ${attributes} class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...colors('link')])}">${iconHtml}<span class="fi-link-label">${e(view.label)}</span>${badge !== null ? `<div class="fi-link-badge-ctn">${badge}</div>` : ''}</button>`;
+    return `<button ${attributes} class="${cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="fi-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+}
+
 /** Keys whose record passes `checkIfRecordIsSelectableUsing()`, loaded in chunks. Without a check, the keys are returned as they are. */
 export async function filterSelectableKeys<R>(table: Table<R>, adapter: Pick<DataAdapter<R>, 'find'>, keys: string[], chunkSize = 100): Promise<string[]> {
     if (!table.hasRecordSelectabilityCheck()) return keys;
@@ -2131,11 +2255,20 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     };
     // `using()` summarizers get the records of the summarized dataset, loaded once per row.
     const loader = (dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]) => { let cache: Promise<R[]> | null = null; return () => (cache ??= Array.isArray(dataset) ? Promise.resolve(dataset) : adapter.paginate({ ...dataset, page: 1, perPage: MAX_UNPAGINATED_RECORDS }).then((result) => result.records)); };
+    // The displayed page as a query (its record keys), for summarizers scoped with `query()`.
+    const pageQuery = { ...query, keys: page.records.map((record) => adapter.getKey(record)) };
     const cells = async (values: SummaryValues, dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]): Promise<SummaryCell[]> => {
         const records = loader(dataset);
+        const datasetQuery = Array.isArray(dataset) ? pageQuery : dataset;
         return Promise.all(columns.slice(span).map(async (c, i) => ({
             alignment: c.getAlignment() ?? 'start',
-            items: (await Promise.all(lists[i + span].map(async (s) => s.summarize(columnOf(c), values, s.hasCustomCalculation() ? await s.compute({ column: c.name, records }) : undefined)))).filter((item): item is SummaryItem => item !== null),
+            items: (await Promise.all(lists[i + span].map(async (s) => {
+                const scope = s.getQueryScope();
+                if (!scope) return s.summarize(columnOf(c), values, s.hasCustomCalculation() ? await s.compute({ column: c.name, records }) : undefined);
+                // Scoped summarizer: its own aggregates and records, on the dataset restricted by its query.
+                const scoped = { ...datasetQuery, modifiers: [...(datasetQuery.modifiers ?? []), (q: any) => { scope(q); }] };
+                return s.summarize(columnOf(c), await aggregate(scoped), s.hasCustomCalculation() ? await s.compute({ column: c.name, records: loader(scoped) }) : undefined);
+            }))).filter((item): item is SummaryItem => item !== null),
         })));
     };
     const label = table.getPluralModelLabel();
@@ -2267,6 +2400,8 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'), grayButtonClasses: classes('button', 'gray'), indicatorColorClasses: (color: string) => classes('badge', color),
         bulkActions: options.bulkActions ?? [],
         filtersForm: options.filtersForm ?? null, activeFiltersCount: countActiveFilters(table, host), filtersLayout: table.getFiltersLayout(), filterIndicators: table.areFilterIndicatorsHidden() ? [] : getFilterIndicators(table, host),
+        filterActions: { trigger: table.getFiltersActionView('trigger'), apply: table.getFiltersActionView('apply'), reset: table.getFiltersActionView('reset') },
+        filterActionHtml: (view: FiltersActionView, attributes: string, badge: string | null = null) => filterActionHtml(view, attributes, badge),
         filtersDeferred: table.hasDeferredFilters(), filtersResetPosition: table.getFiltersResetActionPosition(), filtersFormWidth: table.getFiltersFormWidth(), filtersFormMaxHeight: table.getFiltersFormMaxHeight(), modal,
         hasColumnManager: !reordering && table.hasToggleableColumns(),
         afterContainer: options.after ?? '', heading: table.getHeading(), headerActions: options.headerActions ?? [], summaryHtml: summary?.html ?? '', trailingGroupSummary,

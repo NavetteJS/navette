@@ -43,11 +43,17 @@ export type Condition =
     /** At least one related record (among `keys` when given), or none (`negate`). */
     | { kind: 'related'; relationship: string; keys: Key[] | null; negate: boolean; modify?: RelationshipQueryModifier }
     /** Application-defined condition (custom operator). */
-    | { kind: 'custom'; apply: (query: any) => void };
+    | { kind: 'custom'; apply: (query: any) => void }
+    /** Sum, average, minimum or maximum of a column of the related records, compared to a value. */
+    | { kind: 'aggregate'; relationship: string; column: string; aggregate: Aggregate; operator: Comparison; value: number; modify?: RelationshipQueryModifier };
+const AGGREGATES = ['sum', 'avg', 'min', 'max'] as const;
+type Aggregate = typeof AGGREGATES[number];
+const AGGREGATE_KEYS: Record<Aggregate, string> = { sum: 'sum', avg: 'average', min: 'min', max: 'max' };
 /** `{ relationship, nodes }`: the nodes apply to the related records (`whereExists` subquery). */
 export type ConditionNode = Condition | { or: ConditionNode[][] } | { relationship: string; nodes: ConditionNode[]; modify?: RelationshipQueryModifier };
 type Settings = Record<string, unknown>;
-type Resolved = { condition: Condition; summary: string };
+/** `onBaseQuery`: the condition applies to the table's query even for a relationship constraint (it queries the relationship itself). */
+type Resolved = { condition: Condition; summary: string; onBaseQuery?: boolean };
 
 /** Constraint operator: its settings form and how it turns into a condition. */
 type Operator = {
@@ -82,17 +88,29 @@ function textOperator(name: string, key: string, pattern: (text: string) => stri
         },
     };
 }
-function numberOperator(name: string, key: string, direct: Comparison, inverted: Comparison, integer = false): Operator {
+function numberOperator(name: string, key: string, direct: Comparison, inverted: Comparison, integer = false, aggregatable = false): Operator {
     return {
         name, label: label('number', key), defaults: () => ({ number: null, aggregate: null }),
-        // `aggregate` is only used for relationships; the field exists but stays hidden.
-        fields: () => [(integer ? TextInput.make('number').integer() : TextInput.make('number').numeric()).label(tr('operators.number.form.number.label')).required(), Select.make('aggregate').label(tr('operators.number.form.aggregate.label')).hidden()],
+        // `aggregate` is offered for relationship constraints: the sum, average, minimum or maximum of the related records.
+        fields: () => [
+            (integer ? TextInput.make('number').integer() : TextInput.make('number').numeric()).label(tr('operators.number.form.number.label')).required(),
+            Select.make('aggregate').label(tr('operators.number.form.aggregate.label')).options(AGGREGATES.map((aggregate): [string, string] => [aggregate, tr(`operators.number.aggregates.${AGGREGATE_KEYS[aggregate]}.label`)])).hidden(!aggregatable),
+        ],
         resolve: (settings, inverse, constraint) => {
             const raw = settings.number;
             if (!(typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '')) || !Number.isFinite(Number(raw))) return null;
             const number = Number(raw);
             if (integer && !Number.isInteger(number)) return null;
-            return { condition: { kind: 'compare', column: constraint.getColumn(), operator: inverse ? inverted : direct, value: number }, summary: summary('number', key, inverse, { attribute: constraint.getAttributeLabel(), number: new Intl.NumberFormat('en-US').format(number) }) };
+            const relationship = constraint.getRelationshipName();
+            // Only a known aggregate, and only on a relationship constraint: anything else compares each related value.
+            const aggregate = aggregatable && relationship !== null && (AGGREGATES as readonly string[]).includes(String(settings.aggregate)) ? settings.aggregate as Aggregate : null;
+            const attribute = aggregate ? tr(`operators.number.aggregates.${AGGREGATE_KEYS[aggregate]}.summary`, { attribute: constraint.getAttributeLabel() }) : constraint.getAttributeLabel();
+            const text = summary('number', key, inverse, { attribute, number: new Intl.NumberFormat('en-US').format(number) });
+            if (aggregate) {
+                const modify = constraint.getModifyRelationshipQueryUsing();
+                return { condition: { kind: 'aggregate', relationship: relationship!, column: constraint.getColumn(), aggregate, operator: inverse ? inverted : direct, value: number, ...(modify ? { modify } : {}) }, summary: text, onBaseQuery: true };
+            }
+            return { condition: { kind: 'compare', column: constraint.getColumn(), operator: inverse ? inverted : direct, value: number }, summary: text };
         },
     };
 }
@@ -275,6 +293,10 @@ export class Constraint {
         this.name = name; this.type = type; this._icon = icon;
     }
     label(label: string): this { this._label = label; return this; }
+    private _pickerGroup: string | null = null;
+    /** Group of the constraint in the constraint picker. */
+    pickerGroup(label: string | null): this { this._pickerGroup = label; return this; }
+    getPickerGroup(): string | null { return this._pickerGroup; }
     /** Attribute name used in rule summaries (defaults to the label). */
     attributeLabel(label: string | null): this { this._attributeLabel = label; return this; }
     icon(name: string): this { this._icon = name; return this; }
@@ -385,8 +407,8 @@ export class NumberConstraint extends Constraint {
     /** Whole numbers only: an integer field, and a rule with a decimal value has no effect. */
     integer(condition = true): this { this._integer = condition; return this; }
     getOperators(): Operator[] {
-        if (!this._integer) return super.getOperators();
-        return [numberOperator('isMin', 'is_min', '>=', '<', true), numberOperator('isMax', 'is_max', '<=', '>', true), numberOperator('equals', 'equals', '=', '!=', true), ...(this._nullable ? [isFilledOperator] : [])];
+        const integer = this._integer, aggregatable = this._relationship !== null;
+        return [numberOperator('isMin', 'is_min', '>=', '<', integer, aggregatable), numberOperator('isMax', 'is_max', '<=', '>', integer, aggregatable), numberOperator('equals', 'equals', '=', '!=', integer, aggregatable), ...(this._nullable ? [isFilledOperator] : [])];
     }
 }
 export class BooleanConstraint extends Constraint { static make(name: string): BooleanConstraint { return configured(new BooleanConstraint(name, 'boolean', 'm-check-circle')); } }
@@ -562,8 +584,27 @@ export class RelationshipConstraint extends Constraint {
     }
 }
 
+/**
+ * `[key, title]` pairs of the records of a relationship of `model` (an Objection model with `relationMappings`), sorted by
+ * title; only `keys` when given. `titleAttribute` is a column of the related table, written by the application.
+ */
+export async function loadRelationshipOptions(model: any, relationship: string, titleAttribute: string | null, modify: RelationshipQueryModifier | null = null, keys: string[] | null = null, limit = 1000): Promise<[string, string][]> {
+    if (typeof model?.getRelation !== 'function') throw new Error(`Relationship ${relationship}: the table's records must come from an Objection model with relationMappings.`);
+    const related = model.getRelation(relationship).relatedModelClass;
+    const id = `${related.tableName}.${related.idColumn}`;
+    const title = `${related.tableName}.${titleAttribute ?? related.idColumn}`;
+    const query = related.query();
+    modify?.(query);
+    if (keys !== null) {
+        if (!keys.length) return [];
+        query.whereIn(id, keys.slice(0, MAX_LIST_VALUES));
+    }
+    const rows = await query.clearSelect().select({ __key: id, __title: title }).orderBy(title).limit(limit);
+    return rows.map((row: any): [string, string] => [String(row.__key), String(row.__title ?? row.__key)]);
+}
+
 /** Objection model of the host's table (`ObjectionAdapter`), when the application did not declare one. */
-function modelOfHost(host: unknown): any {
+export function modelOfHost(host: unknown): any {
     const adapter = (host as any)?.getDataAdapterForTable?.() ?? (host as any)?.resource?.adapter ?? null;
     const model = adapter?.model;
     return typeof model === 'function' && typeof model.getRelation === 'function' ? model : null;
@@ -626,7 +667,7 @@ export function compileRules(constraints: Constraint[], rules: Rules, iteration 
         const resolved = parsed.operator.resolve(isObject(rule.data.settings) ? rule.data.settings : {}, parsed.inverse, constraint);
         if (!resolved) continue;
         // Relationship attribute: the condition applies to the related records, unless the operator targets the base query.
-        const relationship = parsed.operator.onBaseQuery ? null : constraint.getRelationshipName();
+        const relationship = parsed.operator.onBaseQuery || resolved.onBaseQuery ? null : constraint.getRelationshipName();
         const modify = constraint.getModifyRelationshipQueryUsing();
         nodes.push(relationship === null ? resolved.condition : { relationship, nodes: [resolved.condition], ...(modify ? { modify } : {}) });
         summaries[key] = resolved.summary;
@@ -693,6 +734,11 @@ export function applyConditions(query: any, nodes: ConditionNode[], dialect: Sql
             query.where((inner: any) => (node.negate ? inner.whereNull(column).orWhereRaw(`${sql.text} = ?`, [column, '']) : inner.whereNotNull(column).whereRaw(`not (${sql.text} = ?)`, [column, ''])));
         } else if (node.kind === 'in') {
             if (node.negate) query.whereNotIn(node.column, node.values); else query.whereIn(node.column, node.values);
+        } else if (node.kind === 'aggregate') {
+            // Aggregate subquery of the related records, passed as a bound parameter like the count below.
+            const sub = relatedQuery(query, node.relationship, node.modify);
+            const column = `${sub.tableRefFor(sub.modelClass())}.${node.column}`;
+            query.whereRaw(`(?) ${node.operator} ?`, [sub.clearSelect()[node.aggregate](column), node.value]);
         } else if (node.kind === 'relationCount') {
             // Count subquery passed as a bound parameter (Objection does not accept it as a `where` column).
             query.whereRaw(`(?) ${node.operator} ?`, [relatedQuery(query, node.relationship, node.modify).count(), node.value]);
@@ -838,7 +884,7 @@ export class RuleBuilder extends Builder {
         const columns = filter.getConstraintPickerColumns();
         this.label(tr('form.rules.label'))
             .blocks(() => [
-                ...filter.getConstraints().map((constraint) => Block.make(constraint.name).label(constraint.getLabel()).icon(constraint.getIcon())
+                ...filter.getConstraints().map((constraint) => Block.make(constraint.name).label(constraint.getLabel()).icon(constraint.getIcon()).pickerGroup(constraint.getPickerGroup())
                     .defaultData(() => constraint.getDefaultData())
                     .schema(({ builder, itemKey, data }) => [new RuleRow(builder as RuleBuilder, itemKey, constraint, data)])),
                 Block.make(OR).label(tr('form.or_groups.block.label')).icon('m-slash')
@@ -847,7 +893,7 @@ export class RuleBuilder extends Builder {
             ])
             .addActionLabel(tr('actions.add_rule.label')).addActionIcon('c-plus').addActionAlignment('start')
             .labelBetweenItems(tr('item_separators.and')).blockHeaders(false).addBetweenAction(false).storedAsList(false).cloneable().generateUuidUsing(shortKey)
-            .blockPickerColumns(columns).blockPickerWidth(columns === 2 ? 'md' : columns === 3 ? '2xl' : null)
+            .blockPickerColumns(columns).blockPickerWidth(filter.getConstraintPickerWidth() ?? (columns === 2 ? 'md' : columns === 3 ? '2xl' : null))
             .extraClass('fi-fo-builder-not-contained').maxItems(filter.getMaxRules());
     }
     /** The "OR" block is neither offered nor accepted beyond the maximum depth; nothing is offered once the rule limit is reached. */
@@ -884,7 +930,9 @@ export class QueryBuilder implements TableFilter {
     /** Maximum nesting depth of "or" groups: 1 forbids them (at most `MAX_NESTING_DEPTH`, 3). */
     maxNestingDepth(depth: number): this { this._maxNestingDepth = Math.min(MAX_NESTING_DEPTH, Math.max(1, Math.floor(depth))); return this; }
     getMaxNestingDepth(): number { return this._maxNestingDepth; }
-    constraints(constraints: Constraint[]): this {
+    /** Constraints, or `{ 'Group label': [constraints] }` to group them in the constraint picker. */
+    constraints(list: Constraint[] | Record<string, Constraint[]>): this {
+        const constraints = Array.isArray(list) ? list : Object.entries(list).flatMap(([group, items]) => items.map((constraint) => constraint.pickerGroup(group)));
         if (new Set(constraints.map((c) => c.name)).size !== constraints.length) throw new Error('QueryBuilder: two constraints have the same name.');
         this._constraints = constraints;
         if (this._model) for (const constraint of constraints) if (!constraint.getModel()) constraint.model(this._model);
@@ -915,6 +963,10 @@ export class QueryBuilder implements TableFilter {
     constraintPickerColumns(columns: number | null = 2): this { this._pickerColumns = columns; return this; }
     getConstraints(): Constraint[] { return this._constraints; }
     getConstraintPickerColumns(): number | null { return this._pickerColumns; }
+    private _pickerWidth: string | null = null;
+    /** Width of the constraint picker dropdown: `xs` to `7xl` (wider by default with 2 or 3 columns). */
+    constraintPickerWidth(width: string | null): this { this._pickerWidth = width !== null && /^(xs|sm|md|lg|xl|[2-7]xl)$/.test(width) ? width : null; return this; }
+    getConstraintPickerWidth(): string | null { return this._pickerWidth; }
     getLabel(): string { return tr('label'); }
     getDefaultState(): FilterState { return { rules: {} }; }
     getFormDefinition() { return { placeholder: '', options: [] as [string, string][] }; }

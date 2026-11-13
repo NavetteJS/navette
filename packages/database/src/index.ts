@@ -18,6 +18,8 @@ export type ListQuery = {
     /** Table grouping: this sort is applied before `sort`. */
     /** Rows are first ordered by their group: by `column`, or by `modify` (a custom order). */
     groupSort?: { column: string; direction: SortDirection; modify?: (query: any, direction: SortDirection) => void } | null;
+    /** Only these records (keys), e.g. the rows of the displayed page. */
+    keys?: string[];
     /** Extra server-side conditions (list tab, custom filter); never built from unvalidated browser input. */
     modifiers?: ((query: any) => void)[];
     page: number;
@@ -173,6 +175,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     /** Base query with modifiers, global search and per-column searches applied. */
     private filtered(query: Omit<ListQuery, 'page' | 'perPage'>): QueryBuilder<M, M[]> {
         const q = this.base(query.trashed ?? 'without');
+        if (query.keys) q.whereIn(`${this.model.tableName}.${this.keyColumn}`, query.keys.map(String).slice(0, 10000));
         for (const modifier of query.modifiers ?? []) modifier(q);
         const words = (query.search ?? '').trim().split(/\s+/).filter(Boolean);
         const columns = query.searchColumns ?? [];

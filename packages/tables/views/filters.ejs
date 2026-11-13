@@ -5,29 +5,36 @@
         <h2 class="fi-ta-filters-heading">
             <%= t('filament-tables::table.filters.heading') %>
         </h2>
-        <% if (resetPosition === 'header') { %>
+        <% if (resetPosition === 'header' && !filterActions.reset.hidden) { %>
 
         <div>
+            <% if (filterActions.reset.customized) { %><%- filterActionHtml(filterActions.reset, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-table-filter-action="reset" wire:click="resetTableFiltersForm"') %><% } else { %>
             <%- resetButton(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...dangerLinkClasses]) %>
                 <span class="fi-link-label">
                     <%= t('filament-tables::table.filters.actions.reset.label') %>
                 </span>
             </button>
+            <% } %>
         </div>
         <% } %>
     </div>
 
     <%- form %>
-    <% if (deferred || resetPosition === 'footer') { %>
+    <% const showApply = deferred && !filterActions.apply.hidden, showFooterReset = resetPosition === 'footer' && !filterActions.reset.hidden; %>
+    <% if (showApply || showFooterReset) { %>
 
     <div class="fi-ta-filters-actions-ctn">
-        <% if (deferred) { %>
+        <% if (showApply && filterActions.apply.customized) { %>
+        <%- filterActionHtml(filterActions.apply, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-table-filter-action="apply" wire:click="applyTableFilters"' + (closeModal ? ' x-on:click="' + e("$dispatch('close-modal', { id: " + js(closeModal) + ' })') + '"' : '')) %>
+        <% } else if (showApply) { %>
         <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...primaryButtonClasses]) %>" data-table-filter-action="apply" wire:click="applyTableFilters"<% if (closeModal) { %> x-on:click="$dispatch('close-modal', { id: <%= js(closeModal) %> })"<% } %>>
             <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'applyTableFilters' })) %>
             <%= t('filament-tables::table.filters.actions.apply.label') %>
         </button>
         <% } %>
-        <% if (resetPosition === 'footer') { %>
+        <% if (showFooterReset && filterActions.reset.customized) { %>
+        <%- filterActionHtml(filterActions.reset, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-table-filter-action="reset" wire:click="resetTableFiltersForm"') %>
+        <% } else if (showFooterReset) { %>
         <%- resetButton(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...grayButtonClasses]) %>
             <%= t('filament-tables::table.filters.actions.reset.label') %>
         </button>

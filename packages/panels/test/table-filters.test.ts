@@ -74,3 +74,49 @@ test('persisted filters and search: restored for the same browser and user only,
     store.set('s', 'k', 'a'.repeat(50));
     assert.equal(store.get('s', 'k'), undefined, 'oversized values are not kept');
 });
+
+test('`filtersFormSchema()`: the filter groups go where the application puts them', async () => {
+    const { Section } = await import('@navette-js/schemas');
+    class Arranged extends Resource {
+        static slug = 'arranged';
+        static adapter = new ObjectionAdapter(Post);
+        static table(table: Table): Table {
+            return table.columns([TextColumn.make('title')]).filters([SelectFilter.make('status').options(STATUSES), Filter.make('locked').query(() => {})])
+                .filtersFormSchema((filters) => [Section.make('Workflow').schema([filters.status]).columnSpanFull()]);
+        }
+    }
+    Panel.make().id('filters-schema-test').key('k').resources([Arranged]);
+    const ListPage = Arranged.getPages().index as any;
+    const list = new ListPage();
+    list._ctx = { panel: Arranged.panel, user: admin, mailbox: 'arranged', req: { query: {} }, res: {} };
+    await list.mount({});
+    const form = await list.getSchema('tableFiltersForm').toHtml();
+    assert.match(form, /Workflow/);
+    assert.match(form, /tableDeferredFilters\.status\.value/);
+    assert.doesNotMatch(form, /locked/, 'a filter left out is not shown');
+});
+
+test('query builder: grouped constraints and picker width in the constraint picker', async () => {
+    const { NumberConstraint, QueryBuilder, TextConstraint } = await import('@navette-js/tables');
+    const { views } = await import('@navette-js/support');
+    views.share({ assetUrl: (file: string) => `/${file}` });
+    class Searchable extends Resource {
+        static slug = 'searchable';
+        static adapter = new ObjectionAdapter(Post);
+        static table(table: Table): Table {
+            return table.columns([TextColumn.make('title')]).filters([
+                QueryBuilder.make().constraintPickerWidth('3xl').constraints({ Content: [TextConstraint.make('title')], Numbers: [NumberConstraint.make('id')] }),
+            ]);
+        }
+    }
+    Panel.make().id('qb-groups-test').key('k').resources([Searchable]);
+    const ListPage = Searchable.getPages().index as any;
+    const list = new ListPage();
+    list._ctx = { panel: Searchable.panel, user: admin, mailbox: 'qb', req: { query: {} }, res: {} };
+    await list.mount({});
+    const form = await list.getSchema('tableFiltersForm').toHtml();
+    assert.match(form, /class="fi-dropdown-panel fi-width-3xl"/);
+    assert.match(form, /fi-fo-builder-block-picker-groups/);
+    assert.match(form, /<div class="fi-fo-builder-block-picker-group" role="group" aria-label="Content"><div class="fi-fo-builder-block-picker-group-label">Content<\/div>/);
+    assert.match(form, /aria-label="Numbers"/);
+});

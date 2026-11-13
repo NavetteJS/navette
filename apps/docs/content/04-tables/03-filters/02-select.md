@@ -139,6 +139,42 @@ SelectFilter.make('price_range')
 
 With fixed options, only offered options reach `query()`.
 
-<Aside variant="warning">
-Relationship filters (`relationship()`) and filtering empty relationships are not available yet: load the options of the related records with a function, as described above.
-</Aside>
+## Using a relationship
+
+`relationship()` lists the records of a relationship of the table's model, and shows the records related to the picked ones. It works with every relationship type of Objection (`BelongsToOne`, `HasMany`, `ManyToMany`...):
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('author')
+    .relationship('author', 'name')
+
+SelectFilter.make('tags')
+    .multiple()
+    .relationship('tags', 'name')
+```
+
+The second argument is the column used as the option label. The relationship must be declared in the model's `relationMappings`, and the table must use an `ObjectionAdapter`.
+
+### Customizing the relationship query
+
+The third argument modifies the query of the related records. It changes both the options and the records the filter matches:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('author')
+    .relationship('author', 'name', (query) => query.where('is_active', 1))
+```
+
+### Filtering empty relationships
+
+Pass `true` as the fourth argument to add a "None" option, which shows the records without any related record. `emptyRelationshipOptionLabel()` changes its label:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('author')
+    .relationship('author', 'name', null, true)
+    .emptyRelationshipOptionLabel('No author')
+```

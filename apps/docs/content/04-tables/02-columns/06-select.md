@@ -85,8 +85,23 @@ SelectColumn.make<Post>('status')
 
 A disabled option cannot be picked, and is also refused on the server: a forged request receives "The selected status is invalid.".
 
+## Using relationship options
+
+`optionsRelationship()` lists the records of a relationship of the record's model as options. The column stores the picked record's key:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make('author_id')
+    .optionsRelationship('author', 'name')
+```
+
+The second argument is the column displayed as the option label. A third argument may modify the query of the related records, for example to list only active authors: `(query) => query.where('is_active', 1)`. The relationship must be declared in the Objection model's `relationMappings`.
+
+Up to 1,000 options are listed. When the value is saved, the server checks that it is the key of a related record that the (modified) query returns.
+
 <Aside variant="warning">
-Relationship options and HTML option labels are not available yet.
+HTML option labels are not available yet.
 </Aside>
 
 ## Disable placeholder selection

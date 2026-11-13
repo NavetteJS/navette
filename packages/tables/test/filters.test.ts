@@ -111,3 +111,17 @@ test('filters layouts, live filters and form options', async () => {
     assert.equal(new Table().filtersFormWidth('100px; color: red').getFiltersFormWidth(), null, 'only known widths');
     assert.throws(() => new Table().filtersLayout('sideways' as any));
 });
+
+test('customized filters actions: trigger, apply and reset', async () => {
+    const table = new Table().columns([TextColumn.make('title')]).filters([SelectFilter.make('status').options(STATUSES)])
+        .filtersTriggerAction((action) => action.button().label('Refine'))
+        .filtersApplyAction((action) => action.link().label('Save filters'))
+        .filtersResetAction((action) => action.hidden());
+    const html = (await renderTable(table, host(), adapter, { filtersForm: '<div></div>' })).replace(/\s+/g, ' ');
+    assert.match(html, /<button type="button" wire:loading\.attr="aria-disabled" wire:loading\.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-md"><svg[^]*?<\/svg>Refine<div class="fi-btn-badge-ctn"><span class="[^"]*fi-badge fi-size-xs">0<\/span><\/div><\/button>/);
+    assert.match(html, /data-table-filter-action="apply" wire:click="applyTableFilters" class="fi-ac-link-action fi-link fi-size-md[^"]*"><span class="fi-link-label">Save filters<\/span>/);
+    assert.doesNotMatch(html, /data-table-filter-action="reset"/);
+    const defaults = await renderTable(new Table().columns([TextColumn.make('title')]).filters([SelectFilter.make('status').options(STATUSES)]), host(), adapter, { filtersForm: '<div></div>' });
+    assert.match(defaults, /title="Filter" aria-label="Filter"/);
+    assert.match(defaults, /data-table-filter-action="reset"/);
+});

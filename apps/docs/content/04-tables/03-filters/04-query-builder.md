@@ -144,9 +144,18 @@ NumberConstraint.make('stock')
     .integer()
 ```
 
-<Aside variant="warning">
-Aggregating the values of related records (sum, average, minimum, maximum) is not available yet.
-</Aside>
+### Aggregating related records
+
+When a number constraint targets a [relationship](#filtering-an-attribute-of-related-records), an "Aggregate" field lets the user compare the sum, average, minimum or maximum of the related values instead of each value:
+
+```ts
+import { NumberConstraint } from '@navette-js/tables';
+
+NumberConstraint.make('orderTotal')
+    .relationship('orders', 'total')
+```
+
+With "Sum" and "Is minimum" 1000, the rule keeps the customers whose orders total at least 1,000. Without an aggregate, it keeps those with at least one order of 1,000 or more.
 
 ### Date constraints
 
@@ -513,6 +522,34 @@ CustomConstraint.make('popularity')
     ])
 ```
 
-<Aside variant="warning">
-Grouping constraints in the picker and `constraintPickerWidth()` are not available yet.
-</Aside>
+## Grouping constraints in the picker
+
+Pass the constraints as an object to group them under labels in the constraint picker:
+
+```ts
+import { DateConstraint, NumberConstraint, QueryBuilder, TextConstraint } from '@navette-js/tables';
+
+QueryBuilder.make()
+    .constraints({
+        Content: [
+            TextConstraint.make('title'),
+            TextConstraint.make('slug'),
+        ],
+        Statistics: [
+            NumberConstraint.make('views'),
+            DateConstraint.make('published_at'),
+        ],
+    })
+```
+
+## Changing the picker width
+
+`constraintPickerWidth()` sets the width of the constraint picker: `'xs'` to `'7xl'`. By default, it is wider with 2 or 3 columns:
+
+```ts
+import { QueryBuilder } from '@navette-js/tables';
+
+QueryBuilder.make()
+    .constraintPickerColumns(3)
+    .constraintPickerWidth('4xl')
+```

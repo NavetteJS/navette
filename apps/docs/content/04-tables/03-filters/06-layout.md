@@ -122,6 +122,29 @@ static table(table: Table<Post>): Table<Post> {
 
 `'above-content'` displays the filters above the table, always open.
 
-<Aside variant="warning">
-Customizing the form schema of the filters (`filtersFormSchema()`) is not available yet.
-</Aside>
+## Customizing the filter form schema
+
+`filtersFormSchema()` lets you arrange the filters form with [layout components](/schemas/layouts), such as sections. The function receives the form group of each filter, keyed by filter name:
+
+```ts
+import { Section } from '@navette-js/schemas';
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .filters([
+            SelectFilter.make('status').options(STATUSES),
+            Filter.make('is_featured'),
+            SelectFilter.make('author').relationship('author', 'name'),
+        ])
+        .filtersFormSchema((filters) => [
+            Section.make('Visibility')
+                .schema([filters.status, filters.is_featured])
+                .columns(2)
+                .columnSpanFull(),
+            filters.author,
+        ]);
+}
+```
+
+A filter left out of the schema is not displayed, but it still exists: it keeps its default value and can be applied by its indicator.

@@ -105,3 +105,19 @@ test('custom group key, scope and order', async () => {
     assert.equal((html.match(/class="fi-ta-group-heading"/g) ?? []).length, 2, 'two groups: not live, live');
     assert.match(html, /Not live summary/);
 });
+
+test('summarizer `query()`: scoped on all records, on the page and on each group', async () => {
+    const { Count, Sum } = await import('../src/index.ts');
+    const table = new Table().columns([
+        TextColumn.make('title'),
+        TextColumn.make('rating').summarize([Count.make().label('Low').query((query) => query.where('rating', '<', 8)), Sum.make().label('Total')]),
+        TextColumn.make('status'),
+    ]);
+    const html = clean(await renderTable(table, host({ tableRecordsPerPage: 5 } as any), adapter));
+    // 6 posts, 5 per page: the page (T1-T5) has one rating below 8 (7), all records two (7 and 6).
+    const highs = [...html.matchAll(/<span class="fi-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
+    assert.deepEqual(highs, ['1', '2']);
+    const grouped = clean(await renderTable(table.groups([Group.make('status')]), host({ tableGrouping: 'status:asc', tableRecordsPerPage: 10 } as any), adapter));
+    const groupHighs = [...grouped.matchAll(/<span class="fi-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
+    assert.deepEqual(groupHighs, ['0', '0', '2', '2'], 'draft, published, reviewing (7 and 6), then all records');
+});

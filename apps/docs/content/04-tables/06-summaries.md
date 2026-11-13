@@ -112,8 +112,19 @@ new Table()
 
 Count counts records, whatever the value of the column.
 
+To count only some values, scope the summarizer with [`query()`](#scoping-the-dataset):
+
+```ts
+import { Count, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('status')
+    .summarize(Count.make()
+        .label('Published')
+        .query((query) => query.where('status', 'published')))
+```
+
 <Aside variant="warning">
-Counting the occurrence of icons or of specific values (`query()`) is not available yet.
+Counting the occurrence of each icon of an icon column (`icons()`) is not available yet.
 </Aside>
 
 ## Range
@@ -390,6 +401,19 @@ new Table()
 
 Each line starts with the group's title, in the cell of the column that has the group's name, followed by the group's summaries. Name that column after the group's column, as above, so that the cells line up with the headers. The table is not paginated, and up to 1,000 records are read to build the groups.
 
+## Scoping the dataset
+
+`query()` restricts the records a summarizer works on. It receives the data adapter's query builder, and applies to every summary row: all records, the current page and each group:
+
+```ts
+import { Count, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('rating')
+    .summarize(Count.make()
+        .label('Well rated')
+        .query((query) => query.where('rating', '>=', 8)))
+```
+
 <Aside variant="warning">
-Scoping the dataset of a summarizer (`query()`) and hiding summary rows are not available yet.
+Hiding summary rows is not available yet.
 </Aside>

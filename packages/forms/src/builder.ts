@@ -46,9 +46,13 @@ export class Block {
     private _icon: string | null = null;
     private _schema: (ctx: BlockContext) => Component[] = () => [];
     private _defaults: ((builder: Builder) => Record<string, unknown>) | null = null;
+    private _pickerGroup: string | null = null;
     constructor(name: string) { this.name = name; }
     static make(name: string): Block { return configured(new Block(name)); }
     label(label: string | null): this { this._label = label; return this; }
+    /** Group of the block in the block picker (also set by passing `{ 'Group label': [blocks] }` to `blocks()`). */
+    pickerGroup(label: string | null): this { this._pickerGroup = label; return this; }
+    getPickerGroup(): string | null { return this._pickerGroup; }
     icon(name: string | null): this { this._icon = name; return this; }
     /** Item components: a function called for each item (with its current data). */
     schema(factory: (ctx: BlockContext) => Component[]): this { this._schema = factory; return this; }
@@ -85,7 +89,12 @@ export class Builder extends Field {
     private _uuid: () => string = randomUUID;
     static make(name: string): Builder { return configured(new Builder(name)); }
 
-    blocks(blocks: Block[] | (() => Block[])): this { this._blocks = blocks; this._resolvedBlocks = null; return this; }
+    /** Blocks, or `{ 'Group label': [blocks] }` to group them in the block picker. */
+    blocks(blocks: Block[] | Record<string, Block[]> | (() => Block[])): this {
+        this._blocks = typeof blocks === 'function' || Array.isArray(blocks) ? blocks : Object.entries(blocks).flatMap(([group, list]) => list.map((block) => block.pickerGroup(group)));
+        this._resolvedBlocks = null;
+        return this;
+    }
     blockPickerColumns(columns: number | null = 2): this { this._pickerColumns = columns; return this; }
     blockPickerWidth(width: string | null): this { this._pickerWidth = width; return this; }
     labelBetweenItems(label: string | null): this { this._labelBetweenItems = label; return this; }
@@ -246,7 +255,14 @@ export class Builder extends Field {
             return `<button x-on:click="close" wire:click="${e(expression)}" type="button" wire:loading.attr="disabled" wire:target="${e(expression)}" class="fi-dropdown-list-item">${blockIcon ? icon(blockIcon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expression }) }) + loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression })) : ''}<span class="fi-dropdown-list-item-label">${e(block.getLabel())}</span></button>`;
         });
         const grid = this._pickerColumns ? ` class="fi-grid fi-grid-direction-col lg:fi-grid-cols" style="--cols-lg: ${this._pickerColumns}; --cols-default: 1;"` : ' class="fi-grid fi-grid-direction-col" style="--cols-default: 1;"';
-        const list = blocks.length ? `<div class="fi-dropdown-list"><div><div${grid}>${items.join('')}</div></div></div>` : '';
+        // Grouped blocks: one labelled group per picker group (ungrouped blocks first), the groups laid out in the grid.
+        const groups = new Map<string, string[]>();
+        blocks.forEach((block, index) => { const group = block.getPickerGroup() ?? ''; groups.set(group, [...(groups.get(group) ?? []), items[index]]); });
+        const grouped = [...groups.keys()].some((group) => group !== '');
+        const content = grouped
+            ? `<div${grid.replace(/class="([^"]*)"/, 'class="$1 fi-fo-builder-block-picker-groups"')}>${[...groups].map(([group, groupItems]) => `<div class="fi-fo-builder-block-picker-group"${group ? ` role="group" aria-label="${e(group)}"` : ''}>${group ? `<div class="fi-fo-builder-block-picker-group-label">${e(group)}</div>` : ''}${groupItems.join('')}</div>`).join('')}</div>`
+            : `<div${grid}>${items.join('')}</div>`;
+        const list = blocks.length ? `<div class="fi-dropdown-list"><div>${content}</div></div>` : '';
         const addIcon = !between && this._addIcon ? icon(this._addIcon, { size: 'sm' }) : '';
         const triggerLabel = between
             ? (this._addBetweenLabel ?? tr('actions.add_between.label'))
