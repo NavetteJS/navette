@@ -507,6 +507,18 @@ function modelOfForm(ctx: ComponentContext, explicit: any): any {
     if (typeof model !== 'function' || typeof model.getRelation !== 'function') throw new Error('relationship(): the form has no Objection model; pass it with relationship(name, title, modify, { model }).');
     return model;
 }
+/**
+ * Copy of a component and of the components it holds (layout children, item schemas), so that each repeated item gets its own
+ * instances: components keep a reference to their container.
+ */
+export function cloneComponentTree<T extends Component>(component: T): T {
+    const copy = Object.assign(Object.create(Object.getPrototypeOf(component)), component) as T;
+    for (const [property, value] of Object.entries(copy)) {
+        if (value instanceof Component) (copy as any)[property] = cloneComponentTree(value);
+        else if (Array.isArray(value) && value.length && value.every((item) => item instanceof Component)) (copy as any)[property] = value.map((item) => cloneComponentTree(item));
+    }
+    return copy;
+}
 /** Prefix or suffix of an input wrapper: actions, icon and label (escaped). */
 function inputAffixHtml(side: 'prefix' | 'suffix', options: { label: string | null; icon: string; actions: string[]; inline: boolean }): string {
     if (options.label === null && !options.icon && !options.actions.length) return '';
@@ -916,29 +928,96 @@ const isItemKey = (key: string) => ITEM_KEY.test(key) && key !== '__proto__' && 
 type ItemLink = { label: string; icon: string; url: string };
 
 /**
- * List of repeated items sharing the same fields, displayed as a table.
+ * List of repeated items sharing the same fields: stacked cards (default), a table (`table()`), or one field per item (`simple()`).
  * The state is a map `item key → fields`; key order is display order.
- * Add, delete and move are component actions, mounted with `schemaComponent`.
+ * Add, delete, clone and move are component actions, mounted with `schemaComponent`.
  */
 export class Repeater extends Field {
-    private _schema: () => Field[] = () => [];
+    private _schema: () => Component[] = () => [];
     private _columns: TableColumn[] = [];
     private _defaultItems = 0;
     private _maxItems = 500;
+    private _minItems: number | null = null;
     private _itemLinks: ((ctx: { item: Record<string, unknown>; key: string }) => ItemLink | null)[] = [];
+    private _simple: Field | null = null;
+    private _grid: Record<string, number> | number | null = null;
+    private _collapsible = false;
+    private _collapsed = false;
+    private _persistCollapsed = false;
+    private _cloneable = false;
+    private _addable = true;
+    private _deletable = true;
+    private _reorderableWithButtons = false;
+    private _itemLabel: ((ctx: { state: Record<string, unknown>; key: string; index: number }) => string | null) | string | null = null;
+    private _itemNumbers = false;
+    private _truncateItemLabel = true;
+    private _headingTag = 'h4';
+    private _addActionLabel: string | null = null;
+    private _addActionAlignment: 'start' | 'center' | 'end' | null = null;
+    private _labelBetweenItems: string | null = null;
+    private _itemHeaders = true;
+    private _relationship: { name: string; modify: ((query: any) => unknown) | null; orderColumn: string | null; model: any } | null = null;
     static make(name: string): Repeater { return configured(new Repeater(name)); }
-    /** Item fields: a function called for each item. */
-    schema(factory: () => Field[]): this { this._schema = factory; return this; }
+    /** Item components: a function called for each item. */
+    schema(factory: (() => Component[]) | Component[]): this { this._schema = typeof factory === 'function' ? factory : () => factory.map(cloneComponentTree); return this; }
     /** Table display, one column per field. */
     table(columns: TableColumn[]): this { this._columns = columns; return this; }
+    isTable(): boolean { return this._columns.length > 0; }
+    /**
+     * One field per item, without a card: the state is saved as a list of values (`['a@example.com', 'b@example.com']`).
+     * The field is cloned for each item.
+     */
+    simple(field: Field | null): this { this._simple = field; return this; }
     defaultItems(count: number): this { this._defaultItems = count; return this; }
     maxItems(count: number): this { this._maxItems = count; return this; }
+    /** Minimum number of items, checked on the server. */
+    minItems(count: number | null): this { this._minItems = count; return this; }
     private _reorderable = true;
     /** `false`: items keep their order (e.g. a relationship without an order column). */
     reorderable(condition = true): this { this._reorderable = condition; return this; }
+    /** Move up / move down buttons in each item header, besides drag and drop. */
+    reorderableWithButtons(condition = true): this { this._reorderableWithButtons = condition; return this; }
+    reorderableWithDragAndDrop(condition = true): this { this._reorderable = condition; return this; }
     /** Link shown on each row (an item action pointing to a URL). */
     extraItemLink(resolver: (ctx: { item: Record<string, unknown>; key: string }) => ItemLink | null): this { this._itemLinks.push(resolver); return this; }
+    /** Items laid out in a grid (`2`, or `{ md: 2, xl: 3 }`). */
+    grid(columns: Record<string, number> | number | null = 2): this { this._grid = columns; return this; }
+    /** Items can be collapsed from their header; `collapsed()` collapses them on load. */
+    collapsible(condition = true): this { this._collapsible = condition; return this; }
+    collapsed(condition = true): this { this._collapsed = condition; if (condition) this._collapsible = true; return this; }
+    /** Keeps each item's collapsed state in the browser (local storage). */
+    persistCollapsed(condition = true): this { this._persistCollapsed = condition; return this; }
+    cloneable(condition = true): this { this._cloneable = condition; return this; }
+    /** `false`: no "Add" button (and adding is refused on the server). */
+    addable(condition = true): this { this._addable = condition; return this; }
+    /** `false`: no delete button (and deleting is refused on the server). */
+    deletable(condition = true): this { this._deletable = condition; return this; }
+    /** Item header label: a string, or a function of the item's state (`({ state }) => state.name ?? null`). Escaped. */
+    itemLabel(label: ((ctx: { state: Record<string, unknown>; key: string; index: number }) => string | null) | string | null): this { this._itemLabel = label; return this; }
+    /** Item number after the label. */
+    itemNumbers(condition = true): this { this._itemNumbers = condition; return this; }
+    truncateItemLabel(condition = true): this { this._truncateItemLabel = condition; return this; }
+    /** `false`: items have no header (and so no buttons): only their fields. */
+    itemHeaders(condition = true): this { this._itemHeaders = condition; return this; }
+    addActionLabel(label: string | null): this { this._addActionLabel = label; return this; }
+    addActionAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._addActionAlignment = alignment; return this; }
+    labelBetweenItems(label: string | null): this { this._labelBetweenItems = label; return this; }
+    /**
+     * Items are the records of a has-many relationship of the form's model (Objection `relationMappings`): loaded when the form is
+     * filled, then created, updated and deleted once the record is saved. `orderColumn()` saves the items' order.
+     */
+    relationship(name: string | null = null, modifyQueryUsing: ((query: any) => unknown) | null = null, options: { model?: any } = {}): this {
+        this._relationship = { name: name ?? this._name!, modify: modifyQueryUsing, orderColumn: this._relationship?.orderColumn ?? null, model: options.model ?? null };
+        return this;
+    }
+    orderColumn(column: string | null = 'sort'): this { if (this._relationship) this._relationship.orderColumn = column; else this._orderColumnPending = column; return this; }
+    private _orderColumnPending: string | null = null;
 
+    private itemComponents(): Component[] {
+        if (this._simple) return [(cloneComponentTree(this._simple) as Field).hiddenLabel()];
+        return this._schema();
+    }
+    private itemFields(): Field[] { return this.itemComponents().filter((component): component is Field => component instanceof Field); }
     /** Well-formed items only: keys come from the browser, so only simple keys are kept. */
     getItems(): Record<string, Record<string, unknown>> {
         const state = this.context().state;
@@ -946,27 +1025,95 @@ export class Repeater extends Field {
         return Object.fromEntries(Object.entries(state as Record<string, unknown>).filter(([key, item]) => isItemKey(key) && item !== null && typeof item === 'object' && !Array.isArray(item)).slice(0, this._maxItems)) as Record<string, Record<string, unknown>>;
     }
     private setItems(items: Record<string, Record<string, unknown>>): void { writePath(this.livewire as any, this.getStatePath().split('.'), items); }
-    private itemDefaults(): Record<string, unknown> { return Object.fromEntries(this._schema().map((field) => [field.getName(), field.getDefaultState()])); }
+    private itemDefaults(): Record<string, unknown> {
+        const data: Record<string, unknown> = {};
+        fillSchema(new Schema(this.container.livewire).statePath('').components(this.itemComponents()), data);
+        return data;
+    }
     getDefaultState(): unknown { return Object.fromEntries(Array.from({ length: this._defaultItems }, () => [randomUUID(), this.itemDefaults()])); }
-    /** Relationship records → `record-<id>` items, limited to the declared fields. */
+    /** A list (records → `record-<id>` items; simple values → one-field items) or a keyed map, limited to the declared fields. */
     hydrateState(value: unknown): unknown {
+        if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = null; } }
         if (!Array.isArray(value)) return value && typeof value === 'object' ? value : {};
-        const fields = this._schema();
-        return Object.fromEntries(value.map((row: any) => [`record-${row.id}`, Object.fromEntries(fields.map((field) => [field.getName(), field.hydrateState(row[field.getName()] ?? field.getDefaultState())]))]));
+        const fields = this.itemFields();
+        return Object.fromEntries(value.slice(0, this._maxItems).map((row: any) => {
+            if (this._simple) return [randomUUID(), { [this._simple.getName()!]: this._simple.hydrateState(row) }];
+            const key = row && typeof row === 'object' && row.id !== undefined && row.id !== null ? `record-${row.id}` : randomUUID();
+            return [key, Object.fromEntries(fields.map((field) => [field.getName(), field.hydrateState(row?.[field.getName()!] ?? field.getDefaultState())]))];
+        }));
     }
     dehydrateState(): unknown { return Object.fromEntries(Object.keys(this.getItems()).map((key) => [key, {}])); }
+    /** Simple repeater: saved as a list of values. */
+    finalizeDehydratedState(state: unknown): unknown {
+        if (!this._simple || !state || typeof state !== 'object' || Array.isArray(state)) return state;
+        const name = this._simple.getName()!;
+        return Object.values(state as Record<string, Record<string, unknown>>).map((item) => item?.[name] ?? null);
+    }
     getChildSchemas(): Schema[] {
         const container = this.container;
-        return Object.keys(this.getItems()).map((key) => new Schema(container.livewire).key(`${this.getKey()}.${key}`).statePath(`${this.getStatePath()}.${key}`).operation(container.getOperation()).record(container.getRecord()).root(false).components(this._schema()));
+        return Object.keys(this.getItems()).map((key) => new Schema(container.livewire).key(`${this.getKey()}.${key}`).statePath(`${this.getStatePath()}.${key}`).operation(container.getOperation()).record(container.getRecord()).root(false).columns((this as any)._childColumns ?? 1).components(this.itemComponents()));
     }
+    private _childColumns: Record<string, number> | number | null = null;
+    /** Grid columns inside each item. */
+    columns(columns: Record<string, number> | number | null): this { this._childColumns = columns; return this; }
     async getValidationRules(): Promise<Rule[]> {
         const rules: Rule[] = [];
-        if (await this.isRequired()) rules.push({ name: 'required', passes: () => Object.keys(this.getItems()).length > 0, message: (a) => `The ${a} field is required.` });
+        const count = () => Object.keys(this.getItems()).length;
+        if (await this.isRequired()) rules.push({ name: 'required', passes: () => count() > 0, message: (a) => `The ${a} field is required.` });
+        if (this._minItems !== null) rules.push({ name: 'min', implicit: true, passes: () => count() >= this._minItems!, message: (a) => `The ${a} field must have at least ${this._minItems} items.` });
+        rules.push({ name: 'max', implicit: true, passes: () => count() <= this._maxItems, message: (a) => `The ${a} field must not have more than ${this._maxItems} items.` });
         return [...rules, ...this._rules];
+    }
+
+    // ---- relationship
+    private relationInfo() {
+        const model = modelOfForm(this.context(), this._relationship!.model);
+        const relation = model.getRelation(this._relationship!.name);
+        return { model, relation, related: relation.relatedModelClass };
+    }
+    async savesRelationships(): Promise<boolean> { return (await super.savesRelationships()) || this._relationship !== null; }
+    private relatedQuery(record: any) {
+        const { model } = this.relationInfo();
+        const query = model.relatedQuery(this._relationship!.name).for(record[model.idColumn]);
+        this._relationship!.modify?.(query);
+        return query;
+    }
+    async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> {
+        if (!this._relationship) return super.loadStateFromRelationships(record);
+        if (this._orderColumnPending !== null) { this._relationship.orderColumn = this._orderColumnPending; this._orderColumnPending = null; }
+        const { related } = this.relationInfo();
+        const query = this.relatedQuery(record);
+        if (this._relationship.orderColumn) query.orderBy(`${related.tableName}.${this._relationship.orderColumn}`);
+        const rows = await query.limit(this._maxItems);
+        return { state: rows.map((row: any) => ({ ...row, id: row[related.idColumn] })) };
+    }
+    /** Creates, updates and deletes the related records; only records of this owner (and query) are touched. */
+    async saveRelationships(record: any): Promise<void> {
+        if (!this._relationship) return super.saveRelationships(record);
+        if (this._orderColumnPending !== null) { this._relationship.orderColumn = this._orderColumnPending; this._orderColumnPending = null; }
+        const { related } = this.relationInfo();
+        const existing = new Map((await this.relatedQuery(record)).map((row: any) => [String(row[related.idColumn]), row]));
+        const kept = new Set<string>();
+        const keys = Object.keys(this.getItems());
+        const schemas = this.getChildSchemas();
+        for (const [index, key] of keys.entries()) {
+            const data = await getSchemaState(schemas[index]);
+            if (this._relationship.orderColumn) data[this._relationship.orderColumn] = index + 1;
+            const id = key.startsWith('record-') ? key.slice('record-'.length) : null;
+            if (id !== null && existing.has(id)) {
+                kept.add(id);
+                await related.query().findById(existing.get(id)[related.idColumn]).patch(data);
+            } else {
+                await this.relatedQuery(record).insert(data);
+            }
+        }
+        const removed = [...existing.keys()].filter((id) => !kept.has(id));
+        if (removed.length) await related.query().whereIn(related.idColumn, removed.map((id) => existing.get(id)[related.idColumn])).delete();
     }
 
     getActions(): Action[] {
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
+            if (!this._reorderable && !this._reorderableWithButtons) return;
             const items = this.getItems();
             const keys = Object.keys(items);
             const from = keys.indexOf(String(args.item));
@@ -975,14 +1122,22 @@ export class Repeater extends Field {
             [keys[from], keys[to]] = [keys[to], keys[from]];
             this.setItems(Object.fromEntries(keys.map((key) => [key, items[key]])));
         };
+        const insertAfter = (items: Record<string, Record<string, unknown>>, after: string, key: string, item: Record<string, unknown>) => Object.fromEntries(Object.entries(items).flatMap(([k, v]) => (k === after ? [[k, v], [key, item]] : [[k, v]])));
         return [
             ...this.getHintActions(),
-            Action.make('add').action(() => { const items = this.getItems(); if (Object.keys(items).length >= this._maxItems) return; items[randomUUID()] = this.itemDefaults(); this.setItems(items); }),
-            Action.make('delete').action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }),
+            Action.make('add').action(() => { const items = this.getItems(); if (!this._addable || Object.keys(items).length >= this._maxItems) return; items[randomUUID()] = this.itemDefaults(); this.setItems(items); }),
+            Action.make('delete').action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!this._deletable || !Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }),
+            Action.make('clone').action(({ arguments: args }) => {
+                const items = this.getItems();
+                const key = String(args.item);
+                if (!this._cloneable || !Object.hasOwn(items, key) || Object.keys(items).length >= this._maxItems) return;
+                this.setItems(insertAfter(items, key, randomUUID(), JSON.parse(JSON.stringify(items[key]))));
+            }),
             Action.make('moveUp').action(move(-1)),
             Action.make('moveDown').action(move(1)),
             // Drag and drop: the browser sends the new order, only accepted if it is a permutation of the existing keys.
             Action.make('reorder').action(({ arguments: args }) => {
+                if (!this._reorderable) return;
                 const items = this.getItems();
                 const keys = Object.keys(items);
                 const order = Array.isArray(args.items) ? args.items.map(String) : [];
@@ -992,8 +1147,85 @@ export class Repeater extends Field {
         ];
     }
 
+    private async itemLabelOf(key: string, index: number, item: Record<string, unknown>): Promise<string | null> {
+        const label = typeof this._itemLabel === 'function' ? await this._itemLabel({ state: item, key, index }) : this._itemLabel;
+        return label === null || label === undefined || label === '' ? null : String(label);
+    }
+
     async toHtml(): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager().');
+        if (this.isTable()) return this.toTableHtml();
+        const id = this.getId();
+        const key = this.getKey()!;
+        const items = this.getItems();
+        const keys = Object.keys(items);
+        const schemas = this.getChildSchemas();
+        const tr = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.${name}`, replace);
+        const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: key };
+        const expression = (action: string, args: Record<string, unknown> | null) => `mountAction(${js(action)}, ${args ? js(args) : '{}'}, ${js(context)})`;
+        const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
+        const danger = colorManager.getComponentClasses('icon-button', 'danger');
+        const gray = colorManager.getComponentClasses('icon-button', 'gray');
+        const button = (options: { label: string; icon: string; expression: string | null; colors?: string[]; disabled?: boolean; extra?: string }) => {
+            const loading = options.expression ? `${icon(options.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': options.expression }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': options.expression }))}` : icon(options.icon);
+            return `<button title="${e(options.label)}"${options.disabled ? ' aria-disabled="true"' : ''} aria-label="${e(options.label)}"${options.disabled ? ' disabled="disabled"' : ''} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': options.disabled === true }, 'fi-size-sm', ...(options.colors ?? [])])}"${options.extra ?? ''}${options.expression ? ` wire:click="${e(options.expression)}"` : ''}>${loading}</button>`;
+        };
+        const reorderButtons = this._reorderable && this._addable !== null;
+        const rows: string[] = [];
+        for (const [index, itemKey] of keys.entries()) {
+            const isFirst = index === 0, isLast = index === keys.length - 1;
+            const moveButton = (action: 'moveUp' | 'moveDown', label: string, iconName: string, direction: string, disabled: boolean) => {
+                const expr = expression(action, { item: itemKey });
+                return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="fi-sr-only"'}>${button({ label, icon: iconName, expression: expr, disabled, extra: `${this._reorderableWithButtons ? '' : ' tabindex="-1"'} data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}"` })}</li>`;
+            };
+            const content = await schemas[index].toHtml();
+            if (this._simple) {
+                const actions = [
+                    ...(this._reorderable && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
+                    ...(reorderButtons && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
+                    ...(this._cloneable ? [`<li x-on:click.stop>${button({ label: tr('actions.clone.label'), icon: 'm-square-2-stack', expression: expression('clone', { item: itemKey }), colors: gray })}</li>`] : []),
+                    ...(this._deletable ? [`<li x-on:click.stop>${button({ label: tr('actions.delete.label'), icon: 'm-trash', expression: expression('delete', { item: itemKey }), colors: danger })}</li>`] : []),
+                ];
+                rows.push(`<li wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}" class="fi-fo-simple-repeater-item"><div class="fi-fo-simple-repeater-item-content">${content}</div>${actions.length ? `<ul class="fi-fo-simple-repeater-item-actions">${actions.join('')}</ul>` : ''}</li>`);
+                continue;
+            }
+            const label = await this.itemLabelOf(itemKey, index, items[itemKey]);
+            const start = [
+                ...(this._reorderable && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
+                ...((this._reorderable || this._reorderableWithButtons) && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
+            ];
+            const links = this._itemLinks.map((resolve) => resolve({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
+                .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
+            const end = [
+                ...links,
+                ...(this._cloneable ? [`<li x-on:click.stop>${button({ label: tr('actions.clone.label'), icon: 'm-square-2-stack', expression: expression('clone', { item: itemKey }), colors: gray })}</li>`] : []),
+                ...(this._deletable ? [`<li x-on:click.stop>${button({ label: tr('actions.delete.label'), icon: 'm-trash', expression: expression('delete', { item: itemKey }), colors: danger })}</li>`] : []),
+                ...(this._collapsible ? [`<li class="fi-fo-repeater-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-repeater-item-header-collapse-action">${button({ label: tr('actions.collapse.label'), icon: 'm-chevron-up', expression: null, colors: gray })}</div><div class="fi-fo-repeater-item-header-expand-action">${button({ label: tr('actions.expand.label'), icon: 'm-chevron-down', expression: null, colors: gray })}</div></li>`] : []),
+            ];
+            const hasHeader = this._itemHeaders && (start.length > 0 || label !== null || end.length > 0);
+            const header = hasHeader ? `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="fi-fo-repeater-item-header">${start.length ? `<ul class="fi-fo-repeater-item-header-start-actions">${start.join('')}</ul>` : ''}${label !== null ? `<${this._headingTag} class="${cls(['fi-fo-repeater-item-header-label', { 'fi-truncated': this._truncateItemLabel }])}">${e(label)}${this._itemNumbers ? ` ${index + 1}` : ''}</${this._headingTag}>` : ''}${end.length ? `<ul class="fi-fo-repeater-item-header-end-actions">${end.join('')}</ul>` : ''}</div>` : '';
+            const itemConfig = { isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `filament:repeater:collapsed:${key}-${itemKey}` : null };
+            rows.push(`<li wire:ignore.self wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-data="item(${e(js(itemConfig))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['fi-fo-repeater-item', { 'fi-fo-repeater-item-has-header': hasHeader }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="fi-fo-repeater-item-content">${content}</div></li>`);
+            if (!isLast && this._labelBetweenItems) rows.push(`<li class="fi-fo-repeater-label-between-items-ctn"><div class="fi-fo-repeater-label-between-items-divider-before"></div><span class="fi-fo-repeater-label-between-items">${e(this._labelBetweenItems)}</span><div class="fi-fo-repeater-label-between-items-divider-after"></div></li>`);
+        }
+        const prefix = this._simple ? 'fi-fo-simple-repeater' : 'fi-fo-repeater';
+        const gridAttributes = this._grid !== null ? new Attributes().grid(this._grid as any).toHtml() : '';
+        const gridClass = /class="([^"]*)"/.exec(gridAttributes)?.[1] ?? '';
+        const gridStyle = /style="([^"]*)"/.exec(gridAttributes)?.[1] ?? null;
+        const list = keys.length ? `<ul x-sortable${gridStyle ? ` style="${gridStyle}"` : ''} data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems" class="${cls([gridClass, `${prefix}-items`])}">${rows.join('')}</ul>` : '';
+        const label = await this.getLabel();
+        const addExpr = expression('add', null);
+        const add = this._addable && keys.length < this._maxItems ? `<div class="${cls([`${prefix}-add`, this._addActionAlignment ? `fi-align-${this._addActionAlignment}` : null])}"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(this._addActionLabel ?? tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : '';
+        const collapseAll = this._collapsible && !this._simple ? `<div class="${cls(['fi-fo-repeater-actions', { 'fi-hidden': keys.length < 2 }])}"><span x-on:click="collapseAll"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...colorManager.getComponentClasses('link', 'gray')])}"><span class="fi-link-label">${e(tr('actions.collapse_all.label'))}</span></button></span><span x-on:click="expandAll"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...colorManager.getComponentClasses('link', 'gray')])}"><span class="fi-link-label">${e(tr('actions.expand_all.label'))}</span></button></span></div>` : '';
+        const itemLabel = tr('reordering.item');
+        const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
+        const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: false };
+        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls([prefix, { 'fi-collapsible': this._collapsible && !this._simple }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAll}${list}${add}${descriptions}</div>`;
+        return this.wrap(html, { labelAsDiv: true });
+    }
+
+    private async toTableHtml(): Promise<string> {
+        const colors = colorManager!;
         const id = this.getId();
         const key = this.getKey()!;
         const livewireKey = this.getLivewireKey() ?? '';
@@ -1025,14 +1257,14 @@ export class Repeater extends Field {
  allowHTML: false,
  }" aria-label="${e(link.label)}" class="${button} fi-size-sm">${icon(link.icon)}</a></div>`);
             const deleteExpr = expression('delete', { item: itemKey });
-            rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${hasReorderColumn ? `<td><div class="fi-fo-table-repeater-actions"><div x-on:click.stop><button title="${e(tr('actions.reorder.label'))}" aria-label="${e(tr('actions.reorder.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button} fi-size-sm" x-sortable-handle="x-sortable-handle">${icon('m-arrows-up-down')}</button></div>${moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', index === 0)}${moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', index === keys.length - 1)}</div></td>` : ''}${cells.join('')}<td><div class="fi-fo-table-repeater-actions">${links.join('')}<div x-on:click.stop><button title="${e(tr('actions.delete.label'))}" aria-label="${e(tr('actions.delete.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${[button, 'fi-size-sm', ...colorManager.getComponentClasses('icon-button', 'danger')].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon('m-trash', deleteExpr)}${loading(deleteExpr)}</button></div></div></td></tr>`);
+            rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${hasReorderColumn ? `<td><div class="fi-fo-table-repeater-actions"><div x-on:click.stop><button title="${e(tr('actions.reorder.label'))}" aria-label="${e(tr('actions.reorder.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button} fi-size-sm" x-sortable-handle="x-sortable-handle">${icon('m-arrows-up-down')}</button></div>${moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', index === 0)}${moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', index === keys.length - 1)}</div></td>` : ''}${cells.join('')}<td><div class="fi-fo-table-repeater-actions">${links.join('')}${this._deletable ? `<div x-on:click.stop><button title="${e(tr('actions.delete.label'))}" aria-label="${e(tr('actions.delete.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${[button, 'fi-size-sm', ...colorManager.getComponentClasses('icon-button', 'danger')].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon('m-trash', deleteExpr)}${loading(deleteExpr)}</button></div>` : ''}</div></td></tr>`);
         }
         const head = this._columns.map((column) => `<th scope="col"${column.getWidth() ? ` style="width: ${e(column.getWidth()!)};"` : ''}>${e(column.label)}</th>`).join('');
         const addExpr = expression('add', null);
         const label = await this.getLabel();
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: false };
         const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
-        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : ''}${descriptions}</div>`;
+        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : ''}${descriptions}</div>`;
         return this.wrap(table, { labelAsDiv: true });
     }
 }
@@ -2036,10 +2268,12 @@ export async function validateSchema(schema: Schema): Promise<Record<string, str
 export async function getSchemaState(schema: Schema): Promise<Record<string, unknown>> {
     const data: Record<string, unknown> = {};
     const fields: Field[] = [];
+    const skipped: string[] = [];
     for (const c of await schema.getVisibleFlatComponents()) {
         if (!(c instanceof Field) || !(await c.isDehydrated())) continue;
-        // Relationship fields save themselves after the record (see saveSchemaRelationships), unless forced with `dehydrated()`.
-        if ((c as any)._dehydrated !== true && (await c.savesRelationships())) continue;
+        // Relationship fields (and the fields of their items) save themselves after the record (see saveSchemaRelationships), unless forced with `dehydrated()`.
+        if (skipped.some((path) => c.getStatePath().startsWith(`${path}.`))) continue;
+        if ((c as any)._dehydrated !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
         const state = await c.dehydrateState(c.context().state);
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
         fields.push(c);
