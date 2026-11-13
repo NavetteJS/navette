@@ -82,3 +82,12 @@ test('multi-tenant panel URLs, data scoped per tenant', async () => {
     assert.equal(await panel.withTenant(blue, () => adapter.update((created as any).id, { name: 'Stolen' })), null);
     assert.equal((await db('projects').where('id', (created as any).id).first()).name, 'Rocket');
 });
+
+test('authentication route slugs can be changed; they are reserved and validated', () => {
+    const panel = Panel.make().id('slugs').path('app').loginRouteSlug('sign-in').registrationRouteSlug('sign-up').passwordResetRoutePrefix('forgot').passwordResetRequestRouteSlug('ask').passwordResetRouteSlug('new');
+    assert.equal(panel.getLoginUrl(), '/app/sign-in');
+    assert.equal(panel.getRegistrationUrl(), '/app/sign-up');
+    assert.equal(panel.getRequestPasswordResetUrl(), '/app/forgot/ask');
+    assert.ok(panel.getReservedSegments().has('sign-in') && panel.getReservedSegments().has('forgot') && panel.getReservedSegments().has('logout'));
+    assert.throws(() => Panel.make().loginRouteSlug('../admin'), /Invalid route slug/);
+});

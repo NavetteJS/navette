@@ -300,6 +300,23 @@ What remains for you to do:
 - behind a reverse proxy, set `app.set('trust proxy', 1)`: otherwise, every user has the IP address of the proxy, and the login limit applies to everybody at once;
 - the attempt counters are kept in memory, per process: with several instances, add a limit at the proxy level.
 
+## Customizing the authentication route slugs
+
+The login, registration and password reset pages are served at `login`, `register`, `password-reset/request` and `password-reset/reset`, under the panel's path. You may change these segments (lowercase letters, digits and dashes):
+
+```ts
+import { Panel } from '@navette-js/panels';
+
+Panel.make()
+    .loginRouteSlug('sign-in')
+    .registrationRouteSlug('sign-up')
+    .passwordResetRoutePrefix('forgot-password')
+    .passwordResetRequestRouteSlug('request')
+    .passwordResetRouteSlug('reset')
+```
+
+These segments are reserved: in a multi-tenant panel, they are never read as tenant keys.
+
 <Aside variant="warning">
-Multi-factor authentication, guest access, verification of a new email address before it is changed, and changing the authentication route slugs are not available yet.
+Multi-factor authentication, guest access, verification of a new email address before it is changed, and the slugs of the email verification and logout routes are not available yet.
 </Aside>

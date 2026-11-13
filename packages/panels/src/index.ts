@@ -429,11 +429,28 @@ export class Panel {
     mailer(mailer: Mailer): this { this._mailer = mailer; return this; }
     async sendMail(message: MailMessage): Promise<void> { await this._mailer.send(message); }
     getAuthKey(): string { return this._key; }
-    getRegistrationUrl(): string { return this.getBaseUrl('register'); }
-    getRequestPasswordResetUrl(): string { return this.getBaseUrl('password-reset/request'); }
+    private _authSlugs = { login: 'login', registration: 'register', passwordResetPrefix: 'password-reset', passwordResetRequest: 'request', passwordReset: 'reset' };
+    private authSlug(slug: string): string { if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(slug)) throw new Error(`Invalid route slug: ${slug}`); return slug; }
+    /** URL segment of the login page (`login` by default). */
+    loginRouteSlug(slug: string): this { this._authSlugs.login = this.authSlug(slug); return this; }
+    /** URL segment of the registration page (`register` by default). */
+    registrationRouteSlug(slug: string): this { this._authSlugs.registration = this.authSlug(slug); return this; }
+    /** URL segments of the password reset pages: `<prefix>/<request>` and `<prefix>/<reset>` (`password-reset/request` and `password-reset/reset` by default). */
+    passwordResetRoutePrefix(prefix: string): this { this._authSlugs.passwordResetPrefix = this.authSlug(prefix); return this; }
+    passwordResetRequestRouteSlug(slug: string): this { this._authSlugs.passwordResetRequest = this.authSlug(slug); return this; }
+    passwordResetRouteSlug(slug: string): this { this._authSlugs.passwordReset = this.authSlug(slug); return this; }
+    /** Paths of the authentication pages, relative to the panel. */
+    getAuthPaths(): { login: string; registration: string; passwordResetRequest: string; passwordReset: string } {
+        const slugs = this._authSlugs;
+        return { login: slugs.login, registration: slugs.registration, passwordResetRequest: `${slugs.passwordResetPrefix}/${slugs.passwordResetRequest}`, passwordReset: `${slugs.passwordResetPrefix}/${slugs.passwordReset}` };
+    }
+    /** First URL segments used by the panel itself (never page slugs or tenant keys). */
+    getReservedSegments(): Set<string> { return new Set([...RESERVED_SEGMENTS, this._authSlugs.login, this._authSlugs.registration, this._authSlugs.passwordResetPrefix]); }
+    getRegistrationUrl(): string { return this.getBaseUrl(this.getAuthPaths().registration); }
+    getRequestPasswordResetUrl(): string { return this.getBaseUrl(this.getAuthPaths().passwordResetRequest); }
     getResetPasswordUrl(user: User, fingerprint: string): string {
         const token = signToken(this._key, `${this._id}.password-reset`, { uid: user.id, fp: fingerprint }, 60 * 60);
-        return `${this.getBaseUrl('password-reset/reset')}?email=${encodeURIComponent(user.email)}&token=${encodeURIComponent(token)}`;
+        return `${this.getBaseUrl(this.getAuthPaths().passwordReset)}?email=${encodeURIComponent(user.email)}&token=${encodeURIComponent(token)}`;
     }
     /** Payload of a password reset token valid for this panel, otherwise `null`. */
     readResetPasswordToken(token: unknown): { uid: string | number; fp: string } | null { return readToken(this._key, `${this._id}.password-reset`, token) as any; }
@@ -504,7 +521,7 @@ export class Panel {
     }
     /** URL outside any tenant (login, registration, profile, tenant registration). */
     getBaseUrl(sub = ''): string { return '/' + [this._path, sub.replace(/^\/|\/$/g, '')].filter(Boolean).join('/'); }
-    getLoginUrl(): string { return this.getBaseUrl('login'); }
+    getLoginUrl(): string { return this.getBaseUrl(this.getAuthPaths().login); }
     getLogoutUrl(): string { return this.getBaseUrl('logout'); }
     /** Prefix of this panel's Livewire endpoint (`/livewire` or `/<path>/livewire`): each panel has its own. */
     getLivewirePrefix(): string { return this._path ? `/${this._path}/livewire` : '/livewire'; }
@@ -3605,7 +3622,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         let key: string;
         try { key = decodeURIComponent(path.slice(prefix.length).split('/')[0] ?? ''); } catch { return null; }
         const registration = panel.getTenantRegistrationPage();
-        if (!key || RESERVED_SEGMENTS.has(key) || key === registration?.slug || key.length > 200) return null;
+        if (!key || panel.getReservedSegments().has(key) || key === registration?.slug || key.length > 200) return null;
         const provider = panel.getTenantProvider();
         const tenant = await provider.find(key);
         return tenant && (await provider.canAccess(user, tenant)) ? tenant : null;
@@ -3744,17 +3761,17 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     });
 
     if (LoginPage) {
-        guestPage('login', name('auth.login'), t('filament-panels::auth/pages/login.title'));
+        guestPage(panel.getAuthPaths().login, name('auth.login'), t('filament-panels::auth/pages/login.title'));
         router.post(panel.getLogoutUrl(), express.urlencoded({ extended: false }), (req, res) => {
             if (!verifyCsrf(req, req.body?._token)) return res.status(419).send('Invalid CSRF token.');
             panel.logOut(res);
             res.redirect(panel.getLoginUrl());
         });
     }
-    if (RegistrationPage) guestPage('register', name('auth.register'), t('filament-panels::auth/pages/register.title'));
+    if (RegistrationPage) guestPage(panel.getAuthPaths().registration, name('auth.register'), t('filament-panels::auth/pages/register.title'));
     if (passwordReset) {
-        guestPage('password-reset/request', name('auth.password-reset.request'), t('filament-panels::auth/pages/password-reset/request-password-reset.title'));
-        guestPage('password-reset/reset', name('auth.password-reset.reset'), t('filament-panels::auth/pages/password-reset/reset-password.title'), (req) => ({ email: typeof req.query.email === 'string' ? req.query.email : null, token: typeof req.query.token === 'string' ? req.query.token : null }));
+        guestPage(panel.getAuthPaths().passwordResetRequest, name('auth.password-reset.request'), t('filament-panels::auth/pages/password-reset/request-password-reset.title'));
+        guestPage(panel.getAuthPaths().passwordReset, name('auth.password-reset.reset'), t('filament-panels::auth/pages/password-reset/reset-password.title'), (req) => ({ email: typeof req.query.email === 'string' ? req.query.email : null, token: typeof req.query.token === 'string' ? req.query.token : null }));
     }
     if (VerificationPrompt) {
         userPage('email-verification/prompt', name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'));
@@ -3800,7 +3817,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         // Tenant root without a dashboard: the first menu page.
         if (!panel.getPages().some((page) => page.slug === '')) {
             router.get(panel.getBaseUrl(':tenant'), async (req, res, next) => {
-                if (RESERVED_SEGMENTS.has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug) return next();
+                if (panel.getReservedSegments().has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug) return next();
                 const ctx = await pageContext(req, res);
                 if (!ctx) return;
                 const url = await panel.withTenant(ctx.tenant, async () => panel.getNavigation(req.path, new Map(), await panel.resolveInaccessiblePages(ctx.user))[0]?.items[0]?.url ?? null);
@@ -3814,7 +3831,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         runtime.register(component, PageClass);
         // `{record}` in the slug becomes a route parameter, passed to mount().
         router.get(panel.getBaseUrl(tenantSegment + PageClass.slug).replace(/\{(\w+)\}/g, ':$1'), async (req, res, next) => {
-            if (panel.hasTenancy() && (RESERVED_SEGMENTS.has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug)) return next();
+            if (panel.hasTenancy() && (panel.getReservedSegments().has(req.params.tenant) || req.params.tenant === TenantRegistration?.slug)) return next();
             const ctx = await pageContext(req, res);
             if (!ctx) return;
             const { tenant: _tenant, ...params } = req.params;
