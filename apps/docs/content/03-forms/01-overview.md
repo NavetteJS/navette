@@ -476,10 +476,10 @@ Select.make('status')
 
 In this example, when the user changes the value of the `status` field, the form is re-rendered. Functions passed to `visible()`, `required()`, `options()` and the other methods then see the new value through `get()`. You can also [hook into the field's lifecycle](#field-updates) to run custom logic when the field is updated.
 
-`live()` is available on `TextInput`, `Textarea`, `Select`, `Checkbox`, `Toggle`, `CheckboxList`, `Radio`, `ToggleButtons`, `DatePicker`, `DateTimePicker`, `TimePicker`, `MarkdownEditor`, `CodeEditor` and `Slider`.
+`live()` is available on `TextInput`, `Textarea`, `Select`, `Checkbox`, `Toggle`, `CheckboxList`, `Radio`, `ToggleButtons`, `DatePicker`, `DateTimePicker`, `TimePicker`, `MarkdownEditor`, `RichEditor`, `CodeEditor` and `Slider`.
 
 <Aside variant="warning">
-`TagsInput`, `KeyValue`, `ColorPicker` and `RichEditor` cannot be made `live()` yet. Their value is sent along with the next request.
+`TagsInput`, `KeyValue` and `ColorPicker` cannot be made `live()` yet. Their value is sent along with the next request.
 </Aside>
 
 ### Reactive fields on blur

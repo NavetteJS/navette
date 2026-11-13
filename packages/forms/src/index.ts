@@ -1788,7 +1788,7 @@ export function richDocumentToHtml(document: unknown): string | null {
 
 /**
  * Rich text editor: the browser works on a TipTap document, the database receives HTML.
- * Not supported yet: attachments, custom blocks, mentions.
+ * Not supported yet: custom blocks, merge tags, mentions, text colors.
  */
 /**
  * Stores a file uploaded by an editor (`componentFileAttachments.<state path>[.<id>]`): type checked on the file's content, size,
@@ -1831,7 +1831,8 @@ export class RichEditor extends Field {
         this._toolbar = list;
         return this;
     }
-    disableToolbarButtons(tools: string[] = []): this { this._disabledTools = [...this._disabledTools, ...tools]; return this; }
+    /** Removes buttons; with no argument, removes them all. */
+    disableToolbarButtons(tools: string[] = []): this { if (!tools.length) this._toolbar = []; this._disabledTools = [...this._disabledTools, ...tools]; return this; }
     disableAllToolbarButtons(condition = true): this { if (condition) this._toolbar = []; return this; }
     /** Saves the content as the editor's JSON document instead of HTML. */
     json(condition = true): this { this._json = condition; return this; }
@@ -1871,7 +1872,7 @@ export class RichEditor extends Field {
     async getUploadedFileAttachmentTemporaryUrl(args: unknown = {}): Promise<string | null> {
         const id = String((args as any)?.attachment ?? '');
         const storage = this.attachmentsStorage();
-        if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.tools().flat().includes('attachFiles')) return null;
+        if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.tools().flat().includes('attachFiles') || (await this.isDisabled())) return null;
         return storeEditorAttachment(this, id, { storage, directory: this._attachmentsDirectory, types: this._attachmentTypes, maxSize: this._attachmentMaxSize });
     }
     async saveUploadedFileAttachmentAndGetUrl(args: unknown = {}): Promise<string | null> { return this.getUploadedFileAttachmentTemporaryUrl(args); }
@@ -1909,7 +1910,10 @@ export class RichEditor extends Field {
         const toolbarStart = html.indexOf('data-rich-editor-toolbar="main"');
         if (toolbarStart >= 0) {
             const open = html.indexOf('>', toolbarStart) + 1;
-            const close = html.indexOf('            \n            <div\n                x-show="isUploadingFile"', open);
+            // The toolbar ends right before the "uploading file" message.
+            const message = html.indexOf('x-show="isUploadingFile"', open);
+            const close = message < 0 ? -1 : html.lastIndexOf('<div', message);
+            if (close < 0) throw new Error('RichEditor: unexpected view markup (toolbar end not found).');
             const body = html.slice(open, close);
             const buttons = new Map<string, string>();
             for (const match of body.matchAll(/<button data-rich-editor-tool="([A-Za-z0-9]+)"[\s\S]*?<\/button>/g)) buttons.set(match[1], match[0]);
@@ -1925,7 +1929,8 @@ export class RichEditor extends Field {
             .replace(/acceptedFileTypes: JSON\.parse\('[^']*'\),/, () => `acceptedFileTypes: ${js(this._attachmentTypes)},`)
             .replace(/acceptedFileTypesValidationMessage: '[^']*',/, () => `acceptedFileTypesValidationMessage: ${js(`Uploaded files must be of type: ${this._attachmentTypes.join(', ')}.`)},`)
             .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
-            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this.isLive() ? 'true' : 'false'})`);
+            .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this._liveMode === 'blur' ? 'true' : 'false'},`)
+            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this._liveMode === 'live' ? 'true' : 'false'})`);
         void tr;
         return this.wrap(html, { labelAsDiv: true });
     }
