@@ -17,7 +17,7 @@ const safeIcon = (name: string | null, size: string, classes: string[]): string 
 /** Only a same-site path (`/…`) or an http(s) URL can become a link (no `javascript:` or protocol-relative URLs). */
 const safeUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
 
-export type GlobalSearchResult = { title: string; url: string; details: Record<string, string> };
+export type GlobalSearchResult = { title: string; url: string; details: Record<string, string>; /** Buttons under the result: links (`url()`) or Livewire events (`dispatch()`). */ actions?: any[]; record?: unknown };
 export type GlobalSearchCategory = { label: string; results: GlobalSearchResult[] };
 
 /** Search field suffix showing the first key binding for the browser's platform; `null` if the platform is unknown. */
@@ -54,6 +54,20 @@ export class GlobalSearch extends Component {
         const focus = "if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')";
         const field = `<div class="fi-input-wrp"><div x-on:click="${e(focus)}" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass', { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'search' }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': 'search' }))}</div><div class="fi-input-wrp-content-ctn">${input}</div>${suffix ? `<div x-on:click="${e(focus)}" class="fi-input-wrp-suffix fi-inline fi-input-wrp-suffix-has-label"><span class="fi-input-wrp-label">${e(suffix)}</span></div>` : ''}</div>`;
 
+        // Actions of each result: rendered first (async), then placed under the result's link.
+        const actionsHtml = new Map<GlobalSearchResult, string[]>();
+        for (const [groupIndex, category] of (categories ?? []).entries()) {
+            for (const [index, result] of category.results.entries()) {
+                const rendered: string[] = [];
+                for (const action of result.actions ?? []) {
+                    const ctx = { livewire: this as any, component: null as any, operation: null, record: result.record ?? null, get: () => undefined, state: undefined };
+                    if (!(await action.isVisible(ctx))) continue;
+                    const describedBy = `${id}-group-${groupIndex} ${id}-group-${groupIndex}-result-${index}`;
+                    rendered.push(String(await action.toHtml(ctx)).replace(/^<(a|button)\s/, (_m: string, tag: string) => `<${tag} aria-describedby="${e(describedBy)}" data-global-search-action="1" `));
+                }
+                if (rendered.length) actionsHtml.set(result, rendered);
+            }
+        }
         let results = '';
         if (categories !== null) {
             results = categories.length === 0
@@ -62,7 +76,8 @@ export class GlobalSearch extends Component {
                     const groupId = `${id}-group-${groupIndex}`;
                     return `<li class="fi-global-search-result-group"><h3 id="${e(groupId)}" class="fi-global-search-result-group-header">${e(category.label)}</h3><ul class="fi-global-search-result-group-results">${category.results.map((result, index) => {
                         const details = Object.entries(result.details);
-                        return `<li class="fi-global-search-result"><a href="${e(result.url)}" wire:navigate class="fi-global-search-result-link"><h4 id="${e(`${groupId}-result-${index}`)}" class="fi-global-search-result-heading">${e(result.title)}</h4>${details.length ? `<dl class="fi-global-search-result-details">${details.map(([label, value]) => `<div class="fi-global-search-result-detail"><dt class="fi-global-search-result-detail-label">${e(label)}:</dt><dd class="fi-global-search-result-detail-value">${e(value)}</dd></div>`).join('')}</dl>` : ''}</a></li>`;
+                        const actions = actionsHtml.get(result);
+                        return `<li class="${actions ? 'fi-global-search-result fi-global-search-result-has-actions' : 'fi-global-search-result'}"><a href="${e(result.url)}" wire:navigate class="fi-global-search-result-link"><h4 id="${e(`${groupId}-result-${index}`)}" class="fi-global-search-result-heading">${e(result.title)}</h4>${details.length ? `<dl class="fi-global-search-result-details">${details.map(([label, value]) => `<div class="fi-global-search-result-detail"><dt class="fi-global-search-result-detail-label">${e(label)}:</dt><dd class="fi-global-search-result-detail-value">${e(value)}</dd></div>`).join('')}</dl>` : ''}</a>${actions ? `<div class="fi-global-search-result-actions">${actions.join('')}</div>` : ''}</li>`;
                     }).join('')}</ul></li>`;
                 }).join('')}</ul>`;
         }

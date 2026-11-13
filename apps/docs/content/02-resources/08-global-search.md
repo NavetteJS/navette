@@ -73,6 +73,44 @@ static async getGlobalSearchResultUrl(record: any, user: User | null): Promise<s
 }
 ```
 
+## Adding actions to global search results
+
+Actions are buttons shown under each result. They open a URL, or dispatch a Livewire event; they are not mounted, so an action needing a modal belongs on the record's pages:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Resource } from '@navette-js/panels';
+
+export class PostResource extends Resource {
+    static getGlobalSearchResultActions(record: Post): Action[] {
+        return [
+            Action.make('edit').link().url(this.getUrl('edit', String(record.id))),
+        ];
+    }
+}
+```
+
+### Opening URLs from global search actions
+
+You can open a URL, optionally in a new tab:
+
+```ts
+Action.make('view')
+    .url(PostResource.getUrl('view', String(record.id)))
+    .openUrlInNewTab()
+```
+
+### Dispatching Livewire events from global search actions
+
+To run code when an action is clicked, dispatch an event, with parameters, to a listener of the page (`static listeners`) or of another component:
+
+```ts
+Action.make('quickView')
+    .dispatch('quickView', [record.id])
+```
+
+The actions are only shown to users allowed to see the result. Hide one with `visible()` or `hidden()`, and check permissions again in the code handling the event: its parameters come from the browser.
+
 ## Limiting the number of global search results
 
 By default, global search returns up to 50 results per resource. Change it with `globalSearchResultsLimit`:
@@ -163,6 +201,3 @@ export class ProductResource extends Resource {
 }
 ```
 
-<Aside variant="warning">
-Actions on global search results are not available yet.
-</Aside>

@@ -1803,6 +1803,11 @@ export abstract class Resource {
     static getGlobalSearchResultTitle(record: any): string { return this.getRecordTitle(record); }
     /** Details shown under the title: `{ Author: 'Jane' }`. Empty values are skipped. */
     static getGlobalSearchResultDetails(_record: any): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
+    /**
+     * Buttons under a result: links (`Action.make('edit').url(…)`) or Livewire events (`.dispatch('quickView', [id])`).
+     * They are not mounted: an action needing a modal belongs on the record's pages.
+     */
+    static getGlobalSearchResultActions(_record: any): Action[] | Promise<Action[]> { return []; }
     /** URL of a result: the view page, otherwise the edit page; for a simple resource, the list with the action open. `null` if the user has no access. */
     static async getGlobalSearchResultUrl(record: any, user: User | null): Promise<string | null> {
         const key = this.adapter.getKey(record);
@@ -1821,7 +1826,7 @@ export abstract class Resource {
             if (url === null) continue;
             const details: Record<string, string> = {};
             for (const [label, value] of Object.entries(await this.getGlobalSearchResultDetails(record))) if (value !== null && value !== undefined && value !== '') details[label] = String(value);
-            results.push({ title: this.getGlobalSearchResultTitle(record), url, details });
+            results.push({ title: this.getGlobalSearchResultTitle(record), url, details, actions: await this.getGlobalSearchResultActions(record), record });
         }
         return results;
     }

@@ -78,6 +78,8 @@ export class Action implements Renderable {
     /** Navigation action, rendered as `<a href wire:navigate>`. */
     url(url: string | null | ((ctx: ComponentContext) => string | null)): this { if (typeof url === 'function') this._lazyUrl = url; else { this._url = url; this._lazyUrl = null; } return this; }
     /** A string: host component method called on click (`wire:click`). A function: the action handler, mounted through `mountAction()` (with its modal, if any). */
+    /** On click, dispatches a Livewire event (to a listener of the page or of another component), with parameters. */
+    dispatch(event: string, params: unknown[] | Record<string, unknown> = []): this { return this.action(`$dispatch(${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`); }
     action(action: string | ((ctx: ActionCallContext) => unknown | Promise<unknown>) | null): this {
         if (typeof action === 'function') { this._handler = action; this._action = null; } else { this._action = action; this._handler = null; }
         return this;

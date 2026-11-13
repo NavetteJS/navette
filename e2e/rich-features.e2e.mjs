@@ -1,5 +1,5 @@
 // Rich editor features on the demo's blog posts (custom block, text color, merge tag and mention, saved as HTML),
-// and the lazy loaded Image section.
+// the lazy loaded Image section, and the actions of global search results.
 // Run by e2e/run.mjs, which provides a throwaway instance on a copy of the database.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
@@ -84,6 +84,16 @@ try {
         await section.scrollIntoViewIfNeeded();
         await section.locator('.fi-fo-file-upload').waitFor({ timeout: 10000 });
         assert.equal(await section.locator('.fi-sc-loading').count(), 0);
+    });
+    await step('global search results of posts have Edit and Comments actions', async () => {
+        await page.goto(`${BASE}/blog/posts`);
+        await page.locator('.fi-global-search input[type=search]').fill(title.slice(0, 14));
+        const result = page.locator('.fi-global-search-result.fi-global-search-result-has-actions').first();
+        await result.waitFor({ timeout: 10000 });
+        const edit = result.locator('.fi-global-search-result-actions a', { hasText: 'Edit' });
+        assert.match(await edit.getAttribute('href'), /\/blog\/posts\/\d+\/edit$/);
+        await edit.click();
+        await page.waitForURL(/\/blog\/posts\/\d+\/edit$/, { timeout: 10000 });
     });
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));
 } finally {

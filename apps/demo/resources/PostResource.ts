@@ -277,6 +277,14 @@ export class PostResource extends Resource {
     static globalSearchSort = 3;
     static globallySearchableAttributes = ['title', 'slug', 'author_name', 'category_name'];
     static getGlobalSearchResultDetails(record: Post): Record<string, unknown> { return { Author: record.author_name, Category: record.category_name }; }
+    /** "Edit" and "Comments" links under each result (not for screenshot comparisons). */
+    static getGlobalSearchResultActions(record: Post): Action[] {
+        if (process.env.NAVETTE_NO_THEMES) return [];
+        return [
+            Action.make('edit').label('Edit').link().url(this.getUrl('edit', String(record.id))),
+            Action.make('comments').label('Comments').link().url(this.getUrl('comments', String(record.id))),
+        ];
+    }
     static hasViewPage = true;
     static pages = { edit: EditPost, view: ViewPost };
     static relatedPages = { comments: ManagePostComments };
