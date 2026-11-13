@@ -106,6 +106,20 @@ export type Theme = {
     css?: string;
 };
 
+/** Navigation group: label, icon (then its items have none, as in Filament) and whether it can be collapsed. */
+export class NavigationGroup {
+    private _label: string;
+    private _icon: string | null = null;
+    private _collapsible = true;
+    constructor(label: string) { this._label = label; }
+    static make(label: string): NavigationGroup { return new NavigationGroup(label); }
+    icon(name: string | null): this { this._icon = name; return this; }
+    collapsible(condition = true): this { this._collapsible = condition; return this; }
+    getLabel(): string { return this._label; }
+    getIcon(): string | null { return this._icon; }
+    isCollapsible(): boolean { return this._collapsible; }
+}
+
 export class NavigationItem {
     label: string;
     _url = '#';
@@ -156,6 +170,7 @@ export class Panel {
     private _resources: (typeof Resource)[] = [];
     private _navigationItems: NavigationItem[] = [];
     private _navigationGroups: string[] = [];
+    private _navigationGroupOptions = new Map<string, { icon: string | null; collapsible: boolean }>();
     private _maxContentWidth = '7xl';
     readonly colors = new ColorManager();
 
@@ -245,7 +260,22 @@ export class Panel {
     }
     navigationItems(items: NavigationItem[]): this { this._navigationItems.push(...items); return this; }
     /** Order of navigation groups. */
-    navigationGroups(groups: string[]): this { this._navigationGroups = groups; return this; }
+    /** Order of the navigation groups: labels, or `NavigationGroup.make('Shop').icon('o-shopping-cart').collapsible(false)`. */
+    private _darkMode = true;
+    private _darkModeForced = false;
+    private _defaultThemeMode: 'light' | 'dark' | 'system' = 'system';
+    /** `false`: light mode only (no switcher); `darkMode(true, true)`: dark mode only. */
+    darkMode(condition = true, isForced = false): this { this._darkMode = condition; this._darkModeForced = condition && isForced; return this; }
+    /** Mode used until the user picks one in the switcher: `'system'` (default), `'light'` or `'dark'`. */
+    defaultThemeMode(mode: 'light' | 'dark' | 'system'): this { if (!['light', 'dark', 'system'].includes(mode)) throw new Error(`Invalid theme mode: ${mode}`); this._defaultThemeMode = mode; return this; }
+    hasDarkMode(): boolean { return this._darkMode; }
+    hasDarkModeForced(): boolean { return this._darkModeForced; }
+    getDefaultThemeMode(): 'light' | 'dark' | 'system' { return this._defaultThemeMode; }
+    navigationGroups(groups: (string | NavigationGroup)[]): this {
+        this._navigationGroups = groups.map((group) => (typeof group === 'string' ? group : group.getLabel()));
+        this._navigationGroupOptions = new Map(groups.filter((group): group is NavigationGroup => typeof group !== 'string').map((group) => [group.getLabel(), { icon: group.getIcon(), collapsible: group.isCollapsible() }]));
+        return this;
+    }
     private _plugins: Plugin[] = [];
     /** Applies a plugin: an object that configures the panel (resources, pages, render hooks, themes…). */
     plugin(plugin: Plugin): this {
@@ -521,7 +551,8 @@ export class Panel {
         const order = [null, ...this._navigationGroups, ...items.map((i) => i._group).filter((g): g is string => g !== null && !this._navigationGroups.includes(g))];
         return [...new Set(order)].map((label) => {
             const own = items.filter((i) => i._group === label).map((i) => ({ label: i.label, url: i._url, icon: i._icon, isActive: i.isActive(path), badge: i._badge, badgeColorClasses: this.colors.getComponentClasses('badge', i._badgeColor) }));
-            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive), items: own };
+            const options = label ? this._navigationGroupOptions.get(label) : undefined;
+            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: label !== null && (options?.collapsible ?? true) };
         }).filter((g) => g.items.length);
     }
 
@@ -3353,6 +3384,7 @@ async function renderUserMenu(component: Component, position: 'topbar' | 'sideba
         profileUrl: profileUrl && !custom.profile ? profileUrl : null,
         itemsBefore: await html(visible.filter((item) => item.getSort() < 0)), itemsAfter: await html(visible.filter((item) => item.getSort() >= 0)),
         themes: panel.getThemes().map((theme) => ({ id: theme.id, label: theme.label, swatch: swatchOf(theme, panel) })), activeTheme: panel.resolveTheme(req)?.id ?? null,
+        hasThemeSwitcher: panel.hasDarkMode() && !panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
     });
 }
 /** Tenant menu: current tenant, other tenants, registration, profile. */
@@ -3659,7 +3691,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const bodyClass = options.layout === 'index' ? cls([{ 'fi-body-has-navigation': hasNavigation, 'fi-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'fi-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'fi-body-has-topbar': panel.hasTopbar(), 'fi-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
         res.send(views.render('filament-panels::layout.base', {
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
-            bodyClass, body, spa: panel.hasSpaMode(),
+            bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
         }));

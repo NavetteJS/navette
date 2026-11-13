@@ -124,8 +124,25 @@ panel.navigationGroups(['Shop', 'HR', 'Projects', 'Blog']);
 
 Groups are collapsible: the user may collapse a group by clicking its label, and the choice is remembered by the browser.
 
+### Customizing navigation groups
+
+Pass `NavigationGroup` objects to `navigationGroups()` to give a group an icon, or to prevent it from being collapsed:
+
+```ts
+import { NavigationGroup, Panel } from '@navette-js/panels';
+
+Panel.make()
+    .navigationGroups([
+        NavigationGroup.make('Shop').icon('o-shopping-cart'),
+        NavigationGroup.make('Blog').collapsible(false),
+        'Settings',
+    ])
+```
+
+As in Filament, the items of a group with an icon are displayed without their own icons.
+
 <Aside variant="warning">
-Group icons, non-collapsible groups, nested items and clusters are not available yet.
+Nested items, clusters, and the dropdown of a group's items when the sidebar is collapsed to icons are not available yet.
 </Aside>
 
 ## Collapsible sidebar on desktop

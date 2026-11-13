@@ -68,10 +68,15 @@
         </style>
 
         <%- renderHook('panels::styles.after', renderHookScopes) %>
+        <% if (locals.darkMode === false) { %><% } else if (locals.darkModeForced) { %>
+        <script>
+            document.documentElement.classList.add('dark')
+        </script>
+        <% } else { %>
         <script>
             const loadDarkMode = () => {
                 window.theme =
-                    localStorage.getItem('filament:theme:mode') ?? 'system'
+                    localStorage.getItem('filament:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
 
                 if (
                     window.theme === 'dark' ||
@@ -87,6 +92,7 @@
 
             document.addEventListener('livewire:navigated', loadDarkMode)
         </script>
+        <% } %>
 
         <% if (locals.themeCss) { %><style data-navette-theme><%- themeCss %></style><% } %>
 

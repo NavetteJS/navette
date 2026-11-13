@@ -4,7 +4,7 @@ import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Checkbox, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
-    DeleteBulkAction, EditAction, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
+    DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, type AuthProvider, type Login,
 } from '@navette-js/panels';
 import { Section } from '@navette-js/schemas';
@@ -51,6 +51,7 @@ class LabProducts extends Resource {
     static modelLabel = 'product';
     static navigationIcon = 'o-beaker';
     static navigationLabel = 'Products lab';
+    static navigationGroup = 'Tables';
     static recordTitleAttribute = 'name';
     static adapter = new ObjectionAdapter(LabProduct);
 
@@ -130,6 +131,7 @@ class LabCards extends Resource {
     static pluralModelLabel = 'product cards';
     static navigationIcon = 'o-squares-2x2';
     static navigationLabel = 'Cards layout';
+    static navigationGroup = 'Tables';
     static adapter = new ObjectionAdapter(LabProduct);
     static table(table: Table<LabProduct>): Table<LabProduct> {
         return table
@@ -151,6 +153,7 @@ class LabFields extends Resource {
     static modelLabel = 'brand';
     static navigationIcon = 'o-pencil-square';
     static navigationLabel = 'Fields lab';
+    static navigationGroup = 'Forms';
     static adapter = new ObjectionAdapter(LabBrand);
     static form(schema: any) {
         return schema.columns(2).components([
@@ -190,6 +193,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .setColors({ primary: Color.Violet })
         .login(options.login)
         .resources([LabProducts, LabCards, LabFields])
+        .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
+        .defaultThemeMode('dark')
         .auth(options.auth)
         .canAccess(options.canAccess);
 }

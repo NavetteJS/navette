@@ -31,13 +31,13 @@
 <% } %>
 <% if (before.length) { %>        <div class="fi-dropdown-list"><%- before.join('') %></div>
 <% } %>
-        <div class="fi-dropdown-list">
+<% if (locals.hasThemeSwitcher !== false) { %>        <div class="fi-dropdown-list">
             <div x-data="{ theme: null }" x-init="
                     $watch('theme', () => {
                         $dispatch('theme-changed', theme)
                     })
 
-                    theme = localStorage.getItem('filament:theme:mode') || 'system'    " role="group" aria-label="<%= t('filament-panels::layout.actions.theme_switcher.label') %>" class="fi-theme-switcher">
+                    theme = localStorage.getItem('filament:theme:mode') || <%- js(locals.defaultThemeMode ?? 'system') %>    " role="group" aria-label="<%= t('filament-panels::layout.actions.theme_switcher.label') %>" class="fi-theme-switcher">
                 <% for (const [theme, iconName] of [['light', 'm-sun'], ['dark', 'm-moon'], ['system', 'm-computer-desktop']]) { %>
                     <% const label = t('filament-panels::layout.actions.theme_switcher.' + theme + '.label') %>
                     <button aria-label="<%= label %>" role="menuitemradio" tabindex="-1" type="button" x-on:click="(theme = <%- js(theme) %>) && close()" x-tooltip="{
@@ -49,6 +49,7 @@
                 <% } %>
             </div>
         </div>
+<% } %>
 
         <% if (locals.themes && themes.length > 1) { %>
             <%# Choice of one of the panel's predefined themes (Panel.themes()). %>

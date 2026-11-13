@@ -42,19 +42,20 @@
             <%- renderHook('panels::sidebar.nav.start') %>
             <ul class="fi-sidebar-nav-groups">
                 <% for (const group of groups) { %>
-                    <li x-data="{ label: <%- js(group.label ?? '') %> }" data-group-label="<%= group.label ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': group.isActive }, 'fi-collapsible']) %>">
+                    <li x-data="{ label: <%- js(group.label ?? '') %> }" data-group-label="<%= group.label ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': group.isActive, 'fi-collapsible': group.collapsible !== false }]) %>">
                         <% if (group.label) { %>
-                            <div x-on:click="$store.sidebar.toggleCollapsedGroup(label)" class="fi-sidebar-group-btn">
+                            <div<% if (group.collapsible !== false) { %> x-on:click="$store.sidebar.toggleCollapsedGroup(label)"<% } %> class="fi-sidebar-group-btn">
+                                <% if (group.icon) { %><%- icon(group.icon, { size: 'lg' }) %><% } %>
                                 <span class="fi-sidebar-group-label">
                                     <%= group.label %>
                                 </span>
-                                <%- view('filament::components.icon-button', {
+                                <% if (group.collapsible !== false) { %><%- view('filament::components.icon-button', {
                                     iconName: 'm-chevron-up', label: group.label, className: 'fi-sidebar-group-collapse-btn',
                                     extra: attrs({ 'aria-controls': group.itemsId, 'x-bind:aria-expanded': '! $store.sidebar.groupIsCollapsed(label)', 'x-on:click.stop': '$store.sidebar.toggleCollapsedGroup(label)' }),
-                                }) %>
+                                }) %><% } %>
                             </div>
                         <% } %>
-                        <ul<% if (group.label) { %> id="<%= group.itemsId %>" x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %> class="fi-sidebar-group-items">
+                        <ul<% if (group.label) { %> id="<%= group.itemsId %>"<% if (group.collapsible !== false) { %> x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %><% } %> class="fi-sidebar-group-items">
                             <% for (const item of group.items) { %>
                                 <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.isActive }, 'fi-sidebar-item-has-url']) %>">
                                     <a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">

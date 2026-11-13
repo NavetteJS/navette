@@ -100,9 +100,27 @@ Compile the theme again whenever you use new Tailwind classes. The demo applicat
 
 The user menu has a switcher between light mode, dark mode and the mode of the operating system (the default). The choice is stored in the browser.
 
-<Aside variant="warning">
-Disabling dark mode, forcing it, hiding the switcher and changing the default mode are not available yet.
-</Aside>
+### Changing the default theme mode
+
+Until the user picks a mode in the switcher, the panel follows the operating system. `defaultThemeMode()` changes that:
+
+```ts
+import { Panel } from '@navette-js/panels';
+
+Panel.make()
+    .defaultThemeMode('light')
+```
+
+### Disabling or forcing dark mode
+
+`darkMode(false)` keeps the panel in light mode, and `darkMode(true, true)` in dark mode. In both cases, the switcher is removed from the user menu:
+
+```ts
+import { Panel } from '@navette-js/panels';
+
+Panel.make()
+    .darkMode(false)
+```
 
 ## Adding a logo
 
