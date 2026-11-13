@@ -139,6 +139,30 @@ To display your own text instead, use `globalSearchFieldSuffix('Search')`.
 
 Only the resources whose list the user may see (`viewAny`) are searched, and a result is left out when the user may neither view nor update the record. In a [multi-tenant panel](/panels/tenancy), results come from the current tenant only, and the scope of each adapter applies.
 
+## Excluding a resource from global search
+
+Set the static `isGloballySearchable` property to `false` to leave a resource out of global search, even when it has a title attribute:
+
+```ts
+import { Resource } from '@navette-js/panels';
+
+export class AuditLogResource extends Resource {
+    static isGloballySearchable = false;
+}
+```
+
+## Disabling search term splitting
+
+By default, the search term is split into words, and each word must appear in one of the searchable attributes. Set `shouldSplitGlobalSearchTerms` to `false` to match the term as a whole:
+
+```ts
+import { Resource } from '@navette-js/panels';
+
+export class ProductResource extends Resource {
+    static shouldSplitGlobalSearchTerms = false;
+}
+```
+
 <Aside variant="warning">
-Actions on global search results, requiring resources to opt in, and disabling search term splitting are not available yet. The search term is always split into words.
+Actions on global search results are not available yet.
 </Aside>

@@ -1543,7 +1543,11 @@ export abstract class Resource {
     /** Columns searched by global search; defaults to the title attribute. Empty array: the resource is not searchable. */
     static globallySearchableAttributes: string[] | null = null;
     static getGloballySearchableAttributes(): string[] { return this.globallySearchableAttributes ?? (this.recordTitleAttribute ? [this.recordTitleAttribute] : []); }
-    static canGloballySearch(): boolean { return this.getGloballySearchableAttributes().length > 0; }
+    /** `false`: the resource is left out of global search. */
+    static isGloballySearchable = true;
+    /** `false`: the search term is matched as a whole instead of word by word. */
+    static shouldSplitGlobalSearchTerms = true;
+    static canGloballySearch(): boolean { return this.isGloballySearchable && this.getGloballySearchableAttributes().length > 0; }
     /** Position of this resource's group in the results; without one, after the others in registration order. */
     static globalSearchSort: number | null = null;
     /** Maximum results rendered per resource. */
@@ -1562,7 +1566,7 @@ export abstract class Resource {
         return action ? `${this.getUrl('index')}?tableAction=${action}&tableActionRecord=${encodeURIComponent(key)}` : null;
     }
     static async getGlobalSearchResults(search: string, user: User | null): Promise<GlobalSearchResult[]> {
-        const page = await this.adapter.paginate({ search, searchColumns: this.getGloballySearchableAttributes(), page: 1, perPage: Math.min(Math.max(this.globalSearchResultsLimit, 1), 200) });
+        const page = await this.adapter.paginate({ search, searchColumns: this.getGloballySearchableAttributes(), splitSearchTerms: this.shouldSplitGlobalSearchTerms, page: 1, perPage: Math.min(Math.max(this.globalSearchResultsLimit, 1), 200) });
         const results: GlobalSearchResult[] = [];
         for (const record of page.records) {
             const url = await this.getGlobalSearchResultUrl(record, user);

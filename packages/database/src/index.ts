@@ -10,6 +10,8 @@ export type ListQuery = {
     /** Global search: every word must appear in at least one of the searchable columns. */
     search?: string | null;
     searchColumns?: string[];
+    /** `false`: the search term is matched as a whole, instead of word by word. */
+    splitSearchTerms?: boolean;
     /** Per-column search: all conditions must match. */
     columnSearches?: Record<string, string>;
     /** Soft-deleted records: excluded by default, included, or only those. */
@@ -177,7 +179,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         const q = this.base(query.trashed ?? 'without');
         if (query.keys) q.whereIn(`${this.model.tableName}.${this.keyColumn}`, query.keys.map(String).slice(0, 10000));
         for (const modifier of query.modifiers ?? []) modifier(q);
-        const words = (query.search ?? '').trim().split(/\s+/).filter(Boolean);
+        const term = (query.search ?? '').trim();
+        const words = query.splitSearchTerms === false ? (term ? [term] : []) : term.split(/\s+/).filter(Boolean);
         const columns = query.searchColumns ?? [];
         if (words.length && columns.length) {
             // Each word must match at least one column, case-insensitively; LIKE wildcards in the input are escaped.

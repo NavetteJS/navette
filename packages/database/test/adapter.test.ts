@@ -67,3 +67,9 @@ test('sum: computed over the filtered query, including computed columns and sear
     assert.equal(total.id, Number(expected));
     assert.ok(total.id > 0);
 });
+
+test('search: splitSearchTerms(false) matches the term as a whole', async () => {
+    const cols = ['name', 'email'];
+    assert.equal((await adapter.paginate({ page: 1, perPage: 50, search: 'person p7@', searchColumns: cols, splitSearchTerms: false })).total, 0);
+    assert.equal((await adapter.paginate({ page: 1, perPage: 50, search: 'p7@', searchColumns: cols, splitSearchTerms: false })).total, 1);
+});
