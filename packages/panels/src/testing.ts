@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { Field, recordFailedRules } from '@navette-js/forms';
+import { makeStateGetter } from '@navette-js/schemas';
 import { getTableQuery, getTableRecords, getVisibleColumns, TernaryFilter, SelectFilter, type Summarizer } from '@navette-js/tables';
 import { hydrateValue, UploadStore, WireError, WireRuntime, type Call, type Component, type Effects, type Snapshot } from '@navette-js/wire';
 import { Notification, runInRequest, type NotificationData } from './notifications.ts';
@@ -686,7 +687,7 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
     }
     private async actionState(component: any, entry: { action: any; context: Record<string, unknown>; spec: ActionSpec }): Promise<{ ctx: any }> {
         const record = await component.resolveActionRecord(entry.context);
-        return { ctx: { livewire: component, component: null, operation: null, record, get: () => undefined, state: undefined, arguments: entry.spec.arguments ?? {} } };
+        return { ctx: { livewire: component, component: null, operation: null, record, get: makeStateGetter(null, ''), state: undefined, arguments: entry.spec.arguments ?? {} } };
     }
     private prettyName(specs: ActionSpec[]): string { return specs.map((spec) => spec.name).join(' > '); }
     private actionAssertion(actions: Actions, args: Record<string, unknown>, check: ((action: any, ctx: any) => Promise<boolean> | boolean) | null, message: (pretty: string) => string): this {

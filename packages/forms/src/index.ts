@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
 import { Component, Icon as SchemaIcon, Schema, Text, childSchema, debounceMilliseconds, jsFieldHtml, normalizeRendererConfiguration, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem, type JsFieldBindingConfiguration, type JsFieldConfiguration, type JsRenderer } from '@navette-js/schemas';
 import { Action, ActionHalt } from '@navette-js/actions';
+import { FieldBase } from './field-base.ts';
+export { FieldBase, type FieldSlotName, type StateCallback, type ValidationMessage } from './field-base.ts';
 import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 export { modifyAction, type ActionModifier } from './item-actions.ts';
 export type { JsFieldProps, JsFieldRenderer, JsonValue, JsRendererContext, JsRendererInstance, JsRendererUtilities, Snapshot } from '@navette-js/schemas';
@@ -46,95 +48,22 @@ export type { Rule } from './rules.ts';
 export { recordFailedRules } from './rules.ts';
 const headline = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ (.)/g, (_, c) => ' ' + c.toLowerCase());
 
-export abstract class Field extends Component {
-    protected _label: Lazy<string | null, ComponentContext> = null;
+export abstract class Field extends FieldBase {
     protected _required: Lazy<boolean, ComponentContext> = false;
-    protected _disabled: Lazy<boolean, ComponentContext> = false;
-    protected _autofocus = false;
-    protected _default: unknown = null;
     protected _rules: Rule[] = [];
-    protected _afterStateUpdated: ((ctx: ComponentContext & { set: (name: string, value: unknown) => void }) => unknown) | null = null;
-    protected _dehydrated: boolean | null = null;
-    protected _hiddenLabel = false;
-    protected _helperText: string | null = null;
-    protected _liveMode: 'live' | 'blur' | null = null;
-    protected _validationAttribute: string | null = null;
-    protected _validationMessages: Record<string, string | ((attribute: string) => string)> = {};
-    protected _markedAsRequired: boolean | null = null;
 
     constructor(name: string) { super(); this._name = name; }
-    /** Sends the state to the server as soon as it changes (`onBlur`: when the field loses focus). `false` turns it off. */
-    live(condition: boolean | { onBlur?: boolean } = true): this { this._liveMode = condition === false ? null : typeof condition === 'object' && condition.onBlur ? 'blur' : 'live'; return this; }
-    isLive(): boolean { return this._liveMode !== null; }
-    /** `wire:model` directive of the field, with its live modifiers. */
-    protected wireModel(): string { return `wire:model${this._liveMode ? '.live' : ''}${this._liveMode === 'blur' ? '.blur' : ''}`; }
+    /** `wire:model` directive of the field, with its live modifiers (`wire:model.live.debounce.500`). */
+    protected wireModel(): string { return this.applyStateBindingModifiers('wire:model'); }
+    /** Second `$entangle()` argument: whether the binding is live (`isOptimisticallyLive: false`: only a plain `live()`). */
+    protected entangleLive(isOptimisticallyLive = true): boolean { return this.getStateBindingModifiers({ withBlur: false, withDebounce: false, isOptimisticallyLive }).includes('live'); }
     hasStatePath(): boolean { return true; }
     getName(): string { return this._name!; }
     getId(): string { return this.getKey()!; }
 
-    label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     required(condition: Lazy<boolean, ComponentContext> = true): this { this._required = condition; return this; }
-    disabled(condition: Lazy<boolean, ComponentContext> = true): this { this._disabled = condition; return this; }
-    autofocus(condition = true): this { this._autofocus = condition; return this; }
-    default(value: unknown): this { this._default = value; return this; }
-    /** Helper text shown under the field. */
-    helperText(text: string | null): this { this._helperText = text; return this; }
-    protected _belowContent: ComponentSlot = null;
-    /** Text, components or actions under the control (after the helper text). Strings are escaped. */
-    belowContent(content: ComponentSlot): this { this._belowContent = content; return this; }
-    /** Helper text id, linked to the control through `aria-describedby`. */
-    protected getHelperTextId(): string | null { return this._helperText !== null ? `${this.getId()}-helper-text` : null; }
-    /** Keeps the label for screen readers only. */
-    hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
 
-    protected _hint: Lazy<string | HtmlString | null, ComponentContext> = null;
-    protected _hintColor: Lazy<string | null, ComponentContext> = null;
-    protected _hintIcon: Lazy<string | null, ComponentContext> = null;
-    protected _hintIconTooltip: Lazy<string | null, ComponentContext> = null;
-    protected _hintActions: Action[] = [];
-    /**
-     * Hint shown to the right of the label (a `Text` component). The text is escaped; an `HtmlString` from `@navette-js/support`
-     * (`raw('<a href="…">…</a>')`) is inserted as is, so only put values escaped with `e()` in it.
-     */
-    hint(hint: Lazy<string | HtmlString | null, ComponentContext>): this { this._hint = hint; return this; }
-    /** Color of the hint and its icon (by default `gray` for the text, `primary` for the icon). */
-    hintColor(color: Lazy<string | null, ComponentContext>): this { this._hintColor = color; return this; }
-    /** Hint icon, with an optional tooltip (also used as its accessible name). */
-    hintIcon(name: Lazy<string | null, ComponentContext>, tooltip?: Lazy<string | null, ComponentContext>): this {
-        this._hintIcon = name;
-        if (arguments.length >= 2) this._hintIconTooltip = tooltip ?? null;
-        return this;
-    }
-    hintIconTooltip(tooltip: Lazy<string | null, ComponentContext>): this { this._hintIconTooltip = tooltip; return this; }
-    /** Action shown after the hint (small link), mounted on the field. */
-    hintAction(action: Action): this { return this.hintActions([action]); }
-    hintActions(actions: Action[]): this { this._hintActions = [...this._hintActions, ...actions]; return this; }
-    getHintActions(): Action[] { return this._hintActions; }
-    /** Actions the field exposes for mounting (`schemaComponent` = field key): its hint actions. */
-    getActions(): Action[] { return this.getHintActions(); }
-    /** Row after the label: hint, hint icon and hint actions. */
-    protected async renderAfterLabel(): Promise<string> {
-        const ctx = this.context();
-        const hint = await evaluate(this._hint, ctx);
-        const color = await evaluate(this._hintColor, ctx);
-        const iconName = await evaluate(this._hintIcon, ctx);
-        const items: InlineItem[] = [];
-        if (hint !== null && hint !== undefined && (hint instanceof HtmlString ? hint.html : hint) !== '') items.push(Text.make(hint).color(color));
-        if (iconName) items.push(SchemaIcon.make(iconName).tooltip(await evaluate(this._hintIconTooltip, ctx)).color(color));
-        items.push(...this._hintActions);
-        if (!items.length) return '';
-        // Row components take the field's path, and the field's schema path as their container path.
-        return renderInlineItems(this, items, { alignment: 'end', scope: { path: this.getStatePath(), containerPath: this.container.getStatePath() }, mountKey: this.getKey(), actionView: 'link' });
-    }
-    /** Runs on the server when the field state changes (`live()` field). `set(name, value)` changes another field of the same form. */
-    afterStateUpdated(callback: (ctx: ComponentContext & { set: (name: string, value: unknown) => void }) => unknown): this { this._afterStateUpdated = callback; return this; }
-    hasAfterStateUpdated(): boolean { return this._afterStateUpdated !== null; }
-    async callAfterStateUpdated(set: (name: string, value: unknown) => void): Promise<void> { await this._afterStateUpdated?.({ ...this.context(), set }); }
-    /** Forces the field into the submitted data, even when disabled (`.disabled().dehydrated()`). */
-    dehydrated(condition = true): this { this._dehydrated = condition; return this; }
-    /** By default, a disabled field is neither validated nor saved. */
-    async isDehydrated(): Promise<boolean> { return this._dehydrated ?? !(await this.isDisabled()); }
-    getDefaultState(): unknown { return typeof this._default === 'function' ? this._default() : this._default; }
+    getDefaultState(): unknown { return this.resolvedDefault(); }
     /** Shapes a record value as it enters the form (hydration). */
     hydrateState(value: unknown): unknown { return value; }
     /** Adds a rule: an object `{ name, passes, message }`, or a Laravel-style string (`'max:255'`, `'regex:/^[a-z]+$/'`). */
@@ -162,10 +91,6 @@ export abstract class Field extends Component {
     protected stateForValidation(state: unknown): unknown { return state; }
     /** Sizes (`min`, `max`, `size`, `between`) compare the number, not the text length. */
     protected hasNumericValidation(): boolean { return false; }
-    /** Name of the field in validation messages (the lowercased label by default). */
-    validationAttribute(name: string | null): this { this._validationAttribute = name; return this; }
-    /** Custom messages by rule name (`{ required: 'Tell us your name.', max: 'Too long.' }`); `:attribute` is replaced by the field name. */
-    validationMessages(messages: Record<string, string | ((attribute: string) => string)>): this { this._validationMessages = { ...this._validationMessages, ...messages }; return this; }
     protected _loadStateFromRelationships: ((record: any, ctx: ComponentContext) => unknown) | null = null;
     protected _saveRelationships: ((args: { record: any; state: unknown; ctx: ComponentContext }) => void | Promise<void>) | null = null;
     /** Fills the field from the record's relationships (after the record's own values): `(record, ctx) => state`. */
@@ -176,9 +101,6 @@ export abstract class Field extends Component {
     async savesRelationships(): Promise<boolean> { return this._saveRelationships !== null; }
     async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> { return this._loadStateFromRelationships ? { state: await this._loadStateFromRelationships(record, this.context()) } : null; }
     async saveRelationships(record: any): Promise<void> { if (this._saveRelationships) await this._saveRelationships({ record, state: await this.dehydrateState(this.context().state), ctx: this.context() }); }
-    /** Shows (or hides, with `false`) the required asterisk, regardless of `required()`. */
-    markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
-    async isMarkedAsRequired(): Promise<boolean> { return this._markedAsRequired ?? (await this.isRequired()); }
     private stringRuleWith(name: string, parameters: unknown[] = []): this { return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name); }
     /** The value must match the pattern (a RegExp, or a `/pattern/flags` string). */
     regex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'regex', passes: (v) => { re.lastIndex = 0; return re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
@@ -228,6 +150,80 @@ export abstract class Field extends Component {
     prohibitedIf(field: string, values: unknown): this { return this.stringRuleWith('prohibited_if', [field, ...[values].flat()]); }
     prohibitedUnless(field: string, values: unknown): this { return this.stringRuleWith('prohibited_unless', [field, ...[values].flat()]); }
     prohibits(fields: string | string[]): this { return this.stringRuleWith('prohibits', [fields].flat()); }
+    /** Rule applied while `condition` holds (a boolean, or a function of the field context). */
+    private conditionalRule(name: string, condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>)): this { return condition === false ? this : this.rule(name, condition); }
+    /** The value must be a URL whose host has a DNS A or AAAA record. */
+    activeUrl(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('active_url', condition); }
+    /** The value must be a string. */
+    string(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('string', condition); }
+    /** The value must not be empty (it is always present in a form, so this is the same as `required()` without the asterisk). */
+    filled(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('filled', condition); }
+    /** The value may be empty: the opposite of `required()` (`nullable(false)` makes the field required). */
+    nullable(condition: Lazy<boolean, ComponentContext> = true): this { return this.required(async (ctx) => !(await evaluate(condition, ctx))); }
+    /** The value must be "yes", "on", 1, "1", true or "true" (terms of service). */
+    accepted(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('accepted', condition); }
+    /** The value must be "no", "off", 0, "0", false or "false". */
+    declined(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('declined', condition); }
+    /** Required when another field of the form is declined. */
+    requiredIfDeclined(field: string): this { return this.stringRuleWith('required_if_declined', [field]); }
+    /**
+     * The value must be a date after a date (`'2024-01-01'`, `'today'`, `'tomorrow'`) or after the value of another field
+     * (`after('start_date')`, relative to the container: `'../start_date'`, or absolute with `'/data.start_date'`).
+     */
+    after(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('after', date); }
+    afterOrEqual(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('after_or_equal', date); }
+    before(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('before', date); }
+    beforeOrEqual(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('before_or_equal', date); }
+    private dateComparisonRule(name: string, date: Lazy<string, ComponentContext>): this {
+        const build = async (ctx: ComponentContext) => { const value = await evaluate(date, ctx); return value ? stringRule(`${name}:${value}`, { numeric: false, name: this._name ?? '' }) : null; };
+        return this.rule({ name, passes: async (value, ctx) => (await build(ctx))?.passes(value, ctx) ?? true, message: (attribute) => `The ${attribute} field must be a date ${({ after: 'after', after_or_equal: 'after or equal to', before: 'before', before_or_equal: 'before or equal to' } as Record<string, string>)[name]} ${typeof date === 'string' ? date.replace(/^[./]+/, '').replace(/_/g, ' ') : 'the given date'}.` });
+    }
+    protected _uniqueIgnoresRecordByDefault: Lazy<boolean, ComponentContext> = true;
+    /** Whether `unique()` ignores the record being edited when `ignoreRecord` is not given (`true` by default). */
+    uniqueValidationIgnoresRecordByDefault(condition: Lazy<boolean, ComponentContext> = true): this { this._uniqueIgnoresRecordByDefault = condition; return this; }
+    async shouldUniqueValidationIgnoreRecordByDefault(): Promise<boolean> { return Boolean(await evaluate(this._uniqueIgnoresRecordByDefault, this.context())); }
+    /**
+     * The value must exist in the database, applying the model's scopes (tenant, soft deletes, `modifyQueryUsing`): `model`
+     * is an Objection model (the form's model by default), `column` the column (the field name by default).
+     */
+    scopedExists(options: { model?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
+        return this.rule({
+            name: 'exists',
+            passes: async (value, ctx) => {
+                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'with');
+                const column = (await evaluate(options.column ?? null, ctx)) ?? this._name!;
+                const values = Array.isArray(value) ? value : [value];
+                for (const item of values) {
+                    const query = makeQuery().where(`${model.tableName}.${column}`, item as any);
+                    const modified = options.modifyQueryUsing ? ((await options.modifyQueryUsing(query, ctx)) ?? query) : query;
+                    if ((await (modified as any).resultSize()) === 0) return false;
+                }
+                return true;
+            },
+            message: (a) => `The selected ${a} is invalid.`,
+        });
+    }
+    /**
+     * The value must not exist in the database, applying the model's scopes (`modifyQueryUsing` may change the query): the
+     * record being edited is ignored unless `ignoreRecord: false`; `ignorable` ignores another record.
+     */
+    scopedUnique(options: { model?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; ignorable?: Lazy<any, ComponentContext>; ignoreRecord?: boolean | null; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
+        return this.rule({
+            name: 'unique',
+            passes: async (value, ctx) => {
+                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'without');
+                const column = (await evaluate(options.column ?? null, ctx)) ?? this._name!;
+                const ignoreRecord = options.ignoreRecord ?? (await this.shouldUniqueValidationIgnoreRecordByDefault());
+                const ignorable = ignoreRecord && !options.ignorable ? ctx.record : await evaluate(options.ignorable ?? null, ctx);
+                const query = makeQuery().where(`${model.tableName}.${column}`, value as any);
+                const key = ignorable && typeof ignorable === 'object' ? (ignorable as any)[model.idColumn] : ignorable;
+                if (key !== null && key !== undefined) query.whereNot(`${model.tableName}.${model.idColumn}`, key);
+                const modified = options.modifyQueryUsing ? ((await options.modifyQueryUsing(query, ctx)) ?? query) : query;
+                return (await (modified as any).resultSize()) === 0;
+            },
+            message: (a) => `The ${a} has already been taken.`,
+        });
+    }
     /**
      * The value must exist: in a column of the host's data adapter (`exists()`, `exists({ column })`), in another adapter
      * (`exists({ adapter: new ObjectionAdapter(Brand), column: 'id' })`), or according to a function.
@@ -245,26 +241,29 @@ export abstract class Field extends Component {
             message: (a) => `The selected ${a} is invalid.`,
         });
     }
-    /** `unique` rule: the value must not exist in the column of the same name; `ignoreRecord` excludes the record being edited. */
-    unique(options: { ignoreRecord?: boolean; column?: string } = {}): this {
+    /**
+     * `unique` rule: the value must not exist in the column of the same name (`column`), in the host's data adapter or another
+     * one (`adapter`). The record being edited is ignored, unless `ignoreRecord: false`; `ignorable` ignores another record
+     * (or key). Like Laravel's rule, it does not apply the adapter's scopes: see `scopedUnique()`.
+     */
+    unique(options: { ignoreRecord?: boolean | null; column?: Lazy<string | null, ComponentContext>; adapter?: { exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>; getKey?(record: any): string } | null; ignorable?: Lazy<unknown, ComponentContext> } = {}): this {
         return this.rule({
             name: 'unique',
             passes: async (value, ctx) => {
                 const host = ctx.livewire as any;
-                const adapter = host.getDataAdapter?.();
+                const adapter = options.adapter ?? host.getDataAdapter?.();
                 if (!adapter) throw new Error('unique(): the host component provides no data adapter (getDataAdapter).');
-                const ignored = options.ignoreRecord ? (ctx.record ? adapter.getKey(ctx.record) : (host.getRecordKey?.() ?? null)) : null;
-                return !(await adapter.exists(options.column ?? this._name!, value, ignored));
+                const ignoreRecord = options.ignoreRecord ?? (await this.shouldUniqueValidationIgnoreRecordByDefault());
+                const ignorable = await evaluate(options.ignorable ?? null, ctx);
+                const keyOf = (record: unknown) => (record && typeof record === 'object' ? (adapter.getKey ? adapter.getKey(record) : String((record as any).id)) : (record as string | number));
+                const ignored = ignorable !== null && ignorable !== undefined ? keyOf(ignorable) : ignoreRecord ? (ctx.record ? keyOf(ctx.record) : (host.getRecordKey?.() ?? null)) : null;
+                return !(await adapter.exists((await evaluate(options.column ?? null, ctx)) ?? this._name!, value, ignored));
             },
             message: (a) => `The ${a} has already been taken.`,
         });
     }
 
-    async getLabel(): Promise<string> { return (await evaluate(this._label, this.context())) ?? headline(this._name!); }
     isRequired(): Promise<boolean> { return evaluate(this._required, this.context()); }
-    isDisabled(): Promise<boolean> { return evaluate(this._disabled, this.context()); }
-    getErrors(): string[] { return this.livewire._errors[this.getStatePath()] ?? []; }
-    hasError(): boolean { return this.getErrors().length > 0; }
 
     /** Validation rules: `required` first, then the field's own. */
     async getValidationRules(): Promise<Rule[]> {
@@ -275,17 +274,21 @@ export abstract class Field extends Component {
     async validate(): Promise<string[]> {
         // A field that is not saved (`dehydrated(false)`: confirmation, current password) is still validated;
         // only a disabled field (not forced by `dehydrated()`) is skipped.
-        if ((await this.isDisabled()) && this._dehydrated !== true) return [];
+        const dehydrated = await this.getDehydratedOverride();
+        if ((await this.isDisabled()) && dehydrated !== true) return [];
+        // `saved(false)` + `validatedWhenNotDehydrated(false)`: not validated either.
+        if (dehydrated === false && !(await this.isValidatedWhenNotDehydrated())) return [];
         // An empty string is treated as missing.
-        const raw = this.stateForValidation(this.context().state);
+        let raw = this.stateForValidation(this.context().state);
+        if (this._mutateStateForValidationUsing) raw = await this._mutateStateForValidationUsing({ ...this.context(), state: raw });
         const value = raw === '' ? null : raw;
-        const attribute = this._validationAttribute ?? (await this.getLabel()).toLowerCase();
+        const attribute = await this.getValidationAttribute();
         for (const rule of await this.getValidationRules()) {
             if (rule.name !== 'required' && !rule.implicit && blank(value)) continue;
             if (!(await rule.passes(value, this.context()))) {
                 reportFailedRule(this.getStatePath(), rule.name);
                 const custom = this._validationMessages[rule.name];
-                return [custom === undefined ? rule.message(attribute) : typeof custom === 'function' ? custom(attribute) : custom.replace(/:attribute/g, attribute)];
+                return [custom === undefined ? rule.message(attribute) : typeof custom === 'function' ? custom(attribute, this.context()) : custom.replace(/:attribute/g, attribute)];
             }
         }
         return [];
@@ -295,22 +298,6 @@ export abstract class Field extends Component {
     dehydrateState(state: unknown): unknown { return state; }
     /** Final shaping of the saved value, once child fields are dehydrated (e.g. a Builder's item list). */
     finalizeDehydratedState(state: unknown): unknown { return state; }
-    protected async wrap(html: string, options: { labelPrefix?: string; wrapperClass?: string; after?: string; labelAsDiv?: boolean; focusable?: boolean } = {}): Promise<string> {
-        const errors = this.getErrors();
-        // FusedGroup field: the wrapper is reduced to a screen-reader label.
-        if (this.container.getFieldWrapperView?.() === 'filament-forms::plain-field-wrapper') {
-            const label = await this.getLabel();
-            const labelHtml = label === '' ? '' : options.labelAsDiv ? `<div id="${e(this.getId())}-label" class="fi-fo-field-label fi-sr-only">${e(label)}</div>` : `<label for="${e(this.getId())}" class="fi-fo-field-label fi-sr-only">${e(label)}</label>`;
-            return `<div data-field-wrapper class="fi-fo-field">${labelHtml}${options.labelPrefix ?? ''}${html}${options.after ?? ''}</div>`;
-        }
-        // Helper text: a small inline schema under the control.
-        if (this._helperText !== null) html += `<div id="${e(this.getHelperTextId()!)}" class="fi-sc fi-inline fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="fi-sc-component"><span class="fi-sc-text">${e(this._helperText)}</span></div></div></div>`;
-        if (this._belowContent !== null) html += await renderSlot(this, this._belowContent, this.getKey());
-        return views.render('filament-forms::components.field-wrapper', {
-            id: this.getId(), label: await this.getLabel(), required: (await this.isMarkedAsRequired()) && !(await this.isDisabled()),
-            labelPrefix: options.labelPrefix ?? '', hiddenLabel: this._hiddenLabel, after: options.after ?? '', afterLabel: this._hiddenLabel ? '' : await this.renderAfterLabel(), labelAsDiv: options.labelAsDiv === true, focusable: options.focusable === true, html, errorMessage: errors[0] ?? null, wrapperClass: options.wrapperClass ?? null,
-        });
-    }
 }
 
 // Records picked from a table (inline or in a modal): see ./table-select.ts.
@@ -390,7 +377,7 @@ export abstract class TableSelectField extends Field {
         if (!values.length) return [];
         return requireTableSelectDriver().selectableKeys(await this.getDefinition(), await this.getTableArguments(), values.slice(0, 1000));
     }
-    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     hydrateState(value: unknown): unknown {
         if (this._multiple) return (Array.isArray(value) ? value : []).filter(isTableSelectKey).map(String);
         return isTableSelectKey(value) ? String(value) : null;
@@ -591,7 +578,7 @@ export class ModalTableSelect extends TableSelectField {
             .action(async ({ data }) => {
                 const selection = data.selection;
                 this.setState(this._multiple ? (Array.isArray(selection) ? [...new Set(selection.filter(isTableSelectKey).map(String))] : []) : isTableSelectKey(selection) ? String(selection) : null);
-                await this.callAfterStateUpdated((name, value) => writeTableSelectState(this.livewire as any, [this.container.getStatePath(), name].filter(Boolean).join('.'), value));
+                await this.callAfterStateUpdated();
             });
         if (this._multiple || blank) action.link(); else action.iconButton();
         return this._modifySelectAction?.(action, this.context()) ?? action;
@@ -643,7 +630,6 @@ export class TextInput extends Field {
     private _minValue: number | null = null;
     private _maxValue: number | null = null;
     private _prefix: string | null = null;
-    private _live: 'live' | 'blur' | null = null;
 
     static make(name: string): TextInput { return configured(new TextInput(name)); }
     protected hasNumericValidation(): boolean { return this._numeric !== null; }
@@ -707,8 +693,6 @@ export class TextInput extends Field {
     inputMode(mode: string | null): this { this._inputMode = mode; return this; }
     /** `none`, `sentences`, `words` or `characters` (`true` / `false` for `on` / `off`). */
     autocapitalize(mode: string | boolean | null = true): this { this._autocapitalize = mode === true ? 'on' : mode === false ? 'off' : mode; return this; }
-    /** Sends the state to the server on every keystroke, or on blur with `onBlur`. */
-    live(options: { onBlur?: boolean } = {}): this { this._live = options.onBlur ? 'blur' : 'live'; return this; }
     type(type: string): this { this._type = type; return this; }
     password(condition = true): this { this._isPassword = condition; return this; }
     revealable(condition = true): this { this._isRevealable = condition; return this; }
@@ -742,12 +726,12 @@ export class TextInput extends Field {
         const hasPrefix = this._prefix !== null || this._prefixIcon !== null || prefixActions.length > 0;
         const hasSuffix = this._suffix !== null || this._suffixIcon !== null || suffixActions.length > 0;
         const type = revealable ? 'password' : this._mask !== null ? 'text' : (this._type ?? (this._isPassword ? 'password' : this._numeric ? 'number' : 'text'));
-        const model = `wire:model${this._live ? '.live' : ''}${this._live === 'blur' ? '.blur' : ''}`;
+        const model = this.wireModel();
         const input = new Attributes()
             .merge({
                 'aria-invalid': this.hasError() ? 'true' : null,
                 'aria-describedby': this.getHelperTextId(),
-                autocomplete: this._autocomplete, autofocus: this._autofocus, disabled: isDisabled, id: this.getId(),
+                autocomplete: this._autocomplete, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(),
                 autocapitalize: this._autocapitalize,
                 inputmode: this._inputMode ?? (this._numeric === 'decimal' ? 'decimal' : this._numeric === 'integer' ? 'numeric' : null),
                 list: this._datalist.length && !isDisabled && !this._readOnly ? `${this.getId()}-list` : null,
@@ -794,6 +778,18 @@ function normalizeOptions(options: GroupedOptions): (OptionGroup | [string, stri
         if (value !== null && typeof value === 'object') return { label: String(key), options: (Array.isArray(value) ? value as [string, string][] : Object.entries(value as Record<string, string>)).map(([v, l]): [string, string] => [String(v), String(l)]) };
         return [String(key), String(value)];
     });
+}
+/**
+ * Query of a model for `scopedExists()` / `scopedUnique()`: the form's data adapter applies its scopes (tenant, column
+ * scopes, `modify`, soft deletes); an explicit model is queried as is.
+ */
+async function scopedQueryOf(ctx: ComponentContext, explicit: Lazy<any, ComponentContext>, trashed: 'with' | 'without'): Promise<{ model: any; query: () => any }> {
+    const model = await evaluate(explicit, ctx);
+    if (model) return { model, query: () => model.query() };
+    const adapter = (ctx.livewire as any).getDataAdapter?.();
+    if (adapter && typeof adapter.scopedQuery === 'function' && adapter.model) return { model: adapter.model, query: () => adapter.scopedQuery(trashed) };
+    const formModel = modelOfForm(ctx, null);
+    return { model: formModel, query: () => formModel.query() };
 }
 /** Objection model of the form (the host's data adapter), for relationships. */
 function modelOfForm(ctx: ComponentContext, explicit: any): any {
@@ -844,7 +840,6 @@ export class Select extends Field {
     private _affixes: { prefix: string | null; suffix: string | null; prefixIcon: string | null; suffixIcon: string | null; prefixIconColor: string | null; suffixIconColor: string | null; prefixActions: Action[]; suffixActions: Action[]; prefixInline: boolean; suffixInline: boolean } = { prefix: null, suffix: null, prefixIcon: null, suffixIcon: null, prefixIconColor: null, suffixIconColor: null, prefixActions: [], suffixActions: [], prefixInline: false, suffixInline: false };
     private _dynamic: boolean | null = null;
     private _searchOnServer: boolean | null = null;
-    private _live = false;
     private _hasNoInitialOptions = false;
     private _multiple = false;
     private _optionLabelsUsing: ((values: string[], ctx: ComponentContext) => Options | Promise<Options>) | null = null;
@@ -945,7 +940,6 @@ export class Select extends Field {
     /** Disables an option depending on the context (e.g. already picked in another row). */
     disableOptionWhen(condition: (value: string, ctx: ComponentContext) => boolean): this { this._disableOptionWhen = condition; return this; }
     /** Sends the state to the server as soon as it changes. */
-    live(condition = true): this { this._live = condition; return this; }
     placeholder(label: string | null): this { this._placeholder = label; return this; }
     private _selectablePlaceholder = true;
     /** `false`: the native select has no empty option. */
@@ -956,7 +950,7 @@ export class Select extends Field {
     isMultiple(): boolean { return this._multiple; }
     /** Labels of several values at once (multiple selection with server search); also used to validate the values. */
     getOptionLabelsUsing(resolver: (values: string[], ctx: ComponentContext) => Options | Promise<Options>): this { this._optionLabelsUsing = resolver; return this; }
-    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     /** Sanitized selected values: unique strings. */
     private selectedValues(): string[] { const state = this.context().state; return [...new Set((Array.isArray(state) ? state : []).filter((v) => typeof v === 'string' || typeof v === 'number').map(String))]; }
     private async labelsOf(values: string[]): Promise<[string, string][]> {
@@ -1051,7 +1045,7 @@ export class Select extends Field {
      * Form of the "Edit" modal for the selected option (single selection only). The field becomes `live()` so the button
      * appears as soon as an option is picked. Filled by `fillEditOptionActionFormUsing()`, saved by `updateOptionUsing()`.
      */
-    editOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._editOptionForm = schema; this._live = true; return this; }
+    editOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._editOptionForm = schema; if (this._isLive === null) this.live(); return this; }
     updateOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => unknown) | null): this { this._updateOptionUsing = callback; return this; }
     /** Initial data of the "Edit" modal (the context carries the current field state in `state`). */
     fillEditOptionActionFormUsing(callback: ((ctx: ComponentContext) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null): this { this._fillEditOptionForm = callback; return this; }
@@ -1076,7 +1070,7 @@ export class Select extends Field {
                 else throw new Error(`Select [${this.getStatePath()}]: createOptionUsing() is required with createOptionForm().`);
                 if (created === null || created === undefined || created === '') return;
                 this.setState(this._multiple ? [...new Set([...this.selectedValues(), String(created)])] : String(created));
-                await this.callAfterStateUpdated((name, value) => writePath(this.livewire as any, [...this.container.getStatePath().split('.').filter(Boolean), ...name.split('.')], value));
+                await this.callAfterStateUpdated();
             });
         // Multiple selection: "Create & create another" keeps the modal open on an empty form.
         if (this._multiple) action.extraModalFooterActions([Action.make('createAnother').label(tr('modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)]);
@@ -1135,7 +1129,7 @@ export class Select extends Field {
             return this.wrap(await this.toJsHtml(grouped, isDisabled, suffix, prefix), { wrapperClass: 'fi-fo-select-wrp', after });
         }
         const select = new Attributes()
-            .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
+            .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this.wireModel()]: this.getStatePath() })
             .class(['fi-select-input']);
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('select')?.focus()" }).class(['fi-fo-select', 'fi-fo-select-native', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         const option = ([value, label]: [string, string]) => `<option value="${e(value)}"${this._disableOptionWhen?.(value, this.context()) ? ' disabled' : ''}>${e(label)}</option>`;
@@ -1168,7 +1162,7 @@ export class Select extends Field {
  initialOptionLabel: ${js(hasState ? await this.getOptionLabel() : null)},
  initialOptionLabels: ${selected.length ? js(selected.map(([value, label]) => ({ label, value, isDisabled: false }))) : '[]'},
  initialState: ${this._multiple ? (selected.length ? js(selected.map(([value]) => value)) : '[]') : js(hasState ? String(state) : null)},
- isAutofocused: ${this._autofocus ? 'true' : 'false'},
+ isAutofocused: ${(await this.isAutofocused()) ? 'true' : 'false'},
  isDisabled: ${isDisabled ? 'true' : 'false'},
  isHtmlAllowed: ${this._allowHtml ? 'true' : 'false'},
  isMultiple: ${this._multiple ? 'true' : 'false'},
@@ -1191,7 +1185,7 @@ export class Select extends Field {
  searchLabel: ${js(tr('search_label'))},
  searchPrompt: ${js(this._messages.searchPrompt ?? tr('search_prompt'))},
  searchableOptionFields: ${js(['label'])},
- state: $wire.$entangle(${js(this.getStatePath())}, ${this._live ? 'true' : 'false'}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  })`;
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('.fi-select-input-btn')?.focus()" }).class(['fi-fo-select', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
@@ -1888,7 +1882,7 @@ abstract class TemporalField extends Field {
  displayFormat: ${js(phpDateFormatToDayjs(this._displayFormat ?? this.defaultDisplayFormat()))},
  firstDayOfWeek: ${this._firstDayOfWeek},
  hasDate: ${hasDate ? 'true' : 'false'},
- isAutofocused: ${this._autofocus && !isDisabled ? 'true' : 'false'},
+ isAutofocused: ${(await this.isAutofocused()) && !isDisabled ? 'true' : 'false'},
  locale: ${js(this._locale ?? 'en')},
  shouldCloseOnDateSelection: ${this._closeOnDateSelection ? 'true' : 'false'},
  state: $wire.$entangle(${js(this.getStatePath())}${this.isLive() ? ', true' : ''}),
@@ -1956,7 +1950,6 @@ export class Radio extends Field {
     private _options: [string, string][] = [];
     private _descriptions: Record<string, string> = {};
     private _inline = false;
-    private _live = false;
     static make(name: string): Radio { return configured(new Radio(name)); }
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
@@ -1964,7 +1957,6 @@ export class Radio extends Field {
     descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
     /** Options side by side. */
     inline(condition = true): this { this._inline = condition; return this; }
-    live(condition = true): this { this._live = condition; return this; }
     private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
     /** Options that cannot be picked; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
@@ -1985,7 +1977,7 @@ export class Radio extends Field {
             .class(['fi-fo-radio', this._inline ? 'fi-inline' : null]);
         const items = this._options.map(([value, label]) => {
             const input = new Attributes()
-                .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
+                .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this.wireModel()]: this.getStatePath() })
                 .class(['fi-radio-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             const description = this._descriptions[value] ? `<p class="fi-fo-radio-label-description">${e(this._descriptions[value])}</p>` : '';
             return `<label class="fi-fo-radio-label"><input ${input.toHtml()} /><div class="fi-fo-radio-label-text"><p>${e(label)}</p>${description}</div></label>`;
@@ -2067,7 +2059,7 @@ export class TagsInput extends Field {
     color(color: string | null): this { this._tagColor = color; return this; }
     /** Rules applied to each tag (e.g. a maximum length); the message names the tag. */
     nestedRecursiveRules(rules: (Rule | string)[]): this { this._tagRules = rules.map((rule) => (typeof rule === 'string' ? stringRule(rule, { numeric: false, name: this._name ?? '' }) : rule)).filter((rule): rule is Rule => rule !== null); return this; }
-    getDefaultState(): unknown { return this._default ?? []; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? []; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && this._separator !== null) value = value === '' ? [] : value.split(this._separator);
         else if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
@@ -2111,7 +2103,7 @@ export class TagsInput extends Field {
 /** On/off switch. */
 export class Toggle extends Field {
     static make(name: string): Toggle { return configured(new Toggle(name)); }
-    getDefaultState(): unknown { return this._default ?? false; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     hydrateState(value: unknown): unknown { return value === true || value === 1 || value === '1'; }
     private _onIcon: string | null = null;
     private _offIcon: string | null = null;
@@ -2149,9 +2141,7 @@ export class ToggleButtons extends Field {
     private _colors: Record<string, string> = {};
     private _icons: Record<string, string> = {};
     static make(name: string): ToggleButtons { return configured(new ToggleButtons(name)); }
-    private _live = false;
     /** Sends the state to the server as soon as it changes. */
-    live(condition = true): this { this._live = condition; return this; }
     /** Color per value (e.g. from an enum). */
     colors(colors: Record<string, string>): this { this._colors = colors; return this; }
     /** Icon per value. */
@@ -2198,7 +2188,7 @@ export class ToggleButtons extends Field {
         this._icons = { 1: icons.resolve('forms::components.toggle-buttons.boolean.true') ?? 'o-check', 0: icons.resolve('forms::components.toggle-buttons.boolean.false') ?? 'o-x-mark', ...this._icons };
         return this;
     }
-    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     hydrateState(value: unknown): unknown {
         if (!this._multiple) return value;
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
@@ -2229,7 +2219,7 @@ export class ToggleButtons extends Field {
         const button = (value: string, disabled: boolean) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, `fi-size-${this._size ?? 'md'}`, disabled ? 'fi-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
         const items = this._options.map(([value, label]) => {
             const optionDisabled = this.isOptionDisabled(value, label);
-            const input = new Attributes().merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
+            const input = new Attributes().merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this.wireModel()]: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
             const tooltip = this._tooltips[value] ? ` x-tooltip="${e(`{ content: ${js(this._tooltips[value])}, theme: $store.theme, allowHTML: false }`)}"` : '';
             const iconSize = this._size === 'xs' || this._size === 'sm' ? 'sm' : undefined;
             const html = `<input ${input.toHtml()} /><label for="${e(`${id}-${value}`)}"${tooltip}${this._labelsHidden ? ` aria-label="${e(label)}"` : ''} class="${button(value, optionDisabled)}">${this._icons[value] ? icon(this._icons[value], iconSize ? { size: iconSize } : {}) : ''}${this._labelsHidden ? '' : e(label)}</label>`;
@@ -2392,7 +2382,7 @@ export class RichEditor extends Field {
         if (typeof value === 'string' && value.trim().startsWith('{')) { try { const parsed = JSON.parse(value); if (isRichDocument(parsed)) return parsed; } catch { /* HTML */ } }
         return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : '');
     }
-    getDefaultState(): unknown { return richHtmlToDocument(typeof this._default === 'string' ? this._default : ''); }
+    getDefaultState(): unknown { return richHtmlToDocument(typeof this.resolvedDefault() === 'string' ? this.resolvedDefault() as string : ''); }
     /** HTML (sanitized by the editor's schema), or the JSON document with `json()` (normalized through the same schema). */
     dehydrateState(state: unknown): unknown {
         const html = richDocumentToHtml(state);
@@ -2596,8 +2586,8 @@ export class RichEditor extends Field {
             .replace(/noMergeTagSearchResultsMessage: '[^']*',/, () => `noMergeTagSearchResultsMessage: ${js(this._noMergeTagResults ?? t('filament-forms::components.rich_editor.no_merge_tag_search_results_message'))},`)
             .replace(/textColors: JSON\.parse\('[^']*'\),/, () => `textColors: ${js(textColorsForJs(this.getTextColors()))},`)
             .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
-            .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this._liveMode === 'blur' ? 'true' : 'false'},`)
-            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this._liveMode === 'live' ? 'true' : 'false'})`);
+            .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},`)
+            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this.entangleLive(false) ? 'true' : 'false'})`);
         return this.wrap(html, { labelAsDiv: true });
     }
 }
@@ -2651,7 +2641,7 @@ export class ColorPicker extends Field {
 export class Checkbox extends Field {
     private _inline = true;
     static make(name: string): Checkbox { return configured(new Checkbox(name)); }
-    getDefaultState(): unknown { return this._default ?? false; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     /** `false`: the label goes above the checkbox instead of beside it. */
     inline(condition = true): this { this._inline = condition; return this; }
     async toHtml(): Promise<string> {
@@ -2773,7 +2763,7 @@ export class CheckboxList extends Field {
         }
         await super.saveRelationships(record);
     }
-    getDefaultState(): unknown { return this._default ?? []; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? []; }
     hydrateState(value: unknown): unknown {
         let list = value;
         if (typeof value === 'string') { try { list = JSON.parse(value); } catch { list = []; } }
@@ -2861,7 +2851,7 @@ export class KeyValue extends Field {
     getReorderAction(): Action { return modifyAction(Action.make('reorder').label(this._reorderLabel ?? t('filament-forms::components.key_value.actions.reorder.label')).icon(fieldActionIcon('key-value', 'reorder')).color('gray').iconButton().size('sm'), this._modifyReorder); }
     // In the form, the state is a list of `{ key, value }` pairs (what the browser component expects, and it keeps order);
     // it becomes an object again when saved.
-    getDefaultState(): unknown { return KeyValue.toPairs(this._default); }
+    getDefaultState(): unknown { return KeyValue.toPairs(this.resolvedDefault()); }
     private static toPairs(value: unknown): { key: string; value: unknown }[] {
         let object = value;
         if (typeof value === 'string') { try { object = JSON.parse(value); } catch { object = {}; } }
@@ -2875,7 +2865,7 @@ export class KeyValue extends Field {
         // Restrictions set on the field are enforced on the server: a forged state cannot add, delete or edit what the UI forbids.
         // The saved value: the one hydrated by this instance, else the record's (fields are rebuilt on every request), else the default.
         const record = this.context().record as Record<string, unknown> | null;
-        const saved = KeyValue.toPairs(this._originalValue ?? (record && typeof record === 'object' ? record[this._name!] : null) ?? this._default);
+        const saved = KeyValue.toPairs(this._originalValue ?? (record && typeof record === 'object' ? record[this._name!] : null) ?? this.resolvedDefault());
         if (!this._addable || !this._deletable || !this._editableKeys || !this._editableValues) {
             const received = Array.isArray(state) ? state.filter((pair: any) => pair && typeof pair === 'object' && typeof pair.key === 'string') : [];
             const byKey = new Map(received.map((pair: any) => [String(pair.key).trim(), pair]));
@@ -2928,9 +2918,6 @@ function accessibilityOf(field: Field, options: { withInvalid?: boolean } = {}):
     const ids = [(field as any).getHelperTextId() as string | null, field.hasError() ? `${field.getId()}-error` : null].filter(Boolean);
     return { 'aria-describedby': ids.length ? ids.join(' ') : null, 'aria-invalid': options.withInvalid !== false && field.hasError() ? 'true' : null };
 }
-type LiveMode = { onBlur: boolean; debounce: number | null } | null;
-/** Second `$entangle()` argument: true only for a plain `live()` field (no `onBlur`, no `debounce`). */
-const entangleLive = (live: LiveMode) => (live !== null && !live.onBlur && live.debounce === null ? 'true' : 'false');
 
 const MARKDOWN_TOOLBAR: string[][] = [['bold', 'italic', 'strike', 'link'], ['heading'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
 /**
@@ -2943,7 +2930,6 @@ export class MarkdownEditor extends Field {
     private _minHeight: string | null = '10rem';
     private _maxHeight: string | null = null;
     private _placeholder: string | null = null;
-    private _live: LiveMode = null;
     static make(name: string): MarkdownEditor { return configured(new MarkdownEditor(name)); }
     /** Toolbar buttons, grouped (`[['bold', 'italic'], ['undo', 'redo']]`) or flat. */
     toolbarButtons(buttons: (string | string[])[]): this { this._toolbarButtons = buttons; return this; }
@@ -2962,7 +2948,6 @@ export class MarkdownEditor extends Field {
     maxHeight(height: string | null): this { this._maxHeight = cssLength(height); return this; }
     placeholder(text: string | null): this { this._placeholder = text; return this; }
     /** Sends the state to the server while typing (`debounce` in milliseconds), or on blur with `onBlur`. */
-    live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     maxLength(length: number): this { return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
     minLength(length: number): this { return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
     hydrateState(value: unknown): unknown { return typeof value === 'string' ? value : null; }
@@ -3013,14 +2998,14 @@ export class MarkdownEditor extends Field {
         };
         const config = `markdownEditorFormComponent({
  canAttachFiles: ${this.canAttachFiles() ? 'true' : 'false'},
- isLiveDebounced: ${this._live?.debounce !== null && this._live?.debounce !== undefined ? 'true' : 'false'},
- isLiveOnBlur: ${this._live?.onBlur ? 'true' : 'false'},
+ isLiveDebounced: ${this.getLiveDebounce() !== null ? 'true' : 'false'},
+ isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},
  label: ${js(await this.getLabel())},
- liveDebounce: ${js(this._live?.debounce ?? null)},
+ liveDebounce: ${js(debounceMilliseconds(this.getLiveDebounce()))},
  maxHeight: ${js(this._maxHeight)},
  minHeight: ${js(this._minHeight)},
  placeholder: ${js(this._placeholder)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${entangleLive(this._live)}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive(false) ? 'true' : 'false'}),
  toolbarButtons: ${js(this.visibleToolbar())},
  translations: ${js(translations)},
  uploadFileAttachmentUsing: async (file, onSuccess, onError) => {
@@ -3053,7 +3038,6 @@ const CODE_LANGUAGES = ['cpp', 'css', 'go', 'html', 'java', 'javascript', 'json'
 export class CodeEditor extends Field {
     private _language: string | null = null;
     private _canWrap = false;
-    private _live: LiveMode = null;
     static make(name: string): CodeEditor { return configured(new CodeEditor(name)); }
     /** Language: `cpp`, `css`, `go`, `html`, `java`, `javascript`, `json`, `markdown`, `php`, `python`, `sql`, `xml`, `yaml`. */
     language(language: string | null): this {
@@ -3072,7 +3056,6 @@ export class CodeEditor extends Field {
         return this;
     }
     canWrap(): boolean { return this._canWrap; }
-    live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     hydrateState(value: unknown): unknown { return typeof value === 'string' ? value : value === null || value === undefined ? null : JSON.stringify(value); }
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'string', passes: (v) => typeof v === 'string', message: (a) => `The ${a} field must be a string.` }];
@@ -3083,13 +3066,13 @@ export class CodeEditor extends Field {
         const config = `codeEditorFormComponent({
  canWrap: ${this._canWrap ? 'true' : 'false'},
  isDisabled: ${isDisabled ? 'true' : 'false'},
- isLive: ${this._live !== null ? 'true' : 'false'},
- isLiveDebounced: ${this._live?.debounce !== null && this._live?.debounce !== undefined ? 'true' : 'false'},
- isLiveOnBlur: ${this._live?.onBlur ? 'true' : 'false'},
+ isLive: ${this.isLive() ? 'true' : 'false'},
+ isLiveDebounced: ${this.getLiveDebounce() !== null ? 'true' : 'false'},
+ isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},
  label: ${js(await this.getLabel())},
- liveDebounce: ${js(this._live?.debounce ?? null)},
+ liveDebounce: ${js(debounceMilliseconds(this.getLiveDebounce()))},
  language: ${js(this._language)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${entangleLive(this._live)}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive(false) ? 'true' : 'false'}),
  })`;
         // Key hash over the serialized `[isDisabled, language]` options.
         const hash = createHash('md5').update(`a:2:{i:0;b:${isDisabled ? 1 : 0};i:1;${this._language === null ? 'N;' : `s:${this._language.length}:"${this._language}";`}}`).digest('hex');
@@ -3122,7 +3105,6 @@ export class Slider extends Field {
     private _pipsFilter: RawJs | null = null;
     private _nonLinearPoints: Record<string, number | number[]> | null = null;
     private _decimalPlaces: number | null = null;
-    private _live: LiveMode = null;
     constructor(name: string) { super(name); this._required = true; }
     static make(name: string): Slider { return configured(new Slider(name)); }
     range(minValue: number, maxValue: number): this { this._minValue = minValue; this._maxValue = maxValue; return this; }
@@ -3158,11 +3140,10 @@ export class Slider extends Field {
     nonLinearPoints(points: Record<string, number | number[]> | null): this { this._nonLinearPoints = points; return this; }
     /** Decimal places of the saved value. */
     decimalPlaces(places: number | null): this { this._decimalPlaces = places; return this; }
-    live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     getMinValueWithPadding(): number { const padding = this._rangePadding; return this._minValue + (typeof padding === 'number' ? padding : Array.isArray(padding) ? (padding[0] ?? 0) : 0); }
     getMaxValueWithPadding(): number { const padding = this._rangePadding; return this._maxValue - (typeof padding === 'number' ? padding : Array.isArray(padding) ? (padding[1] ?? 0) : 0); }
     isMultiple(): boolean { return Array.isArray(this.context().state); }
-    getDefaultState(): unknown { return this._default ?? this._minValue; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? this._minValue; }
     private cast(value: unknown): unknown {
         if (typeof value !== 'number' && (typeof value !== 'string' || value.trim() === '' || !Number.isFinite(Number(value)))) return value;
         const number = Number(value);
@@ -3213,7 +3194,7 @@ export class Slider extends Field {
  pipsMode: ${js(this._pipsMode)},
  pipsValues: ${js(this._pipsValues)},
  rangePadding: ${js(this._rangePadding)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${this._live !== null ? 'true' : 'false'}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.isLive() ? 'true' : 'false'}),
  step: ${js(this._step)},
  tooltips: ${Slider.formatters(this._tooltips)},
  })`;
@@ -3236,7 +3217,6 @@ export class JsField extends Field {
     protected _renderer: Lazy<JsRenderer | null, ComponentContext> = null;
     protected _rendererConfiguration: Lazy<Record<string, unknown> | null, ComponentContext> = null;
     protected _readOnly: Lazy<boolean, ComponentContext> = false;
-    protected _liveDebounce: number | string | null = null;
 
     static make(name: string): JsField { return configured(new JsField(name)); }
     /** URL of the ES module (resolved against the page URL), or a trusted `RawJs` function expression. Never from user input. */
@@ -3252,15 +3232,10 @@ export class JsField extends Field {
      * Sends the edits to the server: on each change, after `props.onBlur()` (`{ onBlur: true }`), or once the user pauses
      * (`{ debounce: 500 }` or `'500ms'`). `false` turns it off.
      */
-    live(condition: boolean | { onBlur?: boolean; debounce?: number | string | null } = true): this {
-        super.live(condition);
-        this._liveDebounce = typeof condition === 'object' && !condition.onBlur ? (condition.debounce ?? null) : null;
-        return this;
-    }
     /** When edits are sent to the server, passed to the renderer's props (`isLive`, `isLiveOnBlur`, `debounce`). */
     getBindingConfiguration(): JsFieldBindingConfiguration {
-        const isLiveOnBlur = this._liveMode === 'blur';
-        return { isLive: this._liveMode !== null, isLiveOnBlur, debounce: isLiveOnBlur ? null : debounceMilliseconds(this._liveDebounce) };
+        const isLiveOnBlur = this.isLiveOnBlur();
+        return { isLive: this.isLive(), isLiveOnBlur, debounce: isLiveOnBlur ? null : debounceMilliseconds(this.getLiveDebounce()) };
     }
     /** Ids of the helper text and validation error, for the control's `aria-describedby`. */
     getDescriptionIds(): string[] {
@@ -3319,7 +3294,7 @@ export class OneTimeCodeInput extends Field {
         const accessibility = accessibilityOf(this);
         const label = await this.getLabel();
         const container = new Attributes().merge({ ...this._extraAttributes, 'aria-describedby': accessibility['aria-describedby'], 'aria-label': label !== '' ? label : null }).class(['fi-one-time-code-input-ctn']);
-        const first = new Attributes().merge({ ...accessibility, autofocus: this._autofocus, disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
+        const first = new Attributes().merge({ ...accessibility, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
         const digit = new Attributes().merge(accessibility);
         const inputs = Array.from({ length: this._length }, (_, index) => (index === 0
             ? `<input autocomplete="one-time-code" inputmode="numeric" type="text" ${first.toHtml()} />`
@@ -3388,7 +3363,7 @@ export async function loadSchemaRelationships(schema: Schema, target: Record<str
 /** Saves the visible fields that write the record's relationships, once the record is created or updated. */
 export async function saveSchemaRelationships(schema: Schema, record: unknown): Promise<void> {
     if (!record) return;
-    for (const c of await schema.getVisibleFlatComponents()) if (c instanceof Field && (await c.isDehydrated() || (c as any)._dehydrated === false) && (await c.savesRelationships())) await c.saveRelationships(record);
+    for (const c of await schema.getVisibleFlatComponents()) if (c instanceof Field && (await c.isDehydrated() || (await c.getDehydratedOverride()) === false) && (await c.savesRelationships())) await c.saveRelationships(record);
 }
 /** Validates every visible field of a schema; returns errors by state path. */
 export async function validateSchema(schema: Schema): Promise<Record<string, string[]>> {
@@ -3412,7 +3387,7 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
         if (skipped.some((path) => c.getStatePath().startsWith(`${path}.`))) continue;
         // A field that is not dehydrated leaves out its children too (the items of a `dehydrated(false)` repeater).
         if (!(await c.isDehydrated())) { skipped.push(c.getStatePath()); continue; }
-        if ((c as any)._dehydrated !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
+        if ((await c.getDehydratedOverride()) !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
         const state = await c.dehydrateState(c.context().state);
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
         for (const [name, value] of Object.entries((c as any).getExtraDehydratedState?.() ?? {})) writePath(data, [...relativePath(schema, c).slice(0, -1), name], value);

@@ -159,6 +159,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     private query(): QueryBuilder<M, M[]> { return this.model.query(currentTransaction(this.model.knex()) ?? undefined); }
     /** Runs `fn` in a transaction of the model's connection. */
     transaction<T>(fn: () => Promise<T>): Promise<T> { return transaction(this.model.knex(), fn); }
+    /** A query of the model within the adapter's scopes (tenant, column scopes, `modify`, soft deletes): used by `scopedExists()` / `scopedUnique()`. */
+    scopedQuery(trashed: 'without' | 'with' | 'only' = 'without'): QueryBuilder<M, M[]> { return this.base(trashed); }
     private base(trashed: 'without' | 'with' | 'only' = 'without'): QueryBuilder<M, M[]> {
         const q = this.query();
         const tenantKey = this.tenantScope?.key() ?? null;

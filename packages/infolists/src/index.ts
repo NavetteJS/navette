@@ -362,22 +362,7 @@ abstract class Entry extends Component {
         return html;
     }
 
-    /** `hiddenJs()` / `visibleJs()`: the grid wrapper becomes a `<fieldset>` toggled by Alpine, as in Filament. */
-    async toSchemaHtml(isVisible: boolean): Promise<string> {
-        const html = await super.toSchemaHtml(isVisible);
-        const hidden = this._hiddenJs?.trim() || null, visible = this._visibleJs?.trim() || null;
-        const visibility = hidden && visible ? `(! (${hidden})) && (${visible})` : hidden ? `! (${hidden})` : visible;
-        const start = html.indexOf('<div');
-        const end = /><div class="fi-sc-component[ "]/.exec(html)?.index;
-        if (!isVisible || visibility === null || start < 0 || end === undefined || html.slice(start, end).includes('fi-sc-visibility-fieldset')) return html;
-        let tag = html.slice(start, end).replace(/^<div/, '<fieldset disabled role="none"');
-        const toggle = ` x-bind:class="${e(`{ 'fi-hidden': ! (${visibility}) }`)}" x-bind:disabled="${e(`! (${visibility})`)}" x-cloak`;
-        const dataStart = tag.indexOf(' x-data="');
-        if (dataStart >= 0) { const dataEnd = tag.indexOf('"', dataStart + 9); tag = `${tag.slice(0, dataEnd + 1)}${toggle}${tag.slice(dataEnd + 1)}`; } else tag += toggle;
-        tag = /\sclass="/.test(tag) ? tag.replace(/(\sclass="[^"]*)"/, '$1 fi-sc-visibility-fieldset"') : `${tag} class="fi-sc-visibility-fieldset"`;
-        const close = html.lastIndexOf('</div>');
-        return `${html.slice(0, start)}${tag}>${html.slice(end + 1, close)}</fieldset>${html.slice(close + '</div>'.length)}`;
-    }
+    // `hiddenJs()` / `visibleJs()`: the schema component wraps the entry in a `<fieldset>` toggled by Alpine, as in Filament.
 }
 
 let htmlSanitizer: ((html: string) => string) | null = null;
