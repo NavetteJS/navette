@@ -89,6 +89,28 @@ const item = (key, label) => ({
 </div>
 ```
 
+### Writing each tab as a tag
+
+Instead of `items`, write each tab as an `<x-tabs.item>` tag in the content of `<x-tabs>`. Its content is the label; `active` highlights it, and `alpine-active` takes an Alpine.js expression instead, evaluated in the browser:
+
+```html
+<x-tabs label="Order" x-data="{ tab: 'details' }">
+    <x-tabs.item alpine-active="tab === 'details'" x-on:click="tab = 'details'">
+        Details
+    </x-tabs.item>
+
+    <x-tabs.item alpine-active="tab === 'history'" x-on:click="tab = 'history'">
+        History
+    </x-tabs.item>
+
+    <x-tabs.item tag="a" href="/orders/archive" :active="false" icon="o-archive-box">
+        Archive
+    </x-tabs.item>
+</x-tabs>
+```
+
+`<x-tabs.item>` takes the props of an item: `active`, `alpine-active`, `icon`, `icon-position`, `badge`, `badge-color`, `tag` and `href`. An active link gets `aria-current="page"`, an active button `aria-current="true"`.
+
 ## Setting a tab icon
 
 Give a tab an `icon`, with the name of an [icon](/styling/icons):

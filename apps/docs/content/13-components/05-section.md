@@ -192,6 +192,18 @@ template(`<x-section heading="User details" collapsible collapsed>
 
 `collapsed` has no effect without `collapsible`. The collapsed state lives in the browser: the server does not know it.
 
+### Persisting collapsed sections
+
+`persist-collapsed` keeps whether the section is collapsed in the browser's local storage, so that it stays collapsed when the user comes back. Give the section an `id`, which names its saved state:
+
+```html
+<x-section heading="User details" collapsible collapsed persist-collapsed id="user-details">
+    <p>…</p>
+</x-section>
+```
+
+The `collapse-id` prop names the saved state instead of the `id`.
+
 ## Adding the section header aside the content instead of above it
 
 With the `aside` prop, the header is placed on the left of the content on large screens, and the content gets its own card:
@@ -279,5 +291,7 @@ template(`<div style="display: grid; gap: 1.5rem">
 | `secondary` | boolean | `false` | Secondary background |
 | `divided` | boolean | `false` | Lines between the elements of the content |
 | `contained` | boolean | `true` | Card around the section |
+| `persist-collapsed` | boolean | `false` | Keeps the collapsed state in local storage |
+| `collapse-id` | string | the `id` | Name of the persisted state |
 
 HTML attributes (`class`, `id`, `x-*`, `wire:*`…) are placed on the `<section>` element.

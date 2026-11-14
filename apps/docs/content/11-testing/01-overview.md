@@ -90,6 +90,18 @@ The test runner of Node.js runs each test file in its own process: with this set
 - `params` are the parameters of the page URL, such as `{ record: task.id }` for an edit page. A record object is replaced by its key.
 - `options` override the defaults of the tests: `panel`, `user` (`null` to test as a guest), `tenant` in a [multi-tenant panel](/panels/tenancy) (the user's first tenant by default), and `query` for the query string of the URL.
 
+The defaults are set once, usually in the setup file: `setCurrentPanel(panel)` for the panel, `actingAs(user)` for the signed-in user (`null` for a guest), and `setTenant(tenant)` for the tenant of a multi-tenant panel:
+
+```ts
+import { actingAs, setCurrentPanel, setTenant } from '@navette-js/panels/testing';
+
+setCurrentPanel(panel);
+actingAs(admin);
+setTenant(acme);
+```
+
+Components rendered [outside a panel](/components/outside-a-panel/form) are tested the same way: pass the panel of their `Livewire` instance, `{ panel: livewire.panel }`.
+
 ```ts
 await livewire(TaskResource.getPages().edit, { record: task.id }).assertOk();
 await livewire(Settings, {}, { user: reader }).assertForbidden();
@@ -129,7 +141,7 @@ await livewire(TaskResource.getPages().edit, { record: task.id })
     .assertSet('recordKey', String(task.id));
 ```
 
-Any other assertion made after a refused request fails, saying why the request was refused: a test cannot pass because nothing happened. `assertOk()` checks that the component mounted, or that the last request succeeded.
+Any other assertion made after a refused request fails, saying why the request was refused: a test cannot pass because nothing happened. `assertOk()` checks that the component mounted, or that the last request succeeded; `assertSuccessful()` is another name for it.
 
 ## Setting state and calling methods
 
@@ -138,7 +150,7 @@ Any other assertion made after a refused request fails, saying why the request w
 - `assertSet('data.title', 'Hello')` and `assertNotSet()` check a value of the state. Instead of a value, you may pass a function receiving the value and returning `true` when it is the expected one.
 - `refresh()` renders the component again, and `dispatch('event', { ... })` calls the component's listener of an event.
 
-After the chain has run, `get('data.title')` returns a value of the state, `instance()` the component as it was after the last request, and `html()` its last render.
+After the chain has run, `get('data.title')` returns a value of the state, `instance()` the component as it was after the last request, `html()` its last render, and `getEffects()` the effects of the last request (the browser events it dispatched, its redirect, the values returned by the methods it called).
 
 ## Testing the rendered HTML
 
@@ -151,6 +163,16 @@ await livewire(TaskResource.getPages().index)
 ```
 
 Each method accepts one text or a list of texts.
+
+### Testing child components
+
+`assertSeeLivewire()` checks that the last render contains a child component, such as a widget or a relation manager, given by its class or by its registered name; `assertDontSeeLivewire()` checks the contrary:
+
+```ts
+await livewire(Dashboard)
+    .assertSeeLivewire(StatsOverview)
+    .assertDontSeeLivewire(RevenueChart);
+```
 
 ## Testing redirects and events
 

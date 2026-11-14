@@ -119,8 +119,11 @@ template(`<div style="display: flex; gap: 0.75rem; align-items: center">
 | `href` | string | none | URL of an `<a>` |
 | `badge` | string or number | none | Counter on the corner of the button, escaped |
 | `badge-color` | string | `primary` | Color of the counter |
+| `tooltip` | string | none | Text shown on hover, instead of the native tooltip of the label |
 
 HTML attributes are placed on the button element, and your classes after its own classes.
+
+The `tooltip` prop shows a styled tooltip instead of the native one: `<x-icon-button icon="o-plus" label="New user" tooltip="Register a user" />`. A disabled icon button with a tooltip stays focusable, so that its tooltip can show.
 
 ## Link
 
@@ -151,8 +154,10 @@ To render a `<button>` that looks like a link, set `tag` to `button`, and give i
 | `icon-position` | `before`, `after` | `before` | Position of the icon |
 | `badge` | string or number | none | Counter after the label, escaped |
 | `badge-color` | string | `primary` | Color of the counter |
+| `disabled` | boolean | `false` | Disabled style; disables a `<button>` |
+| `tooltip` | string | none | Text shown on hover |
 
-HTML attributes are placed on the link element.
+HTML attributes are placed on the link element. `<x-link href="/users/create" tooltip="Register a user">New user</x-link>` shows a tooltip on hover.
 
 ## Loading indicator
 
@@ -175,6 +180,18 @@ template(`<div style="display: flex; gap: 0.75rem; align-items: center">
 | `size` | `xs`, `sm`, `md`, `lg`, `xl`, `2xl` | `md` | Size of the indicator |
 
 HTML attributes are placed on the `<svg>` element.
+
+### Replacing the loading indicator
+
+`useLoadingIndicator()` from `@navette-js/support` replaces the indicator everywhere: buttons, tables, modals, `<x-loading-indicator>` and `<x-spinner>`. The function receives the attributes of the indicator, which already hold the `fi-icon fi-loading-indicator` classes and the size class, and returns its HTML:
+
+```ts
+import { useLoadingIndicator } from '@navette-js/support';
+
+useLoadingIndicator((attributes) => `<span ${attributes.toHtml()}><span class="my-dots"></span></span>`);
+```
+
+Call it once when the application starts; `useLoadingIndicator(null)` restores the default indicator.
 
 `<x-spinner>` renders the same indicator, in the medium size only. Its HTML attributes are placed on the `<svg>` element, and your classes after its own classes:
 
@@ -272,6 +289,14 @@ Add `extreme-links` to show buttons that go to the first and the last page:
 <x-pagination :id="livewireId" :page="current" :per-page="10" :total="total" extreme-links />
 ```
 
+### Disabling the buttons during other requests
+
+The buttons are disabled while the component is changing page. To disable them during other requests too, pass the names of the methods or properties to `loading-targets`:
+
+```html
+<x-pagination :id="livewireId" :page="current" :per-page="10" :total="total" :loading-targets="['search', 'applyFilters']" />
+```
+
 ### Pagination props
 
 | Prop | Type | Default | Description |
@@ -284,3 +309,4 @@ Add `extreme-links` to show buttons that go to the first and the last page:
 | `page-options` | array | none | Choices of the per-page select |
 | `property` | string | `tableRecordsPerPage` | Property bound to the per-page select |
 | `extreme-links` | boolean | `false` | Buttons to the first and last page |
+| `loading-targets` | array | none | Other methods or properties whose requests disable the buttons |

@@ -51,6 +51,36 @@ async save(): Promise<void> {
 }
 ```
 
+## Opening a modal with a trigger
+
+The `trigger` named slot holds the element that opens the modal when it is clicked:
+
+```html
+<x-modal id="edit-user" heading="Edit the user">
+    <x-slot name="trigger">
+        <x-button>Edit</x-button>
+    </x-slot>
+
+    <p>…</p>
+</x-modal>
+```
+
+The trigger and the modal are wrapped together in a `<div>`. A modal with a trigger may have no `id`: one is generated.
+
+### Disabling the modal trigger
+
+The trigger's wrapper opens the modal even when the button inside it is disabled. Add `disabled` to the slot as well:
+
+```html
+<x-modal id="edit-user">
+    <x-slot name="trigger" disabled>
+        <x-button :disabled="true">Edit</x-button>
+    </x-slot>
+
+    <p>…</p>
+</x-modal>
+```
+
 ## Adding a heading to a modal
 
 Use the `heading` prop. The modal is labelled by its heading for assistive technologies:
@@ -204,6 +234,16 @@ A modal with a heading has a close button in its header. To hide it:
 
 Keep another way to close the modal: a button in the footer, a click outside, or the Escape key.
 
+## Preventing the modal from autofocusing
+
+When it opens, a modal focuses its first focusable element. `:autofocus="false"` turns this off:
+
+```html
+<x-modal id="terms" :autofocus="false">
+    <p>…</p>
+</x-modal>
+```
+
 ## Using a modal as an alert dialog
 
 The `alert` prop gives the modal the `alertdialog` role instead of `dialog`, for a message that requires the user's attention:
@@ -247,5 +287,7 @@ In a [page rendered with a view](/resources/custom-pages#rendering-a-page-with-a
 | `close-by-clicking-away` | boolean | `true` | A click outside closes the modal |
 | `close-by-escaping` | boolean | `true` | The Escape key closes the modal |
 | `livewire-id` | string | none | Id of the component that contains the modal |
+| `trigger` | HTML | none | Element opening the modal (named slot; `disabled` on the slot stops it) |
+| `autofocus` | boolean | `true` | Focuses the first focusable element on open |
 
 Other HTML attributes are not used by the modal.

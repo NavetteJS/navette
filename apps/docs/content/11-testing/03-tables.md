@@ -99,6 +99,16 @@ await livewire(TaskResource.getPages().index)
     .assertTableFilterExists('priority', (filter) => filter.getLabel() === 'Priority');
 ```
 
+### Testing the visibility of filters
+
+`assertTableFilterVisible()` checks that a filter is shown, and `assertTableFilterHidden()` that it is [hidden](/tables/filters/overview#hiding-a-filter):
+
+```ts
+await livewire(TaskResource.getPages().index, {}, { user: reader })
+    .assertTableFilterVisible('status')
+    .assertTableFilterHidden('owner');
+```
+
 ## Testing columns
 
 `assertTableColumnExists()` checks that the table has a column, optionally with a function checking its configuration; `assertTableColumnDoesNotExist()` checks the contrary:
@@ -119,6 +129,47 @@ await livewire(TaskResource.getPages().index)
     .assertTableColumnHasDescription('title', 'Due tomorrow', write);
 ```
 
+### Testing that a column is rendered
+
+`assertCanRenderTableColumn()` checks that a column is shown, and rendered in every row of the current page. `assertCanNotRenderTableColumn()` checks that the column exists, but is not rendered, because the user hid it or it is hidden by default:
+
+```ts
+await livewire(TaskResource.getPages().index)
+    .assertCanRenderTableColumn('title')
+    .assertCanNotRenderTableColumn('created_at');
+```
+
+### Testing the formatted state of a column
+
+`assertTableColumnFormattedStateSet()` checks the text a column shows for a record, after `formatStateUsing()`, dates, numbers, money, limits, prefix and suffix. `assertTableColumnFormattedStateNotSet()` checks the contrary. A list state gives a list of texts:
+
+```ts
+await livewire(OrderResource.getPages().index)
+    .assertTableColumnFormattedStateSet('total', '$125.00', order)
+    .assertTableColumnFormattedStateNotSet('total', '125', order);
+```
+
+The text is the one of `TextColumn.formatState(state, record)`, which you may also call yourself.
+
+### Testing the extra attributes of a column
+
+`assertTableColumnHasExtraAttributes()` checks the extra HTML attributes of a column for a record, and `assertTableColumnDoesNotHaveExtraAttributes()` the contrary:
+
+```ts
+await livewire(TaskResource.getPages().index)
+    .assertTableColumnHasExtraAttributes('status', { class: 'is-late' }, lateTask)
+    .assertTableColumnDoesNotHaveExtraAttributes('status', { class: 'is-late' }, task);
+```
+
+### Testing the options of a select column
+
+`assertTableSelectColumnHasOptions()` checks the options of a [select column](/tables/columns/select) for a record, given as `{ value: label }` or as `[value, label]` pairs; `assertTableSelectColumnDoesNotHaveOptions()` checks the contrary:
+
+```ts
+await livewire(TaskResource.getPages().index)
+    .assertTableSelectColumnHasOptions('status', { todo: 'To do', done: 'Done' }, task);
+```
+
 ## Testing summaries
 
 `assertTableColumnSummarySet()` checks the value of a [column summary](/tables/summaries), computed over all the records of the table query. Name the summarizer by its kind (`sum`, `average`, `count`, `range` or `values`) or by its label:
@@ -135,3 +186,13 @@ Numbers are compared rounded to four decimals. Pass `true` as the fourth argumen
 ## Testing table actions
 
 Row actions, header actions and bulk actions are actions of the component: see [testing table actions](/testing/actions#testing-table-actions).
+
+`assertTableRecordActionsExistInOrder()` checks that row actions come in a given order; other actions may come between them, and the actions of a group count in place of the group. `assertTableHeaderActionsExistInOrder()`, `assertTableEmptyStateActionsExistInOrder()` and `assertTableBulkActionsExistInOrder()` check the other lists. `assertTableActionsExistInOrder()` is an older name of the first one:
+
+```ts
+await livewire(TaskResource.getPages().index)
+    .assertTableRecordActionsExistInOrder(['view', 'edit', 'delete'])
+    .assertTableHeaderActionsExistInOrder(['import', 'export']);
+```
+
+`callTableColumnAction()` runs the action of a column (`action()` on the column) for a record. Tables load with their page, so `loadTable()` does nothing; it is kept so that older tests still run.

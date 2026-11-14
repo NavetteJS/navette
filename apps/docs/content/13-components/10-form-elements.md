@@ -116,9 +116,19 @@ template(`<x-input-wrapper :valid="false">
 </x-input-wrapper>`)
 ```
 
+To trigger the error state in the browser, give `alpine-valid` an Alpine.js expression, which is `true` when the input is valid:
+
+```html
+<div x-data="{ errors: ['name'] }">
+    <x-input-wrapper alpine-valid="! errors.includes('name')">
+        <x-input type="text" wire:model="name" />
+    </x-input-wrapper>
+</div>
+```
+
 ### Disabling the input
 
-Add `disabled` to the wrapper, which grays it out, and to the input:
+Add `disabled` to the wrapper, which grays it out, and to the input. `alpine-disabled` takes an Alpine.js expression instead:
 
 ```html
 <x-input-wrapper disabled>
@@ -147,6 +157,10 @@ template(`<x-input-wrapper disabled>
 | `inline-suffix` | boolean | `false` | Suffix inside the input area |
 | `disabled` | boolean | `false` | Disabled style |
 | `valid` | boolean | `true` | `false` gives the error style |
+| `alpine-valid` | string | none | Alpine.js expression replacing `valid` |
+| `alpine-disabled` | string | none | Alpine.js expression replacing `disabled` |
+
+`<x-input.wrapper>` is another name of `<x-input-wrapper>`.
 
 HTML attributes are placed on the wrapper element.
 

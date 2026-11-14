@@ -76,3 +76,21 @@ await livewire(TaskResource.getPages().create)
 After the chain has run, `getNotifications()` returns every notification sent during the test, each with its `title`, `body`, `status` and `actions`.
 
 Notifications sent to the database of the user (`sendToDatabase()`) are not flash notifications: check them in the notifications table of your test database.
+
+## Testing notifications sent outside a component
+
+A notification may be sent by code that is not a component: a route of the application, a job, a function you test on its own. `assertNotified()` and `assertNotNotified()`, imported from `@navette-js/panels/testing`, check every notification sent since the last of these assertions, wherever it was sent:
+
+```ts
+import { assertNotified, assertNotNotified, clearSentNotifications } from '@navette-js/panels/testing';
+
+beforeEach(() => clearSentNotifications());
+
+test('the import job notifies when it is done', async () => {
+    await importTasks(file);
+    assertNotified('Import completed');
+    assertNotNotified('Import failed');
+});
+```
+
+They take a title, a `Notification`, or nothing, like the methods of the tester, and consume the notifications they have seen. In tests, `Notification.send()` called outside a request records the notification instead of failing. The notifications sent by a component under test are seen by both: the tester's `assertNotified()` and the standalone one.

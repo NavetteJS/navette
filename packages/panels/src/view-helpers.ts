@@ -32,7 +32,7 @@ export function actionsFromMethods(component: any): (Action | ActionGroup)[] {
             const match = /^([a-z][A-Za-z0-9_]*)Action$/.exec(method);
             if (!match || found.has(match[1])) continue;
             const action = actionFromMethod(component, match[1]);
-            if (action) found.set(action.getName(), action);
+            if (action) found.set(match[1], action);
         }
     }
     return [...found.values()];

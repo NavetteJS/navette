@@ -140,3 +140,47 @@ await livewire(TaskResource.getPages().view, { record: id })
 ```
 
 `assertSchemaExists('settings')` checks that the page has a schema with this name.
+
+## Testing wizards
+
+The browser keeps the current step of a [wizard](/schemas/wizards), so the tester keeps it too. `goToNextWizardStep()` clicks "Next": the server validates the current step, and the next one is shown only if it is valid. `goToPreviousWizardStep()` clicks "Back", and `assertWizardCurrentStep()` checks the current step, counted from 1:
+
+```ts
+await livewire(TaskResource.getPages().create)
+    .goToNextWizardStep()
+    .assertHasFormErrors(['title'])
+    .assertWizardCurrentStep(1)
+    .fillForm({ title: 'Write the tests' })
+    .goToNextWizardStep()
+    .assertHasNoFormErrors()
+    .assertWizardCurrentStep(2);
+```
+
+`goToWizardStep(3)` validates step 2 and goes to step 3; `goToWizardStep(1)` goes back to the first step. `assertWizardStepExists()` checks that the wizard has a step. Each method takes the name of the schema as its last argument; by default, it is the form of the mounted action if one is open, otherwise the form of the page.
+
+## Testing repeaters and builders
+
+The items of a [repeater](/forms/repeater) or a [builder](/forms/builder) are kept under random keys. Give them predictable keys in a test with `Repeater.fake()` and `Builder.fake()`: new items are then keyed `0`, `1`, `2`… Each returns a function that restores the random keys:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+const undoRepeaterFake = Repeater.fake();
+
+await livewire(TaskResource.getPages().create)
+    .assertSchemaStateSet({
+        checklist: [
+            { label: 'Write the tests' },
+            { label: 'Run them' },
+        ],
+    });
+
+undoRepeaterFake();
+```
+
+The state assertions (`assertSchemaStateSet()`, `assertFormSet()`, `assertSet()`) treat an object whose keys are `0`, `1`, `2`… in order as a list, so the expected state is written as a list. Pass a function to `assertSchemaStateSet()` to check the number of items:
+
+```ts
+await livewire(TaskResource.getPages().edit, { record: task.id })
+    .assertSchemaStateSet((state) => Object.keys(state.checklist as object).length === 2);
+```
