@@ -14,7 +14,7 @@
     <li class="<%- cls(['fi-pagination-item', { 'fi-active': o.active, 'fi-disabled': o.disabled }]) %>"<% if (o.rel) { %> rel="<%- o.rel %>"<% } %><% if (o.key) { %> wire:key="<%= id %>.pagination.<%- o.key %>"<% } %>>
         <button<% if (o.ariaLabel) { %> aria-label="<%= o.ariaLabel %>"<% } %><% if (o.active) { %> aria-current="page"<% } %><% if (o.disabled) { %> aria-hidden="true" disabled<% } %> data-prevent-disabled-clicks type="button" class="fi-pagination-item-btn"<% if (o.click) { %> wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" wire:click="<%= o.click %>"<% } %>>
             <% if (o.icon) { %>
-                <%- icon(o.icon, { attributes: attrs({ 'aria-hidden': 'true', class: 'fi-pagination-item-icon' }) }) %>
+                <%- icon(o.icon, { alias: o.iconAlias, attributes: attrs({ 'aria-hidden': 'true', class: 'fi-pagination-item-icon' }) }) %>
             <% } else { %>
                 <span class="fi-pagination-item-label">
                     <%= o.label %>
@@ -76,13 +76,13 @@
 
     <% if (!simple && page.lastPage > 1) { %>
         <ol class="fi-pagination-items">
-            <% if (extremeLinks && page.page > 1) { item({ rel: 'first', key: 'first', ariaLabel: t('filament::components/pagination.actions.first.label'), click: "gotoPage(1, 'page')", icon: 'm-chevron-double-left' }) } %>
-            <% if (page.page > 1) { item({ rel: 'prev', key: 'previous', ariaLabel: t('filament::components/pagination.actions.previous.label'), click: "previousPage('page')", icon: 'm-chevron-left' }) } %>
+            <% if (extremeLinks && page.page > 1) { item({ rel: 'first', key: 'first', ariaLabel: t('filament::components/pagination.actions.first.label'), click: "gotoPage(1, 'page')", icon: 'm-chevron-double-left', iconAlias: 'pagination.first-button' }) } %>
+            <% if (page.page > 1) { item({ rel: 'prev', key: 'previous', ariaLabel: t('filament::components/pagination.actions.previous.label'), click: "previousPage('page')", icon: 'm-chevron-left', iconAlias: 'pagination.previous-button' }) } %>
             <% for (const element of elements) { %>
                 <% if (element === '...') { item({ disabled: true, label: '...' }) } else { item({ active: element === page.page, key: 'page.' + element, ariaLabel: t('filament::components/pagination.actions.go_to_page.label', { page: element }), click: 'gotoPage(' + element + ", 'page')", label: element }) } %>
             <% } %>
-            <% if (page.page < page.lastPage) { item({ rel: 'next', key: 'next', ariaLabel: t('filament::components/pagination.actions.next.label'), click: "nextPage('page')", icon: 'm-chevron-right' }) } %>
-            <% if (extremeLinks && page.page < page.lastPage) { item({ rel: 'last', key: 'last', ariaLabel: t('filament::components/pagination.actions.last.label'), click: `gotoPage(${page.lastPage}, 'page')`, icon: 'm-chevron-double-right' }) } %>
+            <% if (page.page < page.lastPage) { item({ rel: 'next', key: 'next', ariaLabel: t('filament::components/pagination.actions.next.label'), click: "nextPage('page')", icon: 'm-chevron-right', iconAlias: 'pagination.next-button' }) } %>
+            <% if (extremeLinks && page.page < page.lastPage) { item({ rel: 'last', key: 'last', ariaLabel: t('filament::components/pagination.actions.last.label'), click: `gotoPage(${page.lastPage}, 'page')`, icon: 'm-chevron-double-right', iconAlias: 'pagination.last-button' }) } %>
         </ol>
     <% } %>
 </nav>

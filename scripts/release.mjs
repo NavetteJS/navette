@@ -77,6 +77,7 @@ for (const name of packages) {
         bugs: { url: 'https://github.com/NavetteJS/navette/issues' },
         keywords: ['navette', 'admin', 'panel', 'livewire', 'express', 'node', ...(bin ? ['cli', 'scaffold'] : [])],
         dependencies,
+        ...(manifest.peerDependencies ? { peerDependencies: manifest.peerDependencies, peerDependenciesMeta: manifest.peerDependenciesMeta } : {}),
         publishConfig: { access: 'public', tag: version.includes('-') ? 'beta' : 'latest' },
     };
     fs.writeFileSync(path.join(target, 'package.json'), JSON.stringify(published, null, 2) + '\n');

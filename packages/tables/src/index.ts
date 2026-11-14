@@ -1,6 +1,6 @@
 // @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
-import { Attributes, cls, e, hasRenderHook, icon, js, markdownToHtml, renderHook, sanitizeHtml, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
+import { Attributes, cls, e, hasRenderHook, icon, icons, js, markdownToHtml, renderHook, sanitizeHtml, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
@@ -928,7 +928,7 @@ export class IconColumn<R = any> extends Column<R> {
         if (!this.isBooleanItem(item) || item === null || item === undefined) return null;
         const on = item === true || item === 1 || item === '1';
         const chosen = on ? this._trueIcon : this._falseIcon;
-        return chosen === false ? null : chosen ?? (on ? 'o-check-circle' : 'o-x-circle');
+        return chosen === false ? null : chosen ?? (on ? icons.resolve('tables::columns.icon-column.true') ?? 'o-check-circle' : icons.resolve('tables::columns.icon-column.false') ?? 'o-x-circle');
     }
     private colorOf(record: R, item: unknown): string | null {
         const own = this._color === null ? null : resolveItem(this._color, record, item);
@@ -1964,7 +1964,7 @@ export class Table<R = any> {
     filtersResetAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.reset = configure; return this; }
     getFiltersActionView(kind: 'trigger' | 'apply' | 'reset'): FiltersActionView {
         const defaults = {
-            trigger: { label: t('filament-tables::table.actions.filter.label'), icon: 'm-funnel', color: 'gray', view: 'icon-button' as const },
+            trigger: { label: t('filament-tables::table.actions.filter.label'), icon: icons.resolve('tables::actions.filter') ?? 'm-funnel', color: 'gray', view: 'icon-button' as const },
             apply: { label: t('filament-tables::table.filters.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const },
             reset: { label: t('filament-tables::table.filters.actions.reset.label'), icon: null, color: this._filtersResetPosition === 'footer' ? 'gray' : 'danger', view: this._filtersResetPosition === 'footer' ? 'button' as const : 'link' as const },
         }[kind];
@@ -2037,7 +2037,7 @@ export class Table<R = any> {
     emptyState(html: string | (() => string | Promise<string>) | null): this { this._emptyState = html; return this; }
     getEmptyStateHeading(): string { const heading = typeof this._emptyStateHeading === 'function' ? this._emptyStateHeading() : this._emptyStateHeading; return heading ?? t('filament-tables::table.empty.heading', { model: this.getPluralModelLabel() }); }
     getEmptyStateDescription(): string | null { return typeof this._emptyStateDescription === 'function' ? this._emptyStateDescription() : this._emptyStateDescription; }
-    getEmptyStateIcon(): string { return this._emptyStateIcon ?? 'o-x-mark'; }
+    getEmptyStateIcon(): string { return this._emptyStateIcon ?? icons.resolve('tables::empty-state') ?? 'o-x-mark'; }
     async getCustomEmptyState(): Promise<string | null> { return typeof this._emptyState === 'function' ? this._emptyState() : this._emptyState; }
     private _defaultPageOption: number | 'all' | null = null;
     /** Rows per page when the table opens. */

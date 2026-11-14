@@ -30,7 +30,7 @@ import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCale
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
-import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
+import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
@@ -327,7 +327,7 @@ export class Panel {
         const items: (SubNavigationItem & { sort: number })[] = [];
         for (const component of components.sort((a, b) => a.navigationSort - b.navigationSort)) {
             const badge = typeof (component as any).getNavigationBadge === 'function' ? await (component as any).getNavigationBadge() : component.navigationBadge;
-            items.push({ label: component.getNavigationLabel(), icon: component.navigationIcon, url: this.getUrl(component.slug), active: current instanceof component, group: component.navigationGroup, badge: badge ?? null, badgeColor: component.navigationBadgeColor, sort: component.navigationSort });
+            items.push({ label: component.getNavigationLabel(), icon: typeof (component as any).getNavigationIcon === 'function' ? (component as any).getNavigationIcon() : component.navigationIcon, url: this.getUrl(component.slug), active: current instanceof component, group: component.navigationGroup, badge: badge ?? null, badgeColor: component.navigationBadgeColor, sort: component.navigationSort });
         }
         return items.map(({ sort: _sort, ...item }) => item);
     }
@@ -812,7 +812,7 @@ export class Panel {
         const items = [
             // The pages of a cluster are in its sub-navigation: the menu only shows the cluster.
             ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => {
-                const item = NavigationItem.make(p.getNavigationLabel()).url(this.getUrl(p.slug)).icon(p.navigationIcon).group(p.navigationGroup).sort(p.navigationSort).badge(badges.has(p.slug) ? badges.get(p.slug)! : p.navigationBadge, p.navigationBadgeColor).parentItem(p.navigationParentItem);
+                const item = NavigationItem.make(p.getNavigationLabel()).url(this.getUrl(p.slug)).icon(typeof (p as any).getNavigationIcon === 'function' ? (p as any).getNavigationIcon() : p.navigationIcon).group(p.navigationGroup).sort(p.navigationSort).badge(badges.has(p.slug) ? badges.get(p.slug)! : p.navigationBadge, p.navigationBadgeColor).parentItem(p.navigationParentItem);
                 const base = this.getUrl(p.slug);
                 return (p as any).resource || p.prototype instanceof Cluster ? item.isActiveWhen((current) => current === base || current.startsWith(base + '/')) : item;
             }),
@@ -1418,7 +1418,9 @@ export class Cluster extends Page {
 export class Dashboard extends Page {
     static slug = '';
     static title = 'Dashboard';
-    static navigationIcon = 'o-home';
+    static navigationIcon: string | null = 'o-home';
+    /** The `panels::pages.dashboard.navigation-item` alias replaces the default icon. */
+    static getNavigationIcon(): string | null { return this.navigationIcon === 'o-home' ? icons.resolve('panels::pages.dashboard.navigation-item') ?? 'o-home' : this.navigationIcon; }
     static navigationSort = -2;
     /** Filters form state. Stays `null` while the page has no filters. */
     filters: Record<string, unknown> | null = null;
@@ -1554,7 +1556,7 @@ export class RequestPasswordReset extends SimplePage {
     getTitle(): string { return t('filament-panels::auth/pages/password-reset/request-password-reset.title'); }
     getHeading(): string { return t('filament-panels::auth/pages/password-reset/request-password-reset.heading'); }
     getSubheading(): string | null {
-        return this.panel.getLoginPage() ? authLink(this.panel.getLoginUrl(), t('filament-panels::auth/pages/password-reset/request-password-reset.actions.login.label'), { iconName: 'm-arrow-left' }) : null;
+        return this.panel.getLoginPage() ? authLink(this.panel.getLoginUrl(), t('filament-panels::auth/pages/password-reset/request-password-reset.actions.login.label'), { iconName: icons.resolve('panels::pages.password-reset.request-password-reset.actions.login') ?? 'm-arrow-left' }) : null;
     }
     formSchema(schema: Schema): Schema {
         return schema.components([TextInput.make('email').label(t('filament-panels::auth/pages/password-reset/request-password-reset.form.email.label')).email().required().autocomplete().autofocus()]);
@@ -2074,7 +2076,7 @@ export abstract class Resource {
             const related = this.relatedPages[name];
             return {
                 label: related ? related.getNavigationLabel() : name === 'view' ? t('filament-panels::resources/pages/view-record.navigation_label') : t('filament-panels::resources/pages/edit-record.navigation_label'),
-                icon: related ? (related.navigationIcon ?? 'o-rectangle-stack') : name === 'view' ? 'o-eye' : 'o-pencil-square',
+                icon: related ? (related.navigationIcon ?? icons.resolve('panels::resources.pages.manage-related-records.navigation-item') ?? 'o-rectangle-stack') : name === 'view' ? icons.resolve('panels::resources.pages.view-record.navigation-item') ?? 'o-eye' : icons.resolve('panels::resources.pages.edit-record.navigation-item') ?? 'o-pencil-square',
                 url: this.getUrl(name, key),
                 active: page instanceof (this.getRegisteredPage(name) as any),
             };
@@ -2464,7 +2466,7 @@ export class AccountWidget extends Widget {
         const { req, res, panel, user } = this._ctx as PanelContext;
         const logout = t('filament-panels::widgets/account-widget.actions.logout.label');
         const loading = 'wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"';
-        return this.wrap(widgetSection(`<img alt="${e(t('filament-panels::layout.avatar.alt', { name: user!.name }))}" class="fi-avatar fi-circular fi-size-lg fi-user-avatar" src="${e(panel.getUserAvatarUrl(user!))}" loading="lazy" /><div class="fi-account-widget-main"><h2 class="fi-account-widget-heading">${e(t('filament-panels::widgets/account-widget.welcome'))}</h2><p class="fi-account-widget-user-name">${e(user!.name)}</p></div><form action="${e(panel.getLogoutUrl())}" method="post" class="fi-account-widget-logout-form"><input type="hidden" name="_token" value="${e(csrfToken(req, res))}" autocomplete="off"><button class="fi-icon-btn fi-size-md" title="${e(logout)}" aria-label="${e(logout)}" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle')}</button><button class="fi-btn fi-size-md fi-labeled-from-sm" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle')}${e(logout)}</button></form>`), ['fi-account-widget']);
+        return this.wrap(widgetSection(`<img alt="${e(t('filament-panels::layout.avatar.alt', { name: user!.name }))}" class="fi-avatar fi-circular fi-size-lg fi-user-avatar" src="${e(panel.getUserAvatarUrl(user!))}" loading="lazy" /><div class="fi-account-widget-main"><h2 class="fi-account-widget-heading">${e(t('filament-panels::widgets/account-widget.welcome'))}</h2><p class="fi-account-widget-user-name">${e(user!.name)}</p></div><form action="${e(panel.getLogoutUrl())}" method="post" class="fi-account-widget-logout-form"><input type="hidden" name="_token" value="${e(csrfToken(req, res))}" autocomplete="off"><button class="fi-icon-btn fi-size-md" title="${e(logout)}" aria-label="${e(logout)}" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle', { alias: 'panels::widgets.account.logout-button' })}</button><button class="fi-btn fi-size-md fi-labeled-from-sm" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle', { alias: 'panels::widgets.account.logout-button' })}${e(logout)}</button></form>`), ['fi-account-widget']);
     }
 }
 
@@ -2478,8 +2480,9 @@ export class NavetteInfoWidget extends Widget {
     render(): string {
         const WidgetClass = this.constructor as typeof NavetteInfoWidget;
         const link = (url: string, iconHtml: string, label: string) => `<a href="${e(url)}" target="_blank" class="fi-link fi-size-md" rel="noopener noreferrer">${iconHtml}<span class="fi-link-label">${e(label)}</span></a>`;
-        const github = '<span class="fi-icon fi-size-md"><svg viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" fill="currentColor" fill-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"></path></svg></span>';
-        return this.wrap(widgetSection(`<div class="fi-filament-info-widget-main"><a href="${e(WidgetClass.homeUrl)}" rel="noopener noreferrer" target="_blank"><svg aria-label="Navette" fill="currentColor" role="img" viewBox="0 0 96 24" xmlns="http://www.w3.org/2000/svg" class="fi-filament-info-widget-logo"><text x="0" y="19" font-size="22" font-weight="700" letter-spacing="-0.5">Navette</text></svg></a><p class="fi-filament-info-widget-version">v${e(WidgetClass.version)}</p></div><div class="fi-filament-info-widget-links">${link(WidgetClass.documentationUrl, icon('m-book-open'), t('filament-panels::widgets/filament-info-widget.actions.open_documentation.label'))}${link(WidgetClass.githubUrl, github, t('filament-panels::widgets/filament-info-widget.actions.open_github.label'))}</div>`), ['fi-filament-info-widget']);
+        const githubIcon = icons.resolve('panels::widgets.filament-info.open-github-button');
+        const github = githubIcon ? icon(githubIcon) : '<span class="fi-icon fi-size-md"><svg viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" fill="currentColor" fill-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"></path></svg></span>';
+        return this.wrap(widgetSection(`<div class="fi-filament-info-widget-main"><a href="${e(WidgetClass.homeUrl)}" rel="noopener noreferrer" target="_blank"><svg aria-label="Navette" fill="currentColor" role="img" viewBox="0 0 96 24" xmlns="http://www.w3.org/2000/svg" class="fi-filament-info-widget-logo"><text x="0" y="19" font-size="22" font-weight="700" letter-spacing="-0.5">Navette</text></svg></a><p class="fi-filament-info-widget-version">v${e(WidgetClass.version)}</p></div><div class="fi-filament-info-widget-links">${link(WidgetClass.documentationUrl, icon('m-book-open', { alias: 'panels::widgets.filament-info.open-documentation-button' }), t('filament-panels::widgets/filament-info-widget.actions.open_documentation.label'))}${link(WidgetClass.githubUrl, github, t('filament-panels::widgets/filament-info-widget.actions.open_github.label'))}</div>`), ['fi-filament-info-widget']);
     }
 }
 
@@ -2571,7 +2574,7 @@ export abstract class ChartWidget extends Widget {
     /** Empty state shown when `getData()` returns nothing. */
     protected getEmptyStateHeading(): string { return t('filament-widgets::chart.empty.heading'); }
     protected getEmptyStateDescription(): string | null { return null; }
-    protected getEmptyStateIcon(): string | null { return 'o-x-mark'; }
+    protected getEmptyStateIcon(): string | null { return icons.resolve('widgets::chart-widget.empty-state') ?? 'o-x-mark'; }
     static callable = ['updateChartData'];
     static locked = ['dataChecksum'];
     /** Polling interval, or `null` to disable polling. */
@@ -2628,7 +2631,7 @@ export abstract class ChartWidget extends Widget {
         const hasText = (heading !== null && heading !== '') || (description !== null && description !== '');
         const hasHeader = hasText || filter !== '';
         const header = hasHeader
-            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header"><div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="fi-section-header-text-ctn">${heading ? `<h2 class="fi-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter ? `<div class="fi-section-header-after-ctn">${filter}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('fi-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-label="${e(t('filament::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up')}</button>` : ''}</header>`
+            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header"><div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="fi-section-header-text-ctn">${heading ? `<h2 class="fi-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter ? `<div class="fi-section-header-after-ctn">${filter}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('fi-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-label="${e(t('filament::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
             : '';
         const colors = ['bg', 'border', 'grid', 'text', 'tooltip-bg', 'tooltip-text', 'tooltip-border'];
         const refs = ['background', 'border', 'grid', 'text', 'tooltipBackground', 'tooltipText', 'tooltipBorder'];
@@ -3255,7 +3258,7 @@ export class ListRecords extends Page implements TableHost {
                 return parts.join('');
             } : undefined,
             canReorder: table.getReorderColumn() !== null ? await canOn(this, 'reorder') : undefined,
-            rowActions: async (record) => resource.isSimple || table.getRecordActions().length || !(await canOn(this, 'update', record)) ? [] : [{ label: t('filament-actions::edit.single.label'), url: resource.getUrl('edit', resource.adapter.getKey(record)), icon: 'c-pencil-square', key: `edit.${createHash('md5').update(resource.adapter.getKey(record)).digest('hex')}` }],
+            rowActions: async (record) => resource.isSimple || table.getRecordActions().length || !(await canOn(this, 'update', record)) ? [] : [{ label: t('filament-actions::edit.single.label'), url: resource.getUrl('edit', resource.adapter.getKey(record)), icon: icons.resolve('actions::edit-action') ?? 'c-pencil-square', key: `edit.${createHash('md5').update(resource.adapter.getKey(record)).digest('hex')}` }],
         });
     }
 
@@ -3662,8 +3665,8 @@ export class DeleteAction {
     /** On an edit page, deletes the page's record and returns to the list. On a table row, deletes the row. */
     static make(): Action {
         return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'delete', record))
-            .label(t('filament-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon('c-trash').groupedIcon('m-trash')
-            .requiresConfirmation().modalIcon('o-trash')
+            .label(t('filament-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon(icons.resolve('actions::delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::delete-action.grouped') ?? 'm-trash')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
             // Hidden for an already soft-deleted record.
             .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return target ? (livewire as any).getDataAdapter().isTrashed(target) : false; })
             .modalHeading(({ livewire, record }) => t('filament-actions::delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
@@ -3706,7 +3709,7 @@ export class ReplicateAction {
         let excluded: string[] = [];
         let beforeSaved: ((ctx: any) => unknown) | null = null, afterSaved: ((ctx: any) => unknown) | null = null;
         const action = Action.make('replicate').authorize(({ livewire, record }) => canOn(livewire, 'replicate', record))
-            .label(t('filament-actions::replicate.single.label')).tableIcon('c-square-2-stack').groupedIcon('m-square-2-stack')
+            .label(t('filament-actions::replicate.single.label')).tableIcon(icons.resolve('actions::replicate-action') ?? 'c-square-2-stack').groupedIcon(icons.resolve('actions::replicate-action.grouped') ?? 'm-square-2-stack')
             .modalHeading(({ livewire, record }) => t('filament-actions::replicate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::replicate.single.modal.actions.replicate.label'))
             // With a modal form (`schema()`), it is filled with the record's attributes; its data overrides them in the copy.
@@ -3760,7 +3763,7 @@ export class EditAction {
     static make(resource: typeof Resource | null = null): Action {
         const of = (livewire: any) => resource ?? livewire.resource;
         return Action.make('edit').authorize(({ livewire, record }) => canOn(livewire, 'update', record))
-            .label(t('filament-actions::edit.single.label')).tableIcon('c-pencil-square').groupedIcon('m-pencil-square')
+            .label(t('filament-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
             .modalHeading(({ livewire, record }) => t('filament-actions::edit.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::edit.single.modal.actions.save.label'))
             .schema((schema: Schema) => of(schema.livewire).form(schema))
@@ -3786,7 +3789,7 @@ export class ViewAction {
     static make(resource: typeof Resource | null = null): Action {
         const of = (livewire: any) => resource ?? livewire.resource;
         return Action.make('view').authorize(({ livewire, record }) => canOn(livewire, 'view', record))
-            .label(t('filament-actions::view.single.label')).color('gray').tableIcon('c-eye').groupedIcon('m-eye')
+            .label(t('filament-actions::view.single.label')).color('gray').tableIcon(icons.resolve('actions::view-action') ?? 'c-eye').groupedIcon(icons.resolve('actions::view-action.grouped') ?? 'm-eye')
             // Without a view page (simple resource, related records): the infolist opens in a modal.
             .url(({ livewire, record }) => (record && of(livewire).hasViewPage ? of(livewire).getUrl('view', of(livewire).adapter.getKey(record)) : null))
             .modalHeading(({ livewire, record }) => t('filament-actions::view.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
@@ -3822,8 +3825,8 @@ export class AttachAction {
 export class DetachAction {
     static make(): Action {
         return Action.make('detach')
-            .label(t('filament-actions::detach.single.label')).color('danger').icon('c-x-mark').groupedIcon('m-x-mark')
-            .requiresConfirmation().modalIcon('o-x-mark')
+            .label(t('filament-actions::detach.single.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire, record }) => t('filament-actions::detach.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::detach.single.modal.actions.detach.label'))
             .action(async ({ livewire, record }) => {
@@ -3836,8 +3839,8 @@ export class DetachAction {
 export class DetachBulkAction {
     static make(): Action {
         return Action.make('detach')
-            .label(t('filament-actions::detach.multiple.label')).color('danger').icon('m-x-mark')
-            .requiresConfirmation().modalIcon('o-x-mark')
+            .label(t('filament-actions::detach.multiple.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire }) => t('filament-actions::detach.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
             .modalSubmitActionLabel(t('filament-actions::detach.multiple.modal.actions.detach.label'))
             .action(async ({ livewire }) => {
@@ -3873,8 +3876,8 @@ export class AssociateAction {
 export class DissociateAction {
     static make(): Action {
         return Action.make('dissociate')
-            .label(t('filament-actions::dissociate.single.label')).color('danger').icon('c-x-mark').groupedIcon('m-x-mark')
-            .requiresConfirmation().modalIcon('o-x-mark')
+            .label(t('filament-actions::dissociate.single.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire, record }) => t('filament-actions::dissociate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::dissociate.single.modal.actions.dissociate.label'))
             .action(async ({ livewire, record }) => {
@@ -3887,8 +3890,8 @@ export class DissociateAction {
 export class DissociateBulkAction {
     static make(): Action {
         return Action.make('dissociate')
-            .label(t('filament-actions::dissociate.multiple.label')).color('danger').icon('m-x-mark')
-            .requiresConfirmation().modalIcon('o-x-mark')
+            .label(t('filament-actions::dissociate.multiple.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire }) => t('filament-actions::dissociate.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
             .modalSubmitActionLabel(t('filament-actions::dissociate.multiple.modal.actions.dissociate.label'))
             .action(async ({ livewire }) => {
@@ -3905,8 +3908,8 @@ export class DissociateBulkAction {
 export class RestoreAction {
     static make(): Action {
         return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restore', record ?? (livewire as any)._record))
-            .label(t('filament-actions::restore.single.label')).color('gray').tableIcon('c-arrow-uturn-left').groupedIcon('m-arrow-uturn-left')
-            .requiresConfirmation().modalIcon('o-arrow-uturn-left')
+            .label(t('filament-actions::restore.single.label')).color('gray').tableIcon(icons.resolve('actions::restore-action') ?? 'c-arrow-uturn-left').groupedIcon(icons.resolve('actions::restore-action.grouped') ?? 'm-arrow-uturn-left')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
             .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
             .modalHeading(({ livewire, record }) => t('filament-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::restore.single.modal.actions.restore.label'))
@@ -3927,8 +3930,8 @@ export class RestoreAction {
 export class ForceDeleteAction {
     static make(): Action {
         return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDelete', record ?? (livewire as any)._record))
-            .label(t('filament-actions::force-delete.single.label')).color('danger').tableIcon('c-trash').groupedIcon('m-trash')
-            .requiresConfirmation().modalIcon('o-trash')
+            .label(t('filament-actions::force-delete.single.label')).color('danger').tableIcon(icons.resolve('actions::force-delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::force-delete-action.grouped') ?? 'm-trash')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
             .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
             .modalHeading(({ livewire, record }) => t('filament-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
             .modalSubmitActionLabel(t('filament-actions::force-delete.single.modal.actions.delete.label'))
@@ -3959,8 +3962,8 @@ const trashedFilterValue = (livewire: any): string | null => {
 export class DeleteBulkAction {
     static make(): Action {
         return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'deleteAny', record))
-            .label(t('filament-actions::delete.multiple.label')).color('danger').icon('m-trash')
-            .requiresConfirmation().modalIcon('o-trash')
+            .label(t('filament-actions::delete.multiple.label')).color('danger').icon(icons.resolve('actions::delete-action') ?? 'm-trash')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
             // Showing only deleted records: there is nothing left to delete.
             .hidden(({ livewire }) => trashedFilterValue(livewire) === '0')
             .modalHeading(({ livewire }) => t('filament-actions::delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
@@ -3984,8 +3987,8 @@ export class DeleteBulkAction {
 export class RestoreBulkAction {
     static make(): Action {
         return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restoreAny', record))
-            .label(t('filament-actions::restore.multiple.label')).color('gray').icon('m-arrow-uturn-left')
-            .requiresConfirmation().modalIcon('o-arrow-uturn-left')
+            .label(t('filament-actions::restore.multiple.label')).color('gray').icon(icons.resolve('actions::restore-action') ?? 'm-arrow-uturn-left')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
             .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
             .modalHeading(({ livewire }) => t('filament-actions::restore.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
             .modalSubmitActionLabel(t('filament-actions::restore.multiple.modal.actions.restore.label'))
@@ -4007,8 +4010,8 @@ export class RestoreBulkAction {
 export class ForceDeleteBulkAction {
     static make(): Action {
         return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDeleteAny', record))
-            .label(t('filament-actions::force-delete.multiple.label')).color('danger').icon('m-trash')
-            .requiresConfirmation().modalIcon('o-trash')
+            .label(t('filament-actions::force-delete.multiple.label')).color('danger').icon(icons.resolve('actions::force-delete-action') ?? 'm-trash')
+            .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
             .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
             .modalHeading(({ livewire }) => t('filament-actions::force-delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
             .modalSubmitActionLabel(t('filament-actions::force-delete.multiple.modal.actions.delete.label'))
@@ -4223,7 +4226,7 @@ async function renderUserMenu(component: Component, position: 'topbar' | 'sideba
     const items: Action[] = [];
     const profileUrl = panel.getProfileUrl();
     const custom = panel.getUserMenuItems();
-    if (profileUrl && !custom.profile) items.push(Action.make('profile').label(panel.getProfile()!.page.getLabel()).icon('m-user-circle').url(profileUrl).color('gray').sort(-1));
+    if (profileUrl && !custom.profile) items.push(Action.make('profile').label(panel.getProfile()!.page.getLabel()).icon(icons.resolve('panels::user-menu.profile-item') ?? 'm-user-circle').url(profileUrl).color('gray').sort(-1));
     items.push(...Object.values(custom));
     const visible: Action[] = [];
     for (const item of items) if (await item.isVisible(ctx)) visible.push(item);
@@ -4251,11 +4254,11 @@ export function renderErrorPage(panel: Panel, req: Request, res: Response, statu
     const text = (name: string) => t(`filament-panels::errors.${scene}.${name}`);
     // Inside the request's theme: the buttons' color classes depend on its palette.
     const html = panel.withTheme(req, () => {
-        const home = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: 'm-home', color: 'primary' }, t('filament-panels::errors.actions.home'));
-        const homeGray = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: 'm-home', color: 'gray' }, t('filament-panels::errors.actions.home'));
-        const back = uiButton({ icon: 'm-arrow-left', color: 'gray', attributes: { onclick: 'history.back()' } }, t('filament-panels::errors.actions.back'));
-        const retry = uiButton({ tag: 'a', href: req.method === 'GET' ? req.originalUrl : panel.getBaseUrl(), icon: 'm-arrow-path', color: 'primary' }, t('filament-panels::errors.actions.retry'));
-        const login = panel.getLoginPage() ? uiButton({ tag: 'a', href: panel.getLoginUrl(), icon: 'm-arrow-right-end-on-rectangle', color: 'primary' }, t('filament-panels::errors.actions.login')) : home;
+        const home = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'primary' }, t('filament-panels::errors.actions.home'));
+        const homeGray = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'gray' }, t('filament-panels::errors.actions.home'));
+        const back = uiButton({ icon: icons.resolve('panels::error-page.actions.back') ?? 'm-arrow-left', color: 'gray', attributes: { onclick: 'history.back()' } }, t('filament-panels::errors.actions.back'));
+        const retry = uiButton({ tag: 'a', href: req.method === 'GET' ? req.originalUrl : panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.retry') ?? 'm-arrow-path', color: 'primary' }, t('filament-panels::errors.actions.retry'));
+        const login = panel.getLoginPage() ? uiButton({ tag: 'a', href: panel.getLoginUrl(), icon: icons.resolve('panels::error-page.actions.login') ?? 'm-arrow-right-end-on-rectangle', color: 'primary' }, t('filament-panels::errors.actions.login')) : home;
         const actions = scene === 401 ? (panel.getLoginPage() ? [login, homeGray] : [home]) : scene === 403 || scene === 404 ? [home, back] : scene === 503 ? [retry] : [retry, homeGray];
         const badgeColor = scene >= 500 ? 'danger' : scene === 419 || scene === 429 ? 'warning' : 'gray';
         const label = t('filament-panels::errors.label', { code: status });
@@ -4283,11 +4286,11 @@ async function renderTenantMenu(component: Component, options: { teleport: boole
     const items: Action[] = [];
     const custom = panel.getTenantMenuItems();
     const ProfilePage = panel.getTenantProfilePage();
-    if (ProfilePage && provider.update && !custom.profile) items.push(Action.make('profile').label(ProfilePage.getLabel()).icon('m-cog-6-tooth').url(panel.getUrl(ProfilePage.slug)).color('gray').sort(-1));
+    if (ProfilePage && provider.update && !custom.profile) items.push(Action.make('profile').label(ProfilePage.getLabel()).icon(icons.resolve('panels::tenant-menu.profile-button') ?? 'm-cog-6-tooth').url(panel.getUrl(ProfilePage.slug)).color('gray').sort(-1));
     const billingUrl = panel.getTenantBillingUrl(tenant);
-    if (billingUrl && !custom.billing) items.push(Action.make('billing').label(t('filament-panels::layout.actions.billing.label')).icon('m-credit-card').url(billingUrl).color('gray').sort(-1));
+    if (billingUrl && !custom.billing) items.push(Action.make('billing').label(t('filament-panels::layout.actions.billing.label')).icon(icons.resolve('panels::tenant-menu.billing-button') ?? 'm-credit-card').url(billingUrl).color('gray').sort(-1));
     const RegistrationPage = panel.getTenantRegistrationPage();
-    if (RegistrationPage && !custom.register && (await RegistrationPage.canView(panel, user))) items.push(Action.make('register').label(RegistrationPage.getLabel()).icon('m-plus').url(panel.getBaseUrl(RegistrationPage.slug)).color('gray').sort(Number.MAX_SAFE_INTEGER));
+    if (RegistrationPage && !custom.register && (await RegistrationPage.canView(panel, user))) items.push(Action.make('register').label(RegistrationPage.getLabel()).icon(icons.resolve('panels::tenant-menu.registration-button') ?? 'm-plus').url(panel.getBaseUrl(RegistrationPage.slug)).color('gray').sort(Number.MAX_SAFE_INTEGER));
     items.push(...Object.values(custom));
     const visible: Action[] = [];
     for (const item of items) if (await item.isVisible(ctx)) visible.push(item);

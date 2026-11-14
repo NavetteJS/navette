@@ -12,6 +12,8 @@ export type RichEditorToolDefinition = {
     action?: string;
     toggle?: boolean;
     icon?: string;
+    /** Icon alias (`icons.alias()`) that can replace the icon. */
+    iconAlias?: string;
     activeKey?: string;
     activeOptions?: Record<string, unknown>;
     activeJsExpression?: string;
@@ -29,6 +31,7 @@ export class RichEditorTool {
     protected _label: string | null = null;
     protected _labelKey: string | null = null;
     protected _icon: string | null = null;
+    protected _iconAlias: string | null = null;
     protected _jsHandler: string | null = null;
     protected _toggle = false;
     protected _activeKey: string | null = null;
@@ -44,6 +47,7 @@ export class RichEditorTool {
         const tool = new this(definition.name);
         tool._labelKey = definition.label ?? null;
         tool._icon = definition.icon ?? null;
+        tool._iconAlias = definition.iconAlias ?? null;
         if (definition.jsHandler) tool.jsHandler(definition.jsHandler);
         if (definition.action !== undefined) tool.action(null, definition.action);
         tool._toggle = definition.toggle === true;
@@ -65,6 +69,8 @@ export class RichEditorTool {
     /** Shows the label next to the icon (by default, it is a tooltip). */
     hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
     icon(name: string | null): this { this._icon = name; return this; }
+    /** Icon alias: the icon registered for it with `icons.alias()` replaces `icon()`. */
+    iconAlias(alias: string | null): this { this._iconAlias = alias; return this; }
     /** JavaScript run on click: `$getEditor()?.chain().focus().toggleBold().run()`. */
     jsHandler(handler: string | null): this { this._jsHandler = handler; return this; }
     /** Mounts the field action `name` (the tool's name by default) with the editor selection and these arguments (a JavaScript object expression). */
@@ -99,6 +105,6 @@ export class RichEditorTool {
             'x-on:click': this._jsHandler,
             'x-tooltip': label && this._hiddenLabel ? `{ content: ${js(label)}, theme: $store.theme }` : null,
         }).class(['fi-fo-rich-editor-tool', { 'fi-fo-rich-editor-tool-with-label': !this._hiddenLabel }]);
-        return `<button ${attributes.toHtml()}>${this._icon ? icon(this._icon) : ''}${this._hiddenLabel ? '' : `<span class="fi-fo-rich-editor-tool-label">${e(label)}</span>`}</button>`;
+        return `<button ${attributes.toHtml()}>${this._icon ? icon(this._icon, { alias: this._iconAlias ?? undefined }) : ''}${this._hiddenLabel ? '' : `<span class="fi-fo-rich-editor-tool-label">${e(label)}</span>`}</button>`;
     }
 }

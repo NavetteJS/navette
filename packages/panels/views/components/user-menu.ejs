@@ -13,7 +13,7 @@
             <span<% if (collapsible) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-user-menu-trigger-text">
                 <%= user.name %>
             </span>
-            <%- icon('m-chevron-up', collapsible ? { attributes: attrs({ 'x-show': '$store.sidebar.isOpen' }) } : {}) %>
+            <%- icon('m-chevron-up', collapsible ? { alias: 'panels::user-menu.toggle-button', attributes: attrs({ 'x-show': '$store.sidebar.isOpen' }) } : { alias: 'panels::user-menu.toggle-button' }) %>
         </button>
 <% } %>
     </div>
@@ -22,7 +22,7 @@
 <% if (!locals.profileUrl) { %>
         <%- renderHook('panels::user-menu.profile.before') %>
         <div class="fi-dropdown-header">
-            <%- icon('m-user-circle') %>
+            <%- icon('m-user-circle', { alias: 'panels::user-menu.profile-item' }) %>
             <span>
                 <%= user.name %>
             </span>
@@ -44,7 +44,7 @@
                             content: <%- js(label) %>,
                             theme: $store.theme,
                         }" x-bind:aria-checked="theme === <%- js(theme) %> ? 'true' : 'false'" x-bind:class="{ 'fi-active': theme === <%- js(theme) %> }" class="fi-theme-switcher-btn">
-                        <%- icon(iconName) %>
+                        <%- icon(iconName, { alias: 'panels::theme-switcher.' + theme + '-button' }) %>
                     </button>
                 <% } %>
             </div>
@@ -60,7 +60,7 @@
                         <span class="fi-dropdown-list-item-label">
                             <%= theme.label %>
                         </span>
-                        <% if (theme.id === activeTheme) { %><%- icon('m-check') %><% } %>
+                        <% if (theme.id === activeTheme) { %><%- icon('m-check', { alias: 'panels::user-menu.theme-list.active-item' }) %><% } %>
                     </button>
                 <% } %>
             </div>
@@ -71,7 +71,7 @@
         <div class="fi-dropdown-list">
             <form action="<%= logoutUrl %>" method="post"><input type="hidden" name="_token" value="<%= csrf %>" autocomplete="off">
                 <button role="menuitem" tabindex="-1" type="submit" class="fi-dropdown-list-item">
-                    <%- icon('m-arrow-left-on-rectangle') %>
+                    <%- icon('m-arrow-left-on-rectangle', { alias: 'panels::user-menu.logout-button' }) %>
                     <span class="fi-dropdown-list-item-label">
                         <%= t('filament-panels::layout.actions.logout.label') %>
                     </span>

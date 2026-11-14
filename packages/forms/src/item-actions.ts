@@ -1,7 +1,7 @@
 // Customizable actions of list fields (Repeater, Builder, KeyValue, CheckboxList), as Filament's `addAction(fn)`,
 // `deleteAction(fn)`... A field builds each action with its defaults, then passes it to the developer's function.
 import { Action } from '@navette-js/actions';
-import type { ColorManager } from '@navette-js/support';
+import { icons, type ColorManager } from '@navette-js/support';
 import type { ComponentContext } from '@navette-js/schemas';
 
 /** Function changing a field action: it receives the action and returns it (or nothing, after changing it in place). */
@@ -43,6 +43,21 @@ export function prepareExtraItemAction(action: Action): Action {
     action.defaultColor('gray').defaultSize('sm');
     if (action.getView() === null) action.iconButton();
     return action;
+}
+
+/** Default icons of the field actions, by component and action (Filament's `FormsIconAlias` names). */
+const FIELD_ACTION_ICONS = {
+    repeater: { clone: 'm-square-2-stack', collapse: 'm-chevron-up', delete: 'm-trash', expand: 'm-chevron-down', 'move-down': 'm-arrow-down', 'move-up': 'm-arrow-up', reorder: 'm-arrows-up-down' },
+    builder: { clone: 'm-square-2-stack', collapse: 'm-chevron-up', delete: 'm-trash', edit: 'm-cog-6-tooth', expand: 'm-chevron-down', 'move-down': 'm-arrow-down', 'move-up': 'm-arrow-up', reorder: 'm-arrows-up-down' },
+    'key-value': { delete: 'm-trash', reorder: 'm-arrows-up-down' },
+} as const;
+type FieldActionIcons = typeof FIELD_ACTION_ICONS;
+/**
+ * Icon of a field action: the one registered for its alias (`forms::components.repeater.actions.delete`, see
+ * `icons.alias()`), else the default.
+ */
+export function fieldActionIcon<C extends keyof FieldActionIcons>(component: C, action: keyof FieldActionIcons[C] & string): string {
+    return icons.resolve(`forms::components.${component}.actions.${action}`) ?? (FIELD_ACTION_ICONS[component] as Record<string, string>)[action];
 }
 
 /** Context for evaluating an item action (its `arguments` carry the item key). */

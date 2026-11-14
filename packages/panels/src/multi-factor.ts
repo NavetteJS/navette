@@ -4,7 +4,7 @@ import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes, ra
 import { Action } from '@navette-js/actions';
 import { Field, Halt, OneTimeCodeInput, Radio, Step, TextInput } from '@navette-js/forms';
 import { Actions, Component, Flex, Group, Html, Image, Section, Text, type ComponentContext } from '@navette-js/schemas';
-import { HtmlString, e, js } from '@navette-js/support';
+import { HtmlString, e, icons, js } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
 import { button } from '@navette-js/support/ui';
 import { readToken, signToken } from './auth.ts';
@@ -396,13 +396,13 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
             ...(this._recoverable ? [Step.make('recovery').schema(this.recoveryCodesContent((ctx) => pendingFromSchema(ctx)?.codes ?? [], t(`${group}.modal.content.recovery_codes.instruction`)))] : []),
         ];
         return Action.make('setUpAppAuthentication')
-            .label(t(`${group}.label`)).color('primary').icon('m-lock-closed').link()
+            .label(t(`${group}.label`)).color('primary').icon(icons.resolve('panels::auth.multi-factor.app.actions.set-up') ?? 'm-lock-closed').link()
             .mountUsing((ctx) => {
                 const user = currentUser(ctx.livewire);
                 ctx.arguments.pending = signToken(panel.getAuthKey(), purpose, { secret: this.generateSecret(), ...(this._recoverable ? { codes: this.generateRecoveryCodes() } : {}), user: userKey(user) }, 60 * 30);
             })
             .modalWidth('lg').closeModalByClickingAway(false).closeModalByEscaping(false)
-            .modalIcon('o-lock-closed').modalIconColor('primary')
+            .modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.set-up.modal') ?? 'o-lock-closed').modalIconColor('primary')
             .modalHeading(t(`${group}.modal.heading`))
             .modalDescription(() => new HtmlString(t(`${group}.modal.description`)
                 .replace(/<x-filament::link href="([^"]+)" target="_blank">([^<]+)<\/x-filament::link>/g, (_match, href: string, label: string) => `<a href="${e(href)}" target="_blank" rel="noopener" class="fi-link fi-size-md fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400"><span class="fi-link-label">${e(label)}</span></a>`)
@@ -417,7 +417,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
                 if (!state) return;
                 await this.saveSecret(user, panel, state.secret);
                 if (this._recoverable) await this.saveRecoveryCodes(user, panel, state.codes);
-                Notification.make().success().title(t(`${group}.notifications.enabled.title`)).icon('o-lock-closed').send();
+                Notification.make().success().title(t(`${group}.notifications.enabled.title`)).icon(icons.resolve('panels::auth.multi-factor.app.actions.set-up.notification') ?? 'o-lock-closed').send();
             });
     }
     /** Recovery codes, with "copy" and "download" links. */
@@ -457,8 +457,8 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     disableAction(panel: Panel): Action {
         const group = 'filament-panels::auth/multi-factor/app/actions/disable';
         return Action.make('disableAppAuthentication')
-            .label(t(`${group}.label`)).color('danger').icon('m-lock-open').link()
-            .modalWidth('md').modalIcon('o-lock-open').modalIconColor('danger')
+            .label(t(`${group}.label`)).color('danger').icon(icons.resolve('panels::auth.multi-factor.app.actions.disable') ?? 'm-lock-open').link()
+            .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.disable.modal') ?? 'o-lock-open').modalIconColor('danger')
             .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             .schema(this.confirmationFields(panel, group, { recoveryCodes: true }))
@@ -466,15 +466,15 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
                 const user = currentUser(ctx.livewire);
                 await this.saveSecret(user, panel, null);
                 if (this._recoverable) await this.saveRecoveryCodes(user, panel, null);
-                Notification.make().success().title(t(`${group}.notifications.disabled.title`)).icon('o-lock-open').send();
+                Notification.make().success().title(t(`${group}.notifications.disabled.title`)).icon(icons.resolve('panels::auth.multi-factor.app.actions.disable.notification') ?? 'o-lock-open').send();
             });
     }
     /** Replaces the recovery codes, after a code from the app and the password; the new codes are shown once. */
     regenerateRecoveryCodesAction(panel: Panel): Action {
         const group = 'filament-panels::auth/multi-factor/app/actions/regenerate-recovery-codes';
         return Action.make('regenerateAppAuthenticationRecoveryCodes')
-            .label(t(`${group}.label`)).color('gray').icon('m-arrow-path').link()
-            .modalWidth('md').modalIcon('o-arrow-path')
+            .label(t(`${group}.label`)).color('gray').icon(icons.resolve('panels::auth.multi-factor.app.actions.regenerate-recovery-codes') ?? 'm-arrow-path').link()
+            .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.regenerate-recovery-codes.modal') ?? 'o-arrow-path')
             .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             .schema(this.confirmationFields(panel, group, { recoveryCodes: false }))
@@ -482,7 +482,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
                 const user = currentUser(ctx.livewire);
                 const codes = this.generateRecoveryCodes();
                 await this.saveRecoveryCodes(user, panel, codes);
-                Notification.make().success().title(t(`${group}.notifications.regenerated.title`)).icon('o-lock-closed').send();
+                Notification.make().success().title(t(`${group}.notifications.regenerated.title`)).icon(icons.resolve('panels::auth.multi-factor.app.actions.regenerate-recovery-codes.notification') ?? 'o-lock-closed').send();
                 // The new codes, shown once, in a modal opened in place of this one.
                 await ctx.livewire.replaceMountedAction('showNewAppAuthenticationRecoveryCodes', { codes: signToken(panel.getAuthKey(), `${panel.getId()}.mfa-app-recovery-codes`, { codes, user: userKey(user) }, 60 * 10) });
             });
@@ -497,7 +497,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
             return payload && user && payload.user === userKey(user) && Array.isArray(payload.codes) ? payload.codes.map(String) : [];
         };
         return Action.make('showNewAppAuthenticationRecoveryCodes').hidden()
-            .modalHeading(t(`${group}.heading`)).modalWidth('md').modalIcon('o-lock-closed').modalIconColor('primary')
+            .modalHeading(t(`${group}.heading`)).modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.show-new-recovery-codes.modal') ?? 'o-lock-closed').modalIconColor('primary')
             .closeModalByClickingAway(false).modalSubmitAction(false).modalCancelActionLabel(t(`${group}.actions.submit.label`))
             .schema(this.recoveryCodesContent(codes, t(`${group}.description`)));
     }
@@ -543,7 +543,7 @@ export class SecurityKeyInput extends Field {
         };
         const config = { mode: this._mode, key: this.getKey(), submitOnSuccess: this._submitOnSuccess, autoStart: this._autoStart, messages };
         const label = this._buttonLabel ?? t(`${group}.actions.${this._mode === 'register' ? 'register' : 'authenticate'}.label`);
-        const control = button({ color: 'gray', icon: 'o-key', attributes: { 'x-on:click': 'start()', 'x-bind:disabled': 'isWaiting', id: this.getId(), 'aria-describedby': `${this.getId()}-status` } }, `<span class="fi-btn-label">${e(label)}</span>`);
+        const control = button({ color: 'gray', icon: icons.resolve('panels::auth.multi-factor.security-keys.field.button') ?? 'o-key', attributes: { 'x-on:click': 'start()', 'x-bind:disabled': 'isWaiting', id: this.getId(), 'aria-describedby': `${this.getId()}-status` } }, `<span class="fi-btn-label">${e(label)}</span>`);
         return this.wrap(`<div x-data="${e(`navetteSecurityKey({ state: $wire.$entangle(${js(this.getStatePath())}, false), ...${js(config)} })`)}" class="nv-security-key">${control}<p id="${e(this.getId())}-status" class="nv-security-key-status" role="status" aria-live="polite" x-show="message" x-text="message" x-bind:class="{ 'nv-security-key-status-error': isError }" x-cloak></p></div>`, { labelAsDiv: true });
     }
 }
@@ -688,9 +688,9 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
     registerAction(panel: Panel): Action {
         const group = 'filament-panels::auth/multi-factor/security-keys/actions/register';
         return Action.make('registerSecurityKey')
-            .label(t(`${group}.label`)).color('primary').icon('m-key').link()
+            .label(t(`${group}.label`)).color('primary').icon(icons.resolve('panels::auth.multi-factor.security-keys.actions.register') ?? 'm-key').link()
             .visible(async (ctx) => { const user = contextOf(ctx.livewire)?.user; return Boolean(user) && (await this.getKeys(user!, panel)).length < this._maxKeys; })
-            .modalWidth('md').modalIcon('o-key').modalIconColor('primary')
+            .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.security-keys.actions.register.modal') ?? 'o-key').modalIconColor('primary')
             .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             .closeModalByClickingAway(false)
@@ -732,15 +732,15 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
                     name: String(ctx.data.name).trim().slice(0, 60), credentialId: credential!.credentialId, publicKey: credential!.publicKey, algorithm: credential!.algorithm,
                     signCount: credential!.signCount, transports: credential!.transports,
                 });
-                Notification.make().success().title(t(`${group}.notifications.registered.title`)).icon('o-key').send();
+                Notification.make().success().title(t(`${group}.notifications.registered.title`)).icon(icons.resolve('panels::auth.multi-factor.security-keys.actions.register.notification') ?? 'o-key').send();
             });
     }
     /** Removes one of the user's keys, after the password. */
     removeAction(panel: Panel): Action {
         const group = 'filament-panels::auth/multi-factor/security-keys/actions/remove';
         return Action.make('removeSecurityKey')
-            .label(t(`${group}.label`)).color('danger').icon('m-trash').link()
-            .modalWidth('md').modalIcon('o-trash').modalIconColor('danger')
+            .label(t(`${group}.label`)).color('danger').icon(icons.resolve('panels::auth.multi-factor.security-keys.actions.remove') ?? 'm-trash').link()
+            .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.security-keys.actions.remove.modal') ?? 'o-trash').modalIconColor('danger')
             .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             // The user's keys are read when the modal opens, then kept with the mounted action.
@@ -894,30 +894,30 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
     setUpAction(panel: Panel): Action {
         const group = 'filament-panels::auth/multi-factor/email/actions/set-up';
         return Action.make('setUpEmailAuthentication')
-            .label(t(`${group}.label`)).color('primary').icon('m-lock-closed').link()
+            .label(t(`${group}.label`)).color('primary').icon(icons.resolve('panels::auth.multi-factor.email.actions.set-up') ?? 'm-lock-closed').link()
             .mountUsing(async (ctx) => { await this.sendCode(currentUser(ctx.livewire), panel); })
-            .modalWidth('md').modalIcon('o-lock-closed').modalIconColor('primary').closeModalByClickingAway(false)
+            .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.email.actions.set-up.modal') ?? 'o-lock-closed').modalIconColor('primary').closeModalByClickingAway(false)
             .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             .schema([this.modalCodeInput(panel, group)])
             .action(async (ctx) => {
                 await this.setEnabled(currentUser(ctx.livewire), panel, true);
-                Notification.make().success().title(t(`${group}.notifications.enabled.title`)).icon('o-lock-closed').send();
+                Notification.make().success().title(t(`${group}.notifications.enabled.title`)).icon(icons.resolve('panels::auth.multi-factor.email.actions.set-up.notification') ?? 'o-lock-closed').send();
             });
     }
     /** Sends a code when the modal opens; entering it turns email codes off. */
     disableAction(panel: Panel): Action {
         const group = 'filament-panels::auth/multi-factor/email/actions/disable';
         return Action.make('disableEmailAuthentication')
-            .label(t(`${group}.label`)).color('danger').icon('m-lock-open').link()
+            .label(t(`${group}.label`)).color('danger').icon(icons.resolve('panels::auth.multi-factor.email.actions.disable') ?? 'm-lock-open').link()
             .mountUsing(async (ctx) => { await this.sendCode(currentUser(ctx.livewire), panel); })
-            .modalWidth('md').modalIcon('o-lock-open').modalIconColor('danger')
+            .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.email.actions.disable.modal') ?? 'o-lock-open').modalIconColor('danger')
             .modalHeading(t(`${group}.modal.heading`)).modalDescription(t(`${group}.modal.description`))
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             .schema([this.modalCodeInput(panel, group)])
             .action(async (ctx) => {
                 await this.setEnabled(currentUser(ctx.livewire), panel, false);
-                Notification.make().success().title(t(`${group}.notifications.disabled.title`)).icon('o-lock-open').send();
+                Notification.make().success().title(t(`${group}.notifications.disabled.title`)).icon(icons.resolve('panels::auth.multi-factor.email.actions.disable.notification') ?? 'o-lock-open').send();
             });
     }
 }

@@ -202,3 +202,24 @@ test('CheckboxList: allowHtml() sanitizes labels; without it labels are escaped'
     const escaped = await form(livewire, [CheckboxList.make('tags').options(options)]).toHtml();
     assert.match(escaped, /&lt;b&gt;Bold&lt;\/b&gt;/);
 });
+
+test('icon aliases replace the default icons of the field actions; an icon set on the action wins', async (t) => {
+    const { icons, HtmlString } = await import('@navette-js/support');
+    t.after(() => icons.alias({ 'forms::components.repeater.actions.delete': null, 'forms::components.builder.actions.edit': null, 'forms::components.key-value.actions.reorder': null }));
+    icons.alias({
+        'forms::components.repeater.actions.delete': new HtmlString('<svg data-alias="repeater-delete"></svg>'),
+        'forms::components.builder.actions.edit': new HtmlString('<svg data-alias="builder-edit"></svg>'),
+        'forms::components.key-value.actions.reorder': new HtmlString('<svg data-alias="kv-reorder"></svg>'),
+    });
+    const livewire = host({ items: { a: { name: 'A' } }, content: { a: { type: 'note', data: {} } }, meta: [] });
+    const html = await render(livewire, [
+        Repeater.make('items').schema([TextInput.make('name')]),
+        Builder.make('content').blocks([Block.make('note').schema(() => [TextInput.make('body')]).preview(() => 'n')]).blockPreviews(),
+        KeyValue.make('meta').reorderable(),
+    ]);
+    assert.match(html, /data-alias="repeater-delete"/);
+    assert.match(html, /data-alias="builder-edit"/);
+    assert.match(html, /data-alias="kv-reorder"/);
+    const custom = await render(livewire, [Repeater.make('items').schema([TextInput.make('name')]).deleteAction((a) => a.icon('m-x-mark'))]);
+    assert.doesNotMatch(custom, /data-alias="repeater-delete"/);
+});

@@ -6,7 +6,7 @@ import { Action, ActionHalt } from '@navette-js/actions';
 import { Schema, type Component } from '@navette-js/schemas';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Field, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, type Rule } from './index.ts';
-import { colorClassesOf, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
+import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 
 const asset = (name: string) => views.render('filament-forms::asset', { path: name }).trim();
 const ITEM_KEY = /^[A-Za-z0-9_-]{1,64}$/;
@@ -368,9 +368,9 @@ export class Builder extends Field {
         switch (name) {
             case 'add': action = withAddModal(Action.make('add').label(() => this._addLabel ?? tr('add.label').replace(':label', this._labelText.replace(/^./, (c) => c.toLowerCase())).trim()).icon(this._addIcon).color('gray').size('sm').action(add(false)), 'add'); break;
             case 'addBetween': action = withAddModal(Action.make('addBetween').label(() => this._addBetweenLabel ?? tr('add_between.label')).color('gray').size('sm').action(add(true)), 'add_between'); break;
-            case 'delete': action = Action.make('delete').label(tr('delete.label')).icon('m-trash').color('danger').iconButton().size('sm')
+            case 'delete': action = Action.make('delete').label(tr('delete.label')).icon(fieldActionIcon('builder', 'delete')).color('danger').iconButton().size('sm')
                 .action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!this._deletable || !Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }); break;
-            case 'clone': action = Action.make('clone').label(tr('clone.label')).icon('m-square-2-stack').color('gray').iconButton().size('sm')
+            case 'clone': action = Action.make('clone').label(tr('clone.label')).icon(fieldActionIcon('builder', 'clone')).color('gray').iconButton().size('sm')
                 .action(({ arguments: args }) => {
                     const items = this.getItems();
                     const key = String(args.item);
@@ -378,7 +378,7 @@ export class Builder extends Field {
                     this.setItems(this.insert(items, key, this._uuid(), this.cloneItem(items[key])));
                 }); break;
             // Block previews: the item's form, in a modal.
-            case 'edit': action = Action.make('edit').label(tr('edit.label')).icon('m-cog-6-tooth').color('gray').iconButton().size('sm')
+            case 'edit': action = Action.make('edit').label(tr('edit.label')).icon(fieldActionIcon('builder', 'edit')).color('gray').iconButton().size('sm')
                 .modalHeading(tr('edit.modal.heading')).modalSubmitActionLabel(tr('edit.modal.actions.save.label'))
                 .visible(async () => this._blockPreviews && !(await this.isDisabled()))
                 .schema((schema: Schema, ctx: { arguments?: Record<string, unknown> } = {}) => {
@@ -394,10 +394,10 @@ export class Builder extends Field {
                     items[key] = this.itemFromData(this.getBlock(items[key].type)!, key, data ?? {});
                     this.setItems(items);
                 }); break;
-            case 'moveUp': action = Action.make('moveUp').label(tr('move_up.label')).icon('m-arrow-up').color('gray').iconButton().size('sm').action(move(-1)); break;
-            case 'moveDown': action = Action.make('moveDown').label(tr('move_down.label')).icon('m-arrow-down').color('gray').iconButton().size('sm').action(move(1)); break;
+            case 'moveUp': action = Action.make('moveUp').label(tr('move_up.label')).icon(fieldActionIcon('builder', 'move-up')).color('gray').iconButton().size('sm').action(move(-1)); break;
+            case 'moveDown': action = Action.make('moveDown').label(tr('move_down.label')).icon(fieldActionIcon('builder', 'move-down')).color('gray').iconButton().size('sm').action(move(1)); break;
             // Drag and drop: the new order is only accepted if it is a permutation of the existing keys.
-            case 'reorder': action = Action.make('reorder').label(tr('reorder.label')).icon('m-arrows-up-down').color('gray').iconButton().size('sm')
+            case 'reorder': action = Action.make('reorder').label(tr('reorder.label')).icon(fieldActionIcon('builder', 'reorder')).color('gray').iconButton().size('sm')
                 .action(({ arguments: args }) => {
                     if (!this.canDrag()) return;
                     const items = this.getItems();
@@ -406,8 +406,8 @@ export class Builder extends Field {
                     if (order.length !== keys.length || new Set(order).size !== keys.length || !order.every((key) => Object.hasOwn(items, key))) return;
                     this.setItems(Object.fromEntries(order.map((key) => [key, items[key]])));
                 }); break;
-            case 'collapse': action = Action.make('collapse').label(tr('collapse.label')).icon('m-chevron-up').color('gray').iconButton().size('sm'); break;
-            case 'expand': action = Action.make('expand').label(tr('expand.label')).icon('m-chevron-down').color('gray').iconButton().size('sm'); break;
+            case 'collapse': action = Action.make('collapse').label(tr('collapse.label')).icon(fieldActionIcon('builder', 'collapse')).color('gray').iconButton().size('sm'); break;
+            case 'expand': action = Action.make('expand').label(tr('expand.label')).icon(fieldActionIcon('builder', 'expand')).color('gray').iconButton().size('sm'); break;
             case 'collapseAll': action = Action.make('collapseAll').label(tr('collapse_all.label')).color('gray').link().size('sm'); break;
             case 'expandAll': action = Action.make('expandAll').label(tr('expand_all.label')).color('gray').link().size('sm'); break;
         }
@@ -503,9 +503,9 @@ export class Builder extends Field {
                     return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="fi-sr-only"'}>${iconActionButton({ inHeader: true, label: resolved.label, icon: resolved.icon ?? fallbackIcon, expression, disabled: disabled || resolved.disabled, colorClasses: colorsFor(resolved, 'gray', []), attributes: { tabindex: this._reorderableWithButtons ? null : '-1', 'data-reorder-hidden': 'data-reorder-hidden', 'data-reorder-direction': direction, 'data-reorder-action': expression, 'aria-describedby': descriptionId(itemKey) } })}</li>`;
                 };
                 const blockIcon = block.getIcon();
-                const collapseHtml = this._collapsible ? `<li class="fi-fo-builder-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-builder-item-header-collapse-action"><button title="${e(collapse.label)}" aria-label="${e(collapse.label)}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(collapse, 'gray', gray)])}">${icon(collapse.icon ?? 'm-chevron-up')}</button></div><div class="fi-fo-builder-item-header-expand-action"><button title="${e(expand.label)}" aria-label="${e(expand.label)}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(expand, 'gray', gray)])}">${icon(expand.icon ?? 'm-chevron-down')}</button></div></li>` : '';
-                const reorderHtml = this.canDrag() && reorder.visible ? `<li x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(reorder, 'gray', [])])}" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? 'm-arrows-up-down')}</button></li>` : '';
-                const moves = this.canMove() ? `${await moveButton('moveUp', 'm-arrow-up', 'up', index === 0)}${await moveButton('moveDown', 'm-arrow-down', 'down', index === keys.length - 1)}` : '';
+                const collapseHtml = this._collapsible ? `<li class="fi-fo-builder-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-builder-item-header-collapse-action"><button title="${e(collapse.label)}" aria-label="${e(collapse.label)}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(collapse, 'gray', gray)])}">${icon(collapse.icon ?? fieldActionIcon('builder', 'collapse'))}</button></div><div class="fi-fo-builder-item-header-expand-action"><button title="${e(expand.label)}" aria-label="${e(expand.label)}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(expand, 'gray', gray)])}">${icon(expand.icon ?? fieldActionIcon('builder', 'expand'))}</button></div></li>` : '';
+                const reorderHtml = this.canDrag() && reorder.visible ? `<li x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(reorder, 'gray', [])])}" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? fieldActionIcon('builder', 'reorder'))}</button></li>` : '';
+                const moves = this.canMove() ? `${await moveButton('moveUp', fieldActionIcon('builder', 'move-up'), 'up', index === 0)}${await moveButton('moveDown', fieldActionIcon('builder', 'move-down'), 'down', index === keys.length - 1)}` : '';
                 const extra: string[] = [];
                 for (const extraAction of extraItemActions) {
                     extraAction.arguments(args);
@@ -514,9 +514,9 @@ export class Builder extends Field {
                 const clone = await resolve('clone', args), del = await resolve('delete', args);
                 const end = [
                     ...extra,
-                    showEdit ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: edit.label, icon: edit.icon ?? 'm-cog-6-tooth', expression: this.actionExpression('edit', args), disabled: edit.disabled, colorClasses: colorsFor(edit, 'gray', []) })}</li>` : '',
-                    this._cloneable && clone.visible ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: clone.label, icon: clone.icon ?? 'm-square-2-stack', expression: this.actionExpression('clone', args), disabled: clone.disabled, colorClasses: colorsFor(clone, 'gray', []) })}</li>` : '',
-                    this._deletable && del.visible ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: del.label, icon: del.icon ?? 'm-trash', expression: this.actionExpression('delete', args), disabled: del.disabled, colorClasses: colorsFor(del, 'danger', danger) })}</li>` : '',
+                    showEdit ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: edit.label, icon: edit.icon ?? fieldActionIcon('builder', 'edit'), expression: this.actionExpression('edit', args), disabled: edit.disabled, colorClasses: colorsFor(edit, 'gray', []) })}</li>` : '',
+                    this._cloneable && clone.visible ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: clone.label, icon: clone.icon ?? fieldActionIcon('builder', 'clone'), expression: this.actionExpression('clone', args), disabled: clone.disabled, colorClasses: colorsFor(clone, 'gray', []) })}</li>` : '',
+                    this._deletable && del.visible ? `<li x-on:click.stop>${iconActionButton({ inHeader: true, label: del.label, icon: del.icon ?? fieldActionIcon('builder', 'delete'), expression: this.actionExpression('delete', args), disabled: del.disabled, colorClasses: colorsFor(del, 'danger', danger) })}</li>` : '',
                     collapseHtml,
                 ].join('');
                 const label = block.getLabel({ state: item.data, key: itemKey, index });

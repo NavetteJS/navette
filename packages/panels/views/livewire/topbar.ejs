@@ -3,10 +3,10 @@
 <%- renderHook('panels::topbar.start') %>
 <% if (hasNavigation) { %>
 <%- view('filament::components.icon-button', {
-    iconName: 'o-bars-3', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-topbar-open-sidebar-btn',
+    iconName: 'o-bars-3', iconAlias: 'panels::topbar.open-sidebar-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-topbar-open-sidebar-btn',
     extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.open($event.currentTarget)', 'x-show': '! $store.sidebar.isOpen' }),
 }) %><%- view('filament::components.icon-button', {
-    iconName: 'o-x-mark', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-topbar-close-sidebar-btn',
+    iconName: 'o-x-mark', iconAlias: 'panels::topbar.close-sidebar-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-topbar-close-sidebar-btn',
     extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.close()', 'x-show': '$store.sidebar.isOpen' }),
 }) %>
 <% } %>
@@ -14,10 +14,10 @@
 <% if (isSidebarCollapsibleOnDesktop || isSidebarFullyCollapsibleOnDesktop) { %>
 <div x-show="$store.sidebar.isOpen || <%= isSidebarCollapsibleOnDesktop ? 'true' : 'false' %>" class="fi-topbar-collapse-sidebar-btn-ctn" >
 <% if (isSidebarCollapsibleOnDesktop) { %><%- view('filament::components.icon-button', {
-    iconName: 'o-chevron-right', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-topbar-open-collapse-sidebar-btn',
+    iconName: 'o-chevron-right', iconAlias: 'panels::sidebar.expand-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-topbar-open-collapse-sidebar-btn',
     extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.open()', 'x-show': '! $store.sidebar.isOpen' }),
 }) %><% } %><%- view('filament::components.icon-button', {
-    iconName: 'o-chevron-left', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-topbar-close-collapse-sidebar-btn',
+    iconName: 'o-chevron-left', iconAlias: 'panels::sidebar.collapse-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-topbar-close-collapse-sidebar-btn',
     extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.close()', 'x-show': '$store.sidebar.isOpen' }),
 }) %>
 </div>
@@ -29,7 +29,7 @@
 <ul class="fi-topbar-nav-groups">
 <% for (const group of topNavigation) { %>
 <% if (group.label) { %>
-<div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown" ><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger" ><li class="<%- cls(['fi-topbar-item', { 'fi-active': group.isActive }]) %>"><button type="button" class="fi-topbar-item-btn"><span class="fi-topbar-item-label"> <%= group.label %> </span><%- icon('m-chevron-down', { attributes: attrs({ class: 'fi-topbar-group-toggle-icon' }) }) %></button></li></div><div x-cloak x-float.placement.bottom-start.flip.teleport.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel " style="" ><% for (const list of group.lists) { %><div class="fi-dropdown-list"><% for (const item of list) { %><a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> class="<%- cls(['fi-dropdown-list-item', ...item.colorClasses]) %>" role="menuitem" tabindex="-1"><% if (item.icon) { %><%- icon(item.icon, item.isActive ? { attributes: attrs({ class: 'fi-color fi-color-primary' }) } : {}) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% if (item.badge !== null) { %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %><% } %></a><% } %></div><% } %></div></div>
+<div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown" ><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger" ><li class="<%- cls(['fi-topbar-item', { 'fi-active': group.isActive }]) %>"><button type="button" class="fi-topbar-item-btn"><span class="fi-topbar-item-label"> <%= group.label %> </span><%- icon('m-chevron-down', { alias: 'panels::topbar.group.toggle-button', attributes: attrs({ class: 'fi-topbar-group-toggle-icon' }) }) %></button></li></div><div x-cloak x-float.placement.bottom-start.flip.teleport.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel " style="" ><% for (const list of group.lists) { %><div class="fi-dropdown-list"><% for (const item of list) { %><a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> class="<%- cls(['fi-dropdown-list-item', ...item.colorClasses]) %>" role="menuitem" tabindex="-1"><% if (item.icon) { %><%- icon(item.icon, item.isActive ? { attributes: attrs({ class: 'fi-color fi-color-primary' }) } : {}) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% if (item.badge !== null) { %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %><% } %></a><% } %></div><% } %></div></div>
 <% } else { %>
 <% for (const item of group.items) { %><li class="<%- cls(['fi-topbar-item', { 'fi-active': item.isActive }]) %>"><a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> class="fi-topbar-item-btn"><% if (item.icon) { %><%- icon(item.icon, { attributes: attrs({ class: 'fi-topbar-item-icon' }) }) %><% } %><span class="fi-topbar-item-label"> <%= item.label %> </span><% if (item.badge !== null) { %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %><% } %></a></li><% } %>
 <% } %>
