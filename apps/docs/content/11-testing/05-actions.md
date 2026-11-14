@@ -146,7 +146,7 @@ await livewire(TaskResource.getPages().index, {}, { user: reader })
 
 ## Testing the appearance of actions
 
-`assertActionHasLabel()`, `assertActionHasIcon()`, `assertActionHasColor()` and `assertActionHasUrl()` check how an action looks, and their `DoesNotHave` forms the contrary. `assertActionShouldOpenUrlInNewTab()` and `assertActionShouldNotOpenUrlInNewTab()` check where a link action opens:
+`assertActionHasLabel()`, `assertActionHasIcon()`, `assertActionHasColor()` and `assertActionHasUrl()` check how an action looks, and `assertActionDoesNotHaveLabel()`, `assertActionDoesNotHaveIcon()`, `assertActionDoesNotHaveColor()` and `assertActionDoesNotHaveUrl()` the contrary. `assertActionShouldOpenUrlInNewTab()` and `assertActionShouldNotOpenUrlInNewTab()` check where a link action opens:
 
 ```ts
 await livewire(TaskResource.getPages().edit, { record: id })
@@ -156,3 +156,33 @@ await livewire(TaskResource.getPages().edit, { record: id })
     .assertActionHasUrl('help', 'https://example.test/help')
     .assertActionShouldOpenUrlInNewTab('help');
 ```
+
+## Testing the modal of an action
+
+`assertMountedActionModalSee()` and `assertMountedActionModalDontSee()` check the texts of the modal of the mounted action, with HTML entities decoded. `assertMountedActionModalSeeHtml()` and `assertMountedActionModalDontSeeHtml()` look for raw HTML:
+
+```ts
+await livewire(TaskResource.getPages().edit, { record: task.id })
+    .mountAction('delete')
+    .assertMountedActionModalSee('Delete this task?')
+    .assertMountedActionModalSeeHtml('<strong>cannot be undone</strong>');
+```
+
+## Older method names
+
+These names are kept so that older tests still run:
+
+| Name | Same as |
+| --- | --- |
+| `assertActionHeld()` | `assertActionHalted()` |
+| `setActionData()` | `fillForm()` on the form of the mounted action |
+| `assertActionDataSet()` | `assertSchemaStateSet()` on the form of the mounted action |
+| `assertHasActionErrors()`, `assertHasNoActionErrors()` | `assertHasFormErrors()`, `assertHasNoFormErrors()` |
+| `mountTableAction()`, `callTableAction()` | `mountAction()`, `callAction()` with `TestAction.make(name).table(record)` |
+| `mountTableBulkAction()`, `callTableBulkAction()` | `selectTableRecords()`, then the bulk action |
+| `callMountedTableAction()` | `callMountedAction()` |
+| `assertTableActionExists()`, `assertTableActionDoesNotExist()`, `assertTableActionVisible()`, `assertTableActionHidden()`, `assertTableActionEnabled()`, `assertTableActionDisabled()` | The action assertions with `TestAction.make(name).table(record)` |
+| `assertTableBulkActionExists()`, `assertTableBulkActionDoesNotExist()`, `assertTableBulkActionVisible()`, `assertTableBulkActionHidden()` | The action assertions with `TestAction.make(name).table().bulk()` |
+| `assertFormFieldIsVisible()`, `assertFormFieldIsHidden()`, `assertFormFieldIsEnabled()`, `assertFormFieldIsDisabled()` | `assertFormFieldVisible()`, `assertFormFieldHidden()`, `assertFormFieldEnabled()`, `assertFormFieldDisabled()` |
+| `assertFormComponentExists()` | `assertSchemaComponentExists()` |
+| `assertTableActionsExistInOrder()` | `assertTableRecordActionsExistInOrder()` |

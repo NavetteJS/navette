@@ -47,6 +47,8 @@ The setters return the configuration for chaining, and the getters read the stor
 | `navigationSort()` | Position in the navigation |
 | `modelLabel()`, `pluralModelLabel()` | Labels of the records (titles, buttons) |
 
+Each option has a getter, which returns `null` when the option was not set: `getSlug()`, `getNavigationLabel()`, `getNavigationIcon()`, `getNavigationGroup()`, `getNavigationSort()`, `getModelLabel()` and `getPluralModelLabel()`. `getKey()` returns the configuration key given to `make()`, and `getResource()` the resource class it configures.
+
 ## Linking the configuration class to a resource
 
 Set the static `configurationClass` property of the resource to its configuration class:
@@ -195,6 +197,7 @@ Without the option, `getUrl()` uses the active configuration: inside a configure
 Pages follow the same pattern as resources. The differences are:
 
 - The configuration class extends `PageConfiguration` instead of `ResourceConfiguration`. Besides `slug()`, it has `title()`, `navigationLabel()`, `navigationIcon()`, `navigationGroup()` and `navigationSort()`.
+  Their getters are `getSlug()`, `getTitle()`, `getNavigationLabel()`, `getNavigationIcon()`, `getNavigationGroup()` and `getNavigationSort()` (`null` when not set); `getKey()` returns the configuration key and `getPage()` the page class.
 - You register configurations with `panel.pages()` instead of `panel.resources()`.
 - Pages are components: read the configuration in `mount()` or any other method, with `SettingsPage.getConfiguration()`.
 

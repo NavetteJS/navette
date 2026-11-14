@@ -16,6 +16,8 @@ const colorsOf = (component: Parameters<ColorManager['getComponentClasses']>[0],
 };
 
 export type Attrs = Record<string, string | number | boolean | null | undefined>;
+/** Alpine tooltip of a button, link or icon button (Filament's `tooltip` attribute). */
+const tooltipAttribute = (tooltip: string | null | undefined): Attrs => (tooltip ? { 'x-tooltip': `{\n content: ${js(tooltip)},\n theme: $store.theme,\n allowHTML: false,\n }` } : {});
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 // ------------------------------------------------------------------ badge
@@ -31,16 +33,18 @@ export function badge(props: BadgeProps = {}, slot = ''): string {
 const counter = (value: string | number, color = 'primary'): string => `<span class="${cls([...colorsOf('badge', color), 'fi-badge', 'fi-size-xs'])}">${e(String(value))}</span>`;
 
 // ------------------------------------------------------------------ icon-button
-export type IconButtonProps = { icon: string; label: string; color?: string; size?: Size; disabled?: boolean; tag?: 'button' | 'a'; href?: string | null; badge?: string | number | null; badgeColor?: string; attributes?: Attrs };
+export type IconButtonProps = { icon: string; label: string; color?: string; size?: Size; disabled?: boolean; tag?: 'button' | 'a'; href?: string | null; badge?: string | number | null; badgeColor?: string; tooltip?: string | null; attributes?: Attrs };
 const ICON_BUTTON_ICON_SIZE: Record<Size, string> = { xs: 'sm', sm: 'md', md: 'md', lg: 'lg', xl: 'lg' };
 /** Icon-only button; the label is used as tooltip and accessible name. */
 export function iconButton(props: IconButtonProps): string {
     const { color = 'primary', size = 'md', disabled = false, tag = 'button' } = props;
     // The caller's classes go after the component's own classes.
     const { class: extraClass = null, ...rest } = (props.attributes ?? {}) as Attrs & { class?: string };
-    const attributes = new Attributes(rest)
+    const tooltip = props.tooltip || null;
+    const attributes = new Attributes({ ...tooltipAttribute(tooltip), ...rest })
         .merge({
-            'aria-disabled': disabled ? 'true' : null, 'aria-label': props.label, disabled, href: tag === 'a' ? (props.href ?? null) : null, title: props.label,
+            // A disabled button with a tooltip stays focusable, so its tooltip can show.
+            'aria-disabled': disabled ? 'true' : null, 'aria-label': props.label, disabled: disabled && !tooltip, href: tag === 'a' && !(disabled && tooltip) ? (props.href ?? null) : null, tabindex: tag === 'a' && disabled && tooltip ? '0' : null, title: tooltip ? null : props.label,
             type: tag === 'button' ? 'button' : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'fi-disabled' : null,
         })
         .class([...colorsOf('icon-button', color), 'fi-icon-btn', { 'fi-disabled': disabled }, `fi-size-${size}`, extraClass]);
@@ -51,14 +55,17 @@ export function iconButton(props: IconButtonProps): string {
 // ------------------------------------------------------------------ button
 export type ButtonProps = {
     color?: string; size?: Size; outlined?: boolean; disabled?: boolean; tag?: 'button' | 'a'; type?: string; href?: string | null;
-    icon?: string | null; iconPosition?: 'before' | 'after'; badge?: string | number | null; badgeColor?: string; attributes?: Attrs;
+    icon?: string | null; iconPosition?: 'before' | 'after'; badge?: string | number | null; badgeColor?: string;
+    /** Tooltip shown on hover (Alpine `x-tooltip`); a disabled button with a tooltip stays focusable. */
+    tooltip?: string | null; attributes?: Attrs;
 };
 /** Button. */
 export function button(props: ButtonProps = {}, slot = ''): string {
     const { color = 'primary', size = 'md', outlined = false, disabled = false, tag = 'button', type = 'button', iconPosition = 'before' } = props;
-    const attributes = new Attributes(props.attributes ?? {})
+    const tooltip = props.tooltip || null;
+    const attributes = new Attributes({ ...tooltipAttribute(tooltip), ...(props.attributes ?? {}) })
         .merge({
-            'aria-disabled': disabled ? 'true' : null, disabled, href: tag === 'a' ? (props.href ?? null) : null,
+            'aria-disabled': disabled ? 'true' : null, disabled: disabled && !tooltip, href: tag === 'a' ? (props.href ?? null) : null, tabindex: tag === 'a' && disabled && tooltip ? '0' : null,
             type: tag === 'button' ? type : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'fi-disabled' : null,
         })
         .class([...colorsOf(outlined ? 'button-outlined' : 'button', color), 'fi-btn', { 'fi-disabled': disabled, 'fi-outlined': outlined }, `fi-size-${size}`]);
@@ -70,14 +77,17 @@ export function button(props: ButtonProps = {}, slot = ''): string {
 // ------------------------------------------------------------------ link
 export type LinkProps = {
     href?: string | null; color?: string; size?: Size; weight?: string | null; tag?: 'a' | 'button'; icon?: string | null; iconPosition?: 'before' | 'after';
-    badge?: string | number | null; badgeColor?: string; attributes?: Attrs;
+    badge?: string | number | null; badgeColor?: string; disabled?: boolean;
+    /** Tooltip shown on hover (Alpine `x-tooltip`). */
+    tooltip?: string | null; attributes?: Attrs;
 };
 /** Link. */
 export function link(props: LinkProps = {}, slot = ''): string {
     const { color = 'primary', size = 'md', tag = 'a', iconPosition = 'before' } = props;
-    const attributes = new Attributes(props.attributes ?? {})
-        .merge({ href: tag === 'a' ? (props.href ?? null) : null, type: tag === 'button' ? 'button' : null })
-        .class([...colorsOf('link', color), 'fi-link', `fi-size-${size}`, props.weight ? `fi-font-${props.weight}` : null]);
+    const tooltip = props.tooltip || null, disabled = props.disabled === true;
+    const attributes = new Attributes({ ...tooltipAttribute(tooltip), ...(props.attributes ?? {}) })
+        .merge({ 'aria-disabled': disabled ? 'true' : null, disabled: tag === 'button' && disabled && !tooltip, href: tag === 'a' ? (props.href ?? null) : null, tabindex: tag === 'a' && disabled && tooltip ? '0' : null, type: tag === 'button' ? 'button' : null })
+        .class([...colorsOf('link', color), 'fi-link', { 'fi-disabled': disabled }, `fi-size-${size}`, props.weight ? `fi-font-${props.weight}` : null]);
     const iconHtml = props.icon ? icon(props.icon) : '';
     const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="fi-link-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
     return `<${tag} ${attributes.toHtml()}>${iconPosition === 'before' ? iconHtml : ''}<span class="fi-link-label">${slot}</span>${iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
@@ -118,14 +128,18 @@ export function spinner(attributes: Attrs = {}): string {
 // ------------------------------------------------------------------ text input and wrapper
 export type InputWrapperProps = {
     prefix?: string | null; suffix?: string | null; prefixIcon?: string | null; suffixIcon?: string | null; prefixIconColor?: string; suffixIconColor?: string;
-    disabled?: boolean; valid?: boolean; inlinePrefix?: boolean; inlineSuffix?: boolean; attributes?: Attrs;
+    disabled?: boolean; valid?: boolean; inlinePrefix?: boolean; inlineSuffix?: boolean;
+    /** Alpine expressions for the error and disabled states, instead of `valid` and `disabled` (`alpine-valid="! errors.includes('name')"`). */
+    alpineValid?: string | null; alpineDisabled?: string | null; attributes?: Attrs;
 };
 const FOCUS_INPUT = "if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')";
 const affixIcon = (name: string, color: string | undefined) => icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) });
 /** Input wrapper: border, prefix and suffix (text or icon). */
 export function inputWrapper(props: InputWrapperProps = {}, slot = ''): string {
     const hasPrefix = !!(props.prefix || props.prefixIcon), hasSuffix = !!(props.suffix || props.suffixIcon);
-    const attributes = new Attributes(props.attributes ?? {}).class(['fi-input-wrp', { 'fi-disabled': props.disabled === true, 'fi-invalid': props.valid === false }]);
+    const alpineValid = props.alpineValid || null, alpineDisabled = props.alpineDisabled || null;
+    const alpineClasses: Attrs = alpineValid || alpineDisabled ? { 'x-bind:class': `{\n${alpineDisabled ? ` 'fi-disabled': ${alpineDisabled},\n` : ''}${alpineValid ? ` 'fi-invalid': ! (${alpineValid}),\n` : ''} }` } : {};
+    const attributes = new Attributes({ ...alpineClasses, ...(props.attributes ?? {}) }).class(['fi-input-wrp', { 'fi-disabled': !alpineDisabled && props.disabled === true, 'fi-invalid': !alpineValid && props.valid === false }]);
     const prefix = hasPrefix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['fi-input-wrp-prefix', 'fi-input-wrp-prefix-has-content', { 'fi-inline': props.inlinePrefix === true, 'fi-input-wrp-prefix-has-label': !!props.prefix }])}">${props.prefixIcon ? affixIcon(props.prefixIcon, props.prefixIconColor) : ''}${props.prefix ? `<span class="fi-input-wrp-label">${e(props.prefix)}</span>` : ''}</div>` : '';
     const suffix = hasSuffix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['fi-input-wrp-suffix', { 'fi-inline': props.inlineSuffix === true, 'fi-input-wrp-suffix-has-label': !!props.suffix }])}">${props.suffix ? `<span class="fi-input-wrp-label">${e(props.suffix)}</span>` : ''}${props.suffixIcon ? affixIcon(props.suffixIcon, props.suffixIconColor) : ''}</div>` : '';
     return `<div ${attributes.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn">${slot}</div>${suffix}</div>`;
@@ -170,6 +184,8 @@ export type PaginationProps = {
     id: string; page: number; perPage: number;
     /** Total record count; omit it for simple (previous / next) pagination. */
     total?: number; hasMore?: boolean; pageOptions?: (number | 'all')[]; extremeLinks?: boolean; property?: string;
+    /** Other methods or properties whose requests disable the buttons too (`:loading-targets="['search']"`). */
+    loadingTargets?: string[];
 };
 /** Page numbers to show: all of them up to eleven pages, otherwise a window around the current page. */
 function pageElements(current: number, last: number): (number | '...')[] {
@@ -187,7 +203,7 @@ export function pagination(props: PaginationProps): string {
     const property = props.property ?? 'tableRecordsPerPage';
     return views.render('filament::components.pagination', {
         id: props.id, simple, extremeLinks: props.extremeLinks === true, property, t, tc,
-        targets: `previousPage,gotoPage,setPage,nextPage,paginators,${property}`,
+        targets: [...new Set([...(props.loadingTargets ?? []), 'previousPage', 'gotoPage', 'setPage', 'nextPage', 'paginators', property])].join(','),
         page: { page: props.page, lastPage, total: props.total ?? 0, from, to: simple ? from + props.perPage - 1 : Math.min(props.total!, from + props.perPage - 1) },
         number: (n: number) => n.toLocaleString('en-US'), pageOptions: props.pageOptions ?? [], elements: pageElements(props.page, lastPage),
         attrs: (o: Attrs) => new Attributes(o),
@@ -198,25 +214,28 @@ export function pagination(props: PaginationProps): string {
 export type SectionProps = {
     heading?: string | null; description?: string | null; icon?: string | null; iconColor?: string | null; iconSize?: 'sm' | 'md' | 'lg'; headingTag?: string;
     afterHeader?: string | null; footer?: string | null; collapsible?: boolean; collapsed?: boolean; aside?: boolean; contentBefore?: boolean;
-    compact?: boolean; contained?: boolean; divided?: boolean; secondary?: boolean; attributes?: Attrs;
+    compact?: boolean; contained?: boolean; divided?: boolean; secondary?: boolean;
+    /** Keeps the collapsed state in the browser's local storage, under the section's `id` (or `collapseId`). */
+    persistCollapsed?: boolean; collapseId?: string | null; attributes?: Attrs;
 };
 /** Collapsible card with an optional header (icon, heading, description, after-header area). */
 export function section(props: SectionProps = {}, slot = ''): string {
     const collapsible = props.collapsible === true, collapsed = collapsible && props.collapsed === true;
+    const persistCollapsed = props.persistCollapsed === true, collapseId = js(props.collapseId ?? null);
     const hasText = !!props.heading || !!props.description;
     const hasHeader = !!props.icon || hasText || collapsible || !!props.afterHeader;
     const tag = props.headingTag ?? 'h2';
     const expand = t('filament::components/section.actions.expand.label'), collapse = t('filament::components/section.actions.collapse.label');
     const attributes = new Attributes(props.attributes ?? {})
         .merge({
-            'x-data': `{ isCollapsed: ${collapsed ? 'true' : 'false'} , }`,
+            'x-data': persistCollapsed ? `{ isCollapsed: $persist(${collapsed ? 'true' : 'false'}).as(\`filament:section:collapsed:\${${collapseId} ?? $el.id}\`) , }` : `{ isCollapsed: ${collapsed ? 'true' : 'false'} , }`,
             ...(collapsible ? {
                 'x-id': "['fi-section-content']",
-                'x-on:collapse-section.window': 'if ($event.detail.id == (null ?? $el.id)) isCollapsed = true',
+                'x-on:collapse-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = true`,
                 'x-on:expand': 'isCollapsed = false',
-                'x-on:expand-section.window': 'if ($event.detail.id == (null ?? $el.id)) isCollapsed = false',
-                'x-on:open-section.window': 'if ($event.detail.id == (null ?? $el.id)) isCollapsed = false',
-                'x-on:toggle-section.window': 'if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed',
+                'x-on:expand-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = false`,
+                'x-on:open-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = false`,
+                'x-on:toggle-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = ! isCollapsed`,
                 'x-bind:class': "isCollapsed && 'fi-collapsed'",
             } : {}),
         })
@@ -231,25 +250,34 @@ export function section(props: SectionProps = {}, slot = ''): string {
         'x-bind:aria-controls': "$id('fi-section-content')", 'x-on:click.stop': 'isCollapsed = ! isCollapsed', class: 'fi-section-collapse-btn',
     } }) : '';
     const header = hasHeader ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header">${props.icon ? icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class(colorMark(props.iconColor)) }) : ''}${content}${toggle}</header>` : '';
-    const body = slot !== '' || props.footer ? `<div${collapsible ? ` x-bind:id="$id('fi-section-content')"${collapsed ? ' x-cloak' : ''}` : ''} class="fi-section-content-ctn">${slot !== '' ? `<div class="fi-section-content">${slot}</div>` : ''}${props.footer ? `<footer class="fi-section-footer">${props.footer}</footer>` : ''}</div>` : '';
+    const body = slot !== '' || props.footer ? `<div${collapsible ? ` x-bind:id="$id('fi-section-content')"${collapsed || persistCollapsed ? ' x-cloak' : ''}` : ''} class="fi-section-content-ctn">${slot !== '' ? `<div class="fi-section-content">${slot}</div>` : ''}${props.footer ? `<footer class="fi-section-footer">${props.footer}</footer>` : ''}</div>` : '';
     return `<section ${attributes.toHtml()}>${header}${body}</section>`;
 }
 
 // ------------------------------------------------------------------ tabs
-export type TabItem = { label: string; active?: boolean; icon?: string | null; iconPosition?: 'before' | 'after'; badge?: string | number | null; badgeColor?: string; tag?: 'button' | 'a'; href?: string | null; attributes?: Attrs };
-/** Tabs. */
-export function tabs(props: { label?: string | null; vertical?: boolean; contained?: boolean; attributes?: Attrs }, items: TabItem[]): string {
+export type TabItem = {
+    label: string; active?: boolean; icon?: string | null; iconPosition?: 'before' | 'after'; badge?: string | number | null; badgeColor?: string; tag?: 'button' | 'a'; href?: string | null;
+    /** Alpine expression making the tab active (`alpine-active="activeTab === 'tab1'"`), instead of `active`. */
+    alpineActive?: string | null;
+    /** Label as HTML already escaped (the content of a `<x-tabs.item>` tag), used instead of `label`. */
+    labelHtml?: string | null;
+    attributes?: Attrs;
+};
+/** One tab (`<x-tabs.item>`). */
+export function tabItem(item: TabItem): string {
+    const tag = item.tag ?? 'button';
+    const alpineActive = item.alpineActive || null;
+    const itemAttributes = new Attributes({ ...(alpineActive ? { 'x-bind:class': `{\n 'fi-active': ${alpineActive},\n }` } : {}), ...(item.attributes ?? {}) })
+        .merge({ type: tag === 'button' ? 'button' : null, href: tag === 'a' ? (item.href ?? null) : null, 'aria-current': item.active ? (tag === 'a' ? 'page' : 'true') : null })
+        .class(['fi-tabs-item', { 'fi-active': !alpineActive && item.active === true }]);
+    const iconHtml = item.icon ? icon(item.icon) : '';
+    const badgeHtml = item.badge !== null && item.badge !== undefined ? badge({ color: item.badgeColor ?? 'primary', size: 'sm' }, e(String(item.badge))) : '';
+    return `<${tag} ${itemAttributes.toHtml()}>${item.iconPosition === 'after' ? '' : iconHtml}<span class="fi-tabs-item-label">${item.labelHtml ?? e(item.label)}</span>${item.iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
+}
+/** Tabs: a list of items, or `slot` holding rendered `<x-tabs.item>` tags. */
+export function tabs(props: { label?: string | null; vertical?: boolean; contained?: boolean; attributes?: Attrs }, items: TabItem[] = [], slot = ''): string {
     const attributes = new Attributes(props.attributes ?? {}).merge({ 'aria-label': props.label ?? null }).class(['fi-tabs', { 'fi-contained': props.contained === true, 'fi-vertical': props.vertical === true }]);
-    const html = items.map((item) => {
-        const tag = item.tag ?? 'button';
-        const itemAttributes = new Attributes(item.attributes ?? {})
-            .merge({ type: tag === 'button' ? 'button' : null, href: tag === 'a' ? (item.href ?? null) : null, 'aria-current': item.active ? 'true' : null })
-            .class(['fi-tabs-item', { 'fi-active': item.active === true }]);
-        const iconHtml = item.icon ? icon(item.icon) : '';
-        const badgeHtml = item.badge !== null && item.badge !== undefined ? badge({ color: item.badgeColor ?? 'primary', size: 'sm' }, e(String(item.badge))) : '';
-        return `<${tag} ${itemAttributes.toHtml()}>${item.iconPosition === 'after' ? '' : iconHtml}<span class="fi-tabs-item-label">${e(item.label)}</span>${item.iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
-    });
-    return `<nav ${attributes.toHtml()}>${html.join('')}</nav>`;
+    return `<nav ${attributes.toHtml()}>${items.map(tabItem).join('')}${slot}</nav>`;
 }
 
 // ------------------------------------------------------------------ dropdown
@@ -277,10 +305,15 @@ export function dropdownItem(item: DropdownItem): string {
 /** List of dropdown menu items. */
 export function dropdownList(items: DropdownItem[]): string { return `<div class="fi-dropdown-list">${items.map(dropdownItem).join('')}</div>`; }
 /** Dropdown: `trigger` is the trigger's HTML, `slot` the panel content. */
-export function dropdown(props: { trigger: string; width?: string | null; maxHeight?: string | null; placement?: string | null; offset?: number; attributes?: Attrs }, slot = ''): string {
-    const attributes = new Attributes(props.attributes ?? {}).merge({ 'x-data': 'filamentDropdown({ isMenu: true })' }).class(['fi-dropdown']);
+export function dropdown(props: {
+    trigger: string; width?: string | null; maxHeight?: string | null; placement?: string | null; offset?: number;
+    /** `false` for content other than a menu (form fields…): no menu role, native keyboard interactions. */
+    menu?: boolean; attributes?: Attrs;
+}, slot = ''): string {
+    const menu = props.menu !== false;
+    const attributes = new Attributes(props.attributes ?? {}).merge({ 'x-data': `filamentDropdown({ isMenu: ${menu ? 'true' : 'false'} })` }).class(['fi-dropdown']);
     const float = `x-float${props.placement ? `.placement.${props.placement}` : ''}.flip.offset`;
-    return `<div ${attributes.toHtml()}><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${props.trigger}</div><div x-cloak ${float}="{ offset: ${props.offset ?? 8}, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${cls(['fi-dropdown-panel', props.width ? `fi-width-${props.width}` : null, { 'fi-scrollable': !!props.maxHeight }])}" style="${props.maxHeight ? `max-height: ${e(props.maxHeight)};` : ''}">${slot}</div></div>`;
+    return `<div ${attributes.toHtml()}><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${props.trigger}</div><div x-cloak ${float}="{ offset: ${props.offset ?? 8}, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0"${menu ? ' role="menu"' : ''} class="${cls(['fi-dropdown-panel', props.width ? `fi-width-${props.width}` : null, { 'fi-scrollable': !!props.maxHeight }])}" style="${props.maxHeight ? `max-height: ${e(props.maxHeight)};` : ''}">${slot}</div></div>`;
 }
 
 // ------------------------------------------------------------------ modal
@@ -292,10 +325,18 @@ export type ModalProps = {
     closeButton?: boolean; closeByClickingAway?: boolean; closeByEscaping?: boolean;
     /** Host component id, used to prefix `wire:key` values when the modal lives in a stateful component. */
     livewireId?: string | null;
+    /** HTML of the element opening the modal on click (the `trigger` slot). */
+    trigger?: string | null;
+    /** Attributes of the trigger's wrapper; `disabled` stops it from opening the modal. */
+    triggerAttributes?: Attrs;
+    /** `false`: the first focusable element is not focused when the modal opens. */
+    autofocus?: boolean;
 };
 /** Modal, opened by an `open-modal` event carrying its id. */
 export function modal(props: ModalProps, slot = ''): string {
-    const { id, alignment = 'start', width = 'sm', closeButton = true, closeByClickingAway = true, closeByEscaping = true } = props;
+    const { alignment = 'start', width = 'sm', closeButton = true, closeByClickingAway = true, closeByEscaping = true } = props;
+    const id = props.id || `fi-modal-${Math.random().toString(36).slice(2, 12)}`;
+    const trap = props.autofocus === false ? 'x-trap.noreturn.noautofocus' : 'x-trap.noreturn';
     const hasHeading = !!props.heading, hasDescription = !!props.description && hasHeading;
     const hasFooter = !!props.footer || (props.footerActions?.length ?? 0) > 0;
     const hasContent = slot !== '';
@@ -320,7 +361,12 @@ export function modal(props: ModalProps, slot = ''): string {
             'x-bind:class': "{ 'fi-modal-open': isOpen, }", 'x-cloak': true, 'x-show': 'isOpen',
         })
         .class(['fi-modal', { 'fi-absolute-positioning-context': !props.slideOver, 'fi-modal-slide-over': props.slideOver === true, 'fi-modal-has-sticky-header': props.stickyHeader === true, 'fi-modal-has-sticky-footer': props.stickyFooter === true }]);
-    return `<div ${outer.toHtml()}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div><div${trapOnWindow ? '' : ' tabindex="-1"'}${closeByClickingAway ? ` x-on:click.self="${e(close)}"` : ''}${trapOnWindow ? '' : ' x-trap.noreturn="isTrapActive"'} class="${cls(['fi-modal-window-ctn', { 'fi-clickable': closeByClickingAway }])}"><div${closeByEscaping ? ` x-on:keydown.window.escape="if (isTopmost()) ${e(close)}"` : ''} x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:key="${e(key('window'))}"${trapOnWindow ? ' x-trap.noreturn="isTrapActive" tabindex="0"' : ''} class="${windowClasses}">${header}${content}${footer}</div></div></div>`;
+    const html = `<div ${outer.toHtml()}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div><div${trapOnWindow ? '' : ' tabindex="-1"'}${closeByClickingAway ? ` x-on:click.self="${e(close)}"` : ''}${trapOnWindow ? '' : ` ${trap}="isTrapActive"`} class="${cls(['fi-modal-window-ctn', { 'fi-clickable': closeByClickingAway }])}"><div${closeByEscaping ? ` x-on:keydown.window.escape="if (isTopmost()) ${e(close)}"` : ''} x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:key="${e(key('window'))}"${trapOnWindow ? ` ${trap}="isTrapActive" tabindex="0"` : ''} class="${windowClasses}">${header}${content}${footer}</div></div></div>`;
+    if (!props.trigger) return html;
+    // The trigger opens the modal unless it is disabled (`<x-slot name="trigger" disabled>`).
+    const { disabled: triggerDisabled, ...triggerRest } = props.triggerAttributes ?? {};
+    const trigger = new Attributes({ ...(triggerDisabled ? {} : { 'x-on:click': `$dispatch('open-modal', { id: ${js(id)} })` }), ...triggerRest }).class(['fi-modal-trigger']);
+    return `<div><div ${trigger.toHtml()}>${props.trigger}</div>${html}</div>`;
 }
 
 // ------------------------------------------------------------------ component tags
@@ -349,11 +395,18 @@ views
     .component('loading-indicator', (props) => loadingIndicator(new Attributes(props.attributes), props.size))
     // `id` is an HTML attribute name, so it lands in the attribute bag: these two components need it as a prop.
     .component('modal', (props, slot) => modal({ ...props, id: props.id ?? props.attributes?.id } as ModalProps, slot))
+    // The section's `id` (an HTML attribute) also names its persisted collapsed state.
     .component('pagination', (props) => pagination({ ...props, id: props.id ?? props.attributes?.id } as PaginationProps))
     .component('section', withSlot(section))
     .component('select', (props, slot) => select({ ...props.attributes, ...Object.fromEntries(Object.entries(props).filter(([key]) => key !== 'attributes')) }, slot))
     .component('spinner', (props) => spinner(props.attributes))
-    .component('tabs', (props) => tabs(props as any, props.items ?? []));
+    .component('tabs', (props, slot) => tabs(props as any, props.items ?? [], slot))
+    .component('tabs.item', (props, slot) => tabItem({ ...props, label: props.label ?? '', labelHtml: props.label === undefined ? slot.trim() : null } as TabItem));
+// Filament's names for the same components: `<x-input.wrapper>`, `<x-dropdown.list>`, `<x-dropdown.list.item>`.
+views
+    .component('input.wrapper', withSlot(inputWrapper))
+    .component('dropdown.list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="fi-dropdown-list">${slot}</div>`))
+    .component('dropdown.list.item', (props, slot) => dropdownItem({ ...props, label: props.label ?? '', labelHtml: props.label === undefined ? slot.trim() : null } as DropdownItem));
 
-export const ui = { avatar, badge, breadcrumbs, button, callout, checkbox, dropdown, dropdownItem, dropdownList, emptyState, fieldset, iconButton, input, inputWrapper, link, modal, pagination, section, select, spinner, tabs };
+export const ui = { avatar, badge, breadcrumbs, button, callout, checkbox, dropdown, dropdownItem, dropdownList, emptyState, fieldset, iconButton, input, inputWrapper, link, modal, pagination, section, select, spinner, tabItem, tabs };
 export { cls, e, js, loadingIndicator };

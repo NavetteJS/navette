@@ -23,6 +23,7 @@ import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
 import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
+import { componentViewData } from './view-helpers.ts';
 import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
 export { Notification, Notifications, type NotificationActionData, type NotificationActionGroupData, type NotificationActionInput, type NotificationActionItem, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
 import { streamBroadcasts, userBroadcastChannel, type BroadcastRecipient } from './broadcasting.ts';
@@ -1929,6 +1930,8 @@ export class Page extends BasePage {
      * Content rendered from an EJS view instead of the `content` schema: a namespaced view (`'app::pages.report'`), or a file
      * (path or `new URL('./report.ejs', import.meta.url)`). The view receives `page` (this page) and `getViewData()`, and may use
      * component tags (`<x-section>`, `<x-button>`…). Elements calling the server use `wire:click` on a method listed in `static callable`.
+     * It is an async template, with the helpers `schema(name)`, `table()`, `action(name, args)`, `modals()` and `livewire(Widget)`:
+     * `<%- await schema('form') %>`.
      */
     static view: string | URL | null = null;
     /** Extra variables for the page view. */
@@ -1936,8 +1939,8 @@ export class Page extends BasePage {
     protected async renderContent(): Promise<string> {
         const view = (this.constructor as typeof Page).view;
         if (view === null) return (await this.getSchema('content')).toHtml();
-        const data = { page: this, livewireId: this.id, ...(await this.getViewData()) };
-        return typeof view === 'string' && view.includes('::') ? views.render(view, data) : views.renderFile(view instanceof URL ? fileURLToPath(view) : view, data);
+        const data = { page: this, livewireId: this.id, ...componentViewData(this), ...(await this.getViewData()) };
+        return typeof view === 'string' && view.includes('::') ? views.renderAsync(view, data) : views.renderFileAsync(view instanceof URL ? fileURLToPath(view) : view, data);
     }
 
     async render(): Promise<string> {
@@ -2974,7 +2977,8 @@ export abstract class Widget extends BasePage {
     static canView(_user: User): boolean | Promise<boolean> { return true; }
     async boot(): Promise<void> {
         const ctx = this._ctx as PanelContext | null;
-        if (!ctx?.user) throw new WireError(401, 'Unauthenticated.');
+        // A guest only sees widgets in a panel that allows guests (and outside a panel, see `@navette-js/panels/livewire`).
+        if (!ctx?.user && !ctx?.panel?.allowsGuests()) throw new WireError(401, 'Unauthenticated.');
         const WidgetClass = this.constructor as typeof Widget;
         if (!(await ctx.panel.authorize(ctx.user, 'view', { widget: WidgetClass, rule: () => WidgetClass.canView(ctx.user!) }))) throw new WireError(403, 'Forbidden.');
     }

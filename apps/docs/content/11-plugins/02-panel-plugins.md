@@ -82,6 +82,15 @@ export const footerPlugin = (text: string): Plugin => ({
 panel.plugin(footerPlugin('Acme, internal tool'));
 ```
 
+`getPluginId(plugin)` returns the identifier of any plugin, a class or an object: the result of its `getId()` method, or else its `id` property. It throws an error when the plugin has neither. The panel uses it to find plugins, and you may use it in code that receives plugins of both kinds:
+
+```ts
+import { getPluginId } from '@navette-js/panels';
+
+getPluginId(new BlogPlugin()); // 'blog'
+getPluginId(footerPlugin('Acme')); // 'footer'
+```
+
 ## Fluently instantiating the plugin class
 
 `PanelPlugin` provides a static `make()` method, which creates an instance of your plugin class:

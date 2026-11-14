@@ -212,7 +212,23 @@ Use `max-height` with a CSS length. A panel taller than this scrolls:
 
 ## Displaying content other than a menu
 
-The content of the dropdown is free: put any HTML in it instead of lists.
+The content of the dropdown is free: put any HTML in it instead of lists. When it holds form fields or other content than menu items, set `:menu="false"`: the panel then keeps the native keyboard behavior of its content, and is not announced as a menu:
+
+```html
+<x-dropdown :menu="false">
+    <x-slot name="trigger">
+        <x-button>Edit notes</x-button>
+    </x-slot>
+
+    <label for="dropdown-notes">Notes</label>
+
+    <x-input-wrapper>
+        <x-input id="dropdown-notes" wire:model="notes" />
+    </x-input-wrapper>
+</x-dropdown>
+```
+
+Use form elements, buttons and links in such a panel, rather than `<x-dropdown-item>`, which is a menu item.
 
 ```html
 <x-dropdown width="sm">
@@ -237,6 +253,7 @@ The content of the dropdown is free: put any HTML in it instead of lists.
 | `offset` | number | `8` | Distance between the trigger and the panel, in pixels |
 | `width` | string | none | Width of the panel |
 | `max-height` | string | none | Maximum height of the panel (CSS length) |
+| `menu` | boolean | `true` | `false` for content other than a menu |
 
 `<x-dropdown-list>`:
 

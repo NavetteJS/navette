@@ -140,6 +140,16 @@ template(`<x-button :badge="3" badge-color="danger">
 
 The badge value is escaped.
 
+## Adding a tooltip to a button
+
+The `tooltip` prop shows a text when the pointer is over the button:
+
+```html
+<x-button tooltip="Register a user">New user</x-button>
+```
+
+A disabled button with a tooltip stays focusable, so that its tooltip can explain why it is disabled: it gets `aria-disabled="true"` without the `disabled` attribute. The tooltip is escaped.
+
 ## Props
 
 | Prop | Type | Default | Description |
@@ -155,3 +165,4 @@ The badge value is escaped.
 | `icon-position` | `before`, `after` | `before` | Position of the icon |
 | `badge` | string or number | none | Counter displayed on the button |
 | `badge-color` | string | `primary` | Color of the counter |
+| `tooltip` | string | none | Text shown on hover |

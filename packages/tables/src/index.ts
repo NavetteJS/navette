@@ -505,6 +505,11 @@ export class TextColumn<R = any> extends Column<R> {
         return e(text);
     }
 
+    /**
+     * Displayed text of a state, as the cell shows it (Filament's `formatState()`): `formatStateUsing()`, enum label, date,
+     * money or number, limits, prefix and suffix. A list state gives the text of each item.
+     */
+    formatState(state: unknown, record: R): string | string[] { return Array.isArray(state) ? state.map((item) => this.formatItem(item, record)) : this.formatItem(state, record); }
     /** Displayed text of one state item, escaped by the caller. */
     private formatItem(item: unknown, record: R): string {
         if (this._format) return String(this._format({ state: item, record }) ?? '');
@@ -1878,6 +1883,8 @@ export interface TableFilter {
     applyToBaseQuery?(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void;
     /** `true`: the filter is not applied when a row action resolves its record (`excludeWhenResolvingRecord()`). */
     shouldExcludeWhenResolvingRecord?(): boolean;
+    /** Hidden filters (`hidden()` / `visible(false)`) are left out of the form, the query and the indicators. */
+    isHidden?(): boolean;
 }
 
 const filterLabel = (name: string) => name.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -1972,6 +1979,13 @@ abstract class BaseFilter implements TableFilter {
     columnSpan(span: number | string | Record<string, number | string>): this { this._columnSpan = typeof span === 'object' ? span : { default: span }; return this; }
     columnSpanFull(): this { return this.columnSpan('full'); }
     getColumnSpan(): Record<string, number | string> { return this._columnSpan; }
+    protected _hidden: boolean | (() => boolean) = false;
+    protected _visible: boolean | (() => boolean) = true;
+    /** Removes the filter from the table: its form field, its query and its indicators (Filament's `hidden()`). */
+    hidden(condition: boolean | (() => boolean) = true): this { this._hidden = condition; return this; }
+    visible(condition: boolean | (() => boolean) = true): this { this._visible = condition; return this; }
+    isHidden(): boolean { return Boolean(typeof this._hidden === 'function' ? this._hidden() : this._hidden) || !(typeof this._visible === 'function' ? this._visible() : this._visible); }
+    isVisible(): boolean { return !this.isHidden(); }
     /** State after removing the filter: blank, whatever the default. */
     abstract getResetState(): FilterState;
     abstract getDefaultState(): FilterState;
@@ -2860,7 +2874,10 @@ export class Table<R = any> {
 
     getColumns(): Column<R>[] { return this._columns.filter((column) => !column.isHidden()); }
     getColumn(name: string): Column<R> | undefined { return this.getColumns().find((c) => c.name === name); }
-    getFilters(): TableFilter[] { return this._filters; }
+    /** Filters of the table; `withHidden` includes those hidden with `hidden()` / `visible(false)`. */
+    getFilters(withHidden = false): TableFilter[] { return withHidden ? this._filters : this._filters.filter((filter) => !filter.isHidden?.()); }
+    /** A filter by name (`withHidden`: hidden ones too). */
+    getFilter(name: string, withHidden = false): TableFilter | null { return this.getFilters(withHidden).find((filter) => filter.name === name) ?? null; }
     /** Removes the columns and filters hidden in this host component (`hiddenOn()`); called by the component building the table. */
     withoutComponentsHiddenOn(host: unknown): this {
         this._columns = this._columns.filter((column) => !(column as any).isHiddenOn?.(host));

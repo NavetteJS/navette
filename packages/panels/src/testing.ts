@@ -13,6 +13,8 @@ import { getTableQuery, getTableRecords, getVisibleColumns, TernaryFilter, Selec
 import { hydrateValue, UploadStore, WireError, WireRuntime, type Call, type Component, type Effects, type Snapshot } from '@navette-js/wire';
 import { Notification, runInRequest, type NotificationData } from './notifications.ts';
 import { panelRouter, RelationManager, type Panel, type PanelContext, type User } from './index.ts';
+import { installTestingExtras, normalizeListLikeState, type TestableExtras } from './testing-extras.ts';
+export { assertNotified, assertNotNotified, clearSentNotifications, type TestableExtras } from './testing-extras.ts';
 
 // ------------------------------------------------------------------ defaults (Filament: actingAs(), setCurrentPanel(), setTenant())
 let defaultPanel: Panel | null = null;
@@ -38,6 +40,8 @@ function runtimeFor(panel: Panel): WireRuntime {
     runtime = new WireRuntime({ key, uploads: new UploadStore(directory, key) });
     // The panel's router registers its pages, relation managers and widgets, as in the application.
     panelRouter(panel, runtime);
+    // Components served outside a panel (`@navette-js/panels/livewire`) keep their names.
+    for (const [name, cls] of ((panel as any).registeredComponents ?? new Map()) as Map<string, any>) runtime.register(name, cls);
     runtimes.set(panel, runtime);
     return runtime;
 }
@@ -141,7 +145,8 @@ function flatten(state: Record<string, unknown>, prefix = '', out: Record<string
 }
 /** JSON copy, as values travel between the browser and the server. */
 const wire = <T>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
-const sameValue = (actual: unknown, expected: unknown): boolean => { try { deepStrictEqual(wire(actual), wire(expected)); return true; } catch { return false; } };
+/** Same value once both cross the wire; a list is equal to an object keyed '0', '1'… (faked repeater and builder item keys). */
+const sameValue = (actual: unknown, expected: unknown): boolean => { try { deepStrictEqual(normalizeListLikeState(wire(actual), wire(expected)), wire(expected)); return true; } catch { return false; } };
 const show = (value: unknown) => { try { return JSON.stringify(value); } catch { return String(value); } };
 const decodeEntities = (html: string) => html.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (_, code: string) => {
     const lower = code.toLowerCase();
@@ -176,7 +181,8 @@ export function livewire<C extends Component = any>(componentClass: new () => C,
     return new Testable<C>(componentClass, params, options);
 }
 
-/** A mounted component under test (Livewire's `Testable`). */
+/** A mounted component under test (Livewire's `Testable`); the methods of `TestableExtras` are added by `testing-extras.ts`. */
+export interface Testable<C extends Component = any> extends TestableExtras {}
 export class Testable<C extends Component = any> implements PromiseLike<void> {
     private queue: Promise<void>;
     private readonly panel: Panel;
@@ -1007,3 +1013,4 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         });
     }
 }
+installTestingExtras(Testable);

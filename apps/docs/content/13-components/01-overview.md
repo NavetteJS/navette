@@ -38,10 +38,10 @@ These components are available in every view:
 | `<x-badge>` | [Badge](/components/badge) |
 | `<x-section>` | [Section](/components/section) |
 | `<x-modal>` | [Modal](/components/modal) |
-| `<x-dropdown>`, `<x-dropdown-list>`, `<x-dropdown-item>` | [Dropdown](/components/dropdown) |
-| `<x-tabs>` | [Tabs](/components/tabs) |
+| `<x-dropdown>`, `<x-dropdown-list>` (or `<x-dropdown.list>`), `<x-dropdown-item>` (or `<x-dropdown.list.item>`) | [Dropdown](/components/dropdown) |
+| `<x-tabs>`, `<x-tabs.item>` | [Tabs](/components/tabs) |
 | `<x-callout>`, `<x-empty-state>` | [Callout and empty state](/components/callout-and-empty-state) |
-| `<x-input>`, `<x-input-wrapper>`, `<x-select>`, `<x-checkbox>`, `<x-fieldset>` | [Form elements](/components/form-elements) |
+| `<x-input>`, `<x-input-wrapper>` (or `<x-input.wrapper>`), `<x-select>`, `<x-checkbox>`, `<x-fieldset>` | [Form elements](/components/form-elements) |
 | `<x-avatar>`, `<x-breadcrumbs>`, `<x-icon>`, `<x-icon-button>`, `<x-link>`, `<x-loading-indicator>`, `<x-spinner>`, `<x-pagination>` | [Other components](/components/other) |
 
 In a panel application, they work without any setup: the panel gives them its colors. Outside a panel, import `@navette-js/support/ui` once, which registers the tags, and give the components a color manager:
@@ -55,7 +55,9 @@ useColorManager(new ColorManager().register({ primary: Color.Indigo }));
 
 The components only produce HTML. Their styles come from the panel stylesheet, and the interactive ones (dropdown, modal, collapsible section) need the Alpine.js scripts of the panel: outside a panel, your page must load them.
 
-You may also [create your own components](/components/creating-components) and use them with the same syntax.
+You may also [create your own components](/components/creating-components) and use them with the same syntax. The same functions are available in TypeScript: see [using the components from TypeScript](/components/typescript-api).
+
+Forms, tables, infolists, actions, widgets and notifications may also be rendered outside a panel, in components of your own: see [rendering a form outside a panel](/components/outside-a-panel/form) and the pages that follow it.
 
 ## Passing props
 

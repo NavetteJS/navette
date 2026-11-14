@@ -8,7 +8,7 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { readSecret } from './secret.ts';
-import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateSchemaComponent, generateJsWidget, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateColumn, generateComponent, generateEntry, generateField, generateLivewireForm, generateLivewireTable, generatePlugin, kebab, generateResource, generateMigration, generatePage, generateSchemaComponent, generateJsWidget, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 import { generateCluster, generatePanel, generateRelationManager, generateResourcePage, generateResourceWidget, generateTheme, RESOURCE_PAGE_TYPES, type GeneratedFiles, type ResourcePageType } from './panel-generators.ts';
 import { applyGeneratorOverrides } from './overrides.ts';
 
@@ -67,6 +67,15 @@ const resourceOf = (value: string | undefined) => {
     if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) fail(`Invalid resource name: ${value}`);
     return name;
 };
+/** Columns of a database table (`--generate`), after running the pending migrations. */
+async function databaseColumns(table: string): Promise<ColumnInfo[]> {
+    const { db, migrate } = await project();
+    await migrate();
+    if (!(await db.schema.hasTable(table))) fail(`Table "${table}" not found. Create it with a migration first (npx navette make:migration create_${table}_table), or pass --table=.`);
+    const info = await db(table).columnInfo();
+    await db.destroy();
+    return Object.entries(info).map(([name, column]: [string, any]) => ({ name, type: String(column.type ?? ''), nullable: column.nullable !== false }));
+}
 const panelOf = () => {
     const panel = flag('panel') ?? 'admin';
     if (!/^[a-z][a-z0-9-]*$/.test(panel)) fail(`Invalid panel id: ${panel}`);
@@ -138,6 +147,29 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
             if (options.softDeletes && columns && !columns.some((column) => column.name === 'deleted_at')) say(`\n  The table has no deleted_at column: add one with a migration (table.timestamp('deleted_at').nullable()).`);
             if (nested) say(`\n  List its records in ${nested} with a relation manager: npx navette make:relation-manager ${nested} ${tableName(model).replace(/_(.)/g, (_m, c) => c.toUpperCase())} --related-resource=${model}Resource`);
             say(`\n  Restart the server: the resource is discovered from src/${panel}/resources.`);
+        },
+    },
+    'make:livewire-form': {
+        usage: 'navette make:livewire-form <Name> [Model] [--edit] [--generate] [--table=]   Create a component with a form, outside any panel (src/livewire)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the component a name, e.g. CreatePost'));
+            const model = positional[1] ? studly(positional[1]) : null;
+            if (flags.edit && !model) fail('--edit needs a model: navette make:livewire-form EditPost Post --edit');
+            const columns = model && flags.generate ? await databaseColumns(flag('table') ?? tableName(model)) : null;
+            const { component, view } = generateLivewireForm(name, model, columns, { edit: flags.edit === true });
+            write(join(cwd, 'src', 'livewire', `${name}.ts`), component);
+            write(join(cwd, 'src', 'livewire', `${kebab(name)}.ejs`), view);
+            say(`\n  Register it with livewire.components([${name}]) and serve it: see "Rendering a form outside a panel" in the documentation.`);
+        },
+    },
+    'make:livewire-table': {
+        usage: 'navette make:livewire-table <Name> [Model] [--generate] [--table=]   Create a component with a table, outside any panel (src/livewire)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the component a name, e.g. ListProducts'));
+            const model = positional[1] ? studly(positional[1]) : null;
+            const columns = model && flags.generate ? await databaseColumns(flag('table') ?? tableName(model)) : null;
+            write(join(cwd, 'src', 'livewire', `${name}.ts`), generateLivewireTable(name, model, columns).component);
+            say(`\n  Register it with livewire.components([${name}]) and serve it: see "Rendering a table outside a panel" in the documentation.`);
         },
     },
     'make:page': {

@@ -20,6 +20,12 @@ type NotificationSink = { send(user: string | number, notification: Notification
 type RequestStore = { mailbox: string; pending: NotificationData[] };
 
 const requestStore = new AsyncLocalStorage<RequestStore>();
+let sentNotificationsListener: ((notification: NotificationData) => void) | null = null;
+/**
+ * Calls `listener` with every notification sent (`null` stops). Used by the testing helpers' `assertNotified()`; while a
+ * listener is set, `send()` outside a request records the notification instead of throwing.
+ */
+export function listenToSentNotifications(listener: ((notification: NotificationData) => void) | null): void { sentNotificationsListener = listener; }
 /** Runs `fn` in a request context, where `Notification.send()` queues its notifications. */
 export function runInRequest<T>(mailbox: string, fn: () => Promise<T>): Promise<{ result: T; pending: NotificationData[] }> {
     const store: RequestStore = { mailbox, pending: [] };
@@ -142,7 +148,12 @@ export class Notification {
     /** Queues the notification for the browser of the current request. */
     send(): this {
         const store = requestStore.getStore();
-        if (!store) throw new Error('Notification.send() must be called while handling a request.');
+        if (sentNotificationsListener) sentNotificationsListener({ ...this.data });
+        if (!store) {
+            // Tests (`@navette-js/panels/testing`) record notifications sent outside a request instead of failing.
+            if (sentNotificationsListener) return this;
+            throw new Error('Notification.send() must be called while handling a request.');
+        }
         store.pending.push({ ...this.data });
         return this;
     }

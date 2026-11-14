@@ -82,6 +82,20 @@ TernaryFilter.make('is_active')
 
 Removing the filter's indicator, or clicking "Remove all", clears the filter instead of restoring its default.
 
+## Hiding a filter
+
+`hidden()` removes a filter from the table: its field, its query and its indicator. It accepts a condition or a function, and `visible()` does the contrary:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('owner')
+    .options(OWNERS)
+    .visible(() => currentUserIsAdmin())
+```
+
+A hidden filter is left out of the state the browser can apply: a forged request cannot use it. `table.getFilters()` returns the visible filters, `table.getFilters(true)` all of them, and `table.getFilter(name)` one of them.
+
 ## Applying filters
 
 By default, the user changes the values of the filters in the form, then clicks the "Apply" button. Until then, the table does not change. Applying the filters returns the table to its first page. The "Reset" link restores the [default values](#setting-a-default-value) of all filters.
