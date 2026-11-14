@@ -114,13 +114,15 @@ class StyleSheet {
  * Workbook with a single sheet. By default the first row is bold (header). `headerStyle` and `cellStyle` replace the style of
  * the header row and of the other rows; a row may also be `{ cells, style }`, and a cell an `XlsxCell` with its own style.
  */
-export function buildXlsx(rows: XlsxRowInput[], sheetName = 'Sheet1', options: { headerStyle?: XlsxStyle | null; cellStyle?: XlsxStyle | null; writerOptions?: XlsxOptions | null } = {}): Buffer {
+export function buildXlsx(rows: XlsxRowInput[], sheetName = 'Sheet1', options: { headerStyle?: XlsxStyle | null; cellStyle?: XlsxStyle | null; writerOptions?: XlsxOptions | null; headerRow?: number; sheetView?: XlsxSheetView | null } = {}): Buffer {
+    // Rows above the header (`headerRow`, 0 by default) keep their own style only.
+    const headerRow = Math.max(0, Math.floor(options.headerRow ?? 0));
     const styles = new StyleSheet();
     const sheetRows = rows.map((input, r) => {
         const { cells, style } = Array.isArray(input) ? { cells: input, style: null } : { cells: input.cells, style: input.style ?? null };
-        const rowStyle = style ?? (r === 0 ? options.headerStyle ?? null : options.cellStyle ?? null);
+        const rowStyle = style ?? (r < headerRow ? null : r === headerRow ? options.headerStyle ?? null : options.cellStyle ?? null);
         // Without any style, the header keeps its bold default format.
-        const rowFormat = rowStyle ? styles.format(rowStyle) : r === 0 && options.headerStyle === undefined ? 1 : 0;
+        const rowFormat = rowStyle ? styles.format(rowStyle) : r === headerRow && options.headerStyle === undefined ? 1 : 0;
         return `<row r="${r + 1}">${cells.map((cell, c) => {
             const own = cell instanceof XlsxCell ? cell : null;
             const value = own ? own.value : cell;
@@ -137,10 +139,69 @@ export function buildXlsx(rows: XlsxRowInput[], sheetName = 'Sheet1', options: {
         ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
         ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(sheetName.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31)) || 'Sheet1'}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
         ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
-        ['xl/worksheets/sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${format}${cols}<sheetData>${sheetRows}</sheetData></worksheet>`],
+        ['xl/worksheets/sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sheetViewXml(options.sheetView ?? null)}${format}${cols}<sheetData>${sheetRows}</sheetData></worksheet>`],
     ];
     files.splice(4, 0, ['xl/styles.xml', styles.toXml()]);
     return zip(files.map(([name, content]) => [name, Buffer.from(content, 'utf8')]));
+}
+
+/** Index (from 1) of a frozen column name (`'B'` is 2), or of a column number. */
+function freezeColumnIndex(column: string | number): number {
+    if (typeof column === 'number') return Math.max(1, Math.floor(column));
+    let index = 0;
+    for (const char of column.toUpperCase()) { const code = char.charCodeAt(0); if (code < 65 || code > 90) throw new Error(`Invalid XLSX column name [${column}].`); index = index * 26 + (code - 64); }
+    return Math.max(1, index);
+}
+/** The `<sheetViews>` element of a sheet with frozen panes. */
+function sheetViewXml(view: XlsxSheetView | null): string {
+    if (!view) return '';
+    const row = view.freezeRow !== null && view.freezeRow > 1 ? Math.floor(view.freezeRow) : 1;
+    const column = view.freezeColumn !== null ? freezeColumnIndex(view.freezeColumn) : 1;
+    if (row === 1 && column === 1) return '';
+    const pane = row > 1 && column > 1 ? 'bottomRight' : row > 1 ? 'bottomLeft' : 'topRight';
+    return `<sheetViews><sheetView workbookViewId="0"><pane${column > 1 ? ` xSplit="${column - 1}"` : ''}${row > 1 ? ` ySplit="${row - 1}"` : ''} topLeftCell="${columnName(column - 1)}${row}" activePane="${pane}" state="frozen"/><selection pane="${pane}"/></sheetView></sheetViews>`;
+}
+
+/**
+ * View of a sheet (OpenSpout's `SheetView`): frozen panes. `setFreezeRow(2)` keeps the first row visible while scrolling,
+ * `setFreezeColumn('B')` the first column.
+ */
+export class XlsxSheetView {
+    freezeRow: number | null = null;
+    freezeColumn: string | number | null = null;
+    /** The first row that scrolls: the rows above it stay visible. */
+    setFreezeRow(row: number | null): this { this.freezeRow = row; return this; }
+    /** The first column that scrolls (a name like `'B'`, or a number from 1): the columns left of it stay visible. */
+    setFreezeColumn(column: string | number | null): this { this.freezeColumn = column; return this; }
+}
+/** The sheet being written (OpenSpout's `Sheet`): its name (31 characters at most) and its view. */
+export class XlsxSheet {
+    private _name = 'Sheet1';
+    private _view: XlsxSheetView | null = null;
+    setName(name: string): this { this._name = name; return this; }
+    getName(): string { return this._name; }
+    setSheetView(view: XlsxSheetView | null): this { this._view = view; return this; }
+    getSheetView(): XlsxSheetView | null { return this._view; }
+}
+/**
+ * Writer of an export's XLSX file, as an exporter's `configureXlsxWriterAfterOpen()` and `configureXlsxWriterBeforeClose()`
+ * receive it (OpenSpout's `Writer`): rows added after opening go above the header, rows added before closing go below the data;
+ * `getCurrentSheet()` names the sheet and freezes panes.
+ */
+export class XlsxWriter {
+    readonly rows: XlsxRowInput[] = [];
+    private readonly sheet = new XlsxSheet();
+    private _headerRow: number | null = null;
+    /** Adds a row: values (or `XlsxCell`s), or `{ cells, style }`. */
+    addRow(row: XlsxRowInput): this { this.rows.push(row); return this; }
+    addRows(rows: XlsxRowInput[]): this { this.rows.push(...rows); return this; }
+    getCurrentSheet(): XlsxSheet { return this.sheet; }
+    /** @internal Adds the header row (styled as the header). */
+    addHeaderRow(row: XlsxRowInput): this { this._headerRow = this.rows.length; this.rows.push(row); return this; }
+    /** The file. */
+    toBuffer(options: { headerStyle?: XlsxStyle | null; cellStyle?: XlsxStyle | null; writerOptions?: XlsxOptions | null } = {}): Buffer {
+        return buildXlsx(this.rows, this.sheet.getName(), { ...options, headerRow: this._headerRow ?? 0, sheetView: this.sheet.getSheetView() });
+    }
 }
 
 /** ZIP archive (deflate), as required by the XLSX format. */

@@ -1,6 +1,7 @@
 // Import and export actions: CSV and XLSX files, read and written during the request or in the background (queued()),
 // an optional history of runs, and durable per-user downloads (`downloads.ts`). The import side is in `imports.ts`.
-import { buildXlsx, type XlsxOptions, type XlsxRowInput, type XlsxStyle } from './xlsx.ts';
+import { XlsxWriter, type XlsxOptions, type XlsxRowInput, type XlsxStyle } from './xlsx.ts';
+import { exportFormatKey, normalizeExportFormats, type ExportFormatInterface } from './export-formats.ts';
 import { AssertionError } from 'node:assert';
 import { Action } from '@navette-js/actions';
 import { CheckboxList } from '@navette-js/forms';
@@ -56,11 +57,15 @@ export function parseCsv(text: string, maxRows = Infinity, delimiter = ','): str
 /** Formats of an export (Filament: the `ExportFormat` enum). */
 export const ExportFormat = { Csv: 'csv', Xlsx: 'xlsx' } as const;
 export type ExportFormatValue = 'csv' | 'xlsx';
+/** A format of an export: `'csv'`, `'xlsx'`, or a custom format (`ExportFormatInterface`). */
+export type ExportFormatType = ExportFormatValue | ExportFormatInterface;
 /** One export, as the exporter's methods, the notification and the fake see it (Filament: the `Export` model). */
 export type ExportRun = {
     /** Key of the run in the export history, if the panel keeps one. */
     id: string | number | null;
     userId: string | number | null;
+    /** Type of the user (the panel's id), stored by a history with a polymorphic user (`knexImportExportHistory(db, { polymorphicUser: true })`). */
+    userType?: string | null;
     exporter: string;
     fileName: string;
     totalRows: number;
@@ -68,7 +73,7 @@ export type ExportRun = {
     /** Column name → header label, in the order of the file. */
     columnMap: Record<string, string>;
     options: Record<string, unknown>;
-    formats: ExportFormatValue[];
+    formats: ExportFormatType[];
 };
 /** What the functions of an export column receive. `record` is `null` where no record applies (`hidden()`, `limit()` before a row). */
 export type ExportColumnContext = { record: any; options: Record<string, unknown>; column: ExportColumn; export: ExportRun | null };
@@ -192,10 +197,29 @@ export abstract class Exporter {
     static getFileName(_count: number, _run?: ExportRun): string { return `export-${new Date().toISOString().slice(0, 10)}`; }
     /** Delimiter of the CSV file (one character). */
     static getCsvDelimiter(): string { return ','; }
-    /** Formats offered by default (an action's `formats()` replaces them). */
-    static getFormats(): ExportFormatValue[] { return ['csv', 'xlsx']; }
-    /** How a file of this format is sent (see `Downloader`). */
-    static getDownloader(_format: ExportFormatValue): Downloader { return sendDownload; }
+    /** Formats offered by default (an action's `formats()` replaces them): `'csv'`, `'xlsx'` and custom formats (`ExportFormatInterface`). */
+    static getFormats(): ExportFormatType[] { return ['csv', 'xlsx']; }
+    /** How a file of this format is sent (see `Downloader`): a custom format's own `getDownloader()` by default. */
+    static getDownloader(format: ExportFormatType): Downloader { return typeof format === 'object' ? format.getDownloader?.() ?? sendDownload : sendDownload; }
+    /**
+     * Name of the download disk where the files are kept (Filament's `getFileDiskName()`): one of the panel's
+     * `downloadDisks({ ... })`; `null` (the default) uses the panel's `downloads()` store. An action's `fileDisk()` wins.
+     */
+    static getFileDiskName(): string | null { return null; }
+    /** Queue name handed to the background runner (`useBackgroundRunner()`) with each queued export of this exporter. */
+    static getJobQueue(): string | null { return null; }
+    /** Connection name handed to the background runner with each queued export of this exporter. */
+    static getJobConnection(): string | null { return null; }
+    /**
+     * Changes the XLSX writer right after it is opened, before the header row: rows added here go above the header
+     * (`writer.addRow(['Sales report'])`).
+     */
+    static configureXlsxWriterAfterOpen(writer: XlsxWriter, _run: ExportRun): XlsxWriter { return writer; }
+    /**
+     * Changes the XLSX writer before it is closed, after the data rows: rows added here go below the data, and
+     * `writer.getCurrentSheet()` names the sheet and freezes panes (`setSheetView(new XlsxSheetView().setFreezeRow(2))`).
+     */
+    static configureXlsxWriterBeforeClose(writer: XlsxWriter, _run: ExportRun): XlsxWriter { return writer; }
     /** Style of the XLSX cells (see `XlsxStyle`). */
     static getXlsxCellStyle(): XlsxStyle | null { return null; }
     /** Style of the XLSX header cells (the cell style by default; bold without any). */
@@ -256,8 +280,8 @@ export class ExportQuery {
     async count(): Promise<number> { return (await this.adapter.paginate({ ...this.query, page: 1, perPage: 1 })).total; }
 }
 /** An export requested by the action (`ExportAction.fake()`). `records`: the selected keys of a bulk export, `null` otherwise. */
-export type DispatchedExport = { export: ExportRun; query: ExportQuery; columnMap: Record<string, string>; options: Record<string, unknown>; formats: ExportFormatValue[]; records: string[] | null };
-type ExportInspector = (run: ExportRun, query: ExportQuery, columnMap: Record<string, string>, options: Record<string, unknown>, formats: ExportFormatValue[], records: string[] | null) => boolean | Promise<boolean>;
+export type DispatchedExport = { export: ExportRun; query: ExportQuery; columnMap: Record<string, string>; options: Record<string, unknown>; formats: ExportFormatType[]; records: string[] | null };
+type ExportInspector = (run: ExportRun, query: ExportQuery, columnMap: Record<string, string>, options: Record<string, unknown>, formats: ExportFormatType[], records: string[] | null) => boolean | Promise<boolean>;
 const assertionFailure = (message: string): never => { throw new AssertionError({ message }); };
 let exportFake: ExportFake | null = null;
 /**
@@ -304,8 +328,11 @@ export type ExportActionInstance = Action & {
     columnMappingColumns(columns: number): ExportActionInstance;
     /** Only the columns visible in the table (and enabled by default) are checked when the modal opens. */
     enableVisibleTableColumnsByDefault(condition?: boolean): ExportActionInstance;
-    /** Files offered for download: `['csv', 'xlsx']` (the exporter's `getFormats()` by default). */
-    formats(formats: ExportFormatValue[]): ExportActionInstance;
+    /** Files offered for download: `['csv', 'xlsx']` and custom formats (`ExportFormatInterface`); the exporter's `getFormats()` by default. */
+    formats(formats: ExportFormatType[]): ExportActionInstance;
+    /** Download disk of the files (a name given to the panel's `downloadDisks()`), instead of the exporter's `getFileDiskName()`. */
+    fileDisk(disk: string | null): ExportActionInstance;
+    getFileDisk(): string | null;
     /** Builds the files after the response, in the background; the download links arrive in the bell. */
     queued(condition?: boolean): ExportActionInstance;
     /** Changes the query of the exported records: `(query, { options, livewire }) => …`, after the exporter's `modifyQuery()`. */
@@ -322,7 +349,7 @@ const DEFAULT_MAX_EXPORT_ROWS = 10000, HARD_MAX_EXPORT_ROWS = 100000;
 const fileNameOf = (name: string) => name.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 120) || 'export';
 
 function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
-    let exporter: typeof Exporter | null = null, maxRows = DEFAULT_MAX_EXPORT_ROWS, mapping = true, formats: ExportFormatValue[] | null = null, queued = false;
+    let exporter: typeof Exporter | null = null, maxRows = DEFAULT_MAX_EXPORT_ROWS, mapping = true, formats: ExportFormatType[] | null = null, queued = false, fileDisk: string | null = null;
     let mappingColumns = 2, visibleTableColumnsByDefault = false, chunkSize: ExportActionLazy<number> = 100;
     let modifyQueryUsing: ((query: any, ctx: { options: Record<string, unknown>; livewire: any }) => unknown) | null = null;
     let fileName: string | ((run: ExportRun) => string) | null = null;
@@ -372,12 +399,15 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             const panel = livewire._ctx?.panel;
             const background = queued && canQueue(panel);
             const history: ImportExportHistory | null = panel?.getImportExportHistory?.() ?? null;
-            const exportFormats = formats ?? currentExporter.getFormats();
+            const exportFormats = formats ?? normalizeExportFormats(currentExporter.getFormats());
+            // The download disk: the action's, the exporter's, or the panel's `downloads()` store.
+            const disk = fileDisk ?? currentExporter.getFileDiskName();
+            const storage = panel.getDownloadDisk ? panel.getDownloadDisk(disk) : panel.getDownloads();
             const columnMap = Object.fromEntries(columns.map((column) => [column.name, column.getLabel()]));
-            const run: ExportRun = { id: null, userId: user?.id ?? null, exporter: currentExporter.name, fileName: '', totalRows: first.total, successfulRows: 0, columnMap, options, formats: exportFormats };
+            const run: ExportRun = { id: null, userId: user?.id ?? null, userType: panel?.getId?.() ?? null, exporter: currentExporter.name, fileName: '', totalRows: first.total, successfulRows: 0, columnMap, options, formats: exportFormats };
             const nameOf = (count: number) => fileNameOf(fileName === null ? currentExporter.getFileName(count, run) : typeof fileName === 'function' ? fileName(run) : fileName);
             run.fileName = nameOf(first.total);
-            if (history) run.id = await history.startExport({ userId: user.id, exporter: currentExporter.name, fileName: run.fileName, totalRows: first.total });
+            if (history) run.id = await history.startExport({ userId: user.id, userType: run.userType ?? null, exporter: currentExporter.name, fileName: run.fileName, totalRows: first.total });
             if (bulk) livewire.deselectAllTableRecords();
             if (exportFake) { exportFake.record({ export: run, query: new ExportQuery(adapter, query), columnMap, options, formats: exportFormats, records }); return; }
             const process = async () => {
@@ -392,28 +422,40 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
                 run.successfulRows = values.length;
                 run.fileName = nameOf(values.length);
                 const labels = columns.map((column) => column.getLabel());
-                const links: { label: string; url: string }[] = [];
-                const store = async (format: ExportFormatValue, type: string, content: string | Buffer) => {
+                const links: any[] = [];
+                const store = async (format: ExportFormatType, type: string, content: string | Buffer) => {
+                    const key = exportFormatKey(format);
                     const downloader = currentExporter.getDownloader(format);
                     let downloaderName: string | null = null;
-                    if (downloader !== sendDownload) { downloaderName = `export:${currentExporter.name}:${format}`; registerDownloader(downloaderName, downloader); }
-                    return panel.getDownloadUrl(await panel.getDownloads().put(user.id, `${run.fileName}.${format}`, type, content, { downloader: downloaderName }));
+                    if (downloader !== sendDownload) { downloaderName = `export:${currentExporter.name}:${key}`; registerDownloader(downloaderName, downloader); }
+                    const token = await storage.put(user.id, `${run.fileName}.${key}`, type, content, { downloader: downloaderName });
+                    return panel.getDownloadUrl(token, ...(disk ? [disk] : []));
                 };
-                if (exportFormats.includes('csv')) {
-                    const delimiter = currentExporter.getCsvDelimiter();
-                    if ([...delimiter].length !== 1) throw new Error(`${currentExporter.name}.getCsvDelimiter(): the delimiter must be a single character.`);
-                    // Cells are protected against formula injection, except in the columns that opt out.
-                    const protect = columns.map((column) => column.getFormulaInjectionPrevention(ctx) !== false);
-                    const csv = `﻿${[csvLine(labels, delimiter), ...values.map((row) => csvLine(row, delimiter, protect))].join('\r\n')}\r\n`;
-                    links.push({ label: t('filament-actions::export.notifications.completed.actions.download_csv.label'), url: await store('csv', 'text/csv; charset=utf-8', csv) });
-                }
-                if (exportFormats.includes('xlsx')) {
-                    const cellStyle = currentExporter.getXlsxCellStyle();
-                    const headerStyle = currentExporter.getXlsxHeaderCellStyle() ?? cellStyle;
-                    const xlsxRows = [currentExporter.makeXlsxHeaderRow(labels, headerStyle, names), ...values.map((row) => currentExporter.makeXlsxRow(row, cellStyle, names))];
-                    // Without any style, the header row is bold.
-                    const xlsx = buildXlsx(xlsxRows, 'Sheet1', { headerStyle: headerStyle ?? undefined, cellStyle, writerOptions: currentExporter.getXlsxWriterOptions() });
-                    links.push({ label: t('filament-actions::export.notifications.completed.actions.download_xlsx.label'), url: await store('xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsx) });
+                for (const format of exportFormats) {
+                    if (format === 'csv') {
+                        const delimiter = currentExporter.getCsvDelimiter();
+                        if ([...delimiter].length !== 1) throw new Error(`${currentExporter.name}.getCsvDelimiter(): the delimiter must be a single character.`);
+                        // Cells are protected against formula injection, except in the columns that opt out.
+                        const protect = columns.map((column) => column.getFormulaInjectionPrevention(ctx) !== false);
+                        const csv = `\uFEFF${[csvLine(labels, delimiter), ...values.map((row) => csvLine(row, delimiter, protect))].join('\r\n')}\r\n`;
+                        links.push({ label: t('filament-actions::export.notifications.completed.actions.download_csv.label'), url: await store('csv', 'text/csv; charset=utf-8', csv) });
+                    } else if (format === 'xlsx') {
+                        const cellStyle = currentExporter.getXlsxCellStyle();
+                        const headerStyle = currentExporter.getXlsxHeaderCellStyle() ?? cellStyle;
+                        // Rows added by `configureXlsxWriterAfterOpen()` go above the header, those of `configureXlsxWriterBeforeClose()` below the data.
+                        let writer = currentExporter.configureXlsxWriterAfterOpen(new XlsxWriter(), run) ?? new XlsxWriter();
+                        writer.addHeaderRow(currentExporter.makeXlsxHeaderRow(labels, headerStyle, names));
+                        for (const row of values) writer.addRow(currentExporter.makeXlsxRow(row, cellStyle, names));
+                        writer = currentExporter.configureXlsxWriterBeforeClose(writer, run) ?? writer;
+                        // Without any style, the header row is bold.
+                        const xlsx = writer.toBuffer({ headerStyle: headerStyle ?? undefined, cellStyle, writerOptions: currentExporter.getXlsxWriterOptions() });
+                        links.push({ label: t('filament-actions::export.notifications.completed.actions.download_xlsx.label'), url: await store('xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsx) });
+                    } else {
+                        // A custom format: its content, then its download link.
+                        const content = await format.generate({ exporter: currentExporter, export: run, columns: names, labels, rows: values, options });
+                        const url = await store(format, format.getMimeType(), content);
+                        links.push(format.getDownloadNotificationAction?.(url, run) ?? { label: t('filament-actions::export.notifications.completed.actions.download_format.label', { extension: format.getExtension() }), url });
+                    }
                 }
                 if (history && run.id !== null) await history.finishExport(run.id, { successfulRows: values.length });
                 const notification = Notification.make().success().persistent().title(currentExporter.getCompletedNotificationTitle(run)).body(currentExporter.getCompletedNotificationBody(values.length, run)).actions(links);
@@ -421,12 +463,14 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             };
             if (!background) { await process(); return; }
             Notification.make().success().title(t('filament-actions::export.notifications.started.title')).body(tc('filament-actions::export.notifications.started.body', first.total, { count: first.total.toLocaleString('en-US') })).send();
-            runInBackground(process);
+            runInBackground(process, { type: 'export', exporter: currentExporter, importer: null, run, queue: currentExporter.getJobQueue(), connection: currentExporter.getJobConnection(), panel: panel?.getId?.() ?? null, userId: user?.id ?? null });
         }) as ExportActionInstance;
     action.exporter = (value) => { exporter = value; return action; };
     action.getExporter = () => exporterOf();
     action.maxRows = (count) => { maxRows = Math.max(1, Math.floor(count)); return action; };
-    action.formats = (list) => { const allowed = list.filter((format) => format === 'csv' || format === 'xlsx'); if (!allowed.length) throw new Error('ExportAction: formats() needs csv and/or xlsx.'); formats = [...new Set(allowed)]; return action; };
+    action.formats = (list) => { const allowed = normalizeExportFormats(list); if (!allowed.length) throw new Error('ExportAction: formats() needs at least one format.'); formats = allowed; return action; };
+    action.fileDisk = (disk) => { fileDisk = disk; return action; };
+    action.getFileDisk = () => fileDisk;
     action.columnMapping = (condition) => { mapping = condition; if (!condition) action.requiresConfirmation(); return action; };
     action.columnMappingColumns = (count) => { mappingColumns = Math.max(1, Math.floor(count)); return action; };
     action.enableVisibleTableColumnsByDefault = (condition = true) => { visibleTableColumnsByDefault = condition; return action; };
@@ -467,37 +511,62 @@ async function drainTasks(): Promise<void> {
     }
     draining = false;
 }
-let backgroundRunner: (task: BackgroundTask) => void = (task) => { pendingTasks.push(task); setImmediate(() => { void drainTasks(); }); };
+/**
+ * What a background runner receives with each task: the kind of work, the exporter or importer class, the run, the queue and
+ * connection names of the exporter's or importer's `getJobQueue()` and `getJobConnection()`, the panel and the user.
+ */
+export type BackgroundTaskContext = {
+    type: 'export' | 'import';
+    exporter: Function | null;
+    importer: Function | null;
+    run: { id: string | number | null; fileName: string } & Record<string, unknown>;
+    queue: string | null;
+    connection: string | null;
+    panel: string | null;
+    userId: string | number | null;
+};
+let backgroundRunner: (task: BackgroundTask, context: BackgroundTaskContext | null) => void = (task) => { pendingTasks.push(task); setImmediate(() => { void drainTasks(); }); };
 /**
  * Runs queued imports and exports. By default, one at a time in this process, after the response. Plug your own queue (BullMQ,
  * a worker…) with a function receiving each task.
  */
-export const useBackgroundRunner = (runner: (task: BackgroundTask) => void): void => { backgroundRunner = runner; };
-export const runInBackground = (task: BackgroundTask): void => backgroundRunner(task);
+export const useBackgroundRunner = (runner: (task: BackgroundTask, context: BackgroundTaskContext | null) => void): void => { backgroundRunner = runner; };
+/** Hands a task to the background runner, with its context (to route it: `context.queue`, `context.exporter`...). */
+export const runInBackground = (task: BackgroundTask, context: BackgroundTaskContext | null = null): void => backgroundRunner(task, context);
 
 /** Where runs of imports and exports are recorded (see `knexImportExportHistory()`). */
 export interface ImportExportHistory {
-    startImport(data: { userId: string | number; importer: string; fileName: string; totalRows: number }): Promise<string | number>;
+    /** `userType`: the panel's id, stored by a history with a polymorphic user. */
+    startImport(data: { userId: string | number; userType?: string | null; importer: string; fileName: string; totalRows: number }): Promise<string | number>;
     finishImport(id: string | number, data: { processedRows: number; successfulRows: number }): Promise<void>;
     recordFailedImportRow(importId: string | number, row: Record<string, unknown>, error: string): Promise<void>;
-    startExport(data: { userId: string | number; exporter: string; fileName: string; totalRows: number }): Promise<string | number>;
+    startExport(data: { userId: string | number; userType?: string | null; exporter: string; fileName: string; totalRows: number }): Promise<string | number>;
     finishExport(id: string | number, data: { successfulRows: number }): Promise<void>;
 }
 type Query = (table: string) => any;
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
-/** History in `imports`, `exports` and `failed_import_rows` tables (create them with `importExportSchema()`). */
-export function knexImportExportHistory(db: Query): ImportExportHistory {
+/** Options of the import and export history tables. */
+export type ImportExportHistoryOptions = {
+    /**
+     * Filament's `polymorphicUserRelationship()`: runs also store the type of their user (`user_type`, the panel's id), for
+     * users of several panels (several user tables) whose ids may collide.
+     */
+    polymorphicUser?: boolean;
+};
+/** History in `imports`, `exports` and `failed_import_rows` tables (create them with `importExportSchema()`, with the same options). */
+export function knexImportExportHistory(db: Query, historyOptions: ImportExportHistoryOptions = {}): ImportExportHistory {
+    const userOf = (data: { userId: string | number; userType?: string | null }) => ({ user_id: data.userId, ...(historyOptions.polymorphicUser ? { user_type: data.userType ?? null } : {}) });
     const insert = async (table: string, values: Record<string, unknown>) => { const [id] = await db(table).insert(values); return typeof id === 'object' && id !== null ? (id as any).id : id; };
     return {
-        startImport: (data) => insert('imports', { user_id: data.userId, importer: data.importer, file_name: data.fileName.slice(0, 255), total_rows: data.totalRows, processed_rows: 0, successful_rows: 0, created_at: now(), updated_at: now() }),
+        startImport: (data) => insert('imports', { ...userOf(data), importer: data.importer, file_name: data.fileName.slice(0, 255), total_rows: data.totalRows, processed_rows: 0, successful_rows: 0, created_at: now(), updated_at: now() }),
         async finishImport(id, data) { await db('imports').where('id', id).update({ processed_rows: data.processedRows, successful_rows: data.successfulRows, completed_at: now(), updated_at: now() }); },
         async recordFailedImportRow(importId, row, error) { await db('failed_import_rows').insert({ import_id: importId, data: JSON.stringify(row), validation_error: error.slice(0, 1000), created_at: now(), updated_at: now() }); },
-        startExport: (data) => insert('exports', { user_id: data.userId, exporter: data.exporter, file_name: data.fileName.slice(0, 255), total_rows: data.totalRows, successful_rows: 0, created_at: now(), updated_at: now() }),
+        startExport: (data) => insert('exports', { ...userOf(data), exporter: data.exporter, file_name: data.fileName.slice(0, 255), total_rows: data.totalRows, successful_rows: 0, created_at: now(), updated_at: now() }),
         async finishExport(id, data) { await db('exports').where('id', id).update({ successful_rows: data.successfulRows, completed_at: now(), updated_at: now() }); },
     };
 }
-/** Creates the history tables when missing (call it from a migration). */
-export async function importExportSchema(knex: any): Promise<void> {
+/** Creates the history tables when missing (call it from a migration); `polymorphicUser` adds (or creates) the `user_type` columns. */
+export async function importExportSchema(knex: any, historyOptions: ImportExportHistoryOptions = {}): Promise<void> {
     if (!(await knex.schema.hasTable('imports'))) await knex.schema.createTable('imports', (table: any) => {
         table.increments('id'); table.integer('user_id').index(); table.string('importer'); table.string('file_name');
         table.integer('total_rows'); table.integer('processed_rows').defaultTo(0); table.integer('successful_rows').defaultTo(0); table.timestamp('completed_at').nullable(); table.timestamps();
@@ -509,6 +578,9 @@ export async function importExportSchema(knex: any): Promise<void> {
         table.increments('id'); table.integer('user_id').index(); table.string('exporter'); table.string('file_name');
         table.integer('total_rows'); table.integer('successful_rows').defaultTo(0); table.timestamp('completed_at').nullable(); table.timestamps();
     });
+    if (historyOptions.polymorphicUser) for (const name of ['imports', 'exports']) {
+        if (!(await knex.schema.hasColumn(name, 'user_type'))) await knex.schema.alterTable(name, (table: any) => { table.string('user_type').nullable(); table.index(['user_type', 'user_id']); });
+    }
 }
 /** Sends a notification now (in the request) or, for background work, to the user's database notifications. */
 export async function deliver(notification: Notification, background: boolean, panel: any, user: any): Promise<void> {

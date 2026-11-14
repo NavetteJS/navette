@@ -344,7 +344,10 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         const files: { name: string; type: string; content: Buffer }[] = [];
         for (const notification of this.allNotifications) for (const action of notification.actions ?? []) {
             if (!action.url?.startsWith(prefix) || !this.user) continue;
-            const file = this.panel.getDownloads().get(decodeURIComponent(action.url.slice(prefix.length)), this.user.id);
+            const [token, query] = action.url.slice(prefix.length).split('?');
+            const disk = new URLSearchParams(query ?? '').get('disk');
+            if (disk !== null && !this.panel.hasDownloadDisk(disk)) continue;
+            const file = this.panel.getDownloadDisk(disk).get(decodeURIComponent(token), this.user.id);
             // Read synchronously: the built-in stores (memory, disk). An asynchronous store is read with its own get().
             if (file && !(file instanceof Promise)) files.push({ name: file.name, type: file.type, content: file.content });
         }
