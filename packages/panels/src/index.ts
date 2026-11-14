@@ -1980,24 +1980,32 @@ export class Page extends BasePage {
     /** Widgets shown below the page content. */
     getFooterWidgets(): WidgetEntry[] { return []; }
     getFooterWidgetsColumns(): number | Record<string, number> { return 2; }
+    /** Half the gap between footer widgets (`nv-sc-dense`). */
+    isFooterWidgetsDense(): boolean { return false; }
+    /** `false`: no gap between footer widgets. */
+    hasFooterWidgetsGap(): boolean { return true; }
     /** Footer widget grid, in the page's `footerWidgets` schema. */
     protected async renderFooterWidgets(): Promise<string> {
         const widgets = await this.filterVisibleWidgets(this.getFooterWidgets());
         if (!widgets.length) return '';
         const liberate = (hook: string) => `<div class="nv-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
-        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
+        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets', { dense: this.isFooterWidgetsDense(), gap: this.hasFooterWidgetsGap() })}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
     }
     /** Widgets shown above the page content, with the data passed to each (widget properties). */
     getHeaderWidgets(): WidgetEntry[] { return []; }
     /** Header widget grid columns: a number (from `lg`), or one number per breakpoint (`{ md: 2, xl: 4 }`). */
     getHeaderWidgetsColumns(): number | Record<string, number> { return 2; }
+    /** Half the gap between header widgets (`nv-sc-dense`). */
+    isHeaderWidgetsDense(): boolean { return false; }
+    /** `false`: no gap between header widgets. */
+    hasHeaderWidgetsGap(): boolean { return true; }
     getWidgetData(): Record<string, unknown> { return {}; }
     /** Header widget grid, in the page's `headerWidgets` schema. */
     protected async renderHeaderWidgets(): Promise<string> {
         const widgets = await this.filterVisibleWidgets(this.getHeaderWidgets());
         if (!widgets.length) return '';
         const liberate = (hook: string) => `<div class="nv-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
-        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
+        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets', { dense: this.isHeaderWidgetsDense(), gap: this.hasHeaderWidgetsGap() })}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
     }
     /** Widgets the current user is allowed to see. */
     protected async filterVisibleWidgets(candidates: WidgetEntry[]): Promise<WidgetEntry[]> {
@@ -2007,7 +2015,7 @@ export class Page extends BasePage {
         return widgets;
     }
     /** Widget grid of a schema: each widget is a child component, lazy-loaded by default. */
-    protected async renderWidgetsGrid(widgets: WidgetEntry[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
+    protected async renderWidgetsGrid(widgets: WidgetEntry[], columns: number | Record<string, number>, schemaKey: string, spacing: { dense?: boolean; gap?: boolean } = {}): Promise<string> {
         const items: string[] = [];
         for (const [index, entry] of widgets.entries()) {
             const widget = widgetClassOf(entry);
@@ -2017,7 +2025,7 @@ export class Page extends BasePage {
             const child = await this.mountChild(componentName, { ...this.getWidgetData(), ...widgetPropertiesOf(entry) }, `${this.id}.${key}`, { lazy: widget.isLazy });
             items.push(`<div class="nv-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="navetteSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
         }
-        const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['nv-sc', 'nv-sc-has-gap']);
+        const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['nv-sc', { 'nv-sc-has-gap': spacing.gap !== false, 'nv-sc-dense': spacing.dense === true }]);
         return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
     }
     /** Page content: its `content` schema by default. */
@@ -2093,6 +2101,10 @@ export class Dashboard extends Page {
     getWidgets(): WidgetEntry[] { return [...this.panel.getWidgets()].map((widget, index) => ({ widget, index })).sort((a, b) => (widgetClassOf(a.widget).sort ?? Infinity) - (widgetClassOf(b.widget).sort ?? Infinity) || a.index - b.index).map(({ widget }) => widget); }
     /** Grid columns: a number (at the `lg` breakpoint), or one number per breakpoint. */
     getColumns(): number | Record<string, number> { return 2; }
+    /** Half the gap between widgets (`nv-sc-dense`). */
+    isDense(): boolean { return false; }
+    /** `false`: no gap between widgets. */
+    hasGap(): boolean { return true; }
     hasFiltersForm(): boolean { return typeof (this as any).filtersFormSchema === 'function'; }
     /** Filters edited in a modal: a `FilterAction` among the header actions. */
     hasFiltersAction(): boolean { return flattenActions(this.getHeaderActions()).some(isFilterAction); }
@@ -2152,7 +2164,7 @@ export class Dashboard extends Page {
     getWidgetData(): Record<string, unknown> { return this.hasFilters() ? { pageFilters: this.filters } : {}; }
     protected async renderContent(): Promise<string> {
         const filters = this.hasFiltersForm() ? `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${await this.getSchema('filtersForm').toHtml()}</div></div>` : '';
-        const widgets = await this.renderWidgetsGrid(await this.filterVisibleWidgets(this.getWidgets()), this.getColumns(), 'content');
+        const widgets = await this.renderWidgetsGrid(await this.filterVisibleWidgets(this.getWidgets()), this.getColumns(), 'content', { dense: this.isDense(), gap: this.hasGap() });
         return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${filters}${widgets}</div>`;
     }
 }
@@ -3448,6 +3460,8 @@ export abstract class StatsOverviewWidget extends Widget {
     static columnSpan: ColumnSpan = 'full';
     /** Polling interval, or `null` to disable polling. */
     static pollingInterval: string | null = '5s';
+    /** `false`: the stat cards have no padding (`nv-wi-stats-overview-not-padded`), for stats that lay out their own content. */
+    static isPadded = true;
     abstract getStats(): Stat[] | Promise<Stat[]>;
     /** Heading shown above the stats. */
     protected getHeading(): string | null { return null; }
@@ -3471,7 +3485,7 @@ export abstract class StatsOverviewWidget extends Widget {
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}` : '';
         return this.wrap(`<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymous} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component nv-grid-ctn"><div${poll} class="nv-sc-section"><section x-data="{
         isCollapsed: false,
-    }" class="nv-section nv-section-not-contained${header ? ' nv-section-has-header' : ''}">${header}<div class="nv-section-content-ctn"><div class="nv-section-content nv-grid @xl:nv-grid-cols !@lg:nv-grid-cols nv-sc nv-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div>`, ['nv-wi-stats-overview']);
+    }" class="nv-section nv-section-not-contained${header ? ' nv-section-has-header' : ''}">${header}<div class="nv-section-content-ctn"><div class="nv-section-content nv-grid @xl:nv-grid-cols !@lg:nv-grid-cols nv-sc nv-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div>`, ['nv-wi-stats-overview', ...((this.constructor as typeof StatsOverviewWidget).isPadded ? [] : ['nv-wi-stats-overview-not-padded'])]);
     }
 }
 
@@ -3564,6 +3578,8 @@ export abstract class ChartWidget extends Widget {
     /** Maximum chart height (`'300px'`). */
     static maxHeight: string | null = null;
     static isCollapsible = false;
+    /** `false`: the chart fills the card, without the padding around it; the header keeps its own. */
+    static isPadded = true;
     dataChecksum: string | null = null;
     /** Selected filter, one of `getFilters()`. */
     filter: string | null = null;
@@ -3641,7 +3657,7 @@ export abstract class ChartWidget extends Widget {
         const body = `<div${poll}${isEmpty ? ' style="display: none"' : ''}><div class="nv-wi-chart-image"${label ? ` role="img" aria-label="${e(label)}"` : ''}>${frame}</div>${assistive ? `<div class="nv-wi-chart-assistive-content nv-sr-only"><p>${e(assistive)}</p></div>` : ''}</div>${empty}`;
         return this.wrap(`<section x-data="{
         isCollapsed:  false ,
-    }"${collapsible ? ` x-id="['nv-section-content']" x-on:collapse-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = true" x-on:expand="isCollapsed = false" x-on:expand-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:open-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:toggle-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed" x-bind:class="isCollapsed &amp;&amp; 'nv-collapsed'"` : ''} class="${cls(['nv-section', { 'nv-section-has-header': hasHeader, 'nv-collapsible': collapsible }])}">${header}<div${collapsible ? ` x-bind:id="$id('nv-section-content')"` : ''} class="nv-section-content-ctn"><div class="nv-section-content">${body}</div></div></section>${modals}`, ['nv-wi-chart']);
+    }"${collapsible ? ` x-id="['nv-section-content']" x-on:collapse-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = true" x-on:expand="isCollapsed = false" x-on:expand-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:open-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:toggle-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed" x-bind:class="isCollapsed &amp;&amp; 'nv-collapsed'"` : ''} class="${cls(['nv-section', { 'nv-section-not-padded': !WidgetClass.isPadded, 'nv-section-has-header': hasHeader, 'nv-collapsible': collapsible }])}">${header}<div${collapsible ? ` x-bind:id="$id('nv-section-content')"` : ''} class="nv-section-content-ctn"><div class="nv-section-content">${body}</div></div></section>${modals}`, ['nv-wi-chart']);
     }
     /** Filters dropdown of the header: the trigger button, the form, and the "Apply" / "Reset" buttons when deferred. */
     protected async renderFiltersDropdown(ctx: any): Promise<string> {

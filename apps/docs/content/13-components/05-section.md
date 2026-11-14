@@ -246,6 +246,7 @@ These props change how the section looks:
 - `secondary` gives the section a secondary background, to set it apart from the sections around it;
 - `divided` draws a line between the elements of its content, without gap;
 - `:contained="false"` removes the card: the header and the content are displayed on the background of the page.
+- `:padded="false"` keeps the card but removes the padding around its content (the header and footer keep theirs).
 
 ```html
 <x-section heading="User details" compact secondary>
@@ -291,6 +292,7 @@ template(`<div style="display: grid; gap: 1.5rem">
 | `secondary` | boolean | `false` | Secondary background |
 | `divided` | boolean | `false` | Lines between the elements of the content |
 | `contained` | boolean | `true` | Card around the section |
+| `padded` | boolean | `true` | Padding around the content of the card |
 | `persist-collapsed` | boolean | `false` | Keeps the collapsed state in local storage |
 | `collapse-id` | string | the `id` | Name of the persisted state |
 

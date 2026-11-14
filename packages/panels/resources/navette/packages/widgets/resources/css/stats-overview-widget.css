@@ -65,3 +65,7 @@
         }
     }
 }
+
+.nv-wi-stats-overview-not-padded .nv-wi-stats-overview-stat {
+    @apply p-0;
+}

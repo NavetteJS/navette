@@ -216,6 +216,8 @@ export type SectionProps = {
     heading?: string | null; description?: string | null; icon?: string | null; iconColor?: string | null; iconSize?: 'sm' | 'md' | 'lg'; headingTag?: string;
     afterHeader?: string | null; footer?: string | null; collapsible?: boolean; collapsed?: boolean; aside?: boolean; contentBefore?: boolean;
     compact?: boolean; contained?: boolean; divided?: boolean; secondary?: boolean;
+    /** `false`: no padding around the content of the card. */
+    padded?: boolean;
     /** Keeps the collapsed state in the browser's local storage, under the section's `id` (or `collapseId`). */
     persistCollapsed?: boolean; collapseId?: string | null; attributes?: Attrs;
 };
@@ -241,7 +243,7 @@ export function section(props: SectionProps = {}, slot = ''): string {
             } : {}),
         })
         .class(['nv-section', {
-            'nv-section-not-contained': props.contained === false, 'nv-section-has-content-before': props.contentBefore === true, 'nv-section-has-header': hasHeader,
+            'nv-section-not-contained': props.contained === false, 'nv-section-not-padded': props.padded === false, 'nv-section-has-content-before': props.contentBefore === true, 'nv-section-has-header': hasHeader,
             'nv-aside': props.aside === true, 'nv-compact': props.compact === true, 'nv-collapsible': collapsible, 'nv-divided': props.divided === true, 'nv-secondary': props.secondary === true,
         }]);
     const text = hasText ? `<div class="nv-section-header-text-ctn">${props.heading ? `<${tag} class="nv-section-header-heading">${e(props.heading)}</${tag}>` : ''}${props.description ? `<p class="nv-section-header-description">${e(props.description)}</p>` : ''}</div>` : '';

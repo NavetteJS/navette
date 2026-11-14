@@ -327,6 +327,33 @@ Section.make('Rate limiting')
     ])
 ```
 
+## Removing the padding of the content
+
+By default, the content of a section card is padded. You may remove this padding with `padded(false)`, keeping the card, its header and its footer as they are. This is useful when the content brings its own spacing, such as a full-width table or image:
+
+```ts
+import { Section } from '@navette-js/schemas';
+
+Section.make('Recent orders')
+    .padded(false)
+    .schema([
+        // ...
+    ])
+```
+
+```preview
+// state: {"notes": "Deliver after 6pm."}
+Section.make('Notes')
+    .padded(false)
+    .schema([
+        Textarea.make('notes').hiddenLabel(),
+    ])
+```
+
+It also removes the padding of `compact()` sections, and of each component of a `divided()` section. The header and the footer keep their padding. A section without a card (`contained(false)`) has no content padding to remove.
+
+Optionally, the `padded()` method accepts a boolean value, or a function receiving the context object, to control if the content should be padded or not.
+
 ## Inserting actions and other components in the header of a section
 
 You may insert [actions](/actions/overview) and any other schema component (usually [prime components](/schemas/primes)) into the header of a section, after its heading, by passing an array of components to the `afterHeader()` method:

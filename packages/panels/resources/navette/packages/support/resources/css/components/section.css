@@ -83,6 +83,23 @@
                 @apply px-4 py-2.5;
             }
         }
+
+        /* After the compact rules, with the same specificity, so it wins over them. */
+        &.nv-section-not-padded {
+            &:not(.nv-divided) {
+                & > .nv-section-content-ctn > .nv-section-content {
+                    @apply p-0;
+                }
+            }
+
+            &.nv-divided {
+                & > .nv-section-content-ctn > .nv-section-content {
+                    & > * {
+                        @apply p-0;
+                    }
+                }
+            }
+        }
     }
 
     &.nv-section-not-contained {

@@ -130,6 +130,20 @@ class Home extends Dashboard {
 }
 ```
 
+#### Changing the gap between widgets
+
+Override `isDense()` to return `true` to halve the gap between the widgets of the dashboard, or `hasGap()` to return `false` to remove it:
+
+```ts
+import { Dashboard } from '@navette-js/panels';
+
+class Home extends Dashboard {
+    isDense() {
+        return true;
+    }
+}
+```
+
 #### Customizing widget width
 
 You may customize the width of a widget using the static `columnSpan` property. You may use a number to indicate how many columns the widget should span, or `'full'` to make it occupy the full width of the page:
@@ -193,6 +207,8 @@ class Reports extends Page {
 ```
 
 `getHeaderWidgetsColumns()` returns a number of columns, and `getFooterWidgetsColumns()` a number or an object with a number of columns per breakpoint; both default to 2. Values returned by the page's `getWidgetData()` are passed to each widget as initial properties.
+
+Like `isDense()` and `hasGap()` on a dashboard, `isHeaderWidgetsDense()` and `isFooterWidgetsDense()` halve the gap between the widgets of a grid, and `hasHeaderWidgetsGap()` and `hasFooterWidgetsGap()` returning `false` remove it.
 
 On the list page of a resource, set the resource's `static headerWidgets` to display widgets above the table. The widgets receive the state of the table (search, filters, active tab), which `PageTableStatsWidget` uses to compute [statistics on the displayed records](/widgets/stats-overview#using-the-state-of-the-table).
 

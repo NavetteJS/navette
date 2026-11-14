@@ -544,6 +544,18 @@ export class BlogPostsChart extends ChartWidget {
 }
 ```
 
+## Removing the padding around the chart
+
+The chart is displayed in a padded card. Set the static `isPadded` property to `false` to let the chart fill the card; the header keeps its padding:
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+
+export class BlogPostsChart extends ChartWidget {
+    static isPadded = false;
+}
+```
+
 ## Providing an accessible alternative
 
 The chart is labeled for screen readers with its heading and description. Charts are visual, so you should also provide the information in text. Override `getChartAssistiveContent()` to return a summary that screen readers read instead of the canvas:

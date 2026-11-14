@@ -238,6 +238,20 @@ The chart takes its colors from the [color of the stat](#changing-the-color-of-t
 These properties only affect the charts inside stats. [Chart widgets](/widgets/charts#styling-charts-in-a-theme) are styled with their own set, prefixed `--chart-`.
 </Aside>
 
+## Removing the padding of the stat cards
+
+Each stat is displayed in a padded card. Set the static `isPadded` property to `false` to remove this padding, for example when you lay out the content of the stats yourself with [extra attributes](#adding-extra-html-attributes-to-a-stat) and a theme:
+
+```ts
+import { StatsOverviewWidget } from '@navette-js/panels';
+
+export class StatsOverview extends StatsOverviewWidget {
+    static isPadded = false;
+}
+```
+
+The cards keep their background, border and rounded corners.
+
 ## Live updating stats (polling)
 
 By default, stats overview widgets refresh their data every 5 seconds.

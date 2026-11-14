@@ -41,6 +41,13 @@ test('bound props, flags, self-closing tags and the slot:name syntax', () => {
     assert.match(html, /nv-section-header-after-ctn"><span>after<\/span>/);
 });
 
+test('section: the padded prop removes the content padding, default unchanged', () => {
+    const plain = render('<x-section heading="A">Body</x-section>');
+    assert.match(plain, /class="nv-section nv-section-has-header"/);
+    const flush = render('<x-section heading="A" :padded="false" compact divided>Body</x-section>');
+    assert.match(flush, /class="nv-section nv-section-not-padded nv-section-has-header nv-compact nv-divided"/);
+});
+
 test('application components from a directory: props, slot, named slots, attribute bag, nesting', () => {
     write('components/card.ejs', `<article <%- attributes.class(['card']) %>><h3><%= title %></h3><div class="body"><%- slot %></div><% if (slots.footer) { %><footer><%- slots.footer %></footer><% } %></article>`);
     write('components/forms/hint.ejs', `<small class="hint"><%- slot %></small>`);

@@ -82,6 +82,16 @@ export class Reports extends Page {
 }
 ```
 
+`isHeaderWidgetsDense()` and `isFooterWidgetsDense()` return `true` to halve the gap between the widgets of the grid, and `hasHeaderWidgetsGap()` and `hasFooterWidgetsGap()` return `false` to remove it:
+
+```ts
+export class Reports extends Page {
+    isHeaderWidgetsDense() {
+        return true;
+    }
+}
+```
+
 ### Passing properties to a widget
 
 `make()` gives properties to one widget of the list. They are assigned to the public properties of the same name, before `mount()`:

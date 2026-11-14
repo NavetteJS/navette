@@ -55,3 +55,17 @@ test('widget header icon: rendered like a section header icon, in stats, charts 
     assert.equal(table.getHeadingIcon(), 'o-shopping-bag');
     assert.equal(table.getHeadingIconColor(), 'primary');
 });
+
+test('isPadded = false: stat cards and chart content without padding, default unchanged', async () => {
+    const stats = await mount(First).render();
+    assert.match(stats, /class="nv-wi-widget [^"]*nv-wi-stats-overview"/);
+    assert.doesNotMatch(stats, /not-padded/);
+    class Flush extends First { static isPadded = false; }
+    assert.match(await mount(Flush).render(), /class="nv-wi-widget [^"]*nv-wi-stats-overview nv-wi-stats-overview-not-padded"/);
+    class Traffic extends Second { static heading = 'Traffic'; }
+    const chart = await mount(Traffic).render();
+    assert.match(chart, /class="nv-section nv-section-has-header"><header/);
+    assert.doesNotMatch(chart, /not-padded/);
+    class FlushTraffic extends Traffic { static isPadded = false; }
+    assert.match(await mount(FlushTraffic).render(), /class="nv-section nv-section-not-padded nv-section-has-header"><header/);
+});

@@ -66,7 +66,7 @@
     }
 
     /* Tooltips are painted onto the canvas, so these three elements are the only way to
-       color them. Their values are Chart.js' own tooltip colors rather than Filament
+       color them. Their values are Chart.js' own tooltip colors rather than Navette
        palette values, which is why they are written out longhand instead of `@apply`.
        The border only appears once `--chart-tooltip-border-width` is set, so its
        color defaults to a hairline that suits the background above it. */

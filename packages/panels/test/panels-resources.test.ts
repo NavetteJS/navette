@@ -167,6 +167,25 @@ test('one resource in two panels over HTTP: each panel serves the resource with 
     } finally { server.close(); }
 });
 
+test('widget grids: dense or without gap on dashboards and page header and footer widgets, default unchanged', async () => {
+    const htmlOf = async (Class: typeof Page, panel?: Panel) => { const testable = livewire(Class, {}, panel ? { panel } : {}); await testable; return testable.html(); };
+    // The widget grids themselves, not the schema wrappers around them (which have no column classes).
+    const grid = (html: string) => [...html.matchAll(/<div class="(nv-grid [^"]*nv-grid-cols[^"]*)" style="--cols-/g)].map((match) => match[1].split(' ').filter((name) => name.startsWith('nv-sc')).join(' '));
+    // Separate classes: the testing runtime names an unregistered subclass after a rendered parent.
+    class Spaced extends Page { static slug = 'spaced'; getHeaderWidgets() { return [Greeting]; } getFooterWidgets() { return [Greeting]; } }
+    class Packed extends Page { static slug = 'packed'; getHeaderWidgets() { return [Greeting]; } getFooterWidgets() { return [Greeting]; } isHeaderWidgetsDense() { return true; } hasFooterWidgetsGap() { return false; } }
+    class Flipped extends Page { static slug = 'flipped'; getHeaderWidgets() { return [Greeting]; } getFooterWidgets() { return [Greeting]; } hasHeaderWidgetsGap() { return false; } isFooterWidgetsDense() { return true; } }
+    assert.deepEqual(grid(await htmlOf(Spaced)), ['nv-sc nv-sc-has-gap', 'nv-sc nv-sc-has-gap']);
+    assert.deepEqual(grid(await htmlOf(Packed)), ['nv-sc nv-sc-has-gap nv-sc-dense', 'nv-sc']);
+    assert.deepEqual(grid(await htmlOf(Flipped)), ['nv-sc', 'nv-sc nv-sc-has-gap nv-sc-dense']);
+    class DenseHome extends Dashboard { static slug = 'dense'; isDense() { return true; } }
+    class TightHome extends Dashboard { static slug = 'tight'; hasGap() { return false; } }
+    const homes = Panel.make().id('homes').path('homes').key('shared-key').authGuard('shared').auth(auth).pages([DenseHome, TightHome]).widgets([Greeting]);
+    assert.deepEqual(grid(await htmlOf(Dashboard)), ['nv-sc nv-sc-has-gap']);
+    assert.deepEqual(grid(await htmlOf(DenseHome, homes)), ['nv-sc nv-sc-has-gap nv-sc-dense']);
+    assert.deepEqual(grid(await htmlOf(TightHome, homes)), ['nv-sc']);
+});
+
 test('Widget.make() carries properties; skipping authorization; title case labels; global search opt-in', async () => {
     const configuration = Greeting.make({ who: 'Ada' });
     assert.ok(configuration instanceof WidgetConfiguration);

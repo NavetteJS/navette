@@ -66,6 +66,19 @@ test('Section: description, icon, aside, compact, secondary, footer, function he
     assert.ok(extra.includes('<div class="my-section nv-sc-section" data-x="y"><section'));
 });
 
+test('Section: padded(false) keeps the card and removes the content padding', async () => {
+    // Default output is unchanged: no padding modifier.
+    const plain = await render([Section.make('Cart').schema([Text.make('a')])]);
+    assert.ok(plain.includes('class="nv-section nv-section-has-header">'));
+    assert.ok(!plain.includes('nv-section-not-padded'));
+    const flush = await render([Section.make('Cart').padded(false).compact().divided().aside().secondary().schema([Text.make('a')])]);
+    assert.ok(flush.includes('class="nv-section nv-section-not-padded nv-section-has-header nv-aside nv-compact nv-divided nv-secondary">'));
+    const lazy = await render([Section.make().padded(() => false).schema([Text.make('a')])]);
+    assert.ok(lazy.includes('class="nv-section nv-section-not-padded">'));
+    const explicit = await render([Section.make().padded().schema([Text.make('a')])]);
+    assert.ok(explicit.includes('class="nv-section">'));
+});
+
 test('Section: collapsed state persisted in local storage', async () => {
     const html = await render([Section.make('Cart').collapsed().persistCollapsed().schema([Text.make('a')])]);
     assert.ok(html.includes("isCollapsed: $persist(true).as(`navette:section:collapsed:${'form.cart::data::section' ?? $el.id}`),"));

@@ -794,6 +794,7 @@ export class Section extends LayoutComponent {
     private _secondary: Lazy<boolean, ComponentContext> = false;
     private _divided: Lazy<boolean, ComponentContext> = false;
     private _contained: Lazy<boolean, ComponentContext> = true;
+    private _padded: Lazy<boolean, ComponentContext> = true;
     private _collapsible: Lazy<boolean, ComponentContext> | null = null;
     private _collapsed: Lazy<boolean, ComponentContext> = false;
     private _persistCollapsed: Lazy<boolean, ComponentContext> = false;
@@ -823,6 +824,8 @@ export class Section extends LayoutComponent {
     divided(condition: Lazy<boolean, ComponentContext> = true): this { this._divided = condition; return this; }
     /** `false`: no card around the section. */
     contained(condition: Lazy<boolean, ComponentContext> = true): this { this._contained = condition; return this; }
+    /** `false`: the card keeps its header and footer, but its content has no padding (`nv-section-not-padded`). */
+    padded(condition: Lazy<boolean, ComponentContext> = true): this { this._padded = condition; return this; }
     /** Collapsible by clicking its header; `collapsed()` starts it collapsed. */
     collapsible(condition: Lazy<boolean, ComponentContext> = true): this { this._collapsible = condition; return this; }
     collapsed(condition: Lazy<boolean, ComponentContext> = true): this { this._collapsed = condition; if (this._collapsible === null) this._collapsible = condition; return this; }
@@ -889,6 +892,7 @@ export class Section extends LayoutComponent {
         const collapsedState = shouldPersistCollapsed ? e(`$persist(${isCollapsed ? 'true' : 'false'}).as(\`navette:section:collapsed:\${${js(id)} ?? $el.id}\`)`) : (isCollapsed ? 'true' : 'false');
         const sectionClass = cls(['nv-section', {
             'nv-section-not-contained': !(await evaluate(this._contained, ctx)),
+            'nv-section-not-padded': !(await evaluate(this._padded, ctx)),
             'nv-section-has-content-before': Boolean(await evaluate(this._contentBefore, ctx)),
             'nv-section-has-header': hasHeader,
             'nv-aside': isAside,
