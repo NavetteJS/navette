@@ -25,6 +25,8 @@ export { RichEditorTool, type RichEditorToolDefinition } from './rich-editor-too
 import { applyToolbarModifications, toolbarButtonNames, type RichContentPlugin, type ToolbarItem, type ToolbarItems, type ToolbarModification } from './rich-editor-toolbar.ts';
 export { ToolbarButtonGroup, type RichContentPlugin, type ToolbarItem, type ToolbarItems } from './rich-editor-toolbar.ts';
 import { attachmentIdsOf, attachmentUrl, eachImage, type AttachmentsVisibility } from './rich-editor-attachments.ts';
+import { saveContentToRecord, type FileAttachmentContext, type FileAttachmentProvider } from './file-attachment-provider.ts';
+import { getRichContentAttribute } from './rich-content-attribute.ts';
 export type { AttachmentsVisibility } from './rich-editor-attachments.ts';
 import { MarkdownFaker, RichContentFaker, type ContentFakerOptions, type RichContentFakerOptions } from './content-faker.ts';
 export { ContentFaker, FakeValues, MarkdownFaker, RichContentFaker, type ContentFakerOptions, type RichContentFakerOptions, type CanGenerateFakeConfiguration } from './content-faker.ts';
@@ -40,6 +42,8 @@ import { containedFile, deleteContainedFile, isStoredFileKey, serveContainedFile
 export type { FileRequest, FileResponse, LocalFileStorageOptions } from './file-storage.ts';
 import { signedFileUrl, temporaryFileUrlExpiry, type FileUrlStorage } from '@navette-js/support';
 export { safeFileUrl } from './file-upload-support.ts';
+export { saveContentToRecord, StorageFileAttachmentProvider, type FileAttachmentContext, type FileAttachmentProvider } from './file-attachment-provider.ts';
+export { getRichContentAttribute, InteractsWithRichContent, RichContentAttribute, type HasRichContent } from './rich-content-attribute.ts';
 export { acceptsFileUploads, findFileUploadComponent, isFileUploadForSchemas } from './upload-targets.ts';
 import { applyDisableOptionsWhenSelectedInSiblingRepeaterItems, applyFixIndistinctState, applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
 export { generateItemKey, getParentRepeaterItem, ItemsProcessingLimitError, siblingDistinctRules, type ItemKeyGenerator } from './repeater-items.ts';
@@ -2698,6 +2702,11 @@ export class RichEditor extends Field {
     private _resizableImages = false;
     private _jsExtensions: string[] = [];
     private _editorActions: Action[] = [];
+    private _attachmentProvider: FileAttachmentProvider | null = null;
+    private _attachmentsVisibilitySet = false;
+    /** Record created by the form, while the editor saves its content to it (`saveRelationships()`). */
+    private _createdRecord: unknown = null;
+    private _contentAttributeApplied = false;
     static make(name: string): RichEditor { return configured(new RichEditor(name)); }
     /**
      * Fake rich content for seeders and tests (Filament's `fake()->filamentRichContent()`): chain blocks, then `toHtml()`,
@@ -2755,26 +2764,52 @@ export class RichEditor extends Field {
     getStickyOffset(): Promise<string | null> { return evaluate(this._stickyOffset, this.context()); }
     /** Protocols allowed in links (`http`, `https`, `ftp`, `ftps`, `mailto`, `tel`, `callto`, `sms`, `cid`, `xmpp` by default). Checked on the server. */
     linkProtocols(protocols: string[] | null): this { this._linkProtocols = protocols === null ? null : protocols.map((protocol) => protocol.toLowerCase().replace(/:$/, '')).filter((protocol) => /^[a-z][a-z0-9+.-]*$/.test(protocol)); return this; }
-    getLinkProtocols(): string[] { return this._linkProtocols ?? DEFAULT_LINK_PROTOCOLS; }
+    getLinkProtocols(): string[] { this.applyContentAttribute(); return this._linkProtocols ?? DEFAULT_LINK_PROTOCOLS; }
     /** Plugins: TipTap extensions (server and browser), toolbar tools and their actions. */
     plugins(plugins: RichContentPlugin[]): this { this._plugins = [...this._plugins, ...plugins]; return this; }
-    getPlugins(): RichContentPlugin[] { return this._plugins; }
-    isJson(): boolean { return this._json; }
-    getMergeTags(): Record<string, string> { return { ...this._mergeTags }; }
-    getMentionProviders(): MentionProvider[] { return [...this._mentions]; }
+    getPlugins(): RichContentPlugin[] { this.applyContentAttribute(); return this._plugins; }
+    isJson(): boolean { this.applyContentAttribute(); return this._json; }
+    getMergeTags(): Record<string, string> { this.applyContentAttribute(); return { ...this._mergeTags }; }
+    getMentionProviders(): MentionProvider[] { this.applyContentAttribute(); return [...this._mentions]; }
     /** Custom blocks of the editor, ungrouped. */
     getCustomBlocks(): CustomBlockClass[] { return this.blockGroups().flatMap(([, blocks]) => blocks); }
     /** Storage HTML of a document, sanitized by this editor's schema (used by `RichEditor.fake({ editor })`). */
     async dehydrateRichDocument(document: unknown): Promise<string | null> { return richDocumentToHtml(document, this.schemaOptions()); }
     /** A renderer configured like this editor: custom blocks, mentions, plugins, link protocols and attachments. */
     getRenderer(content: unknown): RichContentRenderer {
-        return RichContentRenderer.make(content).customBlocks(this.getCustomBlocks()).mentions(this._mentions).plugins(this._plugins).linkProtocols(this._linkProtocols)
+        this.applyContentAttribute();
+        return RichContentRenderer.make(content).fileAttachmentProvider(this._attachmentProvider, this.attachmentRecord(), this.getName()).customBlocks(this.getCustomBlocks()).mentions(this._mentions).plugins(this._plugins).linkProtocols(this._linkProtocols)
             .fileAttachmentsStorage(this.attachmentsStorage()).fileAttachmentsVisibility(typeof this._attachmentsVisibility === 'function' ? 'public' : this._attachmentsVisibility).getFileAttachmentUrlUsing(this._getFileAttachmentUrlUsing ? (file) => this._getFileAttachmentUrlUsing!(file, this.context()) : null);
     }
     /** Rendered HTML of a document, as `getRenderer()` renders it. */
     async renderRichDocument(document: unknown): Promise<string> { return this.getRenderer(document).toHtml(); }
     /** Server schema of this editor: link protocols and plugin extensions. */
-    private schemaOptions(): RichSchemaOptions { return { linkProtocols: this._linkProtocols, extensions: this._plugins.flatMap((plugin) => plugin.getTipTapServerExtensions()) }; }
+    /**
+     * Options left unset default to the rich content attribute the record registers under the field's name
+     * (`registerRichContent()` of `InteractsWithRichContent`, Filament's `HasRichContent`); plugins are added to the editor's.
+     */
+    private applyContentAttribute(): void {
+        if (this._contentAttributeApplied || !this.container) return;
+        const record = this.container.getRecord();
+        if (!record) return;
+        this._contentAttributeApplied = true;
+        const attribute = getRichContentAttribute(record, this.getName());
+        if (!attribute) return;
+        if (!this.blockGroups().some(([, blocks]) => blocks.length) && attribute.customBlocksValue) this._customBlocks = attribute.customBlocksValue;
+        if (!Object.keys(this._mergeTags).length && attribute.mergeTagsValue) this._mergeTags = attribute.getMergeTagLabels();
+        if (!this._mentions.length && attribute.mentionsValue) this._mentions = [...attribute.mentionsValue];
+        if (attribute.pluginsValue.length) this._plugins = [...attribute.pluginsValue.filter((plugin) => !this._plugins.includes(plugin)), ...this._plugins];
+        if (this._linkProtocols === null && attribute.linkProtocolsValue) this.linkProtocols(attribute.linkProtocolsValue);
+        if (this._json === false && attribute.jsonValue) this._json = true;
+        if (this._textColors === null && attribute.textColorsValue) this.textColors(attribute.textColorsValue);
+        if (!this._customTextColors && attribute.customTextColorsValue) this._customTextColors = true;
+        if (this._attachmentsStorage === null && attribute.fileAttachmentsStorageValue) this._attachmentsStorage = attribute.fileAttachmentsStorageValue;
+        if (this._attachmentProvider === null && attribute.fileAttachmentProviderValue) this._attachmentProvider = attribute.fileAttachmentProviderValue;
+        const visibility = attribute.getFileAttachmentsVisibility();
+        if (!this._attachmentsVisibilitySet && visibility) this._attachmentsVisibility = visibility;
+    }
+    context(): ComponentContext { this.applyContentAttribute(); return super.context(); }
+    private schemaOptions(): RichSchemaOptions { this.applyContentAttribute(); return { linkProtocols: this._linkProtocols, extensions: this._plugins.flatMap((plugin) => plugin.getTipTapServerExtensions()) }; }
     /** Message shown while an image uploads. */
     uploadingFileMessage(message: string | null): this { this._uploadingFileMessage = message; return this; }
     getUploadingFileMessage(): string { return this._uploadingFileMessage ?? t('filament-forms::components.rich_editor.uploading_file_message'); }
@@ -2796,7 +2831,7 @@ export class RichEditor extends Field {
     fileAttachmentsMaxSize(kilobytes: Lazy<number, ComponentContext>): this { return this.setLazy('_attachmentMaxSize', kilobytes); }
     /** Text colors offered by the `textColor` tool (the Tailwind palette by default): `{ brand: TextColor.make('Brand', '#0ea5e9', '#38bdf8') }`. */
     textColors(colors: Record<string, TextColor> | null): this { this._textColors = colors; if (colors) registerTextColors(colors); return this; }
-    getTextColors(): Record<string, TextColor> { return this._textColors ?? TextColor.getDefaults(); }
+    getTextColors(): Record<string, TextColor> { this.applyContentAttribute(); return this._textColors ?? TextColor.getDefaults(); }
     /** Lets users pick any color, besides the listed ones. */
     customTextColors(condition = true): this { this._customTextColors = condition; return this; }
     /** Merge tags users insert (`mergeTags` tool and `{{` in the text), replaced by values when the content is rendered: `['name', 'today']` or `{ name: 'Name' }`. */
@@ -2837,7 +2872,8 @@ export class RichEditor extends Field {
             ...(plugin.getEnabledToolbarButtons?.()?.length ? [{ type: 'enable' as const, buttons: plugin.getEnabledToolbarButtons!() }] : []),
             ...(plugin.getDisabledToolbarButtons?.()?.length ? [{ type: 'disable' as const, buttons: plugin.getDisabledToolbarButtons!() }] : []),
         ]);
-        const disabled: ToolbarModification[] = this.attachmentsStorage() === null ? [{ type: 'disable', buttons: ['attachFiles'] }] : [];
+        this.applyContentAttribute();
+        const disabled: ToolbarModification[] = this.attachmentsStorage() === null && this._attachmentProvider === null ? [{ type: 'disable', buttons: ['attachFiles'] }] : [];
         return applyToolbarModifications(this._toolbar ?? this.getDefaultToolbarButtons(), [...pluginModifications, ...this._toolbarModifications, ...disabled]);
     }
     private toolGroups(): string[][] { return this.getToolbarButtons().map((group) => toolbarButtonNames(group)); }
@@ -2848,7 +2884,7 @@ export class RichEditor extends Field {
         if (!tool) throw new Error(`RichEditor: toolbar button [${item}] cannot be found.`);
         return tool.toHtml();
     }
-    private blockGroups(): [string, CustomBlockClass[]][] { return Array.isArray(this._customBlocks) ? [['', this._customBlocks]] : Object.entries(this._customBlocks); }
+    private blockGroups(): [string, CustomBlockClass[]][] { if (!this._contentAttributeApplied) this.applyContentAttribute(); return Array.isArray(this._customBlocks) ? [['', this._customBlocks]] : Object.entries(this._customBlocks); }
     getCustomBlock(id: unknown): CustomBlockClass | null { return this.blockGroups().flatMap(([, blocks]) => blocks).find((block) => block.getId() === id) ?? null; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && value.trim().startsWith('{')) { try { const parsed = JSON.parse(value); if (isRichDocument(parsed)) return parsed; } catch { /* HTML */ } }
@@ -2861,6 +2897,9 @@ export class RichEditor extends Field {
      */
     async dehydrateState(state: unknown): Promise<unknown> {
         const document = await this.saveFileAttachments(state);
+        const provider = this.getFileAttachmentProvider();
+        // Attachments removed from the content are deleted by the provider (Filament's `cleanUpFileAttachments()`).
+        if (provider && !this.waitsForRecord()) await provider.cleanUpFileAttachments(await attachmentIdsOf(document), { ...(await this.attachmentContext()), previousIds: await this.getOriginalFileAttachmentPaths() });
         const html = richDocumentToHtml(document, this.schemaOptions());
         if (html === null) return null;
         const isPrivate = (await this.getFileAttachmentsVisibility()) === 'private';
@@ -2887,8 +2926,34 @@ export class RichEditor extends Field {
 
     // ---- file attachments
     /** `private`: images get a temporary signed URL when the content is loaded or rendered, and none is saved (only `data-id`). */
-    fileAttachmentsVisibility(visibility: Lazy<AttachmentsVisibility, ComponentContext>): this { this._attachmentsVisibility = visibility; return this; }
-    async getFileAttachmentsVisibility(): Promise<AttachmentsVisibility> { return (await evaluate(this._attachmentsVisibility, this.context())) === 'private' ? 'private' : 'public'; }
+    fileAttachmentsVisibility(visibility: Lazy<AttachmentsVisibility, ComponentContext>): this { this._attachmentsVisibility = visibility; this._attachmentsVisibilitySet = true; return this; }
+    async getFileAttachmentsVisibility(): Promise<AttachmentsVisibility> {
+        const ctx = this.context();
+        const visibility = !this._attachmentsVisibilitySet && this._attachmentProvider?.getDefaultFileAttachmentVisibility?.() ? this._attachmentProvider.getDefaultFileAttachmentVisibility() : await evaluate(this._attachmentsVisibility, ctx);
+        return visibility === 'private' ? 'private' : 'public';
+    }
+    /**
+     * Record-aware storage of the attached images (Filament's `FileAttachmentProvider`): it stores each upload for the record,
+     * gives the URL of the ids it manages for that record only, and deletes the attachments removed from the content when it
+     * is saved. See `StorageFileAttachmentProvider`. Used instead of `fileAttachmentsStorage()`.
+     */
+    fileAttachmentProvider(provider: FileAttachmentProvider | null): this { this._attachmentProvider = provider; return this; }
+    getFileAttachmentProvider(): FileAttachmentProvider | null { this.applyContentAttribute(); return this._attachmentProvider; }
+    /** Record the attachments belong to: the edited record, or the one just created while the content is saved to it. */
+    private attachmentRecord(): unknown { return this._createdRecord ?? (this.container ? this.container.getRecord() : null) ?? null; }
+    private async attachmentContext(): Promise<FileAttachmentContext> { return { record: this.attachmentRecord(), attribute: this.getName(), visibility: await this.getFileAttachmentsVisibility() }; }
+    /** Whether the provider needs the record and the form is creating it: the content is then saved once the record exists. */
+    private waitsForRecord(): boolean { return Boolean(this.getFileAttachmentProvider()?.isExistingRecordRequiredToSaveNewFileAttachments()) && !this.attachmentRecord(); }
+    async savesRelationships(): Promise<boolean> { return (await super.savesRelationships()) || this.waitsForRecord(); }
+    /** After the record is created (provider requiring it): stores the uploads for it, then writes the content into it. */
+    async saveRelationships(record: any): Promise<void> {
+        if (!this.waitsForRecord() || !record) return super.saveRelationships(record);
+        this._createdRecord = record;
+        try {
+            const content = await this.dehydrateState(this.context().state);
+            await saveContentToRecord(this._attachmentProvider!, record, this.getName(), content);
+        } finally { this._createdRecord = null; }
+    }
     /** URL of a stored attachment (its `data-id`), instead of the storage's (temporary) URL. */
     getFileAttachmentUrlUsing(callback: ((file: string, ctx: ComponentContext) => string | null | Promise<string | null>) | null): this { this._getFileAttachmentUrlUsing = callback; return this; }
     /** Stores an uploaded image yourself, returning its key (saved in `data-id`). */
@@ -2917,6 +2982,8 @@ export class RichEditor extends Field {
     /** URL of a stored attachment: `getFileAttachmentUrlUsing()`, else the storage's URL (a temporary one for private images). */
     async getFileAttachmentUrl(file: string): Promise<string | null> {
         if (this._getFileAttachmentUrlUsing) return safeFileUrl(await this._getFileAttachmentUrlUsing(file, this.context()));
+        const provider = this.getFileAttachmentProvider();
+        if (provider) return safeFileUrl(await provider.getFileAttachmentUrl(file, await this.attachmentContext()));
         return attachmentUrl(this.attachmentsStorage(), await this.getFileAttachmentsVisibility(), file);
     }
     /** Holder of the editor's uploads: `componentFileAttachments.<state path>`. */
@@ -2935,9 +3002,12 @@ export class RichEditor extends Field {
     /** Stores an uploaded image (`saveUploadedFileAttachmentUsing()`, else the storage) and returns its key. */
     async saveUploadedFileAttachment(file: TemporaryUpload): Promise<string | null> {
         if (this._saveUploadedFileAttachmentUsing) return (await this._saveUploadedFileAttachmentUsing(file, this.context())) ?? null;
+        const provider = this.getFileAttachmentProvider();
+        if (provider && this.waitsForRecord()) return null;
         const storage = this.attachmentsStorage();
-        if (!storage) return null;
-        const key = await storage.store(file, this._attachmentsDirectory);
+        if (!provider && !storage) return null;
+        const key = provider ? await provider.saveUploadedFileAttachment(file, await this.attachmentContext()) : await storage!.store(file, this._attachmentsDirectory);
+        if (key === null) return null;
         (this.livewire as any)._runtime?.uploads?.remove(file.id);
         return key;
     }
@@ -3023,7 +3093,7 @@ export class RichEditor extends Field {
     async getUploadedFileAttachmentTemporaryUrl(args: unknown = {}): Promise<string | null> {
         // The editor's JavaScript sends `{ attachment }`, passed as a positional argument by `callSchemaComponentMethod()`.
         const id = typeof args === 'string' ? args : (args as any)?.attachment;
-        if (!this.attachmentsStorage() && !this._saveUploadedFileAttachmentUsing) return null;
+        if (!this.attachmentsStorage() && !this._saveUploadedFileAttachmentUsing && !this.getFileAttachmentProvider()) return null;
         if (!this.toolGroups().flat().includes('attachFiles') || (await this.isDisabled())) return null;
         const file = this.getUploadedFileAttachment(id);
         const runtime = (this.livewire as any)._runtime;
@@ -3032,6 +3102,16 @@ export class RichEditor extends Field {
     /** Stores the file just uploaded to `componentFileAttachments.<state path>` and returns its URL (no `data-id` flow). */
     async saveUploadedFileAttachmentAndGetUrl(args: unknown = {}): Promise<string | null> {
         const id = String((typeof args === 'string' ? args : (args as any)?.attachment) ?? '');
+        const provider = this.getFileAttachmentProvider();
+        if (provider) {
+            if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.toolGroups().flat().includes('attachFiles') || (await this.isDisabled()) || this.waitsForRecord()) return null;
+            const file = this.getUploadedFileAttachment(id);
+            if (!file) return null;
+            const key = await this.saveUploadedFileAttachment(file);
+            const holder = this.attachmentsHolder();
+            if (holder) delete holder[id];
+            return key === null ? null : this.getFileAttachmentUrl(key);
+        }
         const storage = this.attachmentsStorage();
         if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.toolGroups().flat().includes('attachFiles') || (await this.isDisabled())) return null;
         return storeEditorAttachment(this, id, { storage, directory: this._attachmentsDirectory, types: this._attachmentTypes, maxSize: this._attachmentMaxSize });

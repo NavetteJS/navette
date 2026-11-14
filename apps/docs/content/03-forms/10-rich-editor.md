@@ -818,6 +818,59 @@ const html = await RichContentRenderer.make(post.content)
     .toHtml();
 ```
 
+### Storing images with a file attachment provider
+
+A file attachment provider stores the images of a record's content for that record, like Filament's `FileAttachmentProvider` (the Spatie Media Library provider, for example). Navette ships `StorageFileAttachmentProvider`, which keeps each record's images in its own directory of a [storage](/advanced/file-storage):
+
+```ts
+import { LocalFileStorage, RichEditor, StorageFileAttachmentProvider } from '@navette-js/forms';
+
+const attachments = StorageFileAttachmentProvider.make(new LocalFileStorage('storage/attachments', '/attachments'))
+    .directory((post: Post) => `posts/${post.id}`);
+
+RichEditor.make('content')
+    .fileAttachmentProvider(attachments)
+```
+
+Compared with `fileAttachmentsStorage()`:
+
+- an image is stored under the record's directory (`posts/12/<uuid>.png`), and only ids under that directory get a URL, in the editor and in the [renderer](#rendering-rich-content): content cannot display another record's images, even if a forged `data-id` got saved;
+- when the content is saved, the images removed from it are deleted from the storage (the ids of the content saved before minus the ids still used);
+- the provider needs the record's key, so on a create page the content is saved just after the record is created: the uploads are stored for the new record, then the content is written to it (with an Objection `patch()`, or the provider's `saveContentToRecord()`). Until then, an image pasted in the editor keeps its temporary preview.
+
+Its visibility is `private` when the storage is private, so images get temporary URLs; `visibility()` sets it explicitly.
+
+You can write your own provider, for example to keep attachments in a media table, by implementing the `FileAttachmentProvider` interface:
+
+```ts
+import type { FileAttachmentContext, FileAttachmentProvider, TemporaryUpload } from '@navette-js/forms';
+
+class MediaAttachmentProvider implements FileAttachmentProvider {
+    async getFileAttachmentUrl(file: string, { record }: FileAttachmentContext): Promise<string | null> {
+        const media = await Media.query().findOne({ uuid: file, post_id: (record as Post).id });
+        return media ? media.url : null; // Never the URL of another record's file.
+    }
+
+    async saveUploadedFileAttachment(file: TemporaryUpload, { record }: FileAttachmentContext): Promise<string | null> {
+        return (await Media.store(file.path, file.name, { postId: (record as Post).id })).uuid;
+    }
+
+    async cleanUpFileAttachments(exceptIds: string[], { record }: FileAttachmentContext): Promise<void> {
+        await Media.query().where('post_id', (record as Post).id).whereNotIn('uuid', exceptIds).delete();
+    }
+
+    getDefaultFileAttachmentVisibility(): 'private' {
+        return 'private';
+    }
+
+    isExistingRecordRequiredToSaveNewFileAttachments(): boolean {
+        return true;
+    }
+}
+```
+
+`getFileAttachmentUrl()` must return `null` for an id the record does not own: it is what keeps a forged `data-id` from showing someone else's file. `cleanUpFileAttachments()` also receives `previousIds`, the ids of the content as it was loaded. A provider that does not need the record (`isExistingRecordRequiredToSaveNewFileAttachments()` returning `false`) is called with `record: null` on create pages. To render content with a provider outside the editor, pass it to the renderer with the record: `RichContentRenderer.make(post.content).fileAttachmentProvider(attachments, post, 'content')`, or [register the attribute](#registering-rich-content-attributes) on the model.
+
 ### Securing file attachment IDs
 
 The `data-id` of an image is a key of the storage, and like any field value it comes from the browser: a forged request could replace it with the key of someone else's file, which the editor (or the renderer) would then show, with a signed URL for a private image. Navette therefore checks it by default (Filament's `preventFileAttachmentPathTampering()`, opt-in there): the record's saved content is parsed, and only the `data-id` values already present are accepted, besides new uploads. Any other one fails validation, with the `tampered` message, and gets no URL when the form is loaded.
@@ -855,6 +908,58 @@ RichEditor.make('content')
 ```
 
 Both checks run in the browser, and again on the server before the image is stored. On the server, the type is [detected from the file's content](/advanced/file-storage#checking-the-type-of-a-file), never from its name or the type announced by the browser. The `maxFileSize` of the temporary upload store also applies.
+
+## Registering rich content attributes
+
+Custom blocks, merge tags, mentions, plugins, link protocols and attachments must be the same wherever the content is edited or displayed. Instead of repeating them, register the attribute on the model with the `InteractsWithRichContent` mixin (Filament's `InteractsWithRichContent` trait and `HasRichContent` interface), in its `setUpRichContent()` method:
+
+```ts
+import { InteractsWithRichContent, MentionProvider, TextColor } from '@navette-js/forms';
+import { Model } from '@navette-js/database';
+
+export class Post extends InteractsWithRichContent(Model) {
+    static tableName = 'posts';
+
+    setUpRichContent(): void {
+        this.registerRichContent('content')
+            .fileAttachmentProvider(attachments)
+            .customBlocks([HeroBlock, CallToActionBlock])
+            .mergeTags({
+                name: () => this.author_name,
+                today: new Date().toDateString(),
+            })
+            .mergeTagLabels({
+                name: 'Full name',
+                today: "Today's date",
+            })
+            .mentions([
+                MentionProvider.make('@').items({ 1: 'Jane Doe', 2: 'John Smith' }),
+            ])
+            .textColors({ brand: TextColor.make('Brand', '#0ea5e9', '#38bdf8') })
+            .customTextColors()
+            .linkProtocols(['http', 'https', 'mailto'])
+            .plugins([HighlightRichContentPlugin.make()]);
+    }
+}
+```
+
+The attribute also accepts `json()`, `fileAttachmentsStorage()` and `fileAttachmentsVisibility()`. The registered attributes are kept outside the record's own properties, so they are never saved as columns.
+
+A `RichEditor` editing a record that registers its attribute uses that configuration for every option you did not set on the editor itself (plugins are added to the editor's):
+
+```ts
+RichEditor.make('content')
+```
+
+A `TextColumn` or a `TextEntry` of that attribute renders it with the same configuration (merge tags replaced, custom blocks rendered, attachment URLs computed), sanitized, and the entry is displayed as [prose](/infolists/text-entry#rendering-html). A column or entry with its own `state()` is left as it is.
+
+To render it yourself, call `renderRichContent()` on the record:
+
+```html
+<div class="fi-prose"><%- await post.renderRichContent('content') %></div>
+```
+
+`post.getRichContentAttribute('content')` returns the attribute, whose `getRenderer()`, `toHtml()` and `toText()` give the renderer, the HTML and the plain text. Records that are plain objects (a query builder adapter) cannot register attributes: share an editor factory between the form and the renderer instead, as in [rendering rich content](#rendering-rich-content). The editor only finds the attribute through the record, so on a create page, where there is no record yet, options needed before saving (custom blocks, merge tags, mentions) still have to be set on the editor, from the same shared function.
 
 ## Generating fake rich content
 

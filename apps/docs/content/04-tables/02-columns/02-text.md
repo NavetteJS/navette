@@ -630,3 +630,16 @@ Both `html()` and `markdown()` accept a function of the record and of the value,
 <Aside variant="info">
 Without `html()` or `markdown()`, the text is always escaped: a value containing `<b>` shows those characters.
 </Aside>
+
+### Rendering rich content
+
+When the record registers the column's attribute as [rich content](/forms/rich-editor#registering-rich-content-attributes) (`registerRichContent()` of `InteractsWithRichContent`), it is rendered automatically with that configuration: merge tags replaced, custom blocks rendered, attachment URLs computed, then sanitized like any HTML state. No option is needed:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('content')
+```
+
+A column with its own `state()` is not affected.
+

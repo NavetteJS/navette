@@ -1,6 +1,6 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl, NavetteTimezone } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl, NavetteTimezone, getRegisteredRichContent } from '@navette-js/support';
 import { encodeJson, JsonFlags } from './json-flags.ts';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { loadMissingRelationships, loadRelationshipAggregates, normalizeRelationshipAggregates, readRecordPath, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregateFunction } from '@navette-js/support';
@@ -642,6 +642,9 @@ export class TextEntry extends Entry {
     async toHtml(): Promise<string> {
         const record = this.context().record as any;
         let state = await this.getState();
+        // A rich content attribute the record registers (`registerRichContent()`): rendered with its configuration, as prose.
+        const richContent = this._state ? null : getRegisteredRichContent(record, this._name!);
+        if (richContent) state = richContent.isEmpty() ? null : new HtmlString(sanitize(await richContent.toHtml()));
         if (typeof state === 'string' && this._separator) {
             const parts = state.split(this._separator);
             state = parts.length === 1 && parts[0].trim() === '' ? [] : parts;
@@ -677,7 +680,7 @@ export class TextEntry extends Entry {
             const iconHtml = renderIcon(resolveItem(this._icon, record, item) ?? this.enumCaseOf(record, item)?.getIcon() ?? null, { size: size === 'md' || size === 'lg' ? size : 'sm', attributes: new Attributes().class(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${safeName(iconColor)}`] : []) });
             const isCopyable = Boolean(resolveItem(this._copyable, record, item));
             const tooltip = resolveItem(this._tooltip, record, item);
-            let attributes: AttrMap = { class: cls(['fi-in-text-item', { 'fi-prose': this._prose || this._markdown }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
+            let attributes: AttrMap = { class: cls(['fi-in-text-item', { 'fi-prose': this._prose || this._markdown || richContent !== null }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
             if (!this._badge) {
                 attributes = withClass(attributes, [`fi-size-${size}`, fontClass(resolveItem(this._weight, record, item), FONT_WEIGHTS)]);
                 if (this._lineClamp) attributes = withStyle(attributes, [`--line-clamp: ${this._lineClamp}`]);

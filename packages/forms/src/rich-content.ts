@@ -8,6 +8,7 @@ import { t } from '@navette-js/support/i18n';
 import type { Action } from '@navette-js/actions';
 import { attachmentUrl, eachImage, type AttachmentStorage, type AttachmentsVisibility } from './rich-editor-attachments.ts';
 import { safeFileUrl } from './file-upload-support.ts';
+import type { FileAttachmentProvider } from './file-attachment-provider.ts';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -242,6 +243,7 @@ export class RichContentRenderer {
     protected _attachmentsStorage: AttachmentStorage | null = null;
     protected _attachmentsVisibility: AttachmentsVisibility = 'public';
     protected _getFileAttachmentUrlUsing: ((file: string) => string | null | Promise<string | null>) | null = null;
+    protected _attachmentProvider: { provider: FileAttachmentProvider; record: unknown; attribute: string } | null = null;
     constructor(content: unknown) { this.content = content; }
     static make(content: unknown): RichContentRenderer { return new this(content); }
     /** Values of the merge tags: text (escaped), an `HtmlString` (inserted as is), or a function returning one. */
@@ -263,6 +265,8 @@ export class RichContentRenderer {
     fileAttachmentsVisibility(visibility: AttachmentsVisibility): this { this._attachmentsVisibility = visibility === 'private' ? 'private' : 'public'; return this; }
     /** URL of an attached image from its `data-id`, instead of the storage's. */
     getFileAttachmentUrlUsing(callback: ((file: string) => string | null | Promise<string | null>) | null): this { this._getFileAttachmentUrlUsing = callback; return this; }
+    /** URLs of attached images from a record-aware provider (`fileAttachmentProvider()` of the editor), for this record's attribute. */
+    fileAttachmentProvider(provider: FileAttachmentProvider | null, record: unknown = null, attribute = ''): this { this._attachmentProvider = provider ? { provider, record, attribute } : null; return this; }
     protected schemaOptions() { return { linkProtocols: this._linkProtocols, extensions: this._plugins.flatMap((plugin) => plugin.getTipTapServerExtensions()) }; }
     /** Plain text of the rendered content (merge tags replaced). */
     async toText(): Promise<string> {
@@ -277,11 +281,14 @@ export class RichContentRenderer {
         if (sanitized === null) return '';
         const document = richHtmlToDocument(sanitized, options) as RichDocument;
         // Attached images: their URL from their `data-id` (never trusted from the content for private ones).
-        if (this._attachmentsStorage || this._getFileAttachmentUrlUsing) {
+        if (this._attachmentsStorage || this._getFileAttachmentUrlUsing || this._attachmentProvider) {
             await eachImage(document, async (node) => {
                 const id = node.attrs?.id;
                 if (typeof id !== 'string' || id === '') return;
-                const url = this._getFileAttachmentUrlUsing ? safeFileUrl(await this._getFileAttachmentUrlUsing(id)) : await attachmentUrl(this._attachmentsStorage, this._attachmentsVisibility, id);
+                const provided = this._attachmentProvider;
+                const url = this._getFileAttachmentUrlUsing ? safeFileUrl(await this._getFileAttachmentUrlUsing(id))
+                    : provided ? safeFileUrl(await provided.provider.getFileAttachmentUrl(id, { record: provided.record, attribute: provided.attribute, visibility: this._attachmentsVisibility }))
+                    : await attachmentUrl(this._attachmentsStorage, this._attachmentsVisibility, id);
                 node.attrs = { ...node.attrs, src: url ?? (this._attachmentsVisibility === 'private' ? null : node.attrs?.src ?? null) };
             });
         }

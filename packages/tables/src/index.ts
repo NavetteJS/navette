@@ -5,7 +5,7 @@ import { addRelationshipsToQuery, ensureRelationshipSupport, groupScopeThroughRe
 export { addRelationshipsToQuery, ensureRelationshipSupport } from './relationships.ts';
 import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
-import { NavetteTimezone } from '@navette-js/support';
+import { getRegisteredRichContent, NavetteTimezone, RenderedRichContent } from '@navette-js/support';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
 import { applyConditions, loadRelationshipOptions, modelOfHost, type RelationshipQueryModifier } from './query-builder.ts';
@@ -503,6 +503,7 @@ export class TextColumn<R = any> extends Column<R> {
     markdown(condition: PerItem<R, boolean> = true): this { this._markdown = condition; return this; }
     /** Item text as HTML: Markdown, sanitized HTML, or escaped text. */
     private renderItemText(text: string, record: R, item: unknown): string {
+        if (item instanceof RenderedRichContent) return text;
         if (resolveItem(this._markdown, record, item)) return markdownToHtml(text);
         if (resolveItem(this._html, record, item)) return sanitizeHtml(text);
         return e(text);
@@ -515,6 +516,7 @@ export class TextColumn<R = any> extends Column<R> {
     formatState(state: unknown, record: R): string | string[] { return Array.isArray(state) ? state.map((item) => this.formatItem(item, record)) : this.formatItem(state, record); }
     /** Displayed text of one state item, escaped by the caller. */
     private formatItem(item: unknown, record: R): string {
+        if (item instanceof RenderedRichContent) return `${this._prefix ?? ''}${item.html}${this._suffix ?? ''}`;
         if (this._format) return String(this._format({ state: item, record }) ?? '');
         let text: string;
         const currency = typeof this._money === 'function' ? this._money(record) : this._money;
@@ -541,7 +543,7 @@ export class TextColumn<R = any> extends Column<R> {
     private hasDescriptions(): boolean { return this._descriptionAbove !== null || this._descriptionBelow !== null; }
     /** Plain value without per-item options: Filament's short markup. */
     private canRenderOptimized(state: unknown, record: R): boolean {
-        return !Array.isArray(state) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && !this.enumCaseOf(record, state)?.getIcon() && this._tooltip === null
+        return !Array.isArray(state) && !(state instanceof RenderedRichContent) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && !this.enumCaseOf(record, state)?.getIcon() && this._tooltip === null
             && this._copyable === false && this._weight === null && this._fontFamily === null && this._lineClamp === null && this._size === null && !this.hasDescriptions() && !this._wrap && this._html === false && this._markdown === false;
     }
     private alignClass(): string | null { return this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null; }
@@ -549,7 +551,10 @@ export class TextColumn<R = any> extends Column<R> {
 
     /** Cell content, as Filament renders it: a short markup for a plain value, the full markup as soon as an item option is set. */
     async toHtml(record: R): Promise<string> {
-        const state = await this.getState(record);
+        let state = await this.getState(record);
+        // A rich content attribute the record registers (`registerRichContent()`): rendered with its configuration, sanitized.
+        const richContent = this._state ? null : getRegisteredRichContent(record, this.name);
+        if (richContent) state = richContent.isEmpty() ? null : new RenderedRichContent(sanitizeHtml(await richContent.toHtml()));
         if (isBlankState(state)) {
             return `<div class="${cls(this.containerClasses())}">${this._placeholder !== null ? `<p class="fi-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
         }

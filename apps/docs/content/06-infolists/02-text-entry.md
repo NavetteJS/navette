@@ -453,6 +453,18 @@ TextEntry.make('content')
     .prose()
 ```
 
+### Rendering rich content
+
+When the record registers the entry's attribute as [rich content](/forms/rich-editor#registering-rich-content-attributes) (`registerRichContent()` of `InteractsWithRichContent`), it is rendered automatically with that configuration: merge tags replaced, custom blocks rendered, attachment URLs computed, then sanitized like any HTML state, and displayed as prose. No option is needed:
+
+```ts
+import { TextEntry } from '@navette-js/infolists';
+
+TextEntry.make('content')
+```
+
+A entry with its own `state()` is not affected.
+
 #### Rendering raw HTML without sanitization
 
 If you'd like to opt out of sanitization, you can wrap the HTML in an `HtmlString` object by formatting it:
