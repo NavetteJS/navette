@@ -44,7 +44,7 @@ RichEditor.make('content')
         ['h2', 'h3'],
         ['alignStart', 'alignCenter', 'alignEnd'],
         ['blockquote', 'codeBlock', 'bulletList', 'orderedList'],
-        ['table', 'attachFiles'],
+        ['table', 'attachFiles'], // The `customBlocks` and `mergeTags` tools are also added here if those features are used.
         ['undo', 'redo'],
     ])
 ```
@@ -61,11 +61,13 @@ The default groups are exported as `RICH_EDITOR_TOOLS`. Every built-in tool is d
 | `textColor` | [Text color](#customizing-text-colors) |
 | `horizontalRule`, `clearFormatting`, `alignJustify` | A separator, removing formatting, justified text |
 | `grid` | Columns (with a floating toolbar to add and remove columns) |
+| `details` | A collapsible section (`<details>` with its `<summary>`) |
 | `customBlocks`, `mergeTags` | The [blocks](#using-custom-blocks) and [merge tags](#using-merge-tags) panels |
+| `table…`, `grid…` | The table and grid tools of the [floating toolbars](#customizing-floating-toolbars): `tableAddColumnBefore`, `tableAddRowAfter`, `tableMergeCells`, `gridDelete`… |
 
-An unknown tool name throws an error when the field is configured. You may add [your own tools](#adding-your-own-toolbar-buttons).
+An unknown tool name throws an error when the field is configured: add [your own tools](#adding-your-own-toolbar-buttons) and [plugins](#creating-a-plugin) before calling `toolbarButtons()`.
 
-The `attachFiles` button is only shown when a storage is available for [uploaded images](#uploading-images-to-the-editor). The link button opens a modal asking for the URL and whether to open it in a new tab. Only `http(s)://`, `mailto:`, `tel:`, relative (`/…`) and anchor (`#…`) URLs are accepted. When the cursor is in a table, a floating toolbar lets the user add, delete, merge and split rows, columns and cells.
+The `attachFiles` button is only shown when a storage is available for [uploaded images](#uploading-images-to-the-editor). The link button opens a modal asking for the URL and whether to open it in a new tab. Only URLs with one of the [allowed protocols](#allowing-link-protocols), relative (`/…`) and anchor (`#…`) URLs are accepted.
 
 ```ts
 import { RichEditor } from '@navette-js/forms';
@@ -89,16 +91,113 @@ RichEditor.make('content')
     ])
 ```
 
-You may also remove some buttons from the toolbar with `disableToolbarButtons()`, or remove the whole toolbar with `disableAllToolbarButtons()`:
+You may also remove some buttons from the toolbar with `disableToolbarButtons()` (also inside [dropdowns](#grouping-toolbar-buttons-into-dropdowns)), add buttons after the current ones with `enableToolbarButtons()` (a nested list adds a group; buttons already in the toolbar are skipped), or remove the whole toolbar with `disableAllToolbarButtons()`:
 
 ```ts
 import { RichEditor } from '@navette-js/forms';
 
 RichEditor.make('content')
     .disableToolbarButtons(['table', 'attachFiles'])
+    .enableToolbarButtons([['highlight', 'horizontalRule']])
 ```
 
-## Keeping the toolbar visible while scrolling
+`hasToolbarButton('table')` tells whether a tool (or every tool of a list) ends up in the toolbar. Calling `toolbarButtons()` again resets the enabled and disabled buttons.
+
+### Using the toolbar with a keyboard
+
+You can enter the main toolbar using Tab, or Shift+Tab from the editor. The toolbar has one tab stop, which remembers the last focused tool. Use the left and right arrow keys to move between tools, and Home or End to reach the first or last tool. Disabled and hidden tools are skipped. Enter or Space activates the focused tool. Escape returns to the editor without changing the selection.
+
+### Customizing floating toolbars
+
+A floating toolbar shows tools next to the cursor, only while it is inside a given node type: this keeps the main toolbar short. You may set them with `floatingToolbars()`, keyed by node name. In the example below, a toolbar with formatting buttons appears when text is selected in a paragraph, heading tools appear in a heading, and grids and tables show their own controls:
+
+```ts
+import { RichEditor, ToolbarButtonGroup } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .floatingToolbars({
+        paragraph: ['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript'],
+        heading: [ToolbarButtonGroup.make('Heading', ['h1', 'h2', 'h3'])],
+        grid: ['gridAddColumnBefore', 'gridAddColumnAfter', 'gridDeleteColumn', 'gridDelete'],
+        table: [
+            'tableAddColumnBefore', 'tableAddColumnAfter', 'tableDeleteColumn',
+            'tableAddRowBefore', 'tableAddRowAfter', 'tableDeleteRow',
+            'tableMergeCells', 'tableSplitCell',
+            'tableToggleHeaderRow', 'tableToggleHeaderCell',
+            'tableDelete',
+        ],
+    })
+```
+
+By default, the `grid` and `table` toolbars above are shown. Pass `{}` to remove every floating toolbar, or `null` to restore the defaults. A `paragraph` toolbar only appears once some text is selected. A disabled editor has no floating toolbar.
+
+You can press Alt+F10 inside the editor to enter an applicable floating toolbar, or the main toolbar if none applies. Press Alt+F10 again to cycle through the applicable floating toolbars, then the main toolbar. Floating toolbars use the same arrow, Home, End and Escape keys as the main toolbar.
+
+### Grouping toolbar buttons into dropdowns
+
+You may group related toolbar buttons into a dropdown menu using `ToolbarButtonGroup`. The first argument is a label used for the dropdown's tooltip and accessible name, and the second one is the list of button names to include:
+
+```ts
+import { RichEditor, ToolbarButtonGroup } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .toolbarButtons([
+        ['bold', 'italic', 'underline', 'strike'],
+        [ToolbarButtonGroup.make('Paragraph', ['paragraph', 'h1', 'h2', 'h3'])],
+        [ToolbarButtonGroup.make('Alignment', ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'])],
+        ['blockquote', 'codeBlock', 'bulletList', 'orderedList'],
+        ['undo', 'redo'],
+    ])
+```
+
+By default, the first button's icon is used as the dropdown trigger, and it changes to show the active button. Clicking the trigger reveals the grouped buttons. A focused dropdown also opens with Enter, Space or the up and down arrow keys; inside the menu, the arrow keys, Home and End move between tools, Escape closes the menu and returns to its trigger, and Tab leaves it. Toggle tools are checked menu items (`menuitemcheckbox`).
+
+You can set a fixed icon for the trigger with `icon()`: it then no longer follows the active button. `extraAttributes()` adds HTML attributes to the trigger:
+
+```ts
+import { RichEditor, ToolbarButtonGroup } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .toolbarButtons([
+        ['bold', 'italic'],
+        [ToolbarButtonGroup.make('Heading', ['h1', 'h2', 'h3']).icon('fi-o-heading')],
+        ['undo', 'redo'],
+    ])
+```
+
+### Using textual dropdown toolbar buttons
+
+Dropdown buttons show icons only, in a horizontal menu. To show each button's label next to its icon, in a vertical menu, use `textualButtons()`:
+
+```ts
+import { RichEditor, ToolbarButtonGroup } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .toolbarButtons([
+        ['bold', 'italic', 'underline', 'strike', 'link'],
+        [ToolbarButtonGroup.make('Paragraph', ['paragraph', 'h1', 'h2', 'h3']).textualButtons()],
+        [ToolbarButtonGroup.make('Alignment', ['alignStart', 'alignCenter', 'alignEnd', 'alignJustify'])],
+        ['undo', 'redo'],
+    ])
+```
+
+Dropdown groups can also be used in [floating toolbars](#customizing-floating-toolbars).
+
+## Setting the height
+
+You may control the editor's height with `minHeight()` and `maxHeight()`, which accept any CSS length:
+
+```ts
+import { RichEditor } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .minHeight('12rem')
+    .maxHeight('24rem')
+```
+
+The editor has a minimum height of `10rem` by default. Once the content exceeds `maxHeight()`, the editor stops growing and its content scrolls. Each method may be used on its own: pass `null` to `minHeight()` to use the intrinsic `3rem` minimum, or to `maxHeight()` to remove the limit. Both also accept a function of the field's context.
+
+## Keeping the toolbar and panels visible while scrolling
 
 In a long document, `stickyToolbar()` keeps the toolbar at the top of the screen while the user scrolls the content:
 
@@ -108,6 +207,46 @@ import { RichEditor } from '@navette-js/forms';
 RichEditor.make('content')
     .stickyToolbar()
 ```
+
+You can also keep the [custom blocks](#using-custom-blocks) and [merge tags](#using-merge-tags) panels visible with `stickyPanels()`. Each option can be enabled independently:
+
+```ts
+import { RichEditor } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .stickyToolbar()
+    .stickyPanels()
+```
+
+Panels only stick when the editor is wide enough to show them beside the content; in narrower editors they scroll with the page. Inside an action modal or slide-over, sticky panels fit within the modal's scrollable area.
+
+### Setting the sticky offset
+
+Inside a panel, the sticky toolbar and panels account for the topbar (and inside a modal, for its sticky header). If your page has its own fixed header, set the distance from the top of the viewport with `stickyOffset()`, a CSS length (`null` restores the automatic offset):
+
+```ts
+import { RichEditor } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .stickyToolbar()
+    .stickyPanels()
+    .stickyOffset('5rem')
+```
+
+`stickyPanels()` and `stickyOffset()` also accept a function of the field's context.
+
+## Allowing link protocols
+
+By default, links may use the `http`, `https`, `ftp`, `ftps`, `mailto`, `tel`, `callto`, `sms`, `cid` and `xmpp` protocols, besides relative and anchor URLs. You may change the list with `linkProtocols()`, to restrict it or to allow an application's own scheme:
+
+```ts
+import { RichEditor } from '@navette-js/forms';
+
+RichEditor.make('content')
+    .linkProtocols(['https', 'mailto', 'notion'])
+```
+
+The list is checked on the server: the link modal refuses other URLs, and a link with another protocol in the submitted document (or in content rendered with a [renderer](#rendering-rich-content) given the same `linkProtocols()`) is removed when the content is saved. `javascript:` links are never kept.
 
 ## Customizing text colors
 
@@ -170,7 +309,18 @@ const html = await RichContentRenderer.make(post.content)
     .toHtml();
 ```
 
-The renderer accepts HTML or a [JSON document](#storing-content-as-json), and always cleans it first with the editor's schema. Otherwise, you may output the HTML in your own views as it is:
+The renderer accepts HTML or a [JSON document](#storing-content-as-json), and always cleans it first with the editor's schema. Give it the same [plugins](#creating-a-plugin) and [link protocols](#allowing-link-protocols) as the editor with `plugins()` and `linkProtocols()`, and the storage of [private images](#using-private-images-in-the-editor) with `fileAttachmentsStorage()` and `fileAttachmentsVisibility()`. `toText()` returns the plain text of the rendered content.
+
+An editor gives a renderer configured like itself (custom blocks, mentions, plugins, link protocols and attachments) with `getRenderer(content)`:
+
+```ts
+// The editor of the form, built by a function shared with the resource's form.
+const contentEditor = () => RichEditor.make('content').customBlocks([CallToActionBlock]).mentions([users]);
+
+const html = await contentEditor().getRenderer(post.content).mergeTags({ name: customer.name }).toHtml();
+```
+
+Otherwise, you may output the HTML in your own views as it is:
 
 ```html
 <div class="fi-prose"><%- post.content %></div>
@@ -354,7 +504,13 @@ RichEditor.make('content')
     .mergeTags(['name', 'today'])
 ```
 
-A merge tag is stored as `<span data-type="mergeTag" data-id="name">`.
+A merge tag is stored as `<span data-type="mergeTag" data-id="name">`. When the search after `{{` finds nothing, the editor shows "No merge tag results."; change it with `noMergeTagSearchResultsMessage()`:
+
+```ts
+RichEditor.make('content')
+    .mergeTags(['name', 'today'])
+    .noMergeTagSearchResultsMessage('No such placeholder.')
+```
 
 ### Rendering content with merge tags
 
@@ -413,6 +569,14 @@ RichEditor.make('content')
 
 A mention is stored as `<span data-type="mention" data-id="1" data-label="Ada Lovelace" data-char="@">@Ada Lovelace</span>`. `items()` also takes a function, and the provider customizes its messages with `noItemsMessage()`, `noSearchResultsMessage()`, `searchingMessage()` and `searchPrompt()`.
 
+`extraAttributes()` adds HTML attributes to the mentions this provider inserts in the editor (a class to style them, for example):
+
+```ts
+MentionProvider.make('#').items({ urgent: 'Urgent' }).extraAttributes({ class: 'tag-mention' })
+```
+
+The attributes are not escaped in the browser: never build them from user input.
+
 ### Searching mentions from the database
 
 With many items, search them on the server as the user types. `getLabelsUsing()` gives the current labels of stored mentions, so that a renamed user shows their new name:
@@ -460,7 +624,18 @@ RichEditor.make('content')
     .toolbarButtons([['bold', 'italic'], ['signature'], ['undo', 'redo']])
 ```
 
-`toggle()` makes it a toggle button, active when the node or mark of `activeKey()` (its name by default) is selected, or when `activeJsExpression()` is true. A tool with the name of a built-in one replaces it.
+`toggle()` makes it a toggle button (`aria-pressed`), active when the node or mark of `activeKey()` (its name by default) is selected, or when `activeJsExpression()` is true. A tool with the name of a built-in one replaces it. Other options of a tool:
+
+| Method | Effect |
+|---|---|
+| `activeOptions({ level: 2 })` | Attributes the `activeKey()` node or mark must have (TipTap's `isActive(key, options)`): `h2` is `activeKey('heading').activeOptions({ level: 2 })` |
+| `activeStyling(false)` | No active style (`fi-active`) on the button, even when its expression is true |
+| `disabledWhenNotActive()` | The button is disabled while its active expression is false (the grid tools use `activeJsExpression('$getEditor()?.can().addGridColumnBefore()')` with it) |
+| `iconAlias('…')` | An [icon alias](/styling/icons#replacing-the-default-icons): an icon registered for it replaces `icon()` |
+| `extraAttributes({ … })` | HTML attributes added to the button (`data-testid`…) |
+| `hiddenLabel(false)` | Shows the label next to the icon, instead of a tooltip |
+
+Custom tools take part in the toolbar's keyboard navigation, and can be used in [dropdowns](#grouping-toolbar-buttons-into-dropdowns) and [floating toolbars](#customizing-floating-toolbars).
 
 To run server code, `action()` mounts an action of the field instead: declare it with `editorActions()`. It receives the editor selection in `arguments.editorSelection`, and sends commands back to the editor with `runCommands()`:
 
@@ -509,14 +684,79 @@ registerRichContentExtensions(Node.create({
 }));
 ```
 
-Registered extensions apply to every rich editor and to the renderer. The `details` tool of Filament is not available.
+Registered extensions apply to every rich editor and to the renderer. To scope an extension to some editors, ship it in a [plugin](#creating-a-plugin) instead.
+
+### Creating a plugin
+
+A plugin bundles TipTap extensions for the server and the browser, toolbar tools, and the actions they mount. Write a class implementing `RichContentPlugin`:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { RichEditorTool, type RichContentPlugin } from '@navette-js/forms';
+import { Mark } from '@tiptap/core';
+
+export class HighlightRichContentPlugin implements RichContentPlugin {
+    static make() { return new this(); }
+
+    // Server side (Filament's `getTipTapPhpExtensions()`): what is kept when the content is saved or rendered.
+    getTipTapServerExtensions() {
+        return [Mark.create({ name: 'marker', parseHTML: () => [{ tag: 'span[data-marker]' }], renderHTML: () => ['span', { 'data-marker': '' }, 0] })];
+    }
+
+    // Browser side: ES modules exporting the matching TipTap extension.
+    getTipTapJsExtensions() {
+        return ['/js/rich-editor/marker.js'];
+    }
+
+    getEditorTools() {
+        return [
+            RichEditorTool.make('marker').label('Marker').icon('m-pencil').toggle().jsHandler("$getEditor()?.chain().focus().toggleMark('marker').run()"),
+            RichEditorTool.make('markerColor').label('Marker color').icon('m-swatch').action(),
+        ];
+    }
+
+    getEditorActions() {
+        return [Action.make('markerColor').schema([/* … */]).action(() => { /* … */ })];
+    }
+}
+```
+
+Register it with `plugins()`, then place its tools with `toolbarButtons()`, and give it to the [renderer](#rendering-rich-content) too:
+
+```ts
+RichEditor.make('content')
+    .plugins([HighlightRichContentPlugin.make()])
+    .toolbarButtons([['bold', 'italic', 'marker', 'markerColor'], ['undo', 'redo']])
+
+await RichContentRenderer.make(post.content).plugins([HighlightRichContentPlugin.make()]).toHtml();
+```
+
+A plugin tool with the name of another tool replaces it. Unlike `registerRichContentExtensions()`, the plugin's server extensions only apply to the editors and renderers it is given to.
+
+#### Enabling or disabling toolbar buttons from a plugin
+
+A plugin may also add buttons to the toolbar, or remove some, with the optional `getEnabledToolbarButtons()` and `getDisabledToolbarButtons()` methods (Filament's `HasToolbarButtons`). They work like [`enableToolbarButtons()` and `disableToolbarButtons()`](#customizing-the-toolbar-buttons), and apply before the field's own changes, which therefore take precedence:
+
+```ts
+export class HighlightRichContentPlugin implements RichContentPlugin {
+    // …
+    getEnabledToolbarButtons() {
+        return [['marker', 'markerColor']];
+    }
+
+    getDisabledToolbarButtons() {
+        return ['highlight'];
+    }
+}
+```
 
 ## Security
 
 The document comes from the browser, so the server never trusts it. Before saving, Navette renders the document to HTML and parses it again with the editor's schema, so that only known nodes, marks and attributes survive:
 
 - `<script>` elements, event attributes such as `onclick` and `onerror`, and unknown elements are removed.
-- Links with a `javascript:` URL are removed, even when the browser sends a forged document.
+- Links with a `javascript:` URL are removed, even when the browser sends a forged document, and so are links with a protocol outside [`linkProtocols()`](#allowing-link-protocols).
+- An image's `data-id` is only accepted if the record already holds it, or if it is a new upload: see [securing file attachment IDs](#securing-file-attachment-ids).
 - Text colors are kept only when they are known colors or plain CSS colors (`#0ea5e9`, `rgb(…)`, `oklch(…)`, a color name): anything else, such as `red; background: url(…)`, is dropped. Image sizes must be plain lengths.
 - Custom block configurations, merge tags and mentions are kept as data; their HTML is only produced by your code when [rendering](#rendering-rich-content), so escape it there.
 - An empty document (no text, image, horizontal rule, block, merge tag or mention) is saved as `null`.
@@ -535,9 +775,52 @@ RichEditor.make('content')
     .fileAttachmentsDirectory('attachments')
 ```
 
-`fileAttachmentsStorage()` accepts any [`FileStorage`](/advanced/file-storage#storing-files). Images are stored without a chosen name (`LocalFileStorage` gives them a random one), and the editor inserts the URL returned by the storage. Only URLs starting with `/` or `http(s)://` are accepted: since that URL is saved in the content, use a storage whose URLs stay valid.
+`fileAttachmentsStorage()` accepts any [`FileStorage`](/advanced/file-storage#storing-files). While the form is being edited, an uploaded image is shown through a temporary signed URL of the upload store (`/livewire/preview-file/…`, valid for 30 minutes), and nothing is stored yet. When the form is saved, the image is stored, without a chosen name (`LocalFileStorage` gives it a random one): its key is saved in the image's `data-id` attribute, with the storage's URL in `src`. Only URLs starting with `/` or `http(s)://` are accepted. An image removed before saving, or a form left without saving, stores nothing: the temporary file is swept by the upload store.
 
-An image is stored as soon as the editor asks for its URL, right after the upload, not when the form is saved. It therefore stays stored if the user removes it from the content, or leaves without saving the form.
+You may store the image yourself with `saveUploadedFileAttachmentUsing()`, returning the key saved in `data-id`, and compute the URL of a key with `getFileAttachmentUrlUsing()`:
+
+```ts
+RichEditor.make('content')
+    .saveUploadedFileAttachmentUsing(async (file) => (await media.add(file.path, file.name)).id)
+    .getFileAttachmentUrlUsing((id) => `/media/${id}`)
+```
+
+`uploadingFileMessage()` changes the "Uploading file..." message shown during an upload.
+
+### Using private images in the editor
+
+Private images cannot be shown through a permanent URL. With `fileAttachmentsVisibility('private')`, no URL is saved in the content: only the image's `data-id`. Each time the editor is loaded, or the content [rendered](#rendering-rich-content), a temporary URL is generated for each image, valid until the end of the hour following the next 30 minutes:
+
+```ts
+RichEditor.make('content')
+    .fileAttachmentsStorage(privateStorage)
+    .fileAttachmentsVisibility('private')
+```
+
+The temporary URL comes from the storage's `temporaryUrl(key, expiresAt)` method: a storage of private files implements it to return a signed URL, served by a route of your application that checks the signature (a bucket's signed URLs, for instance). A storage without that method gives its usual URL. Keep the private files out of any static folder. When rendering the content, give the renderer the same configuration:
+
+```ts
+import { RichContentRenderer } from '@navette-js/forms';
+
+const html = await RichContentRenderer.make(post.content)
+    .fileAttachmentsStorage(privateStorage)
+    .fileAttachmentsVisibility('private')
+    .toHtml();
+```
+
+### Securing file attachment IDs
+
+The `data-id` of an image is a key of the storage, and like any field value it comes from the browser: a forged request could replace it with the key of someone else's file, which the editor (or the renderer) would then show, with a signed URL for a private image. Navette therefore checks it by default (Filament's `preventFileAttachmentPathTampering()`, opt-in there): the record's saved content is parsed, and only the `data-id` values already present are accepted, besides new uploads. Any other one fails validation, with the `tampered` message, and gets no URL when the form is loaded.
+
+If your application legitimately references other files (an image library, a "copy from another record" action), approve them with the `allowFilePathUsing` argument. It receives the key exactly as submitted: compare it with exact trusted keys, never with a prefix:
+
+```ts
+RichEditor.make('content')
+    .preventFileAttachmentPathTampering(true, (file) => ['templates/logo.png', 'templates/banner.png'].includes(file))
+    .validationMessages({ tampered: 'The content references an image that is not permitted.' })
+```
+
+On a create page there is no record: every existing `data-id` needs `allowFilePathUsing` (new uploads are unaffected). `preventFileAttachmentPathTampering(false)` turns the check off: only do it if the storage holds nothing a user should not see.
 
 Panel pages, including [custom pages](/resources/custom-pages), can receive editor uploads. If you use the rich editor in your own wire component, declare a public `componentFileAttachments` property, initialized to `{}`: the browser uploads images into it, and attaching files fails without it.
 
@@ -562,6 +845,68 @@ RichEditor.make('content')
 ```
 
 Both checks run in the browser, and again on the server before the image is stored. On the server, the type is [detected from the file's content](/advanced/file-storage#checking-the-type-of-a-file), never from its name or the type announced by the browser. The `maxFileSize` of the temporary upload store also applies.
+
+## Generating fake rich content
+
+`RichEditor.fake()` generates content for seeders and tests (Filament's `fake()->filamentRichContent()`). Chain blocks, then get the stored HTML with `toHtml()`, the TipTap document with `toArray()`, or the value as the editor stores it with `toValue()`. The output methods are asynchronous:
+
+```ts
+import { RichEditor } from '@navette-js/forms';
+
+await knex('posts').insert({
+    title: 'Hello',
+    content: await RichEditor.fake()
+        .heading()
+        .paragraphs(3)
+        .bulletList()
+        .toHtml(),
+});
+```
+
+`article(depth)` generates a complete article: a lead introduction, then sections with level-two headings; each level of `depth` (up to 5) adds nested sections with the next heading level. The available blocks are `heading(level)`, `paragraphs(count, marks)`, `lead()`, `bulletList(items)`, `orderedList(items)`, `blockquote()`, `codeBlock(language, code)`, `horizontalRule()`, `table(columns, rows)`, `details()`, `grid(spans, breakpoint)`, `image(url, width, height, alt)` and `fileAttachment(id)` (an existing stored image). `paragraphs()` takes the marks to add, as `{ links, bold, italic, underline, strike, subscript, superscript, code, small, highlight }`:
+
+```ts
+await RichEditor.fake().paragraphs(3, { links: true, bold: true, italic: true }).toHtml();
+```
+
+`textColor()` colors random text, `textAlignment()` aligns a random block, and `hardBreak()` inserts a line break. Pass `{ seed: 42 }` for reproducible content.
+
+### Using an editor's configuration
+
+Pass an editor with `{ editor }` (Filament's rich content attribute): the faker uses its merge tags, mentions, custom blocks, text colors, link protocols, plugins and JSON mode. `toValue()` then returns the document when the editor uses `json()`, and HTML otherwise; `toRenderedHtml()` and `toText()` render it with the editor's [renderer](#rendering-rich-content):
+
+```ts
+const editor = RichEditor.make('content').mergeTags(['name']).mentions([users]).customBlocks([CallToActionBlock]).json();
+
+await RichEditor.fake({ editor })
+    .article()
+    .mergeTags(2)
+    .mention()
+    .customBlock()
+    .textColor()
+    .toValue();
+```
+
+`mergeTag()` and `mention()` insert inline nodes into random paragraphs: without arguments, they pick among the editor's merge tags and mention items (`mergeTags(count)` and `mentions(count)` insert several). You may also pass a merge tag id to `mergeTag()`, or a mention id and trigger character to `mention()` (the character is required with several providers).
+
+`customBlock()` without arguments picks among the editor's blocks that have a static `generateFakeConfiguration(faker)` method, so that no block gets an invalid empty configuration. You may also pass a block class or id, with its configuration:
+
+```ts
+import { RichContentCustomBlock, type FakeValues } from '@navette-js/forms';
+
+export class CallToActionBlock extends RichContentCustomBlock {
+    static generateFakeConfiguration(faker: FakeValues) {
+        return { label: faker.sentence(3), url: '/register' };
+    }
+    // …
+}
+
+await RichEditor.fake().customBlock(CallToActionBlock, { label: 'Start building today', url: '/register' }).toHtml();
+```
+
+`block(node)` and `inline(node)` insert raw TipTap JSON, such as a [plugin's](#creating-a-plugin) node. `renderUsing(fn)` replaces the renderer used by `toRenderedHtml()`.
+
+`FakeValues` is the seeded generator given to `generateFakeConfiguration()`: `numberBetween()`, `boolean(chance)`, `randomElement()`, `word()`, `words(count)`, `sentence()`, `paragraph()`, `text(maxCharacters)`, `uuid()`, `slug()`, `url()`, `safeEmail()`… With a seed, every random value comes from it, so the output is reproducible.
 
 ## Rich editor validation
 

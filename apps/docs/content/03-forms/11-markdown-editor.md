@@ -123,6 +123,39 @@ MarkdownEditor.make('content')
 
 The Markdown editor accepts `live()`, `live({ onBlur: true })` and `live({ debounce: 500 })`. See [reactivity](/forms/overview#the-basics-of-reactivity).
 
+## Generating fake Markdown
+
+`MarkdownEditor.fake()` generates Markdown for seeders and tests (Filament's `fake()->filamentMarkdown()`). Chain blocks, then get the content with `toString()`:
+
+```ts
+import { MarkdownEditor } from '@navette-js/forms';
+
+await knex('posts').insert({
+    title: 'Hello',
+    content: MarkdownEditor.fake()
+        .heading()
+        .paragraphs(3)
+        .bulletList()
+        .toString(),
+});
+```
+
+`article(depth)` generates a complete article: an introductory paragraph, then sections with level-two headings; each level of `depth` (up to 5) adds nested sections with the next heading level:
+
+```ts
+MarkdownEditor.fake().article(2).toString()
+```
+
+The available blocks are `heading(level)`, `paragraphs(count, marks)`, `bulletList(items)`, `orderedList(items)`, `blockquote(paragraphs)`, `codeBlock(language, code)`, `horizontalRule()`, `hardBreak()`, `table(columns, rows)` and `image(url, width, height, alt)`. `paragraphs()` may add a link and bold, italic, strike-through and inline code words:
+
+```ts
+MarkdownEditor.fake()
+    .paragraphs(3, { links: true, bold: true, italic: true })
+    .toString()
+```
+
+Pass `{ seed: 42 }` to `fake()` for reproducible content. To generate rich text instead, see [`RichEditor.fake()`](/forms/rich-editor#generating-fake-rich-content).
+
 ## Markdown editor validation
 
 As well as all rules listed on the [validation](/forms/validation) page, you may limit the length of the text with `minLength()` and `maxLength()`:

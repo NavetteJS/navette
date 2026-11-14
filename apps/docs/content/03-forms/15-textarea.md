@@ -20,14 +20,17 @@ Textarea.make('description')
 
 ## Resizing the textarea
 
-You may change the size of the textarea by defining the `rows()` method:
+You may change the size of the textarea by defining the `rows()` and `cols()` methods:
 
 ```ts
 import { Textarea } from '@navette-js/forms';
 
 Textarea.make('description')
     .rows(10)
+    .cols(20)
 ```
+
+`cols()` sets the textarea's `cols` attribute, its width in characters, which the browser uses when no CSS width applies. As well as allowing a static value, `cols()` also accepts a function of the [field context](/forms/overview#using-the-field-context).
 
 ```preview
 // state: {"description": "Navette renders its components on the server.\n\nForms, tables, infolists and actions share the same schema system, so a page is described once and rendered with the same CSS everywhere."}
@@ -96,6 +99,19 @@ import { Textarea } from '@navette-js/forms';
 Textarea.make('description')
     .disableGrammarly()
 ```
+
+## Stripping characters from the value
+
+The `stripCharacters()` method removes a character, or each of an array of characters, from the value before it is validated and saved (and from a value loaded from the record):
+
+```ts
+import { Textarea } from '@navette-js/forms';
+
+Textarea.make('notes')
+    .stripCharacters(['<', '>'])
+```
+
+As well as allowing a static value, `stripCharacters()` also accepts a function of the [field context](/forms/overview#using-the-field-context) returning the characters.
 
 ## Making the field live
 

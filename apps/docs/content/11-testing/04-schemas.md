@@ -57,6 +57,20 @@ await livewire(DocumentResource.getPages().create)
 
 `UploadedFile.fake().create('large.pdf', 2048)` creates a file of 2,048 kilobytes. The type of an uploaded file is detected from its content, as for real uploads. A list of files fills a `multiple()` field.
 
+For a rich editor or a Markdown editor, generate realistic content with [`RichEditor.fake()`](/forms/rich-editor#generating-fake-rich-content) and [`MarkdownEditor.fake()`](/forms/markdown-editor#generating-fake-markdown). A rich editor's state is a TipTap document, given by `toArray()`:
+
+```ts
+import { MarkdownEditor, RichEditor } from '@navette-js/forms';
+
+await livewire(PostResource.getPages().create)
+    .fillForm({
+        content: await RichEditor.fake({ seed: 1 }).heading().paragraphs(2).toArray(),
+        summary: MarkdownEditor.fake({ seed: 1 }).paragraphs().toString(),
+    })
+    .call('create')
+    .assertHasNoFormErrors();
+```
+
 ## Testing the state of a schema
 
 `assertSchemaStateSet()` checks values of the schema, by their name in it. Fields you do not list are not checked:

@@ -161,6 +161,16 @@ KeyValue.make('meta')
     .reorderable()
 ```
 
+The drag handle of each row is labelled "Reorder row" (its accessible name and title). You may change this label using the `reorderActionLabel()` method:
+
+```ts
+import { KeyValue } from '@navette-js/forms';
+
+KeyValue.make('meta')
+    .reorderable()
+    .reorderActionLabel('Move property')
+```
+
 ## Understanding the saved value
 
 The rows come from the browser, so the saved object is cleaned on the server:

@@ -144,6 +144,81 @@ Select.make('author_id')
     .preload()
 ```
 
+To search several columns of the related table, pass them to `searchable()`. A record matches when any of the columns contains the search term:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+    .searchable(['name', 'email'])
+```
+
+Only plain column names (`email`, or `authors.email`) are used in the query; anything else is ignored.
+
+### Customizing the relationship option labels
+
+If you'd like to customize the label of each option, maybe to be more descriptive, or to concatenate a first and last name, you could use a virtual column in your database migration, or use `getOptionLabelFromRecordUsing()`, which receives the whole related record:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'first_name')
+    .getOptionLabelFromRecordUsing((record) => `${record.first_name} ${record.last_name}`)
+    .searchable(['first_name', 'last_name'])
+```
+
+The title column (the second argument of `relationship()`) is still searched by default, so with a computed label, list the searched columns in `searchable()`. The label is escaped, unless you [allow HTML](#allowing-html-in-the-option-labels).
+
+### Ignoring the current record
+
+When working with a relationship to the same model, such as a parent or manager of a record of the same table, you can prevent the record being edited from being offered as an option, with the `ignoreRecord` option:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('parent_id')
+    .relationship('parent', 'name', null, { ignoreRecord: true })
+```
+
+The record is left out of the options and of the search results, and is rejected if the browser sends its key. When there is no record yet (on a create page), every option is offered.
+
+### Getting the selected record
+
+`getSelectedRecord()` returns the related record of the selected option (single selection), loaded through the relationship's query, or `null`. It is useful in a function of another field, through the field context's `component`, or in an action of the field:
+
+```ts
+import { Select, TextInput } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+    .live()
+    .afterStateUpdated(async ({ component, set }) => {
+        const author = await (component as Select).getSelectedRecord();
+        set('author_email', author?.email ?? null);
+    })
+```
+
+Without a relationship, you may tell the select how to find the record of its state with `getSelectedRecordUsing()`, which receives the field context: `getSelectedRecordUsing(({ state }) => Author.query().findById(state))`.
+
+### Saving pivot data to the relationship
+
+If you're using a many-to-many relationship, you can use the `pivotData()` method to pass an object of data to be saved in the pivot table when a record is linked:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('primary_technologies')
+    .multiple()
+    .relationship('technologies', 'name')
+    .pivotData({
+        is_primary: true,
+    })
+```
+
+Objection only writes the pivot columns that the relation declares in `join.through.extra` (`extra: ['is_primary']`). `pivotData()` also accepts a function of the [field context](/forms/overview#using-the-field-context) returning the data, called when the links are saved.
+
 ### Customizing the relationship query
 
 The third argument scopes the query. It receives the Objection query, and the search term when searching. Records outside this scope are neither listed nor accepted:
@@ -320,6 +395,34 @@ Select.make('technologies')
     .maxItems(2)
 ```
 
+### Reordering selected options
+
+The `reorderable()` method allows the user to reorder the selected options of a multi-select, by dragging them. The state keeps the order of the options:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('technologies')
+    .multiple()
+    .options({ tailwind: 'Tailwind CSS', alpine: 'Alpine.js', laravel: 'Laravel' })
+    .reorderable()
+```
+
+A many-to-many relationship saves its links, not their order: to keep the order, save it yourself with `saveRelationshipsUsing()`.
+
+## Preventing option labels from wrapping
+
+By default, long option labels wrap onto several lines in the JavaScript select. `wrapOptionLabels(false)` keeps each label on one line, truncated:
+
+```ts
+import { Select } from '@navette-js/forms';
+
+Select.make('product_id')
+    .native(false)
+    .options(async () => listProducts())
+    .wrapOptionLabels(false)
+```
+
 ## Customizing the select messages
 
 ```ts
@@ -332,9 +435,12 @@ Select.make('author_id')
     .searchingMessage('Searching authors...')
     .noSearchResultsMessage('No authors found.')
     .loadingMessage('Loading authors...')
+    .noOptionsMessage('No authors yet.')
     .optionsLimit(20)
     .searchDebounce(500)
 ```
+
+`noOptionsMessage()` is shown when the JavaScript select has no options at all, before any search.
 
 `optionsLimit()` sets how many options the JavaScript select shows at once (50 by default), and `searchDebounce()` the delay before a server search, in milliseconds (1000 by default).
 
@@ -428,9 +534,22 @@ Select.make('author_id')
     .updateOptionUsing(async () => {})
 ```
 
+With a [relationship](#integrating-with-a-relationship), `fillEditOptionActionFormUsing()` and `updateOptionUsing()` are optional: the modal is filled with the [selected record](#getting-the-selected-record), and the record is updated with the validated modal data. Only a record allowed by the relationship's query can be edited.
+
 Editing is only available on single selects. `editOptionForm()` makes the field `live()`, so the button appears as soon as an option is chosen. You may customize the modal with `editOptionModalHeading()` and `editOptionAction()`.
 
 If the creation and edit forms are the same, you may define both at once with `manageOptionForm()`.
+
+To customize the create and edit actions together, use `manageOptionActions()`. It runs before `createOptionAction()` and `editOptionAction()`, which may still change each action on its own:
+
+```ts
+import { Select, TextInput } from '@navette-js/forms';
+
+Select.make('author_id')
+    .relationship('author', 'name')
+    .manageOptionForm([TextInput.make('name').required()])
+    .manageOptionActions((action) => action.modalWidth('lg').slideOver())
+```
 
 ### Authorizing option actions
 
