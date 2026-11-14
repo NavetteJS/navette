@@ -537,9 +537,18 @@ export function registerIcon(name: string, svg: string): void {
     if (!/^<svg[\s>]/.test(svg.trim())) throw new Error(`registerIcon(${name}) expects an <svg> element.`);
     iconCache.set(name, svg.trim());
 }
-/** Loading spinner SVG. */
+/** Renders the loading indicator from its attributes, which already hold the `fi-icon fi-loading-indicator fi-size-*` classes. */
+export type LoadingIndicatorRenderer = (attributes: Attributes) => string;
+let loadingIndicatorRenderer: LoadingIndicatorRenderer | null = null;
+/**
+ * Replaces the loading indicator everywhere (buttons, tables, modals, `<x-loading-indicator>`): Filament's `LoadingIndicator`
+ * contract. `null` restores the default spinner.
+ */
+export function useLoadingIndicator(renderer: LoadingIndicatorRenderer | null): void { loadingIndicatorRenderer = renderer; }
+/** Loading spinner SVG (or the indicator given to `useLoadingIndicator()`). */
 export function loadingIndicator(attributes: Attributes = new Attributes(), size = 'md'): string {
     const a = attributes.class(['fi-icon fi-loading-indicator', `fi-size-${size}`]);
+    if (loadingIndicatorRenderer) return loadingIndicatorRenderer(a);
     return `<svg fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" ${a.toHtml()}><path clip-rule="evenodd" d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19ZM12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill-rule="evenodd" fill="currentColor" opacity="0.2"></path><path d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z" fill="currentColor"></path></svg>`;
 }
 
@@ -588,7 +597,11 @@ export class ViewRegistry {
         const attributes: Record<string, any> = {};
         for (const [key, value] of Object.entries(raw)) { if (isHtmlAttribute(key)) attributes[key] = value; else props[camel(key)] = value; }
         // A slot made of whitespace only (line breaks around named slots) counts as empty.
-        for (const [key, value] of Object.entries(slots)) props[camel(key)] = value.trim() === '' ? '' : value;
+        for (const [key, value] of Object.entries(slots)) {
+            // `<x-slot name="trigger" disabled>`: the slot's own attributes, as `triggerAttributes`.
+            if (key.endsWith('::attributes')) { props[`${camel(key.slice(0, -'::attributes'.length))}Attributes`] = value; continue; }
+            props[camel(key)] = (value as string).trim() === '' ? '' : value;
+        }
         if (slot.trim() === '') slot = '';
         const file = this.componentFile(name);
         if (file) return this.renderFile(file, { ...props, slot, slots, attributes: new Attributes(attributes) });

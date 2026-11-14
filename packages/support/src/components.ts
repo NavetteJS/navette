@@ -84,6 +84,9 @@ export function compileComponentTags(source: string, file = 'template'): string 
             const slotName = name.startsWith('slot:') ? name.slice(5) : attributes.find((attribute) => attribute.name === 'name')?.value;
             if (!slotName) throw new Error(`${file}: <x-slot> needs a name`);
             if (!open.length) throw new Error(`${file}: <x-slot name="${slotName}"> must be inside a component`);
+            // The slot's own attributes (`<x-slot name="trigger" disabled>`) reach the component as `triggerAttributes`.
+            const slotAttributes = attributes.filter((attribute) => attribute.name !== 'name');
+            if (slotAttributes.length) out += `<% __xn[__xn.length - 1][${literal(`${slotName}::attributes`)}] = ${propsExpression(slotAttributes)}; %>`;
             if (selfClosing) { out += `<% __xn[__xn.length - 1][${literal(slotName)}] = ''; %>`; continue; }
             open.push({ name, props: literal(slotName) });
             out += capture;
