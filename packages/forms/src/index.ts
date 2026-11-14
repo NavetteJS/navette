@@ -707,7 +707,7 @@ export class TextInput extends Field {
     copyable(condition: Lazy<boolean, ComponentContext> = true, copyMessage: string | null = null, copyMessageDuration = 2000): this { return this.setLazy('_copyable', condition, (on) => (on ? { message: copyMessage, duration: copyMessageDuration } : null)); }
     private _trim = false;
     /** Removes the spaces around the value before it is validated and saved. */
-    trim(condition = true): this { this._trim = condition; return this; }
+    trim(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_trim', condition); }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
     /** `trim()`: the submitted value is trimmed before it is validated and saved. */
     protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
@@ -2039,7 +2039,7 @@ export class Textarea extends Field {
     /** Stops the Grammarly extension from analyzing the content. */
     disableGrammarly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_grammarly', condition, (value) => !value); }
     /** Removes the spaces around the value before it is validated and saved. */
-    trim(condition = true): this { this._trim = condition; return this; }
+    trim(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_trim', condition); }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
     /** `trim()`: the submitted value is trimmed before it is validated and saved. */
     protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }

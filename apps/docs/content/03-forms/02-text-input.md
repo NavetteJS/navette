@@ -325,6 +325,29 @@ TextInput.make('phone')
 
 The mask only guides typing in the browser. It is not a validation rule: always add the rules your data needs, as `tel()` does here.
 
+## Trimming whitespace
+
+You can automatically trim whitespace from the beginning and end of the value using the `trim()` method. The value is trimmed before it is validated and saved:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .trim()
+```
+
+You may want to enable trimming globally for all text inputs, as Laravel's `TrimStrings` middleware does. You can do this once, when the application starts, with the `configureUsing()` method:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.configureUsing((component) => {
+    component.trim();
+});
+```
+
+As well as allowing a static value, the `trim()` method also accepts a function of the [field context](/forms/overview#using-the-field-context).
+
 ## Making the field live
 
 The text input accepts `live()`, which sends its value to the server on every keystroke, and `live({ onBlur: true })`, which sends it when the input loses focus. See [reactivity](/forms/overview#the-basics-of-reactivity).

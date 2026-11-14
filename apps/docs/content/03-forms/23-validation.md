@@ -146,6 +146,58 @@ TextInput.make('name')
 
 The date must be on or after `minDate()`, and on or before `maxDate()`. Available on date pickers. See [min and max date validation](/forms/date-time-picker#min-and-max-date-validation).
 
+### After and before a date
+
+`after()`, `afterOrEqual()`, `before()` and `beforeOrEqual()` compare the value with a date (`'2024-01-01'`, `'today'`, `'tomorrow'`, `'yesterday'`) or with the value of another field of the form:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('start_date')
+    .afterOrEqual('today')
+
+DatePicker.make('end_date')
+    .after('start_date')
+```
+
+The other field is found as with [`get()`](/forms/overview#getting-the-state-of-another-field): a sibling, `'../start_date'` from a repeater item, or an absolute path such as `'/data.start_date'`.
+
+### Filled, nullable and string
+
+`filled()` fails when the value is empty, without marking the field as required. `nullable()` is the opposite of `required()`: the value may be empty (`nullable(false)` makes the field required). `string()` fails when the value is not a string:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('nickname')
+    .nullable()
+    .string()
+```
+
+### Accepted and declined
+
+`accepted()` requires `'yes'`, `'on'`, `1`, `'1'`, `true` or `'true'`, for a "terms of service" checkbox for example. `declined()` requires `'no'`, `'off'`, `0`, `'0'`, `false` or `'false'`:
+
+```ts
+import { Checkbox } from '@navette-js/forms';
+
+Checkbox.make('terms_of_service')
+    .accepted()
+```
+
+### Active URL
+
+`activeUrl()` requires a URL whose host has a DNS `A` or `AAAA` record (Laravel's `active_url` rule). The lookup is made by the server when the form is validated:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('website')
+    .activeUrl()
+```
+
+These methods, like `required()`, accept a boolean or a function of the [field context](/forms/overview#using-the-field-context) as their condition.
+
 ### Unique
 
 The value must not already exist in the database. The rule checks the column of the same name as the field, through the resource's data adapter. Use `ignoreRecord: true` on forms that edit a record, so that the record's own value is accepted, and `column` when the column has another name:
@@ -326,9 +378,9 @@ TextInput.make('quantity')
     .rules('min:1|max:99')
 ```
 
-Supported rules: `required`, `filled`, `nullable`, `sometimes`, `bail`, `string`, `present`, `accepted`, `declined`, `numeric`, `integer`, `boolean`, `array`, `email`, `url`, `uuid`, `ulid`, `alpha`, `alpha_dash`, `alpha_num`, `ascii`, `lowercase`, `uppercase`, `json`, `ip`, `ipv4`, `ipv6`, `mac_address`, `hex_color`, `date`, `min`, `max`, `size`, `between`, `digits`, `digits_between`, `multiple_of`, `in`, `not_in`, `regex`, `not_regex`, `starts_with`, `ends_with`, `doesnt_start_with`, `doesnt_end_with`, `distinct`, `confirmed`, `same`, `different`, `gt`, `gte`, `lt`, `lte`, `after`, `after_or_equal`, `before`, `before_or_equal` (with a date, `today`, `tomorrow` or a field), `required_if`, `required_unless`, `required_if_accepted`, `required_with`, `required_with_all`, `required_without`, `required_without_all`, `prohibited`, `prohibited_if`, `prohibited_unless` and `prohibits`.
+Supported rules: `required`, `filled`, `nullable`, `sometimes`, `bail`, `string`, `present`, `accepted`, `declined`, `active_url`, `numeric`, `integer`, `boolean`, `array`, `email`, `url`, `uuid`, `ulid`, `alpha`, `alpha_dash`, `alpha_num`, `ascii`, `lowercase`, `uppercase`, `json`, `ip`, `ipv4`, `ipv6`, `mac_address`, `hex_color`, `date`, `min`, `max`, `size`, `between`, `digits`, `digits_between`, `multiple_of`, `in`, `not_in`, `regex`, `not_regex`, `starts_with`, `ends_with`, `doesnt_start_with`, `doesnt_end_with`, `distinct`, `confirmed`, `same`, `different`, `gt`, `gte`, `lt`, `lte`, `after`, `after_or_equal`, `before`, `before_or_equal` (with a date, `today`, `tomorrow` or a field), `required_if`, `required_unless`, `required_if_accepted`, `required_with`, `required_with_all`, `required_without`, `required_without_all`, `prohibited`, `prohibited_if`, `prohibited_unless` and `prohibits`.
 
-`min`, `max`, `size` and `between` compare the number on a `numeric()` or `integer()` field, the number of items on a list, and the length of the text otherwise. `nullable`, `sometimes`, `bail`, `string` and `present` are accepted and do nothing, since empty values already skip the rules and validation stops at the first failure.
+`min`, `max`, `size` and `between` compare the number on a `numeric()` or `integer()` field, the number of items on a list, and the length of the text otherwise. `nullable`, `sometimes`, `bail` and `present` are accepted and do nothing, since empty values already skip the rules and validation stops at the first failure. `string` fails when the value is not a string, and `active_url` performs a DNS lookup.
 
 An unknown rule, or a malformed regex, throws an error when the field is declared. Rules that need the database (`unique`, `exists`) have their own methods.
 
@@ -342,6 +394,37 @@ import { TextInput } from '@navette-js/forms';
 TextInput.make('vat_number')
     .rules(['required', 'regex:/^[A-Z]{2}\d+$/'], ({ get }) => get('country') !== 'US')
 ```
+
+### Rule parameters computed by a function
+
+The parameters of the rule methods may be functions of the [field context](/forms/overview#using-the-field-context), evaluated when the form is validated. A function returning a list spreads it as several parameters:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('code')
+    .startsWith(({ get }) => [String(get('prefix'))])
+    .maxLength(({ get }) => (get('type') === 'short' ? 8 : 32))
+
+TextInput.make('plan')
+    .in(({ record }) => record?.allowed_plans ?? ['free'])
+    .requiredIf(() => 'type', () => ['company', 'association'])
+```
+
+## Disabling validation when fields are not saved
+
+When a field is [not saved](/forms/overview#preventing-a-field-from-being-saved), it is still validated. To disable validation for fields that are not saved, use the `validatedWhenNotDehydrated()` method:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .required()
+    .saved(false)
+    .validatedWhenNotDehydrated(false)
+```
+
+As well as allowing a static value, the `validatedWhenNotDehydrated()` method also accepts a function of the field context.
 
 ## Custom rules
 
@@ -441,7 +524,28 @@ TextInput.make('email')
     .validationMessages({ required: (attribute) => `Please enter your ${attribute}.` })
 ```
 
-Error messages are always escaped when displayed.
+Error messages are escaped when displayed.
+
+### Allowing HTML in validation messages
+
+If a custom message contains HTML that should be rendered, such as a link, use `allowHtmlValidationMessages()`:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('password')
+    .password()
+    .rule({
+        name: 'pwned',
+        passes: async (value) => !(await isPwned(String(value))),
+        message: () => 'This password was found in a <a href="https://haveibeenpwned.com/Passwords">data breach</a>.',
+    })
+    .allowHtmlValidationMessages()
+```
+
+<Aside variant="danger">
+The messages of such a field are rendered as HTML, without escaping. Make sure that none of them contains user input, such as the submitted value: it would allow cross-site scripting.
+</Aside>
 
 <Aside variant="warning">
 Messages are not translated yet: they are in English unless you replace them with `validationMessages()`.
