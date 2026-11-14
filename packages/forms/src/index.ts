@@ -24,7 +24,9 @@ export { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
 import { TableKit } from '@tiptap/extension-table';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
-import { constants as fsConstants, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { constants as fsConstants, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mapLazy, safeFileUrl } from './file-upload-support.ts';
+export { safeFileUrl } from './file-upload-support.ts';
 
 views.namespace('filament-forms', fileURLToPath(new URL('../views', import.meta.url)));
 let colorManager: ColorManager | null = null;
@@ -1602,7 +1604,7 @@ export class Repeater extends Field {
             } else {
                 const label = await this.itemLabelOf(itemKey, index, items[itemKey]);
                 const start = [...(showReorder ? [reorderHandle] : []), ...moves];
-                const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
+                const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && safeFileUrl(link.url) !== null)
                     .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
                 const end = [
                     ...links,
@@ -1676,7 +1678,7 @@ export class Repeater extends Field {
             const cells: string[] = [];
             for (const field of schemas[index].getComponents()) cells.push(`<td>${await field.toSchemaHtml(await field.isVisible())}</td>`);
             // Only local or http(s) URLs: a link built from item data cannot become a `javascript:` URL.
-            const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
+            const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && safeFileUrl(link.url) !== null)
                 .map((link) => `<div x-on:click.stop><a href="${e(link.url)}" target="_blank" x-tooltip="{
  content: ${e(js(link.label))},
  theme: $store.theme,
@@ -2281,7 +2283,7 @@ async function storeEditorAttachment(field: Field, id: string | null, options: {
     const key = await options.storage.store(file, options.directory);
     uploads.remove(file.id);
     const info = await options.storage.info(key);
-    return info && /^(\/(?!\/)|https?:\/\/)/.test(info.url) ? info.url : null;
+    return info ? safeFileUrl(info.url) : null;
 }
 /** Tools of the rich editor's toolbar, in their default groups. */
 export const RICH_EDITOR_TOOLS = [['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'link'], ['h2', 'h3'], ['alignStart', 'alignCenter', 'alignEnd'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
@@ -3346,9 +3348,11 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     const fields: Field[] = [];
     const skipped: string[] = [];
     for (const c of await schema.getVisibleFlatComponents()) {
-        if (!(c instanceof Field) || !(await c.isDehydrated())) continue;
+        if (!(c instanceof Field)) continue;
         // Relationship fields (and the fields of their items) save themselves after the record (see saveSchemaRelationships), unless forced with `dehydrated()`.
         if (skipped.some((path) => c.getStatePath().startsWith(`${path}.`))) continue;
+        // A field that is not dehydrated leaves out its children too (the items of a `dehydrated(false)` repeater).
+        if (!(await c.isDehydrated())) { skipped.push(c.getStatePath()); continue; }
         if ((c as any)._dehydrated !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
         const state = await c.dehydrateState(c.context().state);
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
@@ -3537,15 +3541,23 @@ export class Wizard extends Component {
 
 /** Temporary file received by the runtime (see @navette-js/wire). */
 export type TemporaryUpload = { id: string; path: string; name: string; type: string; size: number; extension: string };
-export type UploadedFileInfo = { name: string; size: number; type: string; url: string };
+/** A saved file as sent to FilePond. `type` is `null` (and `size` 0) with `fetchFileInformation(false)`. */
+export type UploadedFileInfo = { name: string; size: number; type: string | null; url: string; openableUrl?: string; downloadableUrl?: string };
+/** URL of a saved file for the open or download button (`getOpenableFileUrlUsing()`), or `null` for the file's own URL. */
+export type FileUrlResolver = (file: string, ctx: ComponentContext) => string | null | undefined | Promise<string | null | undefined>;
+type FieldLazy<T> = Lazy<T, ComponentContext>;
 /** Saved state item when the field does not store files itself (`storeFiles(false)`): an already saved file, or a temporary file to process. */
 export type FileUploadEntry = { key: string } | { file: TemporaryUpload };
 /** Where files go once the form is saved. */
 export interface FileStorage {
     /** Stores a temporary file and returns its key (relative path); `name` is the file name to use instead of a random one. */
-    store(file: TemporaryUpload, directory: string | null, name?: string | null): Promise<string>;
+    store(file: TemporaryUpload, directory: string | null, name?: string | null, options?: FileStoreOptions): Promise<string>;
     info(key: string): Promise<UploadedFileInfo | null>;
+    /** Public URL of a stored file, without reading it (used by `fetchFileInformation(false)`; `info()` otherwise). */
+    url?(key: string): string | null | Promise<string | null>;
 }
+/** `move`: the temporary file may be moved instead of copied (`moveFiles()`); the field removes it afterwards either way. */
+export type FileStoreOptions = { move?: boolean };
 /** Local disk storage, served under a public URL. File names are random; the extension comes from the detected type. */
 /**
  * A file name chosen by the application or the user, made safe for storage: no directory part, only letters, digits, `_` and
@@ -3583,6 +3595,14 @@ export function readImageSize(path: string): { width: number; height: number } |
 const ratioOf = (ratio: string): number | null => { const [width, height] = ratio.split(/[:/]/).map(Number); return width > 0 && height > 0 ? width / height : null; };
 export type ImageDimensions = { minWidth?: number; maxWidth?: number; minHeight?: number; maxHeight?: number; width?: number; height?: number; minRatio?: number; maxRatio?: number; ratio?: number };
 
+/** Copies a file without overwriting; with `move`, hard-links then unlinks it (same disk), copying when that fails across disks. */
+function placeFile(source: string, target: string, move: boolean): void {
+    if (move) {
+        try { linkSync(source, target); unlinkSync(source); return; } catch (error: any) { if (error?.code === 'EEXIST') throw error; }
+    }
+    copyFileSync(source, target, fsConstants.COPYFILE_EXCL);
+    if (move) rmSync(source, { force: true });
+}
 export class LocalFileStorage implements FileStorage {
     private root: string;
     private baseUrl: string;
@@ -3591,17 +3611,17 @@ export class LocalFileStorage implements FileStorage {
         if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,250}$/.test(key) || key.split('/').some((part) => part === '..' || part === '.')) return null;
         return nodePath.join(this.root, ...key.split('/'));
     }
-    async store(file: TemporaryUpload, directory: string | null, name: string | null = null): Promise<string> {
+    async store(file: TemporaryUpload, directory: string | null, name: string | null = null, options: FileStoreOptions = {}): Promise<string> {
         let key = [directory, name === null ? `${randomUUID()}.${file.extension}` : safeStorageName(name, file.extension)].filter(Boolean).join('/');
         // A chosen name never overwrites another file: a short random suffix is added.
         if (name !== null && this.resolve(key) && existsSync(this.resolve(key)!)) key = key.replace(/(\.[A-Za-z0-9]+)$/, `-${randomUUID().slice(0, 8)}$1`);
         const target = this.resolve(key);
         if (!target) throw new Error('Invalid upload directory.');
         mkdirSync(nodePath.dirname(target), { recursive: true });
-        try { copyFileSync(file.path, target, fsConstants.COPYFILE_EXCL); } catch (error: any) {
+        try { placeFile(file.path, target, options.move === true); } catch (error: any) {
             // Another save took this name meanwhile: random suffix.
             if (error?.code !== 'EEXIST' || name === null) throw error;
-            return this.store(file, directory, `${safeStorageName(name, file.extension).replace(/\.[^.]*$/, '')}-${randomUUID().slice(0, 8)}`);
+            return this.store(file, directory, `${safeStorageName(name, file.extension).replace(/\.[^.]*$/, '')}-${randomUUID().slice(0, 8)}`, options);
         }
         writeFileSync(`${target}.meta.json`, JSON.stringify({ name: file.name, type: file.type }));
         return key;
@@ -3611,140 +3631,200 @@ export class LocalFileStorage implements FileStorage {
         if (!target || !existsSync(target)) return null;
         let meta: { name?: string; type?: string } = {};
         try { meta = JSON.parse(readFileSync(`${target}.meta.json`, 'utf8')); } catch { /* file dropped in without metadata */ }
-        return { name: meta.name ?? nodePath.basename(key), size: statSync(target).size, type: meta.type ?? 'application/octet-stream', url: `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}` };
+        return { name: meta.name ?? nodePath.basename(key), size: statSync(target).size, type: meta.type ?? 'application/octet-stream', url: this.url(key)! };
     }
+    url(key: string): string | null { return this.resolve(key) ? `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}` : null; }
 }
 
 /**
  * File upload (FilePond).
  * State: `{ <file key>: <stored key> | 'livewire-file:<temporary id>' }`. A stored key from the browser is only accepted
- * if the record being edited already has it, so nobody can claim someone else's file.
+ * if the record being edited already has it (or `preventFilePathTampering(allowFilePathUsing: …)` approves it), so nobody
+ * can claim someone else's file.
+ * Every setter also accepts a function of the field's context (`({ state, get, record, operation, livewire, component }) => value`).
  */
 export class FileUpload extends Field {
     /** Application-wide default storage. */
     static storage: FileStorage | null = null;
-    private _multiple = false;
-    private _maxFiles: number | null = null;
-    private _maxSize: number | null = null;
-    private _reorderable = false;
-    private _acceptedFileTypes: string[] | null = null;
-    private _directory: string | null = null;
-    private _storeFiles = true;
-    private _storage: FileStorage | null = null;
+    private _multiple: FieldLazy<boolean> = false;
+    private _maxFiles: FieldLazy<number | null> = null;
+    private _minFiles: FieldLazy<number | null> = null;
+    private _maxSize: FieldLazy<number | null> = null;
+    private _reorderable: FieldLazy<boolean> = false;
+    private _acceptedFileTypes: FieldLazy<string[] | null> = null;
+    private _directory: FieldLazy<string | null> = null;
+    private _storeFiles: FieldLazy<boolean> = true;
+    private _moveFiles: FieldLazy<boolean> = false;
+    private _fetchFileInformation: FieldLazy<boolean> = true;
+    private _storage: FieldLazy<FileStorage | null> = null;
     private _getUploadedFileUsing: ((key: string, ctx: ComponentContext) => UploadedFileInfo | null | Promise<UploadedFileInfo | null>) | null = null;
-    private _minSize: number | null = null;
-    private _ui: Record<string, unknown> = {};
+    private _openableFileUrlUsing: FileUrlResolver | null = null;
+    private _downloadableFileUrlUsing: FileUrlResolver | null = null;
+    private _allowFilePathUsing: ((file: string, ctx: ComponentContext) => boolean | Promise<boolean>) | null = null;
+    private _minSize: FieldLazy<number | null> = null;
+    private _ui: Record<string, FieldLazy<unknown>> = {};
     private _avatar = false;
-    private _imageEditor = false;
-    private _circleCropper = false;
-    private _editorAspectRatios: (string | null)[] = [];
-    private _cropAspectRatio: string | null = null;
-    private _imageAspectRatios: string[] | null = null;
-    private _dimensions: ImageDimensions | null = null;
-    private _deletable = true;
-    private _preserveFilenames = false;
+    private _imageEditor: FieldLazy<boolean> = false;
+    private _circleCropper: FieldLazy<boolean> = false;
+    private _editorAspectRatios: FieldLazy<(string | null)[]> = [];
+    private _cropAspectRatio: FieldLazy<string | null> = null;
+    private _imageAspectRatios: FieldLazy<string | string[] | null> = null;
+    private _dimensions: FieldLazy<ImageDimensions | null> = null;
+    private _deletable: FieldLazy<boolean> = true;
+    private _preserveFilenames: FieldLazy<boolean> = false;
+    private _autoOpenEditor: FieldLazy<boolean> = false;
     private _fileNameUsing: ((file: TemporaryUpload, ctx: ComponentContext) => string | Promise<string>) | null = null;
-    private _fileNamesField: string | null = null;
+    private _fileNamesField: FieldLazy<string | null> = null;
+    /** Resolved by `dehydrateState()` for `getExtraDehydratedState()`. */
+    private _savedFileNamesField: string | null = null;
+    private _savedMultiple = false;
     private _storedNames: Record<string, string> = {};
-    private _alignment: 'start' | 'center' | 'end' | null = null;
-    private _placeholder: string | null = null;
+    private _alignment: FieldLazy<'start' | 'center' | 'end' | null> = null;
+    private _placeholder: FieldLazy<string | null> = null;
     static make(name: string): FileUpload { return configured(new FileUpload(name)); }
     /** Minimum file size, in kilobytes. */
-    minSize(kilobytes: number | null): this { this._minSize = kilobytes; return this; }
+    minSize(kilobytes: FieldLazy<number | null>): this { this._minSize = kilobytes; return this; }
     /** Download button on each saved file. */
-    downloadable(condition = true): this { this._ui.isDownloadable = condition; return this; }
+    downloadable(condition: FieldLazy<boolean> = true): this { this._ui.isDownloadable = condition; return this; }
     /** Button opening each saved file in a new tab. */
-    openable(condition = true): this { this._ui.isOpenable = condition; return this; }
+    openable(condition: FieldLazy<boolean> = true): this { this._ui.isOpenable = condition; return this; }
+    /** URL of the "open" button of a saved file (`null`: the URL of the file). Only local or http(s) URLs are used. */
+    getOpenableFileUrlUsing(callback: FileUrlResolver | null): this { this._openableFileUrlUsing = callback; return this; }
+    /** URL of the download button of a saved file (`null`: the URL of the file). Only local or http(s) URLs are used. */
+    getDownloadableFileUrlUsing(callback: FileUrlResolver | null): this { this._downloadableFileUrlUsing = callback; return this; }
     /** `false`: no preview of images. */
-    previewable(condition = true): this { this._ui.isPreviewable = condition; return this; }
+    previewable(condition: FieldLazy<boolean> = true): this { this._ui.isPreviewable = condition; return this; }
     /** `false`: files cannot be pasted from the clipboard. */
-    pasteable(condition = true): this { this._ui.isPasteable = condition; return this; }
+    pasteable(condition: FieldLazy<boolean> = true): this { this._ui.isPasteable = condition; return this; }
     /** New files are added after the existing ones (instead of before). */
-    appendFiles(condition = true): this { this._ui.shouldAppendFiles = condition; return this; }
+    appendFiles(condition: FieldLazy<boolean> = true): this { this._ui.shouldAppendFiles = condition; return this; }
     /** `false`: saved files cannot be removed (the remove button is hidden, and removing is refused on the server). */
-    deletable(condition = true): this { this._deletable = condition; return this; }
+    deletable(condition: FieldLazy<boolean> = true): this { this._deletable = condition; return this; }
     /** `'grid'` (with `multiple()`), `'compact'`, `'integrated'` or `'circle'`. */
-    panelLayout(layout: 'grid' | 'compact' | 'integrated' | 'circle' | string | null): this { this._ui.panelLayout = layout; return this; }
-    panelAspectRatio(ratio: string | null): this { this._ui.panelAspectRatio = ratio; return this; }
-    itemPanelAspectRatio(ratio: string | null): this { this._ui.itemPanelAspectRatio = ratio; return this; }
-    imagePreviewHeight(height: string | null): this { this._ui.imagePreviewHeight = height; return this; }
-    loadingIndicatorPosition(position: string): this { this._ui.loadingIndicatorPosition = position; return this; }
-    removeUploadedFileButtonPosition(position: string): this { this._ui.removeUploadedFileButtonPosition = position; return this; }
-    uploadButtonPosition(position: string): this { this._ui.uploadButtonPosition = position; return this; }
-    uploadProgressIndicatorPosition(position: string): this { this._ui.uploadProgressIndicatorPosition = position; return this; }
+    panelLayout(layout: FieldLazy<'grid' | 'compact' | 'integrated' | 'circle' | string | null>): this { this._ui.panelLayout = layout; return this; }
+    panelAspectRatio(ratio: FieldLazy<string | null>): this { this._ui.panelAspectRatio = ratio; return this; }
+    itemPanelAspectRatio(ratio: FieldLazy<string | null>): this { this._ui.itemPanelAspectRatio = ratio; return this; }
+    imagePreviewHeight(height: FieldLazy<string | null>): this { this._ui.imagePreviewHeight = height; return this; }
+    loadingIndicatorPosition(position: FieldLazy<string | null>): this { this._ui.loadingIndicatorPosition = position; return this; }
+    removeUploadedFileButtonPosition(position: FieldLazy<string | null>): this { this._ui.removeUploadedFileButtonPosition = position; return this; }
+    uploadButtonPosition(position: FieldLazy<string | null>): this { this._ui.uploadButtonPosition = position; return this; }
+    uploadProgressIndicatorPosition(position: FieldLazy<string | null>): this { this._ui.uploadProgressIndicatorPosition = position; return this; }
     /** Message shown while a file uploads. */
-    uploadingMessage(message: string): this { this._ui.uploadingMessage = message; return this; }
+    uploadingMessage(message: FieldLazy<string | null>): this { this._ui.uploadingMessage = message; return this; }
     /** Number of files uploaded at the same time. */
-    maxParallelUploads(count: number | null): this { this._ui.maxParallelUploads = count; return this; }
+    maxParallelUploads(count: FieldLazy<number | null>): this { this._ui.maxParallelUploads = count; return this; }
     /** Extension → MIME type map for files the browser cannot type (`{ zip: 'application/zip' }`). */
-    mimeTypeMap(map: Record<string, string>): this { this._ui.mimeTypeMap = map; return this; }
+    mimeTypeMap(map: FieldLazy<Record<string, string>>): this { this._ui.mimeTypeMap = map; return this; }
     /** `false`: images keep their EXIF orientation. */
-    orientImagesFromExif(condition = true): this { this._ui.shouldOrientImageFromExif = condition; return this; }
-    alignment(alignment: 'start' | 'center' | 'end' | null): this { this._alignment = alignment; return this; }
+    orientImagesFromExif(condition: FieldLazy<boolean> = true): this { this._ui.shouldOrientImageFromExif = condition; return this; }
+    alignment(alignment: FieldLazy<'start' | 'center' | 'end' | null>): this { this._alignment = alignment; return this; }
     /** Text of the drop area. */
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    placeholder(text: FieldLazy<string | null>): this { this._placeholder = text; return this; }
     /** Round avatar: one image, cropped to a square and shown as a circle. */
     avatar(): this { this._avatar = true; this.image(); this._ui.panelLayout ??= 'compact circle'; this._ui.imagePreviewHeight ??= '250'; this._cropAspectRatio ??= '1:1'; this._ui.automaticallyResizeImagesHeight ??= '500'; this._ui.automaticallyResizeImagesWidth ??= '500'; this._ui.loadingIndicatorPosition ??= 'center bottom'; this._ui.removeUploadedFileButtonPosition ??= 'center bottom'; this._ui.uploadButtonPosition ??= 'center bottom'; this._ui.uploadProgressIndicatorPosition ??= 'center bottom'; this._alignment ??= 'center'; return this; }
     /** Image editor (crop, rotate, flip, zoom) opened from each image, powered by Cropper.js in the browser. */
-    imageEditor(condition = true): this { this._imageEditor = condition; return this; }
+    imageEditor(condition: FieldLazy<boolean> = true): this { this._imageEditor = condition; return this; }
     /** Aspect ratios offered by the image editor (`['16:9', '4:3', '1:1']`; `null` for a free crop). */
-    imageEditorAspectRatioOptions(ratios: (string | null)[]): this { this._editorAspectRatios = ratios; return this; }
-    imageEditorAspectRatios(ratios: (string | null)[]): this { return this.imageEditorAspectRatioOptions(ratios); }
+    imageEditorAspectRatioOptions(ratios: FieldLazy<(string | null)[]>): this { this._editorAspectRatios = ratios; return this; }
+    imageEditorAspectRatios(ratios: FieldLazy<(string | null)[]>): this { return this.imageEditorAspectRatioOptions(ratios); }
     /** Cropper.js view mode (1, 2 or 3). */
-    imageEditorMode(mode: 1 | 2 | 3): this { this._ui.imageEditorMode = mode; return this; }
-    imageEditorEmptyFillColor(color: string | null): this { this._ui.imageEditorEmptyFillColor = color; return this; }
-    imageEditorViewportWidth(width: string | number | null): this { this._ui.imageEditorViewportWidth = width === null ? null : String(width); return this; }
-    imageEditorViewportHeight(height: string | number | null): this { this._ui.imageEditorViewportHeight = height === null ? null : String(height); return this; }
-    private _autoOpenEditor = true;
-    /** With `imageEditor()` and a single aspect ratio, opens the editor when an uploaded image has another ratio (on by default). */
-    automaticallyOpenImageEditorForAspectRatio(condition = true): this { this._autoOpenEditor = condition; return this; }
-    private autoOpenEditorRatio(): number | null {
-        if (!this._imageEditor || !this._autoOpenEditor) return null;
-        const ratio = this._cropAspectRatio ?? (this._imageAspectRatios?.length === 1 ? this._imageAspectRatios[0] : null);
-        return ratio === null ? null : ratioOf(ratio);
-    }
+    imageEditorMode(mode: FieldLazy<1 | 2 | 3>): this { this._ui.imageEditorMode = mode; return this; }
+    imageEditorEmptyFillColor(color: FieldLazy<string | null>): this { this._ui.imageEditorEmptyFillColor = color; return this; }
+    imageEditorViewportWidth(width: FieldLazy<string | number | null>): this { this._ui.imageEditorViewportWidth = mapLazy(width, (value) => (value === null ? null : String(value))); return this; }
+    imageEditorViewportHeight(height: FieldLazy<string | number | null>): this { this._ui.imageEditorViewportHeight = mapLazy(height, (value) => (value === null ? null : String(value))); return this; }
+    /**
+     * Opens a crop-only editor when an uploaded image does not have the ratio of `imageAspectRatio()` (a single ratio,
+     * without `multiple()`). With `imageEditor()`, the full editor opens instead.
+     */
+    automaticallyOpenImageEditorForAspectRatio(condition: FieldLazy<boolean> = true): this { this._autoOpenEditor = condition; return this; }
     /** Circle crop in the image editor (avatars). */
-    circleCropper(condition = true): this { this._circleCropper = condition; return this; }
+    circleCropper(condition: FieldLazy<boolean> = true): this { this._circleCropper = condition; return this; }
     /** Crops images to this ratio in the browser before upload (`'16:9'`), without opening the editor. */
-    automaticallyCropImagesToAspectRatio(ratio: string | null): this { this._cropAspectRatio = ratio; return this; }
-    imageCropAspectRatio(ratio: string | null): this { return this.automaticallyCropImagesToAspectRatio(ratio); }
+    automaticallyCropImagesToAspectRatio(ratio: FieldLazy<string | null>): this { this._cropAspectRatio = ratio; return this; }
+    imageCropAspectRatio(ratio: FieldLazy<string | null>): this { return this.automaticallyCropImagesToAspectRatio(ratio); }
     /** Resizes images in the browser before upload (`'cover'`, `'contain'` or `'force'`). */
-    automaticallyResizeImagesMode(mode: 'cover' | 'contain' | 'force' | null): this { this._ui.automaticallyResizeImagesMode = mode; return this; }
-    automaticallyResizeImagesToWidth(width: string | number | null): this { this._ui.automaticallyResizeImagesWidth = width === null ? null : String(width); return this; }
-    automaticallyResizeImagesToHeight(height: string | number | null): this { this._ui.automaticallyResizeImagesHeight = height === null ? null : String(height); return this; }
-    automaticallyUpscaleImagesWhenResizing(condition = true): this { this._ui.shouldAutomaticallyUpscaleImagesWhenResizing = condition; return this; }
-    imageResizeMode(mode: 'cover' | 'contain' | 'force' | null): this { return this.automaticallyResizeImagesMode(mode); }
-    imageResizeTargetWidth(width: string | number | null): this { return this.automaticallyResizeImagesToWidth(width); }
-    imageResizeTargetHeight(height: string | number | null): this { return this.automaticallyResizeImagesToHeight(height); }
+    automaticallyResizeImagesMode(mode: FieldLazy<'cover' | 'contain' | 'force' | null>): this { this._ui.automaticallyResizeImagesMode = mode; return this; }
+    automaticallyResizeImagesToWidth(width: FieldLazy<string | number | null>): this { this._ui.automaticallyResizeImagesWidth = mapLazy(width, (value) => (value === null ? null : String(value))); return this; }
+    automaticallyResizeImagesToHeight(height: FieldLazy<string | number | null>): this { this._ui.automaticallyResizeImagesHeight = mapLazy(height, (value) => (value === null ? null : String(value))); return this; }
+    automaticallyUpscaleImagesWhenResizing(condition: FieldLazy<boolean> = true): this { this._ui.shouldAutomaticallyUpscaleImagesWhenResizing = condition; return this; }
+    imageResizeMode(mode: FieldLazy<'cover' | 'contain' | 'force' | null>): this { return this.automaticallyResizeImagesMode(mode); }
+    imageResizeTargetWidth(width: FieldLazy<string | number | null>): this { return this.automaticallyResizeImagesToWidth(width); }
+    imageResizeTargetHeight(height: FieldLazy<string | number | null>): this { return this.automaticallyResizeImagesToHeight(height); }
     /** Accepted aspect ratio(s) of uploaded images (`'16:9'` or a list), checked on the server. */
-    imageAspectRatio(ratio: string | string[] | null): this { this._imageAspectRatios = ratio === null ? null : [ratio].flat(); return this; }
+    imageAspectRatio(ratio: FieldLazy<string | string[] | null>): this { this._imageAspectRatios = ratio; return this; }
     /** Width, height and ratio bounds of uploaded images (`{ minWidth: 800, maxHeight: 1080 }`), checked on the server. */
-    imageDimensions(dimensions: ImageDimensions | null): this { this._dimensions = dimensions; return this; }
+    imageDimensions(dimensions: FieldLazy<ImageDimensions | null>): this { this._dimensions = dimensions; return this; }
     /** Stores files under their original (sanitized) names. See the security notes in the docs. */
-    preserveFilenames(condition = true): this { this._preserveFilenames = condition; return this; }
+    preserveFilenames(condition: FieldLazy<boolean> = true): this { this._preserveFilenames = condition; return this; }
     /** Name of the stored file, from the temporary file; sanitized, and its extension is the detected one. */
     getUploadedFileNameForStorageUsing(callback: ((file: TemporaryUpload, ctx: ComponentContext) => string | Promise<string>) | null): this { this._fileNameUsing = callback; return this; }
     /** Saves the original file names (keyed by stored file) in another attribute of the record. */
-    storeFileNamesIn(field: string | null): this { this._fileNamesField = field; return this; }
-    /** Extra saved values, next to the field (the original file names of `storeFileNamesIn()`). */
+    storeFileNamesIn(field: FieldLazy<string | null>): this { this._fileNamesField = field; return this; }
+    /** Extra saved values, next to the field (the original file names of `storeFileNamesIn()`), once `dehydrateState()` ran. */
     getExtraDehydratedState(): Record<string, unknown> {
-        if (this._fileNamesField === null) return {};
-        return { [this._fileNamesField]: this._multiple ? this._storedNames : (Object.values(this._storedNames)[0] ?? null) };
+        if (this._savedFileNamesField === null) return {};
+        return { [this._savedFileNamesField]: this._savedMultiple ? this._storedNames : (Object.values(this._storedNames)[0] ?? null) };
     }
-    multiple(condition = true): this { this._multiple = condition; return this; }
-    maxFiles(count: number | null): this { this._maxFiles = count; return this; }
+    multiple(condition: FieldLazy<boolean> = true): this { this._multiple = condition; return this; }
+    maxFiles(count: FieldLazy<number | null>): this { this._maxFiles = count; return this; }
+    /** Minimum number of files (Laravel's `min` rule on the list: an empty field fails it too). */
+    minFiles(count: FieldLazy<number | null>): this { this._minFiles = count; return this; }
     /** Maximum file size, in kilobytes. */
-    maxSize(kilobytes: number | null): this { this._maxSize = kilobytes; return this; }
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    maxSize(kilobytes: FieldLazy<number | null>): this { this._maxSize = kilobytes; return this; }
+    reorderable(condition: FieldLazy<boolean> = true): this { this._reorderable = condition; return this; }
     /** Accepted MIME types (`image/jpeg`, `image/*`…), checked against the received file's content. */
-    acceptedFileTypes(types: string[] | null): this { this._acceptedFileTypes = types; return this; }
+    acceptedFileTypes(types: FieldLazy<string[] | null>): this { this._acceptedFileTypes = types; return this; }
     image(): this { return this.acceptedFileTypes(['image/*']); }
-    directory(directory: string | null): this { this._directory = directory; return this; }
-    storage(storage: FileStorage): this { this._storage = storage; return this; }
+    directory(directory: FieldLazy<string | null>): this { this._directory = directory; return this; }
+    storage(storage: FieldLazy<FileStorage | null>): this { this._storage = storage; return this; }
     /** `false`: the field stores nothing itself; the data receives `FileUploadEntry` items for the adapter to process (media). */
-    storeFiles(condition = true): this { this._storeFiles = condition; return this; }
+    storeFiles(condition: FieldLazy<boolean> = true): this { this._storeFiles = condition; return this; }
+    /** Moves temporary files into the storage instead of copying them (the storage receives `{ move: true }`). */
+    moveFiles(condition: FieldLazy<boolean> = true): this { this._moveFiles = condition; return this; }
+    /** `false`: saved files are listed without reading their size and type from the storage (only their URL). */
+    fetchFileInformation(condition: FieldLazy<boolean> = true): this { this._fetchFileInformation = condition; return this; }
+    /**
+     * Navette always checks the stored keys sent back by the browser against the record; this method only adds
+     * `allowFilePathUsing`, which approves other keys (a template file, for example). The check cannot be turned off.
+     */
+    preventFilePathTampering(condition: FieldLazy<boolean> = true, allowFilePathUsing: ((file: string, ctx: ComponentContext) => boolean | Promise<boolean>) | null = null): this {
+        if (condition === false) throw new Error('FileUpload: the file path check cannot be turned off. Approve other keys with preventFilePathTampering(true, allowFilePathUsing).');
+        this._allowFilePathUsing = allowFilePathUsing;
+        return this;
+    }
     /** Info about an already saved file (name, size, type, URL), when it does not come from the storage. */
     getUploadedFileUsing(resolver: (key: string, ctx: ComponentContext) => UploadedFileInfo | null | Promise<UploadedFileInfo | null>): this { this._getUploadedFileUsing = resolver; return this; }
+
+    private value<T>(value: FieldLazy<T>): Promise<T> { return evaluate(value, this.context()); }
+    private async ui<T>(key: string, fallback: T): Promise<T> { const value = await this.value(this._ui[key]); return (value === undefined ? fallback : value) as T; }
+    isMultiple(): Promise<boolean> { return this.value(this._multiple).then(Boolean); }
+    getMaxFiles(): Promise<number | null> { return this.value(this._maxFiles); }
+    getMinFiles(): Promise<number | null> { return this.value(this._minFiles); }
+    getMaxSize(): Promise<number | null> { return this.value(this._maxSize); }
+    getMinSize(): Promise<number | null> { return this.value(this._minSize); }
+    isReorderable(): Promise<boolean> { return this.value(this._reorderable).then(Boolean); }
+    isDeletable(): Promise<boolean> { return this.value(this._deletable).then(Boolean); }
+    isDownloadable(): Promise<boolean> { return this.ui('isDownloadable', false).then(Boolean); }
+    isOpenable(): Promise<boolean> { return this.ui('isOpenable', false).then(Boolean); }
+    getAcceptedFileTypes(): Promise<string[] | null> { return this.value(this._acceptedFileTypes); }
+    getDirectory(): Promise<string | null> { return this.value(this._directory); }
+    shouldStoreFiles(): Promise<boolean> { return this.value(this._storeFiles).then(Boolean); }
+    shouldMoveFiles(): Promise<boolean> { return this.value(this._moveFiles).then(Boolean); }
+    shouldFetchFileInformation(): Promise<boolean> { return this.value(this._fetchFileInformation).then(Boolean); }
+    shouldPreserveFilenames(): Promise<boolean> { return this.value(this._preserveFilenames).then(Boolean); }
+    async getImageAspectRatio(): Promise<string[] | null> { const ratio = await this.value(this._imageAspectRatios); return ratio === null || ratio === undefined ? null : [ratio].flat(); }
+    async getStorage(): Promise<FileStorage | null> { return (await this.value(this._storage)) ?? FileUpload.storage; }
+    /** Ratio for which the editor opens by itself (`automaticallyOpenImageEditorForAspectRatio()`), or `null`. */
+    async getAutomaticallyOpenImageEditorForAspectRatio(): Promise<number | null> {
+        if (!(await this.value(this._autoOpenEditor))) return null;
+        if (await this.isMultiple()) throw new Error('The [automaticallyOpenImageEditorForAspectRatio()] method cannot be used when [multiple()] is enabled.');
+        const ratios = await this.getImageAspectRatio();
+        if (!ratios?.length) throw new Error('The [automaticallyOpenImageEditorForAspectRatio()] method requires [imageAspectRatio()] to be set with a single aspect ratio.');
+        if (ratios.length > 1) throw new Error('The [automaticallyOpenImageEditorForAspectRatio()] method cannot be used when [imageAspectRatio()] has multiple allowed aspect ratios.');
+        return ratioOf(ratios[0]);
+    }
+    /** With `automaticallyOpenImageEditorForAspectRatio()`, a (crop-only) editor exists even without `imageEditor()`. */
+    async hasImageEditor(): Promise<boolean> { return (await this.getAutomaticallyOpenImageEditorForAspectRatio()) !== null || Boolean(await this.value(this._imageEditor)); }
 
     getDefaultState(): unknown { return {}; }
     hydrateState(value: unknown): unknown {
@@ -3752,54 +3832,78 @@ export class FileUpload extends Field {
         return Object.fromEntries(keys.filter((key) => typeof key === 'string' || typeof key === 'number').map((key) => [randomUUID(), String(key)]));
     }
     private get uploads(): { resolve(value: unknown): TemporaryUpload | null; remove(id: string): void } | null { return (this.livewire as any)._runtime?.uploads ?? null; }
-    private getStorage(): FileStorage | null { return this._storage ?? FileUpload.storage; }
     /** Sanitized state entries: safe file key, string value. */
     private entries(): [string, string][] {
         const state = this.context().state;
         if (!state || typeof state !== 'object' || Array.isArray(state)) return [];
         return Object.entries(state as Record<string, unknown>).filter(([key, value]) => /^[A-Za-z0-9-]{1,64}$/.test(key) && typeof value === 'string').map(([key, value]): [string, string] => [key, value as string]).slice(0, 100);
     }
-    /** Stored keys the current record already owns: the only ones accepted back from the browser. */
+    /** Stored keys the current record already owns: the keys accepted back from the browser, with those of `allowFilePathUsing`. */
     private originalKeys(): Set<string> {
         const record = this.container.getRecord() as Record<string, unknown> | null;
         return new Set(Object.values(this.hydrateState(record?.[this.getName()]) as Record<string, string>));
     }
+    /** A stored key sent by the browser may be used: the record holds it, or `allowFilePathUsing` approves it. */
+    async isFilePathAuthorized(file: string, original: Set<string> = this.originalKeys()): Promise<boolean> {
+        if (original.has(file)) return true;
+        return this._allowFilePathUsing !== null && (await this._allowFilePathUsing(file, this.context())) === true;
+    }
     private isTemporary(value: string): boolean { return value.startsWith('livewire-file:'); }
     /** Original names saved by `storeFileNamesIn()`, by stored key. */
-    private savedFileNames(): Record<string, string> {
-        if (this._fileNamesField === null) return {};
+    private async savedFileNames(): Promise<Record<string, string>> {
+        const field = await this.value(this._fileNamesField);
+        if (field === null || field === undefined) return {};
         const record = this.container.getRecord() as Record<string, unknown> | null;
-        let names: unknown = record?.[this._fileNamesField];
+        let names: unknown = record?.[field];
         if (typeof names === 'string') { try { names = JSON.parse(names); } catch { const key = [...this.originalKeys()][0]; return key ? { [key]: names as string } : {}; } }
         return names && typeof names === 'object' && !Array.isArray(names) ? Object.fromEntries(Object.entries(names as Record<string, unknown>).filter(([, name]) => typeof name === 'string')) as Record<string, string> : {};
     }
 
     getExposedMethods(): string[] { return ['deleteUploadedFile', 'removeUploadedFile', 'reorderUploadedFiles', 'getUploadedFiles']; }
     async getUploadedFiles(): Promise<Record<string, UploadedFileInfo | null>> {
+        const ctx = this.context();
         const original = this.originalKeys();
+        const savedNames = await this.savedFileNames();
+        const storage = await this.getStorage();
+        const shouldFetch = await this.shouldFetchFileInformation();
+        const openable = (await this.isOpenable()) ? this._openableFileUrlUsing : null;
+        const downloadable = (await this.isDownloadable()) ? this._downloadableFileUrlUsing : null;
         const files: Record<string, UploadedFileInfo | null> = {};
         for (const [fileKey, value] of this.entries()) {
-            if (this.isTemporary(value) || !original.has(value)) { files[fileKey] = null; continue; }
-            const info = this._getUploadedFileUsing ? await this._getUploadedFileUsing(value, this.context()) : await this.getStorage()?.info(value);
-            const savedName = this.savedFileNames()[value];
-            if (info && savedName) info.name = savedName;
+            if (this.isTemporary(value) || !(await this.isFilePathAuthorized(value, original))) { files[fileKey] = null; continue; }
+            let info: UploadedFileInfo | null;
+            if (this._getUploadedFileUsing) info = await this._getUploadedFileUsing(value, ctx);
+            else if (shouldFetch) info = (await storage?.info(value)) ?? null;
+            else {
+                // Without file information: only the URL; FilePond reads the file itself to preview it.
+                const url = !storage ? null : storage.url ? await storage.url(value) : ((await storage.info(value))?.url ?? null);
+                info = url === null ? null : { name: value.split('/').pop() ?? value, size: 0, type: null, url };
+            }
             // Only local or http(s) URLs are sent to the browser.
-            files[fileKey] = info && /^(\/(?!\/)|https?:\/\/)/.test(info.url) ? info : null;
+            const url = safeFileUrl(info?.url);
+            if (!info || url === null) { files[fileKey] = null; continue; }
+            info = { ...info, url };
+            if (savedNames[value]) info.name = savedNames[value];
+            const openableUrl = openable ? safeFileUrl(await openable(value, ctx)) : null;
+            if (openableUrl !== null) info.openableUrl = openableUrl;
+            const downloadableUrl = downloadable ? safeFileUrl(await downloadable(value, ctx)) : null;
+            if (downloadableUrl !== null) info.downloadableUrl = downloadableUrl;
+            files[fileKey] = info;
         }
         return files;
     }
     private writeState(entries: [string, string][]): void { writePath(this.livewire as any, this.getStatePath().split('.'), Object.fromEntries(entries)); }
     /** Removes a file from the field. A stored file is only deleted by the application when the form is saved. */
-    removeUploadedFile(fileKey: unknown): void {
+    async removeUploadedFile(fileKey: unknown): Promise<void> {
         const removed = this.entries().find(([key]) => key === fileKey);
         // `deletable(false)`: a saved file stays (a file just uploaded can still be removed).
-        if (removed && !this._deletable && !this.isTemporary(removed[1])) return;
+        if (removed && !this.isTemporary(removed[1]) && !(await this.isDeletable())) return;
         if (removed && this.isTemporary(removed[1])) this.uploads?.remove(removed[1].slice('livewire-file:'.length));
         this.writeState(this.entries().filter(([key]) => key !== fileKey));
     }
-    deleteUploadedFile(fileKey: unknown): void { this.removeUploadedFile(fileKey); }
-    reorderUploadedFiles(fileKeys: unknown): void {
-        if (!this._reorderable || !Array.isArray(fileKeys)) return;
+    deleteUploadedFile(fileKey: unknown): Promise<void> { return this.removeUploadedFile(fileKey); }
+    async reorderUploadedFiles(fileKeys: unknown): Promise<void> {
+        if (!Array.isArray(fileKeys) || !(await this.isReorderable())) return;
         const entries = new Map(this.entries());
         const ordered = fileKeys.map(String).filter((key) => entries.has(key));
         this.writeState([...ordered.map((key): [string, string] => [key, entries.get(key)!]), ...[...entries].filter(([key]) => !ordered.includes(key))]);
@@ -3808,18 +3912,28 @@ export class FileUpload extends Field {
     async getValidationRules(): Promise<Rule[]> {
         const entries = () => this.entries();
         const temporary = () => entries().filter(([, value]) => this.isTemporary(value)).map(([, value]) => this.uploads?.resolve(value) ?? null);
-        const accepts = (type: string) => (this._acceptedFileTypes ?? []).some((accepted) => accepted === type || (accepted.endsWith('/*') && type.startsWith(accepted.slice(0, -1))));
+        const [multiple, maxFiles, minFiles, acceptedFileTypes, maxSize, minSize, dimensions, aspectRatios] = await Promise.all([
+            this.isMultiple(), this.getMaxFiles(), this.getMinFiles(), this.getAcceptedFileTypes(), this.getMaxSize(), this.getMinSize(), this.value(this._dimensions), this.getImageAspectRatio(),
+        ]);
+        const accepts = (type: string) => (acceptedFileTypes ?? []).some((accepted) => accepted === type || (accepted.endsWith('/*') && type.startsWith(accepted.slice(0, -1))));
         const rules: Rule[] = [];
         if (await this.isRequired()) rules.push({ name: 'required', passes: () => entries().length > 0, message: (a) => `The ${a} field is required.` });
         rules.push({ name: 'file', passes: () => temporary().every((file) => file !== null), message: (a) => `The ${a} field must be a file.` });
-        if (!this._multiple) rules.push({ name: 'max_files', passes: () => entries().length <= 1, message: (a) => `The ${a} field must not have more than 1 items.` });
-        if (this._maxFiles !== null) rules.push({ name: 'max_files', passes: () => entries().length <= this._maxFiles!, message: (a) => `The ${a} field must not have more than ${this._maxFiles} items.` });
-        if (this._acceptedFileTypes) rules.push({ name: 'mimetypes', passes: () => temporary().every((file) => file !== null && accepts(file.type)), message: (a) => `The ${a} field must be a file of type: ${this._acceptedFileTypes!.join(', ')}.` });
-        if (this._maxSize !== null) rules.push({ name: 'max', passes: () => temporary().every((file) => file !== null && file.size <= this._maxSize! * 1024), message: (a) => `The ${a} field must not be greater than ${this._maxSize} kilobytes.` });
-        if (this._minSize !== null) rules.push({ name: 'min', passes: () => temporary().every((file) => file !== null && file.size >= this._minSize! * 1024), message: (a) => `The ${a} field must be at least ${this._minSize} kilobytes.` });
+        // A stored key the record does not hold (and `allowFilePathUsing` does not approve) was forged.
+        rules.push({
+            name: 'tampered',
+            passes: async () => { const original = this.originalKeys(); for (const [, value] of entries()) if (!this.isTemporary(value) && !(await this.isFilePathAuthorized(value, original))) return false; return true; },
+            message: (a) => t('filament-forms::validation.tampered_file_path', { attribute: a }),
+        });
+        if (!multiple) rules.push({ name: 'max_files', passes: () => entries().length <= 1, message: (a) => `The ${a} field must not have more than 1 items.` });
+        if (maxFiles !== null && maxFiles !== undefined) rules.push({ name: 'max_files', passes: () => entries().length <= maxFiles, message: (a) => `The ${a} field must not have more than ${maxFiles} items.` });
+        if (minFiles !== null && minFiles !== undefined) rules.push({ name: 'min_files', passes: () => entries().length >= minFiles, message: (a) => `The ${a} field must have at least ${minFiles} items.` });
+        if (acceptedFileTypes) rules.push({ name: 'mimetypes', passes: () => temporary().every((file) => file !== null && accepts(file.type)), message: (a) => `The ${a} field must be a file of type: ${acceptedFileTypes.join(', ')}.` });
+        if (maxSize !== null && maxSize !== undefined) rules.push({ name: 'max', passes: () => temporary().every((file) => file !== null && file.size <= maxSize * 1024), message: (a) => `The ${a} field must not be greater than ${maxSize} kilobytes.` });
+        if (minSize !== null && minSize !== undefined) rules.push({ name: 'min', passes: () => temporary().every((file) => file !== null && file.size >= minSize * 1024), message: (a) => `The ${a} field must be at least ${minSize} kilobytes.` });
         // Image rules only apply to new uploads, as in Laravel; a file whose size cannot be read fails them.
-        if (this._dimensions) {
-            const d = this._dimensions;
+        if (dimensions) {
+            const d = dimensions;
             const fits = (size: { width: number; height: number } | null) => size !== null
                 && (d.width === undefined || size.width === d.width) && (d.height === undefined || size.height === d.height)
                 && (d.minWidth === undefined || size.width >= d.minWidth) && (d.maxWidth === undefined || size.width <= d.maxWidth)
@@ -3828,8 +3942,8 @@ export class FileUpload extends Field {
                 && (d.minRatio === undefined || size.width / size.height >= d.minRatio - 1e-9) && (d.maxRatio === undefined || size.width / size.height <= d.maxRatio + 1e-9);
             rules.push({ name: 'dimensions', passes: () => temporary().every((file) => file !== null && fits(readImageSize(file.path))), message: (a) => `The ${a} field has invalid image dimensions.` });
         }
-        if (this._imageAspectRatios) {
-            const ratios = this._imageAspectRatios.map(ratioOf).filter((ratio): ratio is number => ratio !== null);
+        if (aspectRatios) {
+            const ratios = aspectRatios.map(ratioOf).filter((ratio): ratio is number => ratio !== null);
             rules.push({ name: 'dimensions', passes: () => temporary().every((file) => { const size = file && readImageSize(file.path); return !!size && size.height > 0 && ratios.some((ratio) => Math.abs(size.width / size.height - ratio) < 0.01); }), message: (a) => `The ${a} field has invalid image dimensions.` });
         }
         return rules;
@@ -3841,35 +3955,38 @@ export class FileUpload extends Field {
         for (const rule of await this.getValidationRules()) if (!(await rule.passes(this.context().state, this.context()))) { reportFailedRule(this.getStatePath(), rule.name); return [rule.message(attribute)]; }
         return [];
     }
-    /** On save: temporary files are stored, unrecognized existing keys are dropped. */
+    /** On save: temporary files are stored, unauthorized existing keys are dropped. */
     async dehydrateState(): Promise<unknown> {
         const original = this.originalKeys();
-        const savedNames = this.savedFileNames();
+        const savedNames = await this.savedFileNames();
+        const [storeFiles, multiple, deletable] = await Promise.all([this.shouldStoreFiles(), this.isMultiple(), this.isDeletable()]);
+        this._savedFileNamesField = (await this.value(this._fileNamesField)) ?? null;
+        this._savedMultiple = multiple;
         this._storedNames = {};
         const out: (string | FileUploadEntry)[] = [];
         for (const [, value] of this.entries()) {
             if (this.isTemporary(value)) {
                 const file = this.uploads?.resolve(value);
                 if (!file) continue;
-                if (!this._storeFiles) { out.push({ file }); continue; }
-                const storage = this.getStorage();
+                if (!storeFiles) { out.push({ file }); continue; }
+                const storage = await this.getStorage();
                 if (!storage) throw new Error('FileUpload: no storage configured (FileUpload.storage).');
-                const name = this._fileNameUsing ? await this._fileNameUsing(file, this.context()) : this._preserveFilenames ? file.name : null;
-                const stored = await storage.store(file, this._directory, name);
+                const name = this._fileNameUsing ? await this._fileNameUsing(file, this.context()) : (await this.shouldPreserveFilenames()) ? file.name : null;
+                const stored = await storage.store(file, await this.getDirectory(), name, { move: await this.shouldMoveFiles() });
                 this._storedNames[stored] = file.name;
                 out.push(stored);
                 this.uploads?.remove(file.id);
-            } else if (original.has(value)) { out.push(this._storeFiles ? value : { key: value }); if (savedNames[value]) this._storedNames[value] = savedNames[value]; }
+            } else if (await this.isFilePathAuthorized(value, original)) { out.push(storeFiles ? value : { key: value }); if (savedNames[value]) this._storedNames[value] = savedNames[value]; }
         }
         // `deletable(false)`: a saved file the browser dropped from the state is kept.
-        if (!this._deletable) for (const key of original) if (!out.some((item) => item === key || (typeof item === 'object' && 'key' in item && item.key === key))) { out.push(this._storeFiles ? key : { key }); if (savedNames[key]) this._storedNames[key] = savedNames[key]; }
-        return this._multiple ? out : (out[0] ?? null);
+        if (!deletable) for (const key of original) if (!out.some((item) => item === key || (typeof item === 'object' && 'key' in item && item.key === key))) { out.push(storeFiles ? key : { key }); if (savedNames[key]) this._storedNames[key] = savedNames[key]; }
+        return multiple ? out : (out[0] ?? null);
     }
 
     /** Filament's image editor dialog (Cropper.js), rendered once per field. */
-    private imageEditorHtml(): string {
+    private imageEditorHtml(options: { explicit: boolean; circleCropper: boolean; editorAspectRatios: (string | null)[]; cropAspectRatio: string | null }): string {
         const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.file_upload.editor.${key}`, replace);
-        const explicit = this._imageEditor;
+        const explicit = options.explicit;
         const fields = [
             ['x_position', 'xPositionInput', 'editor.setData({...editor.getData(true), x: +$el.value})'], ['y_position', 'yPositionInput', 'editor.setData({...editor.getData(true), y: +$el.value})'],
             ['width', 'widthInput', 'editor.setData({...editor.getData(true), width: +$el.value})'], ['height', 'heightInput', 'editor.setData({...editor.getData(true), height: +$el.value})'],
@@ -3880,14 +3997,14 @@ export class FileUpload extends Field {
             [['move_left', icons.resolve('forms::components.file-upload.editor.actions.move-left') ?? 'o-arrow-left-circle', 'editor.move(-10, 0)'], ['move_right', icons.resolve('forms::components.file-upload.editor.actions.move-right') ?? 'o-arrow-right-circle', 'editor.move(10, 0)'], ['move_up', icons.resolve('forms::components.file-upload.editor.actions.move-up') ?? 'o-arrow-up-circle', 'editor.move(0, -10)'], ['move_down', icons.resolve('forms::components.file-upload.editor.actions.move-down') ?? 'o-arrow-down-circle', 'editor.move(0, 10)']],
             [['rotate_left', icons.resolve('forms::components.file-upload.editor.actions.rotate-left') ?? 'o-arrow-uturn-left', 'editor.rotate(-90)'], ['rotate_right', icons.resolve('forms::components.file-upload.editor.actions.rotate-right') ?? 'o-arrow-uturn-right', 'editor.rotate(90)'], ['flip_horizontal', icons.resolve('forms::components.file-upload.editor.actions.flip-horizontal') ?? 'fi-o-flip-horizontal', 'editor.scaleX(-editor.getData().scaleX || -1)'], ['flip_vertical', icons.resolve('forms::components.file-upload.editor.actions.flip-vertical') ?? 'fi-o-flip-vertical', 'editor.scaleY(-editor.getData().scaleY || -1)']],
         ].map((group) => `<div class="fi-btn-group">${group.map(([name, iconName, click]) => { const label = tr(`actions.${name}.label`); return `<button aria-label="${e(label)}" type="button" x-on:click.prevent.stop="${e(click)}" x-tooltip="${e(`{ content: ${js(label)}, theme: $store.theme }`)}" class="fi-btn">${icon(iconName)}</button>`; }).join('')}</div>`).join('');
-        const ratioOptions = [...this._editorAspectRatios, ...(this._cropAspectRatio !== null ? [this._cropAspectRatio] : [])].filter((ratio, index, all) => all.indexOf(ratio) === index)
+        const ratioOptions = [...options.editorAspectRatios, ...(options.cropAspectRatio !== null ? [options.cropAspectRatio] : [])].filter((ratio, index, all) => all.indexOf(ratio) === index)
             .map((ratio): [string, number | 'NaN'] => [ratio === null ? tr('aspect_ratios.no_fixed.label') : ratio.replace('/', ':'), ratio === null ? 'NaN' : (ratioOf(ratio) ?? 'NaN')]);
         const ratios = ratioOptions.length >= 2 ? `<div class="fi-fo-file-upload-editor-control-panel-group"><div class="fi-fo-file-upload-editor-control-panel-group-title">${e(tr('aspect_ratios.label'))}</div>${Array.from({ length: Math.ceil(ratioOptions.length / 5) }, (_, chunk) => `<div class="fi-btn-group">${ratioOptions.slice(chunk * 5, chunk * 5 + 5).map(([label, ratio]) => `<button type="button" x-on:click.prevent.stop="${e(`currentRatio = ${js(label)}; editor.setAspectRatio(${ratio === 'NaN' ? 'NaN' : ratio})`)}" x-tooltip="${e(`{ content: ${js(tr('actions.set_aspect_ratio.label', { ratio: label }))}, theme: $store.theme }`)}" x-bind:class="${e(`{ 'fi-active': currentRatio === ${js(label)} }`)}" class="fi-btn">${e(label)}</button>`).join('')}</div>`).join('')}</div>` : '';
         const success = cls(['fi-btn', ...(colorManager?.getComponentClasses('button', 'success') ?? [])]);
         const cancel = `<button type="button" x-on:click.prevent="pond.imageEditEditor.oncancel" class="fi-btn">${e(tr('actions.cancel.label'))}</button>`;
         const save = `<button type="button" x-on:click.prevent="saveEditor" class="${success}">${e(tr('actions.save.label'))}</button>`;
         const main = explicit ? `<div class="fi-fo-file-upload-editor-control-panel-main"><div class="fi-fo-file-upload-editor-control-panel-group">${fields}</div><div class="fi-fo-file-upload-editor-control-panel-group">${groups}</div>${ratios}<div class="fi-fo-file-upload-editor-control-panel-reset-action-ctn"><button type="button" x-on:click.prevent.stop="editor.reset()" class="${cls(['fi-link', 'fi-size-sm', 'fi-fo-file-upload-editor-control-panel-reset-action', ...(colorManager?.getComponentClasses('link', 'danger') ?? [])])}"><span class="fi-link-label">${e(tr('actions.reset.label'))}</span></button></div></div>` : '';
-        return `<div aria-label="${e(tr('label'))}" aria-modal="true" role="dialog" x-show="isEditorOpen" x-cloak x-on:click.stop="" x-trap.noscroll="isEditorOpen" x-on:keydown.escape.prevent.stop="closeEditor" class="${cls(['fi-fo-file-upload-editor', { 'fi-fo-file-upload-editor-circle-cropper': this._circleCropper, 'fi-fo-file-upload-editor-crop-only': !explicit }])}"><div aria-hidden="true" class="fi-fo-file-upload-editor-overlay"></div><div class="fi-fo-file-upload-editor-window"><div class="fi-fo-file-upload-editor-image-ctn"><img alt="" x-ref="editor" class="fi-fo-file-upload-editor-image" /></div><div class="fi-fo-file-upload-editor-control-panel">${main}<div class="fi-fo-file-upload-editor-control-panel-footer">${explicit ? cancel + save : save + cancel}</div></div></div></div>`;
+        return `<div aria-label="${e(tr('label'))}" aria-modal="true" role="dialog" x-show="isEditorOpen" x-cloak x-on:click.stop="" x-trap.noscroll="isEditorOpen" x-on:keydown.escape.prevent.stop="closeEditor" class="${cls(['fi-fo-file-upload-editor', { 'fi-fo-file-upload-editor-circle-cropper': options.circleCropper, 'fi-fo-file-upload-editor-crop-only': !explicit }])}"><div aria-hidden="true" class="fi-fo-file-upload-editor-overlay"></div><div class="fi-fo-file-upload-editor-window"><div class="fi-fo-file-upload-editor-image-ctn"><img alt="" x-ref="editor" class="fi-fo-file-upload-editor-image" /></div><div class="fi-fo-file-upload-editor-control-panel">${main}<div class="fi-fo-file-upload-editor-control-panel-footer">${explicit ? cancel + save : save + cancel}</div></div></div></div>`;
     }
 
     async toHtml(): Promise<string> {
@@ -3895,64 +4012,73 @@ export class FileUpload extends Field {
         const id = this.getId();
         const label = (await this.getLabel()).toLowerCase();
         const tr = (key: string) => t(`filament-forms::components.file_upload.${key}`);
-        const ui = (key: string, fallback: unknown) => (this._ui[key] === undefined ? fallback : this._ui[key]);
-        const hasEditor = (this._imageEditor || this._cropAspectRatio !== null || this._circleCropper) && !isDisabled;
+        const ui: Record<string, unknown> = {};
+        for (const key of Object.keys(this._ui)) ui[key] = await this.value(this._ui[key]);
+        const option = (key: string, fallback: unknown) => (ui[key] === undefined ? fallback : ui[key]);
+        const [multiple, maxFiles, maxSize, minSize, acceptedFileTypes, reorderable, deletable] = await Promise.all([this.isMultiple(), this.getMaxFiles(), this.getMaxSize(), this.getMinSize(), this.getAcceptedFileTypes(), this.isReorderable(), this.isDeletable()]);
+        const explicitEditor = Boolean(await this.value(this._imageEditor));
+        const circleCropper = Boolean(await this.value(this._circleCropper));
+        const cropAspectRatio = (await this.value(this._cropAspectRatio)) ?? null;
+        const autoOpenRatio = await this.getAutomaticallyOpenImageEditorForAspectRatio();
+        const hasEditor = (explicitEditor || autoOpenRatio !== null || cropAspectRatio !== null || circleCropper) && !isDisabled;
+        const alignment = (await this.value(this._alignment)) ?? 'start';
         const config = `fileUploadFormComponent({
- acceptedFileTypes: ${this._acceptedFileTypes ? js(this._acceptedFileTypes) : 'null'},
- automaticallyCropImagesAspectRatio: ${js(this._cropAspectRatio)},
- automaticallyOpenImageEditorForAspectRatio: ${js(this.autoOpenEditorRatio())},
- automaticallyResizeImagesMode: ${js(ui('automaticallyResizeImagesMode', null))},
- automaticallyResizeImagesHeight: ${js(ui('automaticallyResizeImagesHeight', null))},
- automaticallyResizeImagesWidth: ${js(ui('automaticallyResizeImagesWidth', null))},
+ acceptedFileTypes: ${acceptedFileTypes ? js(acceptedFileTypes) : 'null'},
+ automaticallyCropImagesAspectRatio: ${js(cropAspectRatio)},
+ automaticallyOpenImageEditorForAspectRatio: ${js(autoOpenRatio)},
+ automaticallyResizeImagesMode: ${js(option('automaticallyResizeImagesMode', null))},
+ automaticallyResizeImagesHeight: ${js(option('automaticallyResizeImagesHeight', null))},
+ automaticallyResizeImagesWidth: ${js(option('automaticallyResizeImagesWidth', null))},
  canEditSvgs: true,
  confirmSvgEditingMessage: ${js(tr('editor.svg.messages.confirmation'))},
  disabledSvgEditingMessage: ${js(tr('editor.svg.messages.disabled'))},
- hasCircleCropper: ${js(this._circleCropper)},
+ hasCircleCropper: ${js(circleCropper)},
  hasImageEditor: ${js(hasEditor)},
- imageEditorEmptyFillColor: ${js(ui('imageEditorEmptyFillColor', null))},
- imageEditorMode: ${js(ui('imageEditorMode', 1))},
- imageEditorViewportHeight: ${js(ui('imageEditorViewportHeight', null))},
- imageEditorViewportWidth: ${js(ui('imageEditorViewportWidth', null))},
- imagePreviewHeight: ${js(ui('imagePreviewHeight', null))},
+ imageEditorEmptyFillColor: ${js(option('imageEditorEmptyFillColor', null))},
+ imageEditorMode: ${js(option('imageEditorMode', 1))},
+ imageEditorViewportHeight: ${js(option('imageEditorViewportHeight', null))},
+ imageEditorViewportWidth: ${js(option('imageEditorViewportWidth', null))},
+ imagePreviewHeight: ${js(option('imagePreviewHeight', null))},
  isAvatar: ${js(this._avatar)},
- isDeletable: ${js(this._deletable)},
+ isDeletable: ${js(deletable)},
  isDisabled: ${isDisabled ? 'true' : 'false'},
- isDownloadable: ${js(ui('isDownloadable', false))},
- isImageEditorExplicitlyEnabled: ${js(this._imageEditor)},
- isMultiple: ${this._multiple ? 'true' : 'false'},
- isOpenable: ${js(ui('isOpenable', false))},
- isPasteable: ${js(ui('isPasteable', true))},
- isPreviewable: ${js(ui('isPreviewable', true))},
- isReorderable: ${this._reorderable ? 'true' : 'false'},
+ isDownloadable: ${js(Boolean(option('isDownloadable', false)))},
+ isImageEditorExplicitlyEnabled: ${js(explicitEditor)},
+ isMultiple: ${multiple ? 'true' : 'false'},
+ isOpenable: ${js(Boolean(option('isOpenable', false)))},
+ isPasteable: ${js(Boolean(option('isPasteable', true)))},
+ isPreviewable: ${js(Boolean(option('isPreviewable', true)))},
+ isReorderable: ${reorderable ? 'true' : 'false'},
  isSvgEditingConfirmed: false,
- itemPanelAspectRatio: ${js(ui('itemPanelAspectRatio', null))},
- loadingIndicatorPosition: ${js(ui('loadingIndicatorPosition', 'right'))},
+ itemPanelAspectRatio: ${js(option('itemPanelAspectRatio', null))},
+ loadingIndicatorPosition: ${js(option('loadingIndicatorPosition', 'right'))},
  locale: 'en',
- maxFiles: ${this._maxFiles ?? 'null'},
- maxFilesValidationMessage: ${this._maxFiles !== null ? js(`The ${label} field must not have more than ${this._maxFiles} items.`) : 'null'},
- maxParallelUploads: ${js(ui('maxParallelUploads', null))},
- maxSize: ${this._maxSize !== null ? js(`${this._maxSize}KB`) : 'null'},
- mimeTypeMap: ${ui('mimeTypeMap', null) ? js(ui('mimeTypeMap', null)) : '[]'},
- minSize: ${this._minSize !== null ? js(`${this._minSize}KB`) : 'null'},
- panelAspectRatio: ${js(ui('panelAspectRatio', null))},
- panelLayout: ${js(ui('panelLayout', 'compact'))},
- placeholder: ${js(this._placeholder)},
- removeUploadedFileButtonPosition: ${js(ui('removeUploadedFileButtonPosition', 'left'))},
- shouldAppendFiles: ${js(ui('shouldAppendFiles', false))},
- shouldAutomaticallyUpscaleImagesWhenResizing: ${js(ui('shouldAutomaticallyUpscaleImagesWhenResizing', true))},
- shouldOrientImageFromExif: ${js(ui('shouldOrientImageFromExif', true))},
- shouldTransformImage: ${js(Boolean(this._cropAspectRatio || ui('automaticallyResizeImagesHeight', null) || ui('automaticallyResizeImagesWidth', null)))},
+ maxFiles: ${maxFiles ?? 'null'},
+ maxFilesValidationMessage: ${maxFiles !== null && maxFiles !== undefined ? js(`The ${label} field must not have more than ${maxFiles} items.`) : 'null'},
+ maxParallelUploads: ${js(option('maxParallelUploads', null))},
+ maxSize: ${maxSize !== null && maxSize !== undefined ? js(`${maxSize}KB`) : 'null'},
+ mimeTypeMap: ${option('mimeTypeMap', null) ? js(option('mimeTypeMap', null)) : '[]'},
+ minSize: ${minSize !== null && minSize !== undefined ? js(`${minSize}KB`) : 'null'},
+ panelAspectRatio: ${js(option('panelAspectRatio', null))},
+ panelLayout: ${js(option('panelLayout', 'compact'))},
+ placeholder: ${js((await this.value(this._placeholder)) ?? null)},
+ removeUploadedFileButtonPosition: ${js(option('removeUploadedFileButtonPosition', 'left'))},
+ shouldAppendFiles: ${js(Boolean(option('shouldAppendFiles', false)))},
+ shouldAutomaticallyUpscaleImagesWhenResizing: ${js(Boolean(option('shouldAutomaticallyUpscaleImagesWhenResizing', true)))},
+ shouldOrientImageFromExif: ${js(Boolean(option('shouldOrientImageFromExif', true)))},
+ shouldTransformImage: ${js(Boolean(cropAspectRatio || option('automaticallyResizeImagesHeight', null) || option('automaticallyResizeImagesWidth', null)))},
  state: $wire.$entangle(${js(this.getStatePath())}, false),
  statePath: ${js(this.getStatePath())},
- uploadButtonPosition: ${js(ui('uploadButtonPosition', 'right'))},
- uploadingMessage: ${js(ui('uploadingMessage', t('filament::components/button.messages.uploading_file')))},
+ uploadButtonPosition: ${js(option('uploadButtonPosition', 'right'))},
+ uploadingMessage: ${js(option('uploadingMessage', t('filament::components/button.messages.uploading_file')))},
  downloadActionLabel: ${js(tr('actions.download.label'))},
  openActionLabel: ${js(tr('actions.open.label'))},
- uploadProgressIndicatorPosition: ${js(ui('uploadProgressIndicatorPosition', 'right'))},
+ uploadProgressIndicatorPosition: ${js(option('uploadProgressIndicatorPosition', 'right'))},
  })`;
-        const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([this._acceptedFileTypes, this._maxFiles, this._multiple, isDisabled, this._ui, this._imageEditor, this._cropAspectRatio])).digest('hex')}`;
-        const input = new Attributes().merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: this._multiple ? 'multiple' : null, type: 'file' });
-        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${this._alignment ?? 'start'}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${hasEditor ? this.imageEditorHtml() : ''}</div>`, { labelAsDiv: true });
+        const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([acceptedFileTypes, maxFiles, multiple, isDisabled, ui, explicitEditor, cropAspectRatio])).digest('hex')}`;
+        const input = new Attributes().merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: multiple ? 'multiple' : null, type: 'file' });
+        const editor = hasEditor ? this.imageEditorHtml({ explicit: explicitEditor, circleCropper, editorAspectRatios: (await this.value(this._editorAspectRatios)) ?? [], cropAspectRatio }) : '';
+        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${alignment}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
     }
 }
 

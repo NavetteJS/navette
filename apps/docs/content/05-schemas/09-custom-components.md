@@ -4,7 +4,13 @@ title: Custom components
 
 ## Introduction
 
-For a one-off piece of content, insert [HTML into your schema](#inserting-html-into-a-schema). For a reusable component with its own configuration, write a [component class](#custom-component-classes): a TypeScript class that extends `Component` from `@navette-js/schemas` and renders its HTML.
+For a one-off piece of content, insert [HTML into your schema](#inserting-html-into-a-schema). For a reusable component with its own configuration, write a [component class](#custom-component-classes): a TypeScript class that extends `Component` from `@navette-js/schemas` and renders its HTML. To create one, run:
+
+```bash
+npx navette make:schema-component Chart
+```
+
+Then customize the generated class, following [custom component classes](#custom-component-classes). Most custom components can render their HTML with the schema's existing utilities; use a [nested Livewire component](#inserting-a-livewire-component-into-a-schema) when you need a separately managed component with its own state and requests.
 
 Use a [custom field](/forms/custom-fields) for an input with state binding and validation, and a [custom entry](/infolists/custom-entries) for a labelled read-only value.
 
@@ -38,6 +44,149 @@ The HTML is inserted as is. Escape every value that comes from a user or from th
 Unless a form field is `live()`, the HTML will not refresh when the value of the field changes, only when the next user interaction occurs that makes a request to the server.
 </Aside>
 
+## Inserting a Livewire component into a schema
+
+You may insert a Livewire component (a component class of `@navette-js/wire`) directly into a schema:
+
+```ts
+import { Livewire } from '@navette-js/schemas';
+import { SalesChart } from './livewire/SalesChart.ts';
+
+Livewire.make(SalesChart)
+```
+
+The component is mounted as a child of the page. It has its own state and its own requests: calling one of its methods does not render the page again, and it keeps its state when the page renders again. For example:
+
+```ts
+import { Component } from '@navette-js/wire';
+import { e } from '@navette-js/support';
+
+export class SalesChart extends Component {
+    static callable = ['setPeriod'];
+
+    period = 'week';
+
+    setPeriod(period: unknown): void {
+        this.period = period === 'month' ? 'month' : 'week';
+    }
+
+    render(): string {
+        return `<div><button type="button" wire:click="setPeriod('month')">Month</button> Sales of the ${e(this.period)}</div>`;
+    }
+}
+```
+
+The first time it is rendered, the class is registered with the runtime of the panel under the name `livewire.<name in kebab case>` (`livewire.sales-chart`). Register it yourself when your server starts, before `panelRouter()`, so that its requests are answered even when no page has rendered it since the server started (after a restart, for example). `Livewire.make()` then uses that name:
+
+```ts
+const runtime = new WireRuntime({ key });
+runtime.register('livewire.sales-chart', SalesChart);
+
+app.use(panelRouter(panel, runtime));
+```
+
+You may also pass the registered name instead of the class: `Livewire.make('livewire.sales-chart')`.
+
+<Aside variant="info">
+When inserting a Livewire component into the schema, there are limited capabilities. The nested component is rendered separately: it can't render a child schema, read the live state of another component, or access the page or the schema component. Only [the data that you pass to the Livewire component](#passing-parameters-to-a-livewire-component), and [the current record](#accessing-the-current-record-in-the-livewire-component) are accessible. Situations where you should render a nested Livewire component instead of a [component class](#custom-component-classes) are rare because of these limitations.
+</Aside>
+
+<Aside variant="warning">
+A nested Livewire component does not inherit the authorization of its page. Its public properties are sent to the browser and come back with every request, and its callable methods can be called with any arguments: re-query and authorize the records it uses, and list in `static locked` the properties that the browser must not change. See [security](/advanced/security).
+</Aside>
+
+If you are rendering multiple of the same Livewire component, please make sure to pass a unique `key()` to each:
+
+```ts
+import { Livewire } from '@navette-js/schemas';
+
+Livewire.make(SalesChart)
+    .key('chart-first')
+
+Livewire.make(SalesChart)
+    .key('chart-second')
+```
+
+### Passing parameters to a Livewire component
+
+You can pass an object of parameters to a Livewire component:
+
+```ts
+import { Livewire } from '@navette-js/schemas';
+
+Livewire.make(SalesChart, { bar: 'baz' })
+```
+
+As well as allowing a static value, the `make()` method also accepts a function to dynamically calculate it. The function receives the [context object](/schemas/overview#component-utility-injection):
+
+```ts
+Livewire.make(SalesChart, ({ get }) => ({ currency: get('currency') }))
+```
+
+Now, those parameters will be passed to the Livewire component's `mount()` method:
+
+```ts
+export class SalesChart extends Component {
+    mount(params: Record<string, unknown>): void {
+        // params.bar
+    }
+}
+```
+
+Alternatively, they will be set on the public properties of the same name:
+
+```ts
+export class SalesChart extends Component {
+    static locked = ['bar'];
+
+    bar: string | null = null;
+}
+```
+
+For server-provided configuration that should not be editable, list the property in `static locked`, like `bar` above.
+
+#### Accessing the current record in the Livewire component
+
+You can access the current record in the `mount()` method of the Livewire component, as `params.record`:
+
+```ts
+import { Component } from '@navette-js/wire';
+
+export class SalesChart extends Component {
+    static locked = ['productId'];
+
+    productId: number | null = null;
+
+    mount(params: Record<string, unknown>): void {
+        this.productId = (params.record as Product | null)?.id ?? null;
+    }
+}
+```
+
+Keep the key of the record, not the record itself, in a public property: public properties are sent to the browser. Re-query the record from its key when you need it.
+
+Please be aware that when the record has not yet been created, it will be `null`. If you'd like to hide the Livewire component when the record is `null`, you can use the `hidden()` method:
+
+```ts
+import { Livewire } from '@navette-js/schemas';
+
+Livewire.make(SalesChart)
+    .hidden(({ record }) => record === null)
+```
+
+### Lazy loading a Livewire component
+
+You may allow the component to lazily load when it enters the viewport using the `lazyLoaded()` method. Its `placeholder()` is shown meanwhile:
+
+```ts
+import { Livewire } from '@navette-js/schemas';
+
+Livewire.make(SalesChart)
+    .lazyLoaded()
+```
+
+The parameters of a lazy component are written in the page (signed, but readable) until it loads. For this reason, the record is not passed to a lazy component: pass its key in the parameters instead, `Livewire.make(SalesChart, ({ record }) => ({ productId: (record as Product | null)?.id ?? null })).lazyLoaded()`, and never pass a secret.
+
 ## Custom component classes
 
 You may create your own component classes, which you can reuse across your project. A component class extends `Component`, declares a static `make()` method, and implements the asynchronous `toHtml()` method, which returns the HTML of the component:
@@ -62,6 +211,12 @@ Use the class in your schema:
 import { Chart } from './components/Chart.ts';
 
 Chart.make()
+```
+
+To generate a component class, use the `make:schema-component` command. It creates `src/schemas/components/Chart.ts`, a component with a `heading()` [configuration method](#adding-a-configuration-method-to-a-custom-component-class) that accepts a function, and a `toHtml()` method that escapes it:
+
+```bash
+npx navette make:schema-component Chart
 ```
 
 Navette places the HTML in the grid of the schema, so your component automatically supports `columnSpan()`, `hidden()`, `visible()`, `hiddenOn()` and the other methods shared by all components.
@@ -341,5 +496,5 @@ export class Chart extends Component {
 ```
 
 <Aside variant="warning">
-Rendering components with JavaScript frameworks (`JsComponent`) and inserting a nested Livewire component are not available yet. There is no command that generates a component class, but `npx navette make:component` generates a [view component](/components/creating-components) that your class can render.
+Rendering components with JavaScript frameworks (`JsComponent`) is not available yet.
 </Aside>

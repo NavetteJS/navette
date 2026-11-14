@@ -218,44 +218,9 @@ export function isLight(color: string): boolean {
     return +m[1] >= 0.65;
 }
 
-type Candidate = { bg: number; hover: number; alternateHover: number | null };
-/** Picks accessible background and text shades for a filled button. */
+/** Picks accessible background and text shades for a filled button (Filament's default `ButtonComponentColorMap` candidates). */
 export function buttonColorMap(palette: Palette, minRatio = WCAG_AA_TEXT): Record<string, number> {
-    const light: Candidate[] = [{ bg: 600, hover: 500, alternateHover: null }, { bg: 400, hover: 300, alternateHover: 500 }];
-    const dark: Candidate[] = [{ bg: 600, hover: 500, alternateHover: 700 }];
-    const shades = Object.keys(palette).map(Number).sort((a, b) => a - b);
-    const textForBg: Record<number, number> = {};
-    const possibleDark = shades.slice(1);
-    let fallbackOk = true;
-    outer: for (const bg of shades) {
-        while (possibleDark.length) {
-            const t = possibleDark[0];
-            if (t >= 800 && calculateContrastRatio(palette[bg], palette[t]) >= minRatio) { textForBg[bg] = t; continue outer; }
-            possibleDark.shift();
-        }
-        if (fallbackOk && palette[50] !== undefined) {
-            if (calculateContrastRatio(palette[bg], palette[50]) >= minRatio) { textForBg[bg] = 50; continue; }
-            fallbackOk = false;
-        }
-        textForBg[bg] = 0;
-    }
-    const lightness: Record<number, boolean> = {};
-    for (const c of [...light, ...dark]) for (const s of [c.bg, c.hover, c.alternateHover]) {
-        if (s === null) continue;
-        const t = textForBg[s] ?? 0;
-        lightness[s] = t === 0 || isLight(palette[t] ?? 'oklch(1 0 0)');
-    }
-    const pick = (cands: Candidate[]): [number, number] => {
-        for (const c of cands) {
-            if (!lightness[c.bg]) continue;
-            if (lightness[c.hover]) return [c.bg, c.hover];
-            if (c.alternateHover !== null && lightness[c.alternateHover]) return [c.bg, c.alternateHover];
-        }
-        const f = cands[cands.length - 1];
-        return [f.bg, lightness[f.bg] === lightness[f.hover] ? f.hover : (f.alternateHover ?? f.hover)];
-    };
-    const [bg, hoverBg] = pick(light), [darkBg, darkHoverBg] = pick(dark);
-    return { bg, 'hover:bg': hoverBg, 'dark:bg': darkBg, 'dark:hover:bg': darkHoverBg, text: textForBg[bg] ?? 0, 'hover:text': textForBg[hoverBg] ?? 0, 'dark:text': textForBg[darkBg] ?? 0, 'dark:hover:text': textForBg[darkHoverBg] ?? 0 };
+    return ButtonComponentColorMap.make(palette).minContrastRatio(minRatio).lightBackground(600, 500).lightBackground(400, 300, 500).darkBackground(600, 500, 700).get();
 }
 
 /** First shade of the palette with enough contrast against a surface. */
@@ -287,11 +252,7 @@ export function iconColumnColorMap(palette: Palette, gray: Palette): Record<stri
 }
 /** Color map of icon buttons (non-text contrast 3:1 on gray-50 / gray-700). */
 export function iconButtonColorMap(palette: Palette, gray: Palette): Record<string, number> {
-    const light = findShade(palette, gray[50], { minRatio: 3 });
-    const dark = findShade(palette, gray[700], { minRatio: 3, maxShade: 500, fromDarkest: true });
-    // Above 500 the shade is already dark: hover darkens it instead of lightening it.
-    const [text, hoverText] = light === null ? [900, 800] : light > 500 ? [light, light + 100] : [light + 100, light];
-    return { text, 'hover:text': hoverText, 'dark:text': dark ?? 200, 'dark:hover:text': dark === null ? 100 : dark - 100 };
+    return IconButtonComponentColorMap.make(palette).lightSurface(gray[50]).darkSurface(gray[700]).darkMaxShade(500).get();
 }
 /** Color map of toggles (non-text contrast, 3:1). */
 export function toggleColorMap(palette: Palette, gray: Palette): Record<string, number> {
@@ -324,15 +285,44 @@ const COMPONENT_COLOR_MAPS = {
     text: (palette: Palette, gray: Palette) => (palette === gray ? { text: 500, 'dark:text': 400 } : { text: findShade(palette, 'oklch(1 0 0)', { minShade: 600 }) ?? 950, 'dark:text': findShade(palette, gray[900], { maxShade: 400, fromDarkest: true }) ?? 50 }),
 } satisfies Record<string, (palette: Palette, gray: Palette) => Record<string, number>>;
 export type ColoredComponent = keyof typeof COMPONENT_COLOR_MAPS;
+/** Computes the color map of a component, given its palette (see `ColorManager.overrideColorMap()`). */
+export type ColorMapResolver = (palette: Palette, context: { gray: Palette; color: string; getDefault: () => Record<string, number> }) => Record<string, number>;
 
 const CLASS_FOR: Record<string, (s: number) => string> = {
     bg: (s) => `fi-bg-color-${s}`, 'hover:bg': (s) => `hover:fi-bg-color-${s}`, 'dark:bg': (s) => `dark:fi-bg-color-${s}`, 'dark:hover:bg': (s) => `dark:hover:fi-bg-color-${s}`,
     text: (s) => `fi-text-color-${s}`, 'hover:text': (s) => `hover:fi-text-color-${s}`, 'dark:text': (s) => `dark:fi-text-color-${s}`, 'dark:hover:text': (s) => `dark:hover:fi-text-color-${s}`,
 };
+import { ButtonComponentColorMap, IconButtonComponentColorMap } from './color-maps.ts';
+export { ButtonComponentColorMap, ComponentColorMap, IconButtonComponentColorMap, WCAG_AA_NON_TEXT, WCAG_AAA_TEXT, type ColorMap, type ColorMapSlotOptions } from './color-maps.ts';
 /** Registers named palettes and computes the color classes of components. */
 export class ColorManager {
     static DEFAULT_COLORS: Record<string, Palette> = { danger: Color.Red, gray: Color.Zinc, info: Color.Blue, primary: Color.Amber, success: Color.Green, warning: Color.Amber };
     private colors: Record<string, Palette> = { ...ColorManager.DEFAULT_COLORS };
+    private static colorMapOverrides = new Map<string, ColorMapResolver>();
+    /** Bumped by `overrideColorMap()`: the class caches of every color manager are keyed by it. */
+    private static colorMapGeneration = 0;
+    /**
+     * Replaces the shade selection of a component, for every panel (Filament: extending the component class, overriding
+     * `getColorMap()` and binding it in the container). `null` restores the default. The resolver receives the palette,
+     * the gray palette, the color name and the default map, and returns slots (`bg`, `text`, `dark:hover:text`…) mapped to shades.
+     */
+    static overrideColorMap(component: ColoredComponent, resolver: ColorMapResolver | null): void {
+        if (!(component in COMPONENT_COLOR_MAPS)) throw new Error(`Unknown colored component [${component}].`);
+        if (resolver) ColorManager.colorMapOverrides.set(component, resolver); else ColorManager.colorMapOverrides.delete(component);
+        ColorManager.colorMapGeneration++;
+    }
+    /** Color map of a component for a palette: the override of `overrideColorMap()`, or the default one. */
+    static getColorMap(component: ColoredComponent, palette: Palette, gray: Palette, color = ''): Record<string, number> {
+        const getDefault = () => COMPONENT_COLOR_MAPS[component](palette, gray);
+        const override = ColorManager.colorMapOverrides.get(component);
+        if (!override) return getDefault();
+        const map = override(palette, { gray, color, getDefault });
+        for (const [key, shade] of Object.entries(map ?? {})) {
+            if (!CLASS_FOR[key]) throw new Error(`Invalid color mapping key [${key}].`);
+            if (!Number.isInteger(shade) || shade < 0 || shade > 1000) throw new Error(`Invalid shade [${shade}] for the color mapping key [${key}].`);
+        }
+        return map ?? {};
+    }
     private cache = new Map<string, string[]>();
     /** Per-request colors (theme picked by the user); they take precedence over the panel's colors. */
     private scope = new AsyncLocalStorage<{ key: string; colors: Record<string, Palette> }>();
@@ -348,7 +338,7 @@ export class ColorManager {
     /** Color classes of a colored component. */
     getComponentClasses(component: ColoredComponent, color: string | null): string[] {
         if (!color) return [];
-        const key = `${this.scope.getStore()?.key ?? ''}:${component}:${color}`;
+        const key = `${ColorManager.colorMapGeneration}:${this.scope.getStore()?.key ?? ''}:${component}:${color}`;
         const hit = this.cache.get(key);
         if (hit) return hit;
         let classes: string[] = [];
@@ -358,7 +348,7 @@ export class ColorManager {
             const palette = this.getColor(color);
             if (palette) {
                 const gray = this.getColor('gray')!;
-                const map = COMPONENT_COLOR_MAPS[component](palette, gray);
+                const map = ColorManager.getColorMap(component, palette, gray, color);
                 classes.push(...Object.entries(map).map(([k, shade]) => CLASS_FOR[k](shade)));
             }
         }

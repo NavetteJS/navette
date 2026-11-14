@@ -270,3 +270,36 @@ export function generateComponent(name: string): string {
 </div>
 `;
 }
+
+/** Schema component class (`make:schema-component`): a `Component` with a configuration method that accepts a function. */
+export function generateSchemaComponent(name: string): string {
+    return `import { Component, type ComponentContext } from '@navette-js/schemas';
+import { configured, e, evaluate, type Lazy } from '@navette-js/support';
+
+/**
+ * ${headline(snake(name))} schema component: \`${name}.make().heading('…')\`, in any form, infolist or page schema.
+ * See "Custom components" in the schemas documentation: configuration methods, context, child components, exposed methods.
+ */
+export class ${name} extends Component {
+    private headingValue: Lazy<string | null, ComponentContext> = null;
+
+    static make(): ${name} {
+        return configured(new ${name}());
+    }
+
+    /** A static value, or a function of the context: \`({ record, get, operation }) => …\`. */
+    heading(heading: Lazy<string | null, ComponentContext>): this {
+        this.headingValue = heading;
+
+        return this;
+    }
+
+    // Returns the HTML of the component. Escape every value you print with \`e()\`.
+    async toHtml(): Promise<string> {
+        const heading = await evaluate(this.headingValue, this.context());
+
+        return \`<div class="${snake(name).replace(/_/g, '-')}">\${heading ? \`<h3>\${e(heading)}</h3>\` : ''}</div>\`;
+    }
+}
+`;
+}

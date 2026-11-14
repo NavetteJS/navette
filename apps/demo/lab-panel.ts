@@ -7,10 +7,11 @@ import {
     Cluster, DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, Tab, type AuthProvider, type Login,
 } from '@navette-js/panels';
-import { Section } from '@navette-js/schemas';
+import { Livewire, Section } from '@navette-js/schemas';
+import { Color, e } from '@navette-js/support';
+import { Component as WireComponent } from '@navette-js/wire';
 import { LabOrders } from './lab-orders.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
-import { Color } from '@navette-js/support';
 import {
     BulkActionGroup, Count, Filter, Group, IconColumn, Indicator, NumberConstraint, Panel as TablePanel, QueryBuilder, SelectColumn, SelectFilter, Split, Stack, Sum,
     TernaryFilter, TextColumn, TextConstraint, ToggleColumn, type Table,
@@ -212,6 +213,18 @@ class LabCards extends Resource {
     }
 }
 
+/** Nested Livewire component of the Fields lab form, with its own state and requests. */
+class LabBrandNotes extends WireComponent {
+    static callable = ['like'];
+    static locked = ['brandName'];
+    brandName: string | null = null;
+    likes = 0;
+    mount(params: Record<string, unknown>) { this.brandName ??= (params.record as { name?: string } | null)?.name ?? null; }
+    like() { this.likes++; }
+    placeholder() { return '<div class="lab-brand-notes-placeholder">Loading notes…</div>'; }
+    render() { return `<div class="lab-brand-notes"><p>Notes for ${e(this.brandName ?? 'a new brand')}</p><button type="button" wire:click="like">Like</button> <span data-likes>${this.likes}</span></div>`; }
+}
+
 /** A form page with the new field options. */
 class LabFields extends Resource {
     static slug = 'fields';
@@ -241,6 +254,24 @@ class LabFields extends Resource {
                 FileUpload.make('logo').avatar().imageEditor().imageEditorAspectRatioOptions(['1:1', '4:3', null]).dehydrated(false),
                 FileUpload.make('gallery').multiple().image().panelLayout('grid').reorderable().imageDimensions({ minWidth: 200 }).dehydrated(false),
             ]).columnSpanFull().columns(2),
+            // File upload options and nested Livewire components. Left out of the parity screenshots.
+            ...(process.env.NAVETTE_NO_THEMES ? [] : [
+                Section.make('Nested components').schema([
+                    Livewire.make(LabBrandNotes).key('brand-notes'),
+                    Livewire.make(LabBrandNotes, ({ record }) => ({ brandName: record ? `${(record as { name: string }).name} (lazy)` : null })).key('lazy-brand-notes').lazyLoaded(),
+                ]).columnSpanFull().columns(2),
+                Section.make('Upload options').schema([
+                    // Saved in the `seo_description` column: moved from the temporary folder, listed without reading the file.
+                    FileUpload.make('seo_description').label('Brand sheet').image()
+                        .directory(({ operation }) => `lab-brands/${operation}`).moveFiles().fetchFileInformation(false)
+                        .openable().downloadable()
+                        .getOpenableFileUrlUsing((file) => `/storage/${file}?view=open`)
+                        .getDownloadableFileUrlUsing((file) => `/storage/${file}?view=download`),
+                    // Validated but not saved (no column): a crop editor opens for images that are not 16:9.
+                    FileUpload.make('banner').image().imageAspectRatio('16:9').automaticallyOpenImageEditorForAspectRatio().saveRelationshipsUsing(() => {}),
+                    FileUpload.make('documents').multiple().minFiles(({ operation }) => (operation === 'create' ? 2 : null)).maxFiles(({ get }) => (get('name') === 'Many' ? 4 : 3)).image().saveRelationshipsUsing(() => {}),
+                ]).columnSpanFull().columns(2),
+            ]),
             Repeater.make('contacts').schema([TextInput.make('name').required(), TextInput.make('email').email()]).columns(2)
                 .itemLabel(({ state }) => (state.name as string) || null).collapsible().cloneable().reorderableWithButtons().defaultItems(1).columnSpanFull().dehydrated(false)
                 // Item actions: a confirmed delete, "Insert between", and an extra action that validates its item.
