@@ -288,8 +288,14 @@ export class Constraint {
     /** Objection model of the table's records, used to list related records. */
     protected _model: any = null;
     constructor(name: string, type: ConstraintType, icon: string) {
-        if (!isItemKey(name) || name === OR) throw new Error(`Invalid constraint name: ${name}`);
+        // Dot syntax (`creator.name`, like Filament): each segment is a plain key; the attribute is the last segment, the
+        // relationship the ones before it (`relationship('creator', 'name')`). Relationship constraints keep their whole name.
+        if (!name.split('.').every((segment) => isItemKey(segment)) || name === OR || name.length > 128) throw new Error(`Invalid constraint name: ${name}`);
         this.name = name; this.type = type; this._icon = icon;
+        if (type !== 'relationship' && name.includes('.')) {
+            this._relationship = name.slice(0, name.lastIndexOf('.'));
+            this._column = name.slice(name.lastIndexOf('.') + 1);
+        }
     }
     label(label: string): this { this._label = label; return this; }
     private _pickerGroup: string | null = null;
@@ -315,7 +321,7 @@ export class Constraint {
     isNullable(): boolean { return this._nullable; }
     model(model: any): this { this._model = model; return this; }
     getModel(): any { return this._model; }
-    getLabel(): string { return this._label ?? headline(this.name); }
+    getLabel(): string { return this._label ?? headline(this.name.split('.')[0]); }
     getAttributeLabel(): string { return this._attributeLabel ?? this.getLabel(); }
     getIcon(): string { return this._icon; }
     getColumn(): string { return this._column ?? this.name; }
@@ -698,6 +704,7 @@ const SQL: Record<SqlDialect, { date: string; month: string; year: string; text:
 
 /** Correlated subquery of the records related to the query's records (Objection `relatedQuery`). */
 function relatedQuery(query: any, relationship: string, modify: RelationshipQueryModifier | undefined): any {
+    if (relationship.includes('.')) throw new Error(`Query builder: nested relationship ${relationship} is only supported by attribute constraints (author.country.name); count or aggregate a direct relationship of the table's model.`);
     const model = query?.modelClass?.();
     if (typeof model?.relatedQuery !== 'function') throw new Error(`Query builder: relationship ${relationship} requires an Objection query (model with relationMappings).`);
     // Fixed alias (Objection only sets one for some relationships): related columns are qualified with it.
@@ -715,6 +722,11 @@ export function applyConditions(query: any, nodes: ConditionNode[], dialect: Sql
     for (const node of nodes) {
         if ('or' in node) {
             query.where((builder: any) => { for (const group of node.or) builder.orWhere((inner: any) => applyConditions(inner, group, dialect)); });
+        } else if ('nodes' in node && node.relationship.includes('.')) {
+            const dot = node.relationship.indexOf('.');
+            const sub = relatedQuery(query, node.relationship.slice(0, dot), undefined);
+            applyConditions(sub, [{ ...node, relationship: node.relationship.slice(dot + 1) }], dialect);
+            query.whereExists(sub);
         } else if ('nodes' in node) {
             const sub = relatedQuery(query, node.relationship, node.modify);
             // Qualify columns with the related table: the subquery may join a pivot table.
