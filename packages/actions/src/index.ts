@@ -185,8 +185,8 @@ export class Action implements Renderable {
     }
     /** A computed URL depends on the record, so the host checks it again on mount (`resolveUrl`). */
     isMountable(): boolean { return (this._handler !== null || this._schema !== null || this.hasModalContentOnly()) && this._url === null; }
-    /** A modal with custom content, without handler nor form (a help modal…). */
-    private hasModalContentOnly(): boolean { return this._handler === null && this._action === null && (this._modalContent !== null || this._modalContentFooter !== null); }
+    /** A modal without handler nor form (custom content, a heading or description: a help modal…). */
+    private hasModalContentOnly(): boolean { return this._handler === null && this._action === null && this._alpineClick === null && this._lazyAlpineClick === null && this._submit === null && this.hasModal(); }
     /** URL of the action in this context; an action with a URL is a link, never a mounted action. */
     resolveUrl(ctx: ComponentContext): string | null { return this._lazyUrl ? this._lazyUrl(ctx) : this._url; }
     /** Whether the action opens a modal: `modal()`, a confirmation, a form, or a custom heading, eyebrow, description or content. */
