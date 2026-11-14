@@ -24,6 +24,7 @@ my-app/
     ├── fields/               custom form fields (npx navette make:field)
     ├── entries/              custom infolist entries (npx navette make:entry)
     ├── columns/              custom table columns (npx navette make:column)
+    ├── schemas/components/   custom schema components (npx navette make:schema-component)
     ├── panels/
     │   ├── admin.ts          the admin panel (/admin)
     │   └── app.ts            the user panel (/app), if you chose it
@@ -40,7 +41,7 @@ my-app/
 
 The blank template has the same layout with only the admin panel: a users resource, a dashboard and no widgets yet.
 
-The `components`, `fields`, `entries` and `columns` folders are created by the [generators](/getting-started/cli) the first time you use them. Fields, entries and columns are classes that you import where you use them; components are EJS files used as tags in your views (see [creating components](/components/creating-components)).
+The `components`, `fields`, `entries`, `columns` and `schemas/components` folders are created by the [generators](/getting-started/cli) the first time you use them. Fields, entries, columns and schema components are classes that you import where you use them; components are EJS files used as tags in your views (see [creating components](/components/creating-components)).
 
 ## The server
 

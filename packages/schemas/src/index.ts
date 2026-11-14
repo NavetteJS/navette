@@ -507,6 +507,63 @@ export class Html extends Component {
     async toHtml(): Promise<string> { return typeof this.content === 'function' ? this.content(this.context()) : this.content; }
 }
 
+/** A Livewire component class of `@navette-js/wire` (`class Chart extends Component`), or the name it is registered under. */
+export type LivewireComponentReference = string | ((new () => any) & { name: string });
+/**
+ * Inserts a nested Livewire component (`@navette-js/wire`), mounted as a child of the page with its own state and
+ * requests. Its parameters (`data`) are passed to its `mount()` and set on its matching public properties. A class is
+ * registered with the page's runtime under `livewire.<kebab-case class name>` the first time it is rendered, unless it
+ * was registered before (`runtime.register(name, Class)`, recommended: see the docs).
+ */
+const isLivewireClass = (value: unknown): value is (new () => any) & { name: string } => typeof value === 'function' && (/^class[\s{]/.test(Function.prototype.toString.call(value)) || typeof value.prototype?.render === 'function');
+export class Livewire extends Component {
+    private _component: Lazy<LivewireComponentReference, ComponentContext>;
+    private _data: Lazy<Record<string, unknown>, ComponentContext>;
+    constructor(component: Lazy<LivewireComponentReference, ComponentContext>, data: Lazy<Record<string, unknown>, ComponentContext> = {}) {
+        super();
+        this._component = component;
+        this._data = data;
+    }
+    static make(component: Lazy<LivewireComponentReference, ComponentContext>, data: Lazy<Record<string, unknown>, ComponentContext> = {}): Livewire { return configured(new Livewire(component, data)); }
+    component(component: Lazy<LivewireComponentReference, ComponentContext>): this { this._component = component; return this; }
+    data(data: Lazy<Record<string, unknown>, ComponentContext>): this { this._data = data; return this; }
+    /** Mounts the component when it enters the viewport (its `placeholder()` is shown meanwhile). */
+    lazyLoaded(condition: Lazy<boolean, ComponentContext> = true): this { return super.lazyLoaded(condition); }
+    lazy(condition: Lazy<boolean, ComponentContext> = true): this { return this.lazyLoaded(condition); }
+    async isLazyLoaded(): Promise<boolean> { return Boolean(await evaluate(this._lazyLoaded, this.context())); }
+    async getData(): Promise<Record<string, unknown>> { return (await evaluate(this._data, this.context())) ?? {}; }
+    /** Name of the component in the page's runtime; a class is registered on first use. */
+    async getComponent(): Promise<string> {
+        // A component class is a function too: only other functions are evaluated.
+        const component = isLivewireClass(this._component) ? this._component : await evaluate(this._component, this.context());
+        if (typeof component === 'string') return component;
+        const runtime = (this.livewire as any)._runtime;
+        if (!runtime || typeof runtime.register !== 'function') throw new Error('Livewire: the schema is not rendered by a Livewire component.');
+        const known = runtime.nameOf(component);
+        if (known && runtime.has(known)) return known;
+        const base = component.name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+        if (!base) throw new Error('Livewire: register an anonymous component class with runtime.register() and pass its name.');
+        const name = `livewire.${base}`;
+        if (runtime.has(name)) throw new Error(`Livewire: another component is registered as [${name}]; register ${component.name} under its own name with runtime.register().`);
+        runtime.register(name, component);
+        return name;
+    }
+    /**
+     * Parameters of the component: `record` (the record of the schema), then `data`. With `lazyLoaded()`, `record` is left
+     * out: the parameters of a lazy component are written in the page (signed, not encrypted), so pass its key in `data`.
+     */
+    async getComponentProperties(): Promise<Record<string, unknown>> {
+        return { ...((await this.isLazyLoaded()) ? {} : { record: this.container.getRecord() ?? null }), ...(await this.getData()) };
+    }
+    async toHtml(): Promise<string> {
+        const host = this.livewire as any;
+        if (typeof host.mountChild !== 'function') throw new Error('Livewire: the schema is not rendered by a Livewire component.');
+        const name = await this.getComponent();
+        const html: string = await host.mountChild(name, await this.getComponentProperties(), this.getLivewireKey() ?? `${host.id}.${name}`, { lazy: await this.isLazyLoaded() });
+        return Object.keys(this._extraAttributes).length ? `<div ${new Attributes().merge({ ...this._extraAttributes }).toHtml()}>${html}</div>` : html;
+    }
+}
+
 /** A tab of a Tabs component: a label, an optional icon and badge, and its own schema. */
 export class Tab extends Component {
     private children: Component[] = [];
