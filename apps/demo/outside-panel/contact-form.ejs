@@ -1,0 +1,19 @@
+<div class="outside-contact" style="display: grid; gap: 1.5rem;">
+    <h1 class="fi-header-heading">Contact us</h1>
+
+    <form wire:submit="send" data-test="contact-form">
+        <%- await schema('form') %>
+
+        <div style="margin-top: 1rem;">
+            <x-button type="submit" icon="o-paper-airplane">Send</x-button>
+        </div>
+    </form>
+
+    <x-section heading="Our office" compact>
+        <%- await schema('office') %>
+    </x-section>
+
+    <div><%- await action('newsletter') %></div>
+
+    <%- await modals() %>
+</div>

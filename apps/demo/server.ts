@@ -170,6 +170,8 @@ if (!process.env.NAVETTE_NO_THEMES) panel.profile(EditProfile, false).mailer(fil
 const secondPanel = appPanel({ key, login: DemoLogin, auth: accounts, mailLog, appUrl: `http://127.0.0.1:${port}`, profile: !process.env.NAVETTE_NO_THEMES });
 if (process.env.NAVETTE_HOOK_PROBE) secondPanel.plugin((await import('./hook-probe.ts')).hookProbe(CustomerResource));
 app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
+// Components outside any panel (`/outside/...`), with the lab: NAVETTE_NO_LAB turns them off too.
+if (!process.env.NAVETTE_NO_LAB) app.use((await import('./outside-panel/index.ts')).outsidePanel(key));
 // Third panel (`/lab`): recent features on the demo data, outside the pages compared with Filament. NAVETTE_NO_LAB turns it off.
 if (!process.env.NAVETTE_NO_LAB) app.use(panelRouter(labPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
