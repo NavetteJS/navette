@@ -1,6 +1,7 @@
 // Files of a new Navette project, built from the `npm create navette` answers.
 // The generated code doubles as an example: each file has a single, clear role.
 import { randomBytes } from 'node:crypto';
+import { agentFiles } from './agents.ts';
 
 export type ProjectOptions = {
     /** Folder and package name. */
@@ -734,6 +735,12 @@ npx navette make:widget SalesChart --type=chart
 \`\`\`
 
 Add \`--panel=app\` to target the user panel.
+
+## Documentation
+
+The documentation of the installed Navette version is available offline: \`npx navette docs search <terms>\`, \`npx navette docs show <page>\`. Online: https://navettejs.github.io/navette/. AI coding agents: see \`AGENTS.md\`.
 `;
+    // Instructions for AI coding agents.
+    Object.assign(files, agentFiles(o));
     return files;
 }
