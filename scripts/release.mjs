@@ -30,7 +30,7 @@ const DESCRIPTIONS = {
     support: 'Shared utilities, colors, icons, views and translations for Navette.',
     tables: 'Interactive tables for Navette admin panels.',
     wire: 'Server-side runtime compatible with Livewire 3 for Node.js and Express.',
-    cli: 'Command-line tools for Navette projects: migrations, users, and generators for resources, pages, widgets and form fields (npx navette).',
+    cli: 'Command-line tools for Navette projects: migrations, users, generators for resources, pages, widgets and form fields, and the documentation offline (npx navette).',
     create: 'Create a Navette project: npm create navette@latest',
 };
 const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
@@ -58,6 +58,8 @@ for (const name of packages) {
     // 2. Extra files shipped with the package.
     for (const entry of EXTRA) if (fs.existsSync(path.join(source, entry))) fs.cpSync(path.join(source, entry), path.join(target, entry), { recursive: true });
     fs.copyFileSync(path.join(root, 'LICENSE'), path.join(target, 'LICENSE'));
+    // The CLI ships the documentation of its version as Markdown, for `npx navette docs` and coding agents.
+    if (name === 'cli') execFileSync(process.execPath, [path.join(root, 'apps', 'docs', 'export-markdown.ts'), path.join(target, 'docs'), `--version=${version}`], { stdio: 'inherit', cwd: root });
     if (name === 'panels' || name === 'wire' || name === 'support') fs.copyFileSync(path.join(root, 'THIRD-PARTY-NOTICES.md'), path.join(target, 'THIRD-PARTY-NOTICES.md'));
 
     // 3. Publishing package.json: exports point to lib/, internal dependencies pinned to the same version.
@@ -70,7 +72,7 @@ for (const name of packages) {
     const published = {
         name: manifest.name, version, description: DESCRIPTIONS[name] ?? '', license: 'MIT', type: 'module',
         exports, types: exports['.']?.types, ...(bin ? { bin } : {}),
-        files: ['lib', ...EXTRA.filter((entry) => fs.existsSync(path.join(source, entry))), 'LICENSE', 'README.md', ...(fs.existsSync(path.join(target, 'THIRD-PARTY-NOTICES.md')) ? ['THIRD-PARTY-NOTICES.md'] : [])],
+        files: ['lib', ...EXTRA.filter((entry) => fs.existsSync(path.join(source, entry))), ...(name === 'cli' ? ['docs'] : []), 'LICENSE', 'README.md', ...(fs.existsSync(path.join(target, 'THIRD-PARTY-NOTICES.md')) ? ['THIRD-PARTY-NOTICES.md'] : [])],
         engines: { node: '>=24' },
         repository: { type: 'git', url: 'git+https://github.com/NavetteJS/navette.git', directory: `packages/${name}` },
         homepage: 'https://github.com/NavetteJS/navette#readme',

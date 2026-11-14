@@ -300,6 +300,26 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
             say(`\n  Register it in ${resource}: static widgets = [${name}] and static headerWidgets = [${name}] (above the list).`);
         },
     },
+    docs: {
+        usage: 'navette docs [search <terms> | show <page>[#heading]] [--descriptions]   List, search or print the documentation pages of the installed version (offline Markdown)',
+        async run() {
+            const { docsDirectory, formatList, formatResults, loadDocs, resolvePage, searchDocs, showPage } = await import('./docs.ts');
+            const dir = docsDirectory() ?? fail('No documentation found: it ships with @navette-js/cli (in the repository, run `node apps/docs/build.ts` first, or set NAVETTE_DOCS_DIR).');
+            const docs = loadDocs(dir);
+            const [action, ...args] = positional;
+            if (!action || action === 'list') return say(formatList(docs, { descriptions: flags.descriptions === true }));
+            if (action === 'search') {
+                const query = args.join(' ').trim() || fail('Give search terms, e.g. npx navette docs search select options');
+                return say(formatResults(searchDocs(docs, query, { limit: Number(flag('limit') ?? 10) || 10 }), query));
+            }
+            if (action !== 'show') fail(`Unknown docs command: ${action}. Use: npx navette docs, docs search <terms>, docs show <page>`);
+            const reference = args.join(' ') || fail('Give a page, e.g. npx navette docs show tables/columns/overview');
+            const { page, anchor, candidates } = resolvePage(docs, reference);
+            if (!page) fail(`No page "${reference}".${candidates.length ? ` Did you mean: ${candidates.slice(0, 8).map((entry) => entry.path).join(', ')}?` : ' List the pages with: npx navette docs'}`);
+            const markdown = showPage(docs, page!, anchor) ?? fail(`No heading "#${anchor}" in ${page!.path}.`);
+            process.stdout.write(markdown);
+        },
+    },
     'make:plugin': {
         usage: 'navette make:plugin <Name> [--standalone]           Create a plugin package in plugins/ (a panel plugin, or a schema component with --standalone)',
         async run() {
