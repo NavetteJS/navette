@@ -1,6 +1,6 @@
 <%# Panel HTML document %>
 <!DOCTYPE html>
-<html lang="en" dir="ltr" class="fi">
+<html lang="<%= lang %>" dir="<%= dir %>" class="nv">
     <head>
         <%- renderHook('panels::head.start', renderHookScopes) %>
         <meta charset="utf-8" />
@@ -63,7 +63,7 @@
                 --default-theme-mode: system;
             }
 
-            html.fi {
+            html.nv {
                 --livewire-progress-bar-color: var(--primary-500);
             }
         </style>

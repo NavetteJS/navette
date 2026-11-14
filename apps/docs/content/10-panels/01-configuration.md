@@ -240,6 +240,18 @@ panel.bootUsing(async (panel, req) => {
 
 An error thrown by the function is passed to the Express error handler.
 
+## Setting the locale
+
+`setLocale()` of `@navette-js/support/i18n` chooses the language of Navette's own texts (labels, notifications, relative dates, calendars) and of your `t()` translations:
+
+```ts
+import { setLocale } from '@navette-js/support/i18n';
+
+setLocale('fr');
+```
+
+The page document follows it: `<html lang="fr" dir="ltr" class="nv">`. Right-to-left languages (Arabic, Hebrew, Persian, Urdu…) get `dir="rtl"`. Locale names in the `pt_BR` form are accepted and written `pt-BR`.
+
 ## Configuring the topbar and the sidebar
 
 By default, the panel has a topbar, with the user menu and global search, and a sidebar with the navigation. Several methods change this layout:

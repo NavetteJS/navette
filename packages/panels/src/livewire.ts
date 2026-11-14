@@ -12,6 +12,7 @@ import type { Request, RequestHandler, Response, Router } from 'express';
 import { ActionGroup, type Action } from '@navette-js/actions';
 import type { DataAdapter } from '@navette-js/database';
 import { e, type Palette } from '@navette-js/support';
+import { intlLocale, localeDirection } from '@navette-js/support/i18n';
 import { Table } from '@navette-js/tables';
 import { UploadStore, WireError, WireRuntime, type Component } from '@navette-js/wire';
 import { csrfToken, wireScripts, wireStyles } from '@navette-js/wire/express';
@@ -196,7 +197,7 @@ export class Livewire {
             panel.withTheme(req, () => panel.colors.renderCssVariables()),
             NavetteAsset.renderStyles(null, { panel: panel.getId() }),
             `<link rel="stylesheet" href="${e(panel.getTheme() ?? panel.assetUrl('css/navette/navette/app.css'))}" />`,
-            `<style>:root{--font-family:'${panel.getFont().family.replace(/['\\<>]/g, '')}';--font-family-mono:'ui-monospace';--font-family-serif:'ui-serif';}html.fi{--livewire-progress-bar-color:var(--primary-500);}</style>`,
+            `<style>:root{--font-family:'${panel.getFont().family.replace(/['\\<>]/g, '')}';--font-family-mono:'ui-monospace';--font-family-serif:'ui-serif';}html.nv{--livewire-progress-bar-color:var(--primary-500);}</style>`,
             theme?.css ? `<style data-navette-theme>${theme.css}</style>` : '',
             `<script>if (localStorage.getItem('navette:theme:mode') === 'dark' || ((localStorage.getItem('navette:theme:mode') ?? 'system') === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark')</script>`,
             wireStyles(),
@@ -228,7 +229,7 @@ export class Livewire {
                 const title = options.title ?? (mounted.component as any).getTitle?.() ?? name;
                 const parts = { title, component: mounted.html, styles: this.styles(req, res), scripts: this.scripts(req, res), notifications: await this.notifications(req, res) };
                 res.setHeader('Cache-Control', 'no-store');
-                res.send(options.layout ? options.layout(parts, req, res) : `<!DOCTYPE html>\n<html lang="en" dir="ltr" class="fi">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${e(title)}</title>\n${parts.styles}\n</head>\n<body class="nv-body nv-livewire-page">\n<main class="nv-livewire-page-main" style="max-width: 80rem; margin: 0 auto; padding: 2rem 1rem;">${parts.component}</main>\n${parts.notifications}\n${parts.scripts}\n</body>\n</html>`);
+                res.send(options.layout ? options.layout(parts, req, res) : `<!DOCTYPE html>\n<html lang="${e(intlLocale())}" dir="${localeDirection()}" class="nv">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${e(title)}</title>\n${parts.styles}\n</head>\n<body class="nv-body nv-livewire-page">\n<main class="nv-livewire-page-main" style="max-width: 80rem; margin: 0 auto; padding: 2rem 1rem;">${parts.component}</main>\n${parts.notifications}\n${parts.scripts}\n</body>\n</html>`);
             } catch (error) {
                 if (error instanceof WireError && [401, 403, 404].includes(error.status)) return void res.status(error.status).type('text/plain').send(error.status === 404 ? 'Not Found' : error.status === 401 ? 'Unauthorized' : 'Forbidden');
                 next(error);

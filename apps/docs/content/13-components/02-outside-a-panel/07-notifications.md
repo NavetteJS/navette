@@ -9,7 +9,7 @@ title: Rendering notifications outside a panel
 ```ts
 app.get('/shop', async (req, res) => {
     res.send(`<!DOCTYPE html>
-<html class="fi">
+<html class="nv">
 <head>${livewire.styles(req, res)}</head>
 <body class="nv-body">
     ${await livewire.mount('list-products', {}, req, res)}

@@ -90,7 +90,7 @@ export function outsidePanel(key: string): Router {
     router.get('/outside/shop', async (req, res) => {
         const catalog = await livewire.mount('product-catalog', {}, req, res);
         res.send(`<!DOCTYPE html>
-<html lang="en" class="fi">
+<html lang="en" class="nv">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />

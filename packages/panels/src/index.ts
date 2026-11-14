@@ -84,7 +84,7 @@ import { ContentTabPosition, managersOfEntry, RelationManagerConfiguration, rela
 import { WidgetConfiguration, widgetClassOf, widgetPropertiesOf, type WidgetEntry } from './widget-configuration.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, cspNonce, getResponseCspNonce, hasCustomHtmlSanitizerConfig, HtmlString, isEnum, isEnumCase, RenderHookRegistry, runWithCspNonce, sanitizeHtml, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, readRecordPath, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Enum, type EnumCase, type Palette, type RenderHookCallback } from '@navette-js/support';
-import { getLocale, t, tc } from '@navette-js/support/i18n';
+import { getLocale, intlLocale, localeDirection, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import { Model as DatabaseModel, transaction as databaseTransaction, type DataAdapter } from '@navette-js/database';
@@ -5563,7 +5563,7 @@ export function renderErrorPage(panel: Panel, req: Request, res: Response, statu
         const error = options.error instanceof Error ? options.error : null;
         const theme = panel.resolveTheme(req);
         return views.render('navette-panels::errors.page', {
-            status, locale: getLocale(), title: text('title'), heading: text('title'), description: options.description ?? text('description'),
+            status, locale: intlLocale(), dir: localeDirection(), title: text('title'), heading: text('title'), description: options.description ?? text('description'),
             illustration: errorIllustration(status, `${label}: ${text('title')}`), badge: uiBadge({ color: badgeColor, size: 'lg' }, e(label)), actions, css: ERROR_PAGE_CSS,
             // The stack only helps while developing: never shown otherwise.
             details: error && process.env.NODE_ENV === 'development' ? (error.stack ?? String(error)) : null,
@@ -6024,6 +6024,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const { class: extraBodyClass, ...extraBodyAttributes } = ((mounted.component as any).getExtraBodyAttributes?.() ?? {}) as Record<string, AttrValue>;
         const bodyAttributes = Object.keys(extraBodyAttributes).length ? new Attributes(Object.fromEntries(Object.entries(extraBodyAttributes).filter(([attribute]) => /^[a-zA-Z_:@][a-zA-Z0-9_:.@-]*$/.test(attribute)))).toHtml() : '';
         res.send(spaLinks(views.render('navette-panels::layout.base', {
+            lang: intlLocale(), dir: localeDirection(),
             sidebarWidth: panel.getSidebarWidth(), collapsedSidebarWidth: panel.getCollapsedSidebarWidth(), errorNotifications,
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass: cls([bodyClass, typeof extraBodyClass === 'string' ? extraBodyClass : null]) || null, bodyAttributes, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),

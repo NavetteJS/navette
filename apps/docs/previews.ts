@@ -188,7 +188,7 @@ export async function renderPreview(preview: Preview): Promise<RenderedPreview> 
 /** Standalone preview page. It follows the light or dark theme of the parent page and sizes its iframe. */
 export function previewDocument(rendered: RenderedPreview): string {
     return `<!DOCTYPE html>
-<html lang="en" class="fi">
+<html lang="en" class="nv">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
