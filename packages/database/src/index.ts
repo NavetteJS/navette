@@ -2,8 +2,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import knexFactory, { type Knex } from 'knex';
 import { Model, type ModelClass, type QueryBuilder } from 'objection';
+import { applyCursorCondition, cursorOrdersOf, decodeCursor, encodeCursor, searchWords } from './cursor.ts';
 
 export { Model };
+export { decodeCursor, encodeCursor, searchWords } from './cursor.ts';
+export type { Cursor, CursorOrder } from './cursor.ts';
 export type { Knex };
 
 export type SortDirection = 'asc' | 'desc';
@@ -13,11 +16,25 @@ export type ListQuery = {
     searchColumns?: string[];
     /** `false`: the search term is matched as a whole, instead of word by word. */
     splitSearchTerms?: boolean;
+    /** Replaces the global search: receives the query and the whole search term (`Table.searchUsing()`). */
+    searchUsing?: ((query: any, search: string) => void) | null;
+    /** More global search conditions, OR-ed with `searchColumns` for each word (custom column search queries). */
+    searchConstraints?: ((query: any, search: string) => void)[];
     /** Per-column search: all conditions must match. */
     columnSearches?: Record<string, string>;
+    /**
+     * How each per-column search applies: the database columns it looks in (the key itself by default), whether the term is
+     * split into words (default), or a custom query replacing the column match.
+     */
+    columnSearchOptions?: Record<string, { columns?: string[]; split?: boolean; query?: ((query: any, search: string) => void) | null }>;
     /** Soft-deleted records: excluded by default, included, or only those. */
     trashed?: 'without' | 'with' | 'only';
-    sort?: { column: string; direction: SortDirection } | null;
+    /** Sort: by `column` (or by every one of `columns`), or by `modify` (a custom order). */
+    sort?: TableSort | null;
+    /** Further sorts after `sort` (a table's default sort, applied after the user's). */
+    thenSort?: TableSort[];
+    /** `false`: no final sort by the primary key. */
+    keySort?: boolean;
     /** Table grouping: this sort is applied before `sort`. */
     /** Rows are first ordered by their group: by `column`, or by `modify` (a custom order). */
     groupSort?: { column: string; direction: SortDirection; modify?: (query: any, direction: SortDirection) => void } | null;
@@ -30,7 +47,12 @@ export type ListQuery = {
 };
 /** Aggregates of one group of records (`DataAdapter.aggregateGroups()`). */
 export type AggregateGroup = { key: unknown; count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> };
-export type Page<T> = { records: T[]; total: number; page: number; perPage: number; lastPage: number; from: number | null; to: number | null };
+export type TableSort = { column: string; direction: SortDirection; columns?: string[]; modify?: ((query: any, direction: SortDirection) => void) | null };
+export type Page<T> = {
+    records: T[]; total: number; page: number; perPage: number; lastPage: number; from: number | null; to: number | null;
+    /** Cursor pagination (`cursorPaginate()`): the cursors of the previous and next pages, `null` when there is none. */
+    cursor?: { previous: string | null; next: string | null };
+};
 
 /** What the framework needs to list, read and write records, independently of the ORM. */
 export interface DataAdapter<T = any> {
@@ -49,6 +71,11 @@ export interface DataAdapter<T = any> {
     getLabel(): string;
     count(): Promise<number>;
     paginate(query: ListQuery): Promise<Page<T>>;
+    /**
+     * Cursor pagination (Filament's `paginationMode('cursor')`): the `perPage` records after (or before) `cursor`, without
+     * counting the records; `page.cursor` holds the cursors of the previous and next pages. Optional.
+     */
+    cursorPaginate?(query: Omit<ListQuery, 'page'> & { cursor: string | null }): Promise<Page<T>>;
     find(key: string | number): Promise<T | null>;
     /** Like `find()`, soft-deleted records included (tables that show deleted records). Optional. */
     findWithTrashed?(key: string | number): Promise<T | null>;
@@ -280,33 +307,83 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         if (query.keys) q.whereIn(`${this.model.tableName}.${this.keyColumn}`, query.keys.map(String).slice(0, 10000));
         for (const modifier of query.modifiers ?? []) modifier(q);
         const term = (query.search ?? '').trim();
-        const words = query.splitSearchTerms === false ? (term ? [term] : []) : term.split(/\s+/).filter(Boolean);
-        const columns = query.searchColumns ?? [];
-        if (words.length && columns.length) {
-            // Each word must match at least one column, case-insensitively; LIKE wildcards in the input are escaped.
-            for (const word of words) {
-                q.where((sub) => {
-                    for (const column of columns) sub.orWhereRaw("lower(??) like ? escape '\\'", [column, `%${escapeLike(word.toLowerCase())}%`]);
-                });
+        const like = (sub: any, column: string, word: string) => sub.orWhereRaw("lower(??) like ? escape '\\'", [column, `%${escapeLike(word.toLowerCase())}%`]);
+        if (term && query.searchUsing) q.where((sub) => { query.searchUsing!(sub, term); });
+        else {
+            const words = query.splitSearchTerms === false ? (term ? [term] : []) : searchWords(term);
+            const columns = query.searchColumns ?? [];
+            const constraints = query.searchConstraints ?? [];
+            if (words.length && (columns.length || constraints.length)) {
+                // Each word must match at least one column, case-insensitively; LIKE wildcards in the input are escaped.
+                for (const word of words) {
+                    q.where((sub) => {
+                        for (const column of columns) like(sub, column, word);
+                        for (const constraint of constraints) sub.orWhere((inner: any) => { constraint(inner, word); });
+                    });
+                }
             }
         }
         for (const [column, value] of Object.entries(query.columnSearches ?? {})) {
-            for (const word of String(value ?? '').trim().split(/\s+/).filter(Boolean)) q.whereRaw("lower(??) like ? escape '\\'", [column, `%${escapeLike(word.toLowerCase())}%`]);
+            const options = query.columnSearchOptions?.[column] ?? {};
+            const text = String(value ?? '').trim();
+            for (const word of options.split === false ? (text ? [text] : []) : searchWords(text)) {
+                q.where((sub) => {
+                    if (options.query) sub.where((inner: any) => { options.query!(inner, word); });
+                    else for (const target of options.columns?.length ? options.columns : [column]) like(sub, target, word);
+                });
+            }
         }
         return q;
     }
 
     private async finishPagination(q: QueryBuilder<M, M[]>, query: ListQuery): Promise<Page<M>> {
         const total = await q.clone().resultSize();
-        if (query.groupSort?.modify) query.groupSort.modify(q, query.groupSort.direction);
-        else if (query.groupSort) q.orderBy(query.groupSort.column, query.groupSort.direction);
-        if (query.sort) q.orderBy(query.sort.column, query.sort.direction);
-        q.orderBy(this.keyColumn, 'asc');
+        this.applySorts(q, query);
         const perPage = Math.max(1, query.perPage);
         const lastPage = Math.max(1, Math.ceil(total / perPage));
         const page = Math.min(Math.max(1, query.page), lastPage);
         const records = await q.offset((page - 1) * perPage).limit(perPage);
         return { records, total, page, perPage, lastPage, from: records.length ? (page - 1) * perPage + 1 : null, to: records.length ? (page - 1) * perPage + records.length : null };
+    }
+
+    /** Group sort, then the sorts, then the key (unless `keySort: false`). */
+    private applySorts(q: QueryBuilder<M, M[]>, query: Omit<ListQuery, 'page' | 'perPage'>): void {
+        if (query.groupSort?.modify) query.groupSort.modify(q, query.groupSort.direction);
+        else if (query.groupSort) q.orderBy(query.groupSort.column, query.groupSort.direction);
+        for (const sort of [query.sort ?? null, ...(query.thenSort ?? [])]) {
+            if (!sort) continue;
+            if (sort.modify) sort.modify(q, sort.direction);
+            else for (const column of sort.columns?.length ? sort.columns : [sort.column]) q.orderBy(column, sort.direction);
+        }
+        if (query.keySort !== false) q.orderBy(this.keyColumn, 'asc');
+    }
+
+    /**
+     * Cursor pagination: the query's orderings (sorts, then the key) must be plain columns. The cursor comes from the
+     * browser: anything that does not decode to values of exactly these columns gives the first page.
+     */
+    async cursorPaginate(query: Omit<ListQuery, 'page'> & { cursor: string | null }): Promise<Page<M>> {
+        const q = this.filtered(query);
+        // The key always ends the orderings: without a unique last ordering, a cursor could skip or repeat records.
+        this.applySorts(q, { ...query, keySort: true });
+        const orders = cursorOrdersOf(q.toKnexQuery());
+        const cursor = decodeCursor(query.cursor, orders);
+        const perPage = Math.max(1, query.perPage);
+        if (cursor) {
+            applyCursorCondition(q, orders, cursor);
+            // Going back: the orderings are reversed to read the records just before the cursor, then put back in order.
+            if (!cursor.pointsToNextItems) { q.clearOrder(); for (const order of orders) q.orderBy(order.column, order.direction === 'asc' ? 'desc' : 'asc'); }
+        }
+        const rows = (await q.limit(perPage + 1)) as M[];
+        const hasMore = rows.length > perPage;
+        const records = rows.slice(0, perPage);
+        if (cursor && !cursor.pointsToNextItems) records.reverse();
+        const first = records[0] as Record<string, unknown> | undefined, last = records[records.length - 1] as Record<string, unknown> | undefined;
+        // Forward: a previous page exists once a cursor was followed, a next one if more rows were read; backward, the opposite.
+        const forward = !cursor || cursor.pointsToNextItems;
+        const previous = first && (forward ? cursor !== null : hasMore) ? encodeCursor(first, orders, false) : null;
+        const next = last && (forward ? hasMore : true) ? encodeCursor(last, orders, true) : null;
+        return { records, total: records.length, page: 1, perPage, lastPage: 1, from: records.length ? 1 : null, to: records.length || null, cursor: { previous, next } };
     }
 
     async find(key: string | number): Promise<M | null> { return ((await this.base(this.findsTrashed ? 'with' : 'without').findById(key)) as M | undefined) ?? null; }

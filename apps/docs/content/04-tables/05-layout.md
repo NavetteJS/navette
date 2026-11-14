@@ -368,6 +368,27 @@ Split.make([
 The HTML of a `View` is inserted as it is. Escape record data with `e()` from `@navette-js/support`, or with `<%= %>` in an EJS view.
 </Aside>
 
+An EJS view receives more data with `viewData()`, and can render columns inside it with `components()`. The columns given to `components()` are columns of the table like the others (they can be sortable, searchable or toggleable); they are rendered first, and their HTML reaches the view as `children`. The view also receives `getRecord()`:
+
+```ts
+import { TextColumn, View } from '@navette-js/tables';
+
+View.make<User>('app::tables.user-card')
+    .viewData({ showEmail: true })
+    .components([
+        TextColumn.make('name').weight('bold'),
+        TextColumn.make('email'),
+    ])
+```
+
+```ejs
+<%# views/tables/user-card.ejs %>
+<div class="user-card">
+    <%- children %>
+    <% if (showEmail) { %><a href="mailto:<%= record.email %>"><%= record.email %></a><% } %>
+</div>
+```
+
 ## Grouping column headers
 
 In a traditional table layout, you may also group several columns under a common heading with a `ColumnGroup`. See [grouping columns](/tables/columns/overview#grouping-columns).

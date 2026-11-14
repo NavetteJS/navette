@@ -1,6 +1,8 @@
-<%# Pagination. Options: simple (previous / next only), extremeLinks (first / last), property (property bound to the per-page count).
-    Cursor pagination is not supported. %>
-<% const simple = locals.simple === true, extremeLinks = locals.extremeLinks === true, property = locals.property ?? 'tableRecordsPerPage'; %>
+<%# Pagination. Options: simple (previous / next only), extremeLinks (first / last), property (property bound to the per-page count),
+    pageName (name of the page parameter), cursor (cursor pagination: { previous, next } cursors, previous / next only). %>
+<% const cursor = locals.cursor ?? null, simple = locals.simple === true || cursor !== null, extremeLinks = locals.extremeLinks === true, property = locals.property ?? 'tableRecordsPerPage', pageName = locals.pageName ?? 'page'; %>
+<% const onFirstPage = cursor ? !cursor.previous : page.page <= 1, hasMorePages = cursor ? !!cursor.next : page.page < page.lastPage; %>
+<% const previousClick = cursor ? 'setPage(' + js(cursor.previous) + ', ' + js(pageName) + ')' : 'previousPage(' + js(pageName) + ')', nextClick = cursor ? 'setPage(' + js(cursor.next) + ', ' + js(pageName) + ')' : 'nextPage(' + js(pageName) + ')'; %>
 <% const perPageSelect = () => { %>
     <select class="fi-select-input" wire:model.live="<%= property %>">
         <% for (const option of pageOptions) { %>
@@ -24,9 +26,9 @@
     </li>
 <% } %>
 <nav aria-label="<%= t('filament::components/pagination.label') %>" class="<%- cls(['fi-pagination', { 'fi-simple': simple }]) %>">
-    <% if (page.page > 1) { %>
-        <button class="fi-btn fi-size-md  fi-pagination-previous-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" rel="prev" wire:click="previousPage('page')" wire:key="<%= id %>.pagination.previous">
-            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': "previousPage('page')" })) %>
+    <% if (!onFirstPage) { %>
+        <button class="fi-btn fi-size-md  fi-pagination-previous-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" rel="prev" wire:click="<%= previousClick %>" wire:key="<%= id %>.pagination.previous">
+            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': previousClick })) %>
             <%= t('filament::components/pagination.actions.previous.label') %>
         </button>
     <% } %>
@@ -67,22 +69,22 @@
         </div>
     <% } %>
 
-    <% if (page.page < page.lastPage) { %>
-        <button class="fi-btn fi-size-md  fi-pagination-next-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" rel="next" wire:click="nextPage('page')" wire:key="<%= id %>.pagination.next">
-            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': "nextPage('page')" })) %>
+    <% if (hasMorePages) { %>
+        <button class="fi-btn fi-size-md  fi-pagination-next-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" rel="next" wire:click="<%= nextClick %>" wire:key="<%= id %>.pagination.next">
+            <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': nextClick })) %>
             <%= t('filament::components/pagination.actions.next.label') %>
         </button>
     <% } %>
 
     <% if (!simple && page.lastPage > 1) { %>
         <ol class="fi-pagination-items">
-            <% if (extremeLinks && page.page > 1) { item({ rel: 'first', key: 'first', ariaLabel: t('filament::components/pagination.actions.first.label'), click: "gotoPage(1, 'page')", icon: 'm-chevron-double-left', iconAlias: 'pagination.first-button' }) } %>
-            <% if (page.page > 1) { item({ rel: 'prev', key: 'previous', ariaLabel: t('filament::components/pagination.actions.previous.label'), click: "previousPage('page')", icon: 'm-chevron-left', iconAlias: 'pagination.previous-button' }) } %>
+            <% if (extremeLinks && page.page > 1) { item({ rel: 'first', key: 'first', ariaLabel: t('filament::components/pagination.actions.first.label'), click: 'gotoPage(1, ' + js(pageName) + ')', icon: 'm-chevron-double-left', iconAlias: 'pagination.first-button' }) } %>
+            <% if (page.page > 1) { item({ rel: 'prev', key: 'previous', ariaLabel: t('filament::components/pagination.actions.previous.label'), click: 'previousPage(' + js(pageName) + ')', icon: 'm-chevron-left', iconAlias: 'pagination.previous-button' }) } %>
             <% for (const element of elements) { %>
-                <% if (element === '...') { item({ disabled: true, label: '...' }) } else { item({ active: element === page.page, key: 'page.' + element, ariaLabel: t('filament::components/pagination.actions.go_to_page.label', { page: element }), click: 'gotoPage(' + element + ", 'page')", label: element }) } %>
+                <% if (element === '...') { item({ disabled: true, label: '...' }) } else { item({ active: element === page.page, key: 'page.' + element, ariaLabel: t('filament::components/pagination.actions.go_to_page.label', { page: element }), click: 'gotoPage(' + element + ', ' + js(pageName) + ')', label: element }) } %>
             <% } %>
-            <% if (page.page < page.lastPage) { item({ rel: 'next', key: 'next', ariaLabel: t('filament::components/pagination.actions.next.label'), click: "nextPage('page')", icon: 'm-chevron-right', iconAlias: 'pagination.next-button' }) } %>
-            <% if (extremeLinks && page.page < page.lastPage) { item({ rel: 'last', key: 'last', ariaLabel: t('filament::components/pagination.actions.last.label'), click: `gotoPage(${page.lastPage}, 'page')`, icon: 'm-chevron-double-right', iconAlias: 'pagination.last-button' }) } %>
+            <% if (page.page < page.lastPage) { item({ rel: 'next', key: 'next', ariaLabel: t('filament::components/pagination.actions.next.label'), click: 'nextPage(' + js(pageName) + ')', icon: 'm-chevron-right', iconAlias: 'pagination.next-button' }) } %>
+            <% if (extremeLinks && page.page < page.lastPage) { item({ rel: 'last', key: 'last', ariaLabel: t('filament::components/pagination.actions.last.label'), click: 'gotoPage(' + page.lastPage + ', ' + js(pageName) + ')', icon: 'm-chevron-double-right', iconAlias: 'pagination.last-button' }) } %>
         </ol>
     <% } %>
 </nav>

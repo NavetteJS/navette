@@ -50,7 +50,7 @@ import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import type { DataAdapter } from '@navette-js/database';
-import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
+import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, getTableRecordsPerPage, hasReorderedColumns, moveTableRecordOrder, saveTableOrder, setTablePage, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
 import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 
@@ -2137,6 +2137,7 @@ function canOn(livewire: any, ability: string, record: unknown = null): Promise<
 
 const plural = (s: string) => (/[^aeiou]y$/.test(s) ? s.slice(0, -1) + 'ies' : /(s|x|z|ch|sh)$/.test(s) ? s + 'es' : s + 's');
 const ucfirst = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
+const lcfirst = (s: string) => s.replace(/^./, (c) => c.toLowerCase());
 
 /** Resource: a model with its pages, table and navigation. */
 export abstract class Resource {
@@ -2946,15 +2947,19 @@ export abstract class ChartWidget extends Widget {
  */
 export abstract class TableWidget extends Widget implements TableHost {
     static columnSpan: ColumnSpan = 'full';
-    static callable = ['sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableColumnManager', 'resetTableColumnManager'];
+    static callable = ['sortTable', 'gotoPage', 'nextPage', 'previousPage', 'setPage', 'applyTableColumnManager', 'resetTableColumnManager', 'loadTable'];
     /** Table heading; derived from the class name by default (`FlaggedOrders` → "Flagged Orders"). */
     static heading: string | null = null;
     tableSearch = '';
     tableSort: string | null = null;
     tableColumnSearches: Record<string, string> = {};
-    tableRecordsPerPage = 10;
-    paginators: Record<string, number> = { page: 1 };
+    tableRecordsPerPage: number | 'all' = 10;
+    paginators: Record<string, number | string> = { page: 1 };
     tableColumns: ColumnState[] = [];
+    /** `false` until a lazy loaded table (`lazyLoaded()`) has loaded its records (`loadTable()`). */
+    isTableLoaded = false;
+    loadTable(): void { this.isTableLoaded = true; }
+    setPage(page: unknown, _pageName: unknown = 'page'): void { setTablePage(this.getTable(), this, page); }
     abstract table(table: Table<any>): Table<any>;
     abstract getDataAdapterForTable(): DataAdapter;
     getTableHeading(): string {
@@ -2966,6 +2971,7 @@ export abstract class TableWidget extends Widget implements TableHost {
         const table = this.getTable();
         this.tableRecordsPerPage = table.getDefaultPageOption();
         this.tableColumns = table.getDefaultColumnState();
+        this.isTableLoaded = !table.isLazyLoaded();
         initializeTableGrouping(table, this as any);
     }
     tableGrouping: string | null = null;
@@ -2973,11 +2979,11 @@ export abstract class TableWidget extends Widget implements TableHost {
     gotoPage(page: number, _pageName = 'page'): void { this.paginators.page = Math.max(1, Math.floor(Number(page)) || 1); }
     nextPage(_pageName = 'page'): void { this.paginators.page = (Number(this.paginators.page) || 1) + 1; }
     previousPage(_pageName = 'page'): void { this.paginators.page = Math.max(1, (Number(this.paginators.page) || 1) - 1); }
-    applyTableColumnManager(state: unknown = null, _wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state); }
+    applyTableColumnManager(state: unknown = null, wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state, wasReordered === true); }
     resetTableColumnManager(): void { this.tableColumns = this.getTable().getDefaultColumnState(); }
     updatedTableSearch(): void { this.paginators.page = 1; }
     updatedTableColumnSearches(): void { this.paginators.page = 1; }
-    updatedTableRecordsPerPage(): void { this.paginators.page = 1; }
+    updatedTableRecordsPerPage(): void { const table = this.getTable(); if (table.enforcesPaginationPageOptions()) this.tableRecordsPerPage = getTableRecordsPerPage(table, this); this.paginators.page = 1; }
     updatedTableSort(): void { this.paginators.page = 1; }
     async render(): Promise<string> {
         const scopes = [this.constructor];
@@ -3242,7 +3248,7 @@ class ResourceTabs extends SchemaComponent {
 
 /** Resource list page: table state and methods called by the browser. */
 export class ListRecords extends Page implements TableHost {
-    static callable = ['updateTableColumnState', 'sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableFilters', 'resetTableFiltersForm', 'removeTableFilters', 'removeTableFilter', 'applyTableColumnManager', 'resetTableColumnManager', 'toggleTableReordering', 'reorderTable'];
+    static callable = ['updateTableColumnState', 'sortTable', 'gotoPage', 'nextPage', 'previousPage', 'setPage', 'applyTableFilters', 'resetTableFiltersForm', 'removeTableFilters', 'removeTableFilter', 'applyTableColumnManager', 'resetTableColumnManager', 'toggleTableReordering', 'reorderTable', 'moveTableRecord', 'loadTable'];
     static resource: typeof Resource;
     /** In a cluster, the list page shows the cluster's sub-navigation. */
     getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> {
@@ -3252,8 +3258,10 @@ export class ListRecords extends Page implements TableHost {
     tableSearch = '';
     tableSort: string | null = null;
     tableColumnSearches: Record<string, string> = {};
-    tableRecordsPerPage = 10;
-    paginators: Record<string, number> = { page: 1 };
+    tableRecordsPerPage: number | 'all' = 10;
+    paginators: Record<string, number | string> = { page: 1 };
+    /** `false` until a lazy loaded table (`lazyLoaded()`) has loaded its records (`loadTable()`). */
+    isTableLoaded = false;
     // Selection: kept by the browser, sent along with the bulk action call.
     selectedTableRecords: string[] = [];
     deselectedTableRecords: string[] = [];
@@ -3267,22 +3275,33 @@ export class ListRecords extends Page implements TableHost {
     tableGrouping: string | null = null;
     updatedTableGrouping(): void { this.paginators.page = 1; }
     /** Toggles manual reordering mode. */
-    async toggleTableReordering(): Promise<void> { if (this.getTable().getReorderColumn() !== null && (await canOn(this, 'reorder'))) { this.isTableReordering = !this.isTableReordering; this.deselectAllTableRecords(); } }
-    /** Saves the new order: only keys belonging to the table are kept, each gets its position. */
+    async toggleTableReordering(): Promise<void> { if (this.getTable().isReorderable() && (await canOn(this, 'reorder'))) { this.isTableReordering = !this.isTableReordering; this.deselectAllTableRecords(); } }
+    /**
+     * Saves the new order: only keys of records the table shows are kept, each gets its position (`saveTableOrder()`, with
+     * the table's `beforeReordering()` and `afterReordering()` callbacks).
+     */
     async reorderTable(order: unknown, _draggedRecordKey: unknown = null): Promise<void> {
-        const column = this.getTable().getReorderColumn();
-        if (column === null || !this.isTableReordering || !Array.isArray(order) || order.length > REORDER_LIMIT || !(await canOn(this, 'reorder'))) return;
-        const adapter = this.getDataAdapterForTable();
-        const allowed = new Set(await adapter.keysInScope(order.filter((key) => typeof key === 'string' || typeof key === 'number').map(String)));
-        let rank = 0;
-        for (const key of order.map(String)) if (allowed.delete(key)) await adapter.update(key, { [column]: ++rank });
+        const table = this.getTable();
+        if (!table.isReorderable() || !this.isTableReordering || !(await canOn(this, 'reorder'))) return;
+        await saveTableOrder(table, this, this.getDataAdapterForTable(), order);
     }
+    /** Keyboard reordering: moves a row one place up or down. */
+    async moveTableRecord(recordKey: unknown, direction: unknown): Promise<void> {
+        const table = this.getTable();
+        if (!table.isReorderable() || !this.isTableReordering || !(await canOn(this, 'reorder'))) return;
+        await moveTableRecordOrder(table, this, this.getDataAdapterForTable(), recordKey, direction);
+    }
+    /** Lazy loaded table (`lazyLoaded()`): called by the browser once the page is shown (`wire:init`). */
+    loadTable(): void { this.isTableLoaded = true; }
 
-    /** Key of this table's persisted state: per page class (and resource or relationship). */
+    /** Key of this table's persisted state: per page class (and resource or relationship), and per table `identifier()`. */
     protected tableSessionKey(part: string): string {
         const page = this.constructor as any;
-        return ['tables', page.name, page.resource?.slug ?? '', relationshipNameOf(page), part].join(':');
+        const identifier = this.getTable().getIdentifier();
+        return ['tables', page.name, page.resource?.slug ?? '', relationshipNameOf(page), ...(identifier ? [identifier] : []), part].join(':');
     }
+    /** Whether the page number is kept in the URL (`?page=2`, or `?<queryStringIdentifier>Page=2`), as Livewire's pagination does. */
+    protected syncsTablePageWithQueryString(): boolean { return true; }
     /** Session of the persisted table state: the browser (its CSRF token) and the signed-in user. */
     private tableSession(): string | null {
         const ctx = this._ctx as PanelContext | null;
@@ -3298,6 +3317,11 @@ export class ListRecords extends Page implements TableHost {
         if (table.persistsColumnSearchesInSession()) await store.set(session, this.tableSessionKey('column-searches'), this.tableColumnSearches);
         if (table.persistsSortInSession()) await store.set(session, this.tableSessionKey('sort'), this.tableSort);
         if (table.persistsGroupingInSession()) await store.set(session, this.tableSessionKey('grouping'), this.tableGrouping);
+        if (table.persistsRecordsPerPageInSession() && table.isPaginated()) await store.set(session, this.tableSessionKey('per_page'), getTableRecordsPerPage(table, this));
+        if (table.persistsColumnsInSession() && Array.isArray(this.tableColumns) && this.tableColumns.length) {
+            await store.set(session, this.tableSessionKey('columns'), this.tableColumns);
+            if (table.hasReorderableColumns()) await store.set(session, this.tableSessionKey('has_reordered_columns'), hasReorderedColumns(table.getDefaultColumnState(), this.tableColumns));
+        }
     }
     /** Restores the persisted table state; every value is sanitized like browser input. */
     private async restoreTableSession(table: Table): Promise<void> {
@@ -3316,18 +3340,37 @@ export class ListRecords extends Page implements TableHost {
         if (table.persistsSortInSession()) { const saved = await store.get(session, this.tableSessionKey('sort')); if (typeof saved === 'string' || saved === null) this.tableSort = saved as string | null; }
         // Only a group the table declares is kept: `getTableGrouping()` ignores anything else.
         if (table.persistsGroupingInSession()) { const saved = await store.get(session, this.tableSessionKey('grouping')); if (typeof saved === 'string' && saved.length <= 200) this.tableGrouping = saved; }
+        // Records per page: only a declared option is kept (the default one applies otherwise).
+        if (table.persistsRecordsPerPageInSession()) {
+            const saved = await store.get(session, this.tableSessionKey('per_page'));
+            if ((typeof saved === 'number' || saved === 'all') && table.getPageOptions().includes(saved)) this.tableRecordsPerPage = saved;
+        }
+        // Column manager: the saved state is checked against the declared columns like browser input.
+        if (table.persistsColumnsInSession()) {
+            const saved = await store.get(session, this.tableSessionKey('columns'));
+            if (Array.isArray(saved)) this.tableColumns = sanitizeColumnState(table, saved, table.hasReorderableColumns() && (await store.get(session, this.tableSessionKey('has_reordered_columns'))) === true);
+        }
     }
 
     async mount(_params: Record<string, unknown> = {}): Promise<void> {
         const table = this.getTable();
         this.tableFilters = table.getDefaultFilterState();
         this.tableDeferredFilters = table.getDefaultFilterState();
-        await this.restoreTableSession(table);
         this.tableColumns = table.getDefaultColumnState();
+        this.tableRecordsPerPage = table.getDefaultPageOption();
+        this.isTableLoaded = !table.isLazyLoaded();
+        await this.restoreTableSession(table);
         // Preselect the default group.
         initializeTableGrouping(table, this as any);
-        // `?tableAction=view&tableActionRecord=12` (global search result link): the row action opens on arrival, with the usual checks.
         const query = ((this._ctx as PanelContext | null)?.req?.query ?? {}) as Record<string, unknown>;
+        // The page is kept in the URL, under the table's page name (`?page=2`, `?ordersPage=2`), like Livewire's pagination.
+        if (this.syncsTablePageWithQueryString() && table.isPaginated()) {
+            const pageName = table.getPaginationPageName();
+            const requested = query[pageName];
+            if (typeof requested === 'string' && requested.length <= 2000) setTablePage(table, this, requested);
+            (this._effects as Record<string, unknown>).url = { ...((this._effects as any).url ?? {}), 'paginators.page': { as: pageName, use: 'push', alwaysShow: false, except: null } };
+        }
+        // `?tableAction=view&tableActionRecord=12` (global search result link): the row action opens on arrival, with the usual checks.
         if (typeof query.tableAction === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(query.tableAction) && typeof query.tableActionRecord === 'string' && query.tableActionRecord.length <= 64) {
             try { await this.mountAction(query.tableAction, {}, { table: true, recordKey: query.tableActionRecord }); } catch (error) { if (!(error instanceof WireError)) throw error; }
         }
@@ -3420,7 +3463,8 @@ export class ListRecords extends Page implements TableHost {
         this.paginators.page = 1;
         this.dispatch('deselectAllTableRecords', [], { self: true });
     }
-    applyTableColumnManager(state: unknown = null, _wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state); }
+    /** Column manager "Apply" (or a live change): the state comes from the browser, `sanitizeColumnState()` checks it. */
+    applyTableColumnManager(state: unknown = null, wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state, wasReordered === true); }
     resetTableColumnManager(): void { this.tableColumns = this.getTable().getDefaultColumnState(); }
 
     // --- list tabs: the empty key is the default tab (`null` in the browser)
@@ -3596,14 +3640,22 @@ export class ListRecords extends Page implements TableHost {
         return html;
     }
     sortTable(column: string | null = null, direction: string | null = null): void { sortTable(this, column, direction); }
-    gotoPage(page: number, _pageName = 'page'): void { this.paginators.page = Math.max(1, Math.floor(Number(page)) || 1); }
-    nextPage(_pageName = 'page'): void { this.paginators.page = (Number(this.paginators.page) || 1) + 1; }
-    previousPage(_pageName = 'page'): void { this.paginators.page = Math.max(1, (Number(this.paginators.page) || 1) - 1); }
+    gotoPage(page: number, _pageName = 'page'): void { this.paginators.page = Math.max(1, Math.floor(Number(page)) || 1); this.scrollTableToTop(); }
+    nextPage(_pageName = 'page'): void { this.paginators.page = (Number(this.paginators.page) || 1) + 1; this.scrollTableToTop(); }
+    previousPage(_pageName = 'page'): void { this.paginators.page = Math.max(1, (Number(this.paginators.page) || 1) - 1); this.scrollTableToTop(); }
+    /** Livewire's `setPage()`: a page number, or a cursor in cursor pagination (`paginationMode('cursor')`). */
+    setPage(page: unknown, _pageName: unknown = 'page'): void { setTablePage(this.getTable(), this, page); this.scrollTableToTop(); }
+    private scrollTableToTop(): void { if (this.getTable().shouldScrollToTopOnPageChange()) this.dispatch('scrollToTopOfTable', [], { self: true }); }
     updatedTableSearch(): void { this.paginators.page = 1; }
     getDataAdapterForTable(): DataAdapter { return this.resource.adapter; }
     getDataAdapter(): DataAdapter { return this.resource.adapter; }
     updatedTableColumnSearches(): void { this.paginators.page = 1; }
-    updatedTableRecordsPerPage(): void { this.paginators.page = 1; }
+    /** The value comes from the browser: with `enforcePaginationPageOptions()`, anything but a declared option becomes the default option. */
+    updatedTableRecordsPerPage(): void {
+        const table = this.getTable();
+        if (table.enforcesPaginationPageOptions()) this.tableRecordsPerPage = getTableRecordsPerPage(table, this);
+        this.paginators.page = 1;
+    }
     updatedTableSort(): void { this.paginators.page = 1; }
 
     getBreadcrumbs(): { label: string; url: string | null }[] {
@@ -3675,16 +3727,19 @@ export class TableSelectComponent extends ListRecords {
             .headerActions([]).recordActions([]).toolbarActions([]).emptyStateActions([]).groupedBulkActions([])
             .recordAction(null)
             .reorderable(null)
-            .persistFiltersInSession(false).persistSearchInSession(false).persistColumnSearchesInSession(false).persistSortInSession(false).persistGroupingInSession(false)
+            .persistInSession(false)
             .maxSelectableRecords(this.isMultiple ? this.maxSelectableRecords : 1);
     }
+    /** A field's table is not in the page URL. */
+    protected syncsTablePageWithQueryString(): boolean { return false; }
     async mount(): Promise<void> {
         if (!(await this.resource.can('viewAny', (this._ctx as any)?.user ?? null))) throw new WireError(403, 'Forbidden.');
         const table = this.getTable();
         this.tableFilters = table.getDefaultFilterState();
         this.tableDeferredFilters = table.getDefaultFilterState();
         this.tableColumns = table.getDefaultColumnState();
-        this.tableRecordsPerPage = table.getDefaultPageOption() as number;
+        this.tableRecordsPerPage = table.getDefaultPageOption();
+        this.isTableLoaded = !table.isLazyLoaded();
         initializeTableGrouping(table, this as any);
     }
     /** Relationship constraints of the field, on top of the table's own query. */
@@ -3794,7 +3849,8 @@ export class RelationManager extends ListRecords {
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
-        const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()));
+        // As in Filament, the manager's class name prefixes its query string parameters (`?commentsRelationManagerPage=2`).
+        const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()).queryStringIdentifier(lcfirst(manager.name)));
         // With a related resource, rows link to its view or edit page.
         if (manager.getRelatedResource()) return linkRelatedRecords(table, this.resource);
         // If there is an "edit" row action, clicking the row opens it.
@@ -3900,7 +3956,7 @@ export class ManageRelatedRecords extends ListRecords {
         }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}));
     }
     getTable(): Table {
-        const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()));
+        const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).queryStringIdentifier(lcfirst(this.related.name)));
         return this.related.getRelatedResource() ? linkRelatedRecords(table, this.resource) : table;
     }
     getHeaderActions(): Action[] { return []; }

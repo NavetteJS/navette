@@ -51,7 +51,7 @@
                 maxSelectableRecords: <%- maxSelectableRecords ?? 'null' %>,
                 reorderMessage: <%- js(t('filament-tables::table.reordering.moved')) %>,
                 selectsCurrentPageOnly: <%- selectsCurrentPageOnly ? 'true' : 'false' %>,
-            })" class="fi-ta">
+            })"<% if (!isLoaded) { %> wire:init="loadTable"<% } %> class="<%- cls(['fi-ta', { 'fi-loading': !isLoaded }]) %>">
     <input type="hidden" value="<%- allCount %>" x-ref="allSelectableRecordsCount" />
 
     <% if (reorder) { %><span wire:ignore x-ref="tableReorderStatus" role="status" aria-live="polite" aria-atomic="true" class="fi-sr-only"></span><% } %>
@@ -76,15 +76,24 @@
                 const filtersModalId = id + '-table-filters';
             %>
             <% const toolbarVisible = reorder !== null || groups.length > 0 || isSearchable || filtersTriggerInToolbar || hasColumnManager || toolbarActions.length > 0; %>
-            <div x-show="<%- heading !== null || headerActions.length || toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header.visible" class="fi-ta-header-ctn">
+            <div x-show="<%- header || heading !== null || description || headerActions.length || toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header.visible" class="fi-ta-header-ctn">
                 <%- hook('tables::header.before') %>
-                <% if (heading !== null || headerActions.length) { %>
+                <% if (header) { %>
+                    <%- header %>
+                <% } else if (heading !== null || description || headerActions.length) { %>
                     <div class="<%- cls(['fi-ta-header', { 'fi-ta-header-adaptive-actions-position': headerActions.length }]) %>">
-                        <% if (heading !== null) { %>
+                        <% if (heading !== null || description) { %>
                             <div>
+                                <% if (heading !== null) { %>
                                 <h2 class="fi-ta-header-heading">
                                     <%= heading %>
                                 </h2>
+                                <% } %>
+                                <% if (description) { %>
+                                <p class="fi-ta-header-description">
+                                    <%= description %>
+                                </p>
+                                <% } %>
                             </div>
                         <% } %>
                         <% if (headerActions.length) { %>
@@ -112,7 +121,9 @@
                     <%- hook('tables::toolbar.start') %>
                     <div class="fi-ta-actions fi-align-start fi-wrapped">
                         <%- hook('tables::toolbar.reorder-trigger.before') %>
-                        <% if (reorder) { %>
+                        <% if (reorder && reorder.trigger.customized) { %>
+                            <% if (!reorder.trigger.hidden) { %><%- filterActionHtml(reorder.trigger, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="toggleTableReordering"', null, true) %><% } %>
+                        <% } else if (reorder) { %>
                             <% const reorderLabel = t(reorder.active ? 'filament-tables::table.actions.disable_reordering.label' : 'filament-tables::table.actions.enable_reordering.label') %>
                             <button title="<%= reorderLabel %>" aria-label="<%= reorderLabel %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="toggleTableReordering" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
                                 <%- icon(reorder.active ? 'm-check' : 'm-arrows-up-down', { alias: reorder.active ? 'tables::actions.disable-reordering' : 'tables::actions.enable-reordering', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'toggleTableReordering' }) }) %>
@@ -243,7 +254,7 @@
                                 </div>
 
                                 <div class="fi-input-wrp-content-ctn">
-                                    <input class="fi-input fi-input-has-inline-prefix" autocomplete="off" maxlength="1000" placeholder="<%= t('filament-tables::table.fields.search.placeholder') %>" type="search" wire:key="<%= id %>.table.tableSearch.field.input" wire:model.live.debounce.500ms="tableSearch" x-bind:id="$id('input')" x-on:keyup="if ($event.key === 'Enter') { $wire.$refresh() }" />
+                                    <input class="fi-input fi-input-has-inline-prefix" autocomplete="off" maxlength="1000" placeholder="<%= search.placeholder %>" type="search" wire:key="<%= id %>.table.tableSearch.field.input" <%- search.model %>="tableSearch" x-bind:id="$id('input')" x-on:keyup="if ($event.key === 'Enter') { $wire.$refresh() }" />
                                 </div>
                             </div>
                         </div><% } %>
@@ -273,7 +284,7 @@
                         <%# These two hook slots only exist when there is a filters trigger or a column manager. %>
                         <% if (filtersTriggerInToolbar || hasColumnManager) { %><%- hook('tables::toolbar.toggle-column-trigger.before') %><% } %>
                         <% if (hasColumnManager) { %>
-                            <%- view('filament-tables::column-manager', { id, dangerLinkClasses, primaryButtonClasses }) %>
+                            <%- view('filament-tables::column-manager', { id, dangerLinkClasses, primaryButtonClasses, dangerButtonClasses: buttonColorClasses('danger'), buttonColorClasses, columnManager, modal, filterActionHtml, heading }) %>
                         <% } %>
                         <% if (filtersTriggerInToolbar || hasColumnManager) { %><%- hook('tables::toolbar.toggle-column-trigger.after') %><% } %>
                     </div><% } %>
@@ -368,7 +379,8 @@
             <% } %>
 
             <%- hook('tables::content.before', { table, records: page.records }) %>
-            <div wire:loading.attr="aria-busy" wire:target="<%- targets %>" class="fi-ta-content-ctn fi-fixed-positioning-context">
+            <div<% if (pollingInterval) { %> wire:poll.<%- pollingInterval %><% } %> wire:loading.attr="aria-busy"<% if (hasLoadingSkeleton) { %> wire:loading.class.delay.default="fi-ta-content-loading"<% } %> wire:target="<%- targets %>" class="fi-ta-content-ctn fi-fixed-positioning-context">
+                <% if (isLoaded) { %>
                 <div role="status" aria-live="polite" aria-atomic="true" class="fi-sr-only">
                     <%= tc('filament-tables::table.result_count', resultsCount) %>
                 </div>
@@ -376,8 +388,15 @@
                 <div wire:loading.delay.default.block wire:target="<%- targets %>" role="status" aria-live="polite" data-testid="table-loading-state" class="fi-sr-only">
                     <%= t('filament-tables::table.loading') %>
                 </div>
+                <% } %>
 
-                <% if (contentLayout) { %>
+                <% if (!isLoaded) { %>
+                    <%# Lazy loaded table: a loading indicator until `loadTable()` returns the records. %>
+                    <div role="status" aria-busy="true" aria-live="polite" class="fi-ta-table-loading-ctn">
+                        <%- loadingIndicator(attrs(), '2xl') %>
+                        <span class="fi-sr-only"><%= t('filament-tables::table.loading') %></span>
+                    </div>
+                <% } else if (contentLayout) { %>
                     <%# Column layout (Split / Stack): one card per record, sorting through a select. %>
                     <% if (rows.length) { %>
                     <% if (selectable || columns.some((c) => c.sortable)) { %>
@@ -437,7 +456,7 @@
 
                                                 <div class="fi-input-wrp-content-ctn">
                                                     <select class="fi-select-input" x-model="column">
-                                                        <option value="">-</option>
+                                                        <option value=""><%= defaultSortOptionLabel %></option>
                                                         <% for (const column of columns.filter((c) => c.sortable)) { %>
                                                             <option value="<%= column.name %>"><%= column.label %></option>
                                                         <% } %>
@@ -464,7 +483,7 @@
                         <% } %>
                     </div>
                     <% } %>
-                    <div aria-label="<%= heading ?? table.getPluralModelLabel() %>" role="list" <%- (contentGrid ? attrs().grid(contentGrid) : attrs()).class(['fi-ta-content', { 'fi-ta-content-grid': contentGrid !== null, 'fi-ta-content-grouped': grouping.active }]).toHtml() %>>
+                    <div aria-label="<%= heading ?? table.getPluralModelLabel() %>" role="list"<% if (hasLoadingSkeleton) { %> wire:loading.attr.delay.default="inert" wire:target="<%- targets %>"<% } %> <%- (contentGrid ? attrs().grid(contentGrid) : attrs()).class(['fi-ta-content', { 'fi-ta-content-grid': contentGrid !== null, 'fi-ta-content-grouped': grouping.active }]).toHtml() %>>
                         <% for (const row of rows) { %>
                         <div<% if (row.collapsibleHtml !== null) { %> x-data="{ isCollapsed: <%- row.collapsed ? 'true' : 'false' %> }" x-init="$dispatch('collapsible-table-row-initialized')" x-on:collapse-all-table-rows.window="isCollapsed = true" x-on:expand-all-table-rows.window="isCollapsed = false"<% } %> role="listitem" wire:key="<%= id %>.table.records.<%= row.key %>" class="<%- cls(['fi-ta-record', { 'fi-clickable': row.url || row.mountExpression, 'fi-ta-record-with-content-prefix': selectable, 'fi-ta-record-with-content-suffix': row.collapsibleHtml !== null }, row.classes]) %>" x-bind:class="{<% if (row.collapsibleHtml !== null) { %>
                                 'fi-ta-record-collapsed': isCollapsed,<% } %>
@@ -476,7 +495,7 @@
                             <div class="fi-ta-record-content-ctn">
                                 <div>
                                     <% if (row.url) { %>
-                                    <a href="<%= row.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-record-content"><%- row.contentHtml %></a>
+                                    <a href="<%= row.url %>"<%- recordLinkAttributes(row.newTab) %> class="fi-ta-record-content"><%- row.contentHtml %></a>
                                     <% } else if (row.mountExpression) { %>
                                     <button type="button" wire:click="<%= row.mountExpression %>" wire:loading.attr="disabled" wire:target="<%= row.mountExpression %>" class="fi-ta-record-content"><%- row.contentHtml %></button>
                                     <% } else { %>
@@ -558,7 +577,7 @@
 
                                                 <div class="fi-input-wrp-content-ctn">
                                                     <select class="fi-select-input" x-model="column">
-                                                        <option value="">-</option>
+                                                        <option value=""><%= defaultSortOptionLabel %></option>
                                                         <% for (const column of columns.filter((c) => c.sortable)) { %>
                                                             <option value="<%= column.name %>"><%= column.label %></option>
                                                         <% } %>
@@ -663,7 +682,7 @@
                     <% } %>
 
                     <% if (rows.length) { %>
-                    <tbody<% if (reorder) { %> x-ref="tableReorderRecords" x-on:start.stop="startTableReorder($event)" x-on:end.stop="reorderTableRecords($event)" x-sortable data-sortable-animation-duration="300"<% } %> class="fi-ta-records">
+                    <tbody<% if (reorder) { %> x-ref="tableReorderRecords" x-on:start.stop="startTableReorder($event)" x-on:end.stop="reorderTableRecords($event)" x-sortable data-sortable-animation-duration="300"<% } %><% if (hasLoadingSkeleton) { %> wire:loading.attr.delay.default="inert" wire:target="<%- targets %>"<% } %> class="fi-ta-records">
                         <% for (const row of rows) { %>
                             <%- row.groupSummaryHtml %>
                             <% if (grouping.groupsOnly) continue; %>
@@ -705,7 +724,7 @@
                             <tr wire:key="<%= id %>.table.records.<%= row.key %>" x-bind:class="{
 <% if (row.collapsedExpression) { %>                                    'fi-collapsed': <%= row.collapsedExpression %>,
 <% } %>                                    'fi-selected': <%- selectable ? 'true' : 'false' %> && isRecordSelected(<%= js(row.key) %>),
-                                }"<% if (reorder?.active) { %> x-sortable-item="<%= row.key %>" x-sortable-handle<% } %> class="<%- cls(['fi-ta-row', { 'fi-clickable': row.url || row.mountExpression || row.wasClickable }, row.classes]) %>">
+                                }"<% if (reorder?.active) { %> x-sortable-item="<%= row.key %>" x-sortable-handle<% } %> class="<%- cls(['fi-ta-row', { 'fi-clickable': row.url || row.mountExpression || row.wasClickable, 'fi-striped': row.striped }, row.classes]) %>">
                                 <% if (reorder?.active) { %>
                                 <td class="fi-ta-cell">
                                     <button aria-hidden="true" tabindex="-1" type="button" class="fi-ta-reorder-handle fi-icon-btn"><%- icon('m-bars-2', { alias: 'tables::reorder.handle' }) %></button>
@@ -748,7 +767,7 @@
                                         <%# The content wrapper only exists in stacked mode. %>
                                         <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
                                             <% if (row.url && !cell.plain) { %>
-                                                <a href="<%= row.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-col">
+                                                <a href="<%= row.url %>"<%- recordLinkAttributes(row.newTab) %> class="fi-ta-col">
                                                     <%- cell.html %>
                                                 </a>
                                             <% } else { %>
@@ -774,7 +793,7 @@
             <%- hook('tables::content.after', { table, records: page.records }) %>
             <% if (rows.length) { %>
                 <%- pagination %>
-            <% } else { %>
+            <% } else if (isLoaded) { %>
 <% if (emptyState.custom !== null) { %>
                 <%- emptyState.custom %>
                 <% } else { %>

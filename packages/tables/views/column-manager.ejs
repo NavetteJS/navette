@@ -1,5 +1,32 @@
-<%# Column manager dropdown; only the id, labels and color classes are filled in here.
+<%# Column manager: a dropdown (default) or a modal (`columnManagerLayout('modal')`, or a `slideOver()` trigger action).
     The list itself is rendered by Alpine (filamentTableColumnManager) from the `tableColumns` state. %>
+<%
+    const cm = columnManager;
+    const isLive = cm.apply.hidden;
+    const isModal = cm.layout === 'modal' || cm.action.isModalSlideOver();
+    const triggerHtml = () => cm.trigger.customized
+        ? filterActionHtml(cm.trigger, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"' + (isModal ? ' x-on:click="$dispatch(\'open-modal\', { id: ' + e(js(id + '-table-column-manager')) + ' })"' : ''), null, true)
+        : '<button title="' + e(t('filament-tables::table.actions.column_manager.label')) + '" aria-label="' + e(t('filament-tables::table.actions.column_manager.label')) + '" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"' + (isModal ? ' x-on:click="$dispatch(\'open-modal\', { id: ' + e(js(id + '-table-column-manager')) + ' })"' : '') + ' class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">' + icon('m-view-columns', { alias: 'tables::actions.column-manager' }) + '</button>';
+    const resetLabel = t('filament-tables::table.column_manager.actions.reset.label');
+    const applyButton = (click) => '<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="' + cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...buttonColorClasses(cm.apply.color)]) + '" x-on:click="' + click + '">' + (cm.apply.icon ? icon(cm.apply.icon) : '') + e(cm.apply.label) + '</button>';
+    const footerResetButton = (click) => '<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="' + cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...dangerButtonClasses]) + '" wire:click="resetTableColumnManager" x-on:click="' + click + '">' + e(resetLabel) + '</button>';
+%>
+<% if (isModal) { %>
+<%# Modal layout: the trigger opens a modal; "Apply" and "Reset" are footer buttons talking to the manager through window events. %>
+<% const modalId = id + '-table-column-manager'; %>
+<div class="fi-ta-col-manager-modal" wire:key="<%= id %>.table.column-manager">
+    <%- triggerHtml() %>
+    <%- modal({
+        id: modalId, livewireId: id, heading: cm.action.getCustomModalHeading() ?? t('filament-tables::table.column_manager.heading'), description: cm.action.getModalDescription(),
+        width: cm.action.getModalWidth() ?? cm.width, slideOver: cm.action.isModalSlideOver(),
+        footerActions: [
+            ...(cm.apply.hidden ? [] : [applyButton(e("$dispatch('apply-table-column-manager'); $dispatch('close-modal', { id: " + js(modalId) + ' })'))]),
+            '<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="' + cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...dangerButtonClasses]) + '" x-on:click="' + e("$dispatch('reset-table-column-manager'); $wire.resetTableColumnManager()") + '">' + e(resetLabel) + '</button>',
+            '<button type="button" class="fi-ac-btn-action fi-btn fi-size-md" x-on:click="' + e("$dispatch('close-modal', { id: " + js(modalId) + ' })') + '">' + e(t('filament::components/modal.actions.close.label')) + '</button>',
+        ],
+    }, '<div x-data="filamentTableColumnManager({ columns: $wire.entangle(\'tableColumns\'), isLive: ' + (isLive ? 'true' : 'false') + ', })" x-on:apply-table-column-manager.window="applyTableColumnManager()" x-on:reset-table-column-manager.window="resetDeferredColumns()" class="fi-ta-col-manager">' + view('filament-tables::column-manager-content', { columnManager: cm }) + '</div>') %>
+</div>
+<% } else { %>
 <div
     x-data="filamentDropdown({ isMenu: false })"
     class="fi-dropdown fi-ta-col-manager-dropdown" wire:key="<%= id %>.table.column-manager"
@@ -8,11 +35,13 @@
         x-on:mousedown="if ($event.button === 0) toggle($event)"
         class="fi-dropdown-trigger"
     >
+        <% if (cm.trigger.customized) { %><%- triggerHtml() %><% } else { %>
         <button                                                title="<%= t('filament-tables::table.actions.column_manager.label') %>" aria-label="<%= t('filament-tables::table.actions.column_manager.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md"        >
             <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
   <path d="M14 17h2.75A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H14v14ZM12.5 3h-5v14h5V3ZM3.25 3H6v14H3.25A2.25 2.25 0 0 1 1 14.75v-9.5A2.25 2.25 0 0 1 3.25 3Z"/>
-</svg>            
+</svg>
                     </button>
+        <% } %>
     </div>
             <div
             x-cloak
@@ -22,19 +51,19 @@
             x-transition:leave-end="fi-opacity-0"
                                         wire:ignore.self
                 wire:key="<%= id %>.table.column-manager.panel"
-                        class="fi-dropdown-panel fi-width-xs"
-            style=""
+                        class="<%- cls(['fi-dropdown-panel', 'fi-width-' + cm.width, { 'fi-scrollable': !!cm.maxHeight }]) %>"
+            style="<%= cm.maxHeight ? 'max-height: ' + cm.maxHeight + ';' : '' %>"
         >
             <div
     x-data="filamentTableColumnManager({
                 columns: $wire.entangle('tableColumns'),
-                isLive: false,
+                isLive: <%- isLive ? 'true' : 'false' %>,
             })"
     class="fi-ta-col-manager"
 >
     <div class="fi-ta-col-manager-header">
-        <h2 class="fi-ta-col-manager-heading"><%= t('filament-tables::table.column_manager.heading') %></h2>
-                    <div>
+        <h<%- heading !== null ? '3' : '2' %> class="fi-ta-col-manager-heading"><%= t('filament-tables::table.column_manager.heading') %></h<%- heading !== null ? '3' : '2' %>>
+                    <% if (cm.resetPosition === 'header') { %><div>
                 <button
                 class="<%- cls([...dangerLinkClasses, 'fi-link', 'fi-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="resetTableColumnManager" wire:click="resetTableColumnManager" wire:loading.remove.delay.default="" x-on:click="resetDeferredColumns"
 >
@@ -56,91 +85,15 @@
             fill="currentColor"
         ></path>
     </svg>
-            <span class="fi-link-label"><%= t('filament-tables::table.column_manager.actions.reset.label') %></span>
-    </button>            </div>
+            <span class="fi-link-label"><%= resetLabel %></span>
+    </button>            </div><% } %>
             </div>
-    <div
-        x-id="['fi-ta-col-manager-group-checkbox', 'fi-ta-col-manager-column-checkbox']"
-            class="fi-grid fi-grid-direction-col lg:fi-grid-cols  fi-ta-col-manager-items" style="--cols-lg: 1; --cols-default: 1;"
->
-    <template
-        x-for="column in getVisibleColumns()"
-        x-bind:key="JSON.stringify([column.type, column.name])"
-    >
-        <div
-                    >
-            <template x-if="column.type === 'group'">
-                <div class="fi-ta-col-manager-group">
-                    <div class="fi-ta-col-manager-item">
-                        <label
-                             x-bind:for="$id('fi-ta-col-manager-group-checkbox', column.name)"                             class="fi-ta-col-manager-label"
-                        >
-                                                            <input
-                                    type="checkbox"
-                                    class="fi-checkbox-input fi-valid"
-                                    x-bind:id="$id('fi-ta-col-manager-group-checkbox', column.name)"
-                                    x-bind:checked="(groupedColumns[column.name] || {}).checked || false"
-                                    x-bind:disabled="(groupedColumns[column.name] || {}).disabled || false"
-                                    x-effect="$el.indeterminate = (groupedColumns[column.name] || {}).indeterminate || false"
-                                    x-on:change="toggleGroup(column.name)"
-                                />
-                            <span x-html="column.label"></span>
-                        </label>
-                                            </div>
-                    <div
-                                                class="fi-ta-col-manager-group-items"
-                    >
-                        <template
-                            x-for="groupColumn in getVisibleColumns(column.name)"
-                            x-bind:key="JSON.stringify([groupColumn.type, groupColumn.name])"
-                        >
-                            <div
-                                                            >
-                                <div class="fi-ta-col-manager-item">
-                                    <label
-                                         x-bind:for="$id('fi-ta-col-manager-column-checkbox', groupColumn.name)"                                         class="fi-ta-col-manager-label"
-                                    >
-                                                                                    <input
-                                                type="checkbox"
-                                                class="fi-checkbox-input fi-valid"
-                                                x-bind:id="$id('fi-ta-col-manager-column-checkbox', groupColumn.name)"
-                                                x-bind:checked="(getColumn(groupColumn.name, column.name) || {}).isToggled || false"
-                                                x-bind:disabled="(getColumn(groupColumn.name, column.name) || {}).isToggleable === false"
-                                                x-on:change="toggleColumn(groupColumn.name, column.name)"
-                                            />
-                                        <span
-                                            x-html="groupColumn.label"
-                                        ></span>
-                                    </label>
-                                                                    </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </template>
-            <template x-if="column.type !== 'group'">
-                <div class="fi-ta-col-manager-item">
-                    <label
-                         x-bind:for="$id('fi-ta-col-manager-column-checkbox', column.name)"                         class="fi-ta-col-manager-label"
-                    >
-                                                    <input
-                                type="checkbox"
-                                class="fi-checkbox-input fi-valid"
-                                x-bind:id="$id('fi-ta-col-manager-column-checkbox', column.name)"
-                                x-bind:checked="(getColumn(column.name, null) || {}).isToggled || false"
-                                x-bind:disabled="(getColumn(column.name, null) || {}).isToggleable === false"
-                                x-on:change="toggleColumn(column.name)"
-                            />
-                        <span x-html="column.label"></span>
-                    </label>
-                                    </div>
-            </template>
-        </div>
-    </template>
-    </div>
-            <div class="fi-ta-col-manager-actions-ctn">
-        <button                                                            type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...primaryButtonClasses]) %>" x-on:click="applyTableColumnManager"        ><%= t('filament-tables::table.column_manager.actions.apply.label') %></button>
-                    </div>
+    <%- view('filament-tables::column-manager-content', { columnManager: cm }) %>
+            <% if (!cm.apply.hidden || cm.resetPosition === 'footer') { %><div class="fi-ta-col-manager-actions-ctn">
+        <% if (!cm.apply.hidden) { %><%- applyButton('applyTableColumnManager') %><% } %>
+        <% if (cm.resetPosition === 'footer') { %><%- footerResetButton('resetDeferredColumns') %><% } %>
+                    </div><% } %>
     </div>
         </div>
     </div>
+<% } %>

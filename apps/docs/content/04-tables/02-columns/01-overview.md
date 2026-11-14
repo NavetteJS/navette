@@ -258,6 +258,33 @@ TextColumn.make<Employee>('age')
     .sortable({ column: 'birth_date', inverted: true })
 ```
 
+### Sorting by several columns
+
+Pass a list of columns of the query to `sortable()` to sort by all of them, in that order. This is useful when the column displays several attributes, such as a full name:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<User>('full_name')
+    .getStateUsing(({ record }) => `${record.first_name} ${record.last_name}`)
+    .sortable(['last_name', 'first_name'])
+```
+
+### Customizing the sort query
+
+To order the query yourself, pass a function as the second argument of `sortable()` (or as the `query` option). It receives the query and the direction, `'asc'` or `'desc'`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<User>('full_name')
+    .sortable(true, (query, direction) => query
+        .orderBy('last_name', direction)
+        .orderBy('first_name', direction))
+```
+
+The function receives the direction already checked: only `'asc'` or `'desc'` reach it, whatever the browser sends.
+
 ### Sorting by default
 
 You may choose to sort a table by default if no other sort is applied, using the table's [`defaultSort()`](/tables/overview#sorting-records-by-default) method.
@@ -283,7 +310,36 @@ new Table()
     ])
 ```
 
-The search term is split into words. Each word must appear, ignoring case, in at least one of the searchable columns. The search field is only displayed when at least one column is searchable.
+The search term is split into words (a phrase in double quotes is one word). Each word must appear, ignoring case, in at least one of the searchable columns. The search field is only displayed when at least one column is searchable, unless the table is [`searchable()` itself](/tables/overview#searching-records).
+
+### Searching several columns
+
+Pass a column of the query, or a list of them, to `searchable()` to search those columns instead of the one named like the column:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<User>('full_name')
+    .getStateUsing(({ record }) => `${record.first_name} ${record.last_name}`)
+    .searchable(['first_name', 'last_name'])
+```
+
+### Customizing the search query
+
+To search with your own conditions, use the `query` option. The function receives the query and the search term (one word at a time, unless the terms are [not split](/tables/overview#searching-records)), and adds conditions to the query:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<User>('full_name')
+    .searchable({
+        query: (query, search) => query
+            .where('first_name', 'like', `%${search}%`)
+            .orWhere('last_name', 'like', `%${search}%`),
+    })
+```
+
+The conditions are grouped, and combined with the other searchable columns with `or`. Pass the search term as a bound value, as above, never inside raw SQL.
 
 ### Searching a different column
 
@@ -331,11 +387,17 @@ TextColumn.make('email')
     .searchable({ isIndividual: true, isGlobal: false })
 ```
 
-Each word of an individual search must appear in that column.
+Each word of an individual search must appear in that column. An individual search uses the same columns, or the same `query` function, as the global search of the column.
 
-<Aside variant="warning">
-Individual searches query the column of the query that has the column's name: the `column` option only applies to the global search.
-</Aside>
+By default, individual search terms are split into words like the global search (see the table's [`splitSearchTerms()`](/tables/overview#splitting-search-terms)). To match the whole term of one column instead, use `splitIndividualSearchTerms(false)`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('sku')
+    .searchable({ isIndividual: true })
+    .splitIndividualSearchTerms(false)
+```
 
 ## Clickable cell content
 
@@ -530,9 +592,7 @@ TextColumn.make('id')
     .toggleable(true, { isToggledHiddenByDefault: true })
 ```
 
-<Aside variant="info">
-The column manager's state is part of the page's state: it is kept while the user stays on the page, but is not persisted in the session yet.
-</Aside>
+The column manager's state is kept in the user's session, so the hidden columns are restored when the user comes back. The table can also let users [reorder the columns, apply changes at once, or open the manager in a modal](/tables/overview#column-manager).
 
 ## Accessing the record in column functions
 
@@ -571,6 +631,20 @@ return new Table()
 ```
 
 The record is the object returned by the data adapter: with `ObjectionAdapter`, a model instance, including any computed column of the query.
+
+### Using the row loop
+
+Filament's `$rowLoop` is the `rowLoop` of the state functions: `getStateUsing()` receives `({ record, rowLoop })`, and a function given to `state()` receives `(record, { rowLoop })`. It describes the row being rendered, like Blade's `$loop`: `index` (from 0), `iteration` (from 1), `count`, `remaining`, `first`, `last`, `odd` and `even`. For example, to number the rows of the page:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('number')
+    .label('#')
+    .state((record, { rowLoop }) => rowLoop?.iteration ?? null)
+```
+
+In any other column function, call `getRowLoop()` from `@navette-js/tables`. Both are `null` outside a table row (in an export, for example).
 
 ## Global settings
 
