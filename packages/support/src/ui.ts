@@ -1,5 +1,6 @@
 // @navette-js/support/ui — base UI components (button, badge, modal…) usable on their own, outside a panel.
 // Each function returns an HTML string.
+import { ModalComponent } from './modal-component.ts';
 import { Attributes, cls, e, icon, icons, js, loadingIndicator, views, type ColorManager } from './index.ts';
 import { t, tc } from './i18n.ts';
 import { fileURLToPath } from 'node:url';
@@ -322,6 +323,7 @@ export type ModalProps = {
     /** Footer buttons (already rendered HTML), or `footer` for a fully custom footer. */
     footerActions?: string[]; footer?: string | null; footerActionsAlignment?: 'start' | 'center' | 'end';
     alignment?: 'start' | 'center'; width?: string; slideOver?: boolean; stickyHeader?: boolean; stickyFooter?: boolean; alert?: boolean;
+    /** Unset: the app-wide default (`ModalComponent.closeButton()`, `closedByClickingAway()`, `closedByEscaping()`). */
     closeButton?: boolean; closeByClickingAway?: boolean; closeByEscaping?: boolean;
     /** Host component id, used to prefix `wire:key` values when the modal lives in a stateful component. */
     livewireId?: string | null;
@@ -329,14 +331,14 @@ export type ModalProps = {
     trigger?: string | null;
     /** Attributes of the trigger's wrapper; `disabled` stops it from opening the modal. */
     triggerAttributes?: Attrs;
-    /** `false`: the first focusable element is not focused when the modal opens. */
+    /** `false`: the first focusable element is not focused when the modal opens (unset: `ModalComponent.autofocus()`). */
     autofocus?: boolean;
 };
 /** Modal, opened by an `open-modal` event carrying its id. */
 export function modal(props: ModalProps, slot = ''): string {
-    const { alignment = 'start', width = 'sm', closeButton = true, closeByClickingAway = true, closeByEscaping = true } = props;
+    const { alignment = 'start', width = 'sm', closeButton = ModalComponent.hasCloseButton, closeByClickingAway = ModalComponent.isClosedByClickingAway, closeByEscaping = ModalComponent.isClosedByEscaping } = props;
     const id = props.id || `fi-modal-${Math.random().toString(36).slice(2, 12)}`;
-    const trap = props.autofocus === false ? 'x-trap.noreturn.noautofocus' : 'x-trap.noreturn';
+    const trap = (props.autofocus ?? ModalComponent.isAutofocused) === false ? 'x-trap.noreturn.noautofocus' : 'x-trap.noreturn';
     const hasHeading = !!props.heading, hasDescription = !!props.description && hasHeading;
     const hasFooter = !!props.footer || (props.footerActions?.length ?? 0) > 0;
     const hasContent = slot !== '';

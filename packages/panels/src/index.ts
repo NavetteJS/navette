@@ -60,6 +60,9 @@ import { configuredBaseOf, findConfiguration, getActiveConfiguration, isClosestN
 import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentResourceRegistration, parentChainOf, parentRegistrationOf, relatedResourceAdapter, relationshipNameOf, resolveResourceReference, resourceUrl, scopeAdapterByForeignKey, withRelatedResource, type ResourceReference } from './nested-resources.ts';
 export { ParentResourceRegistration } from './nested-resources.ts';
 import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
+import { isRecordPageClass } from './record-page.ts';
+import { loadOwnerRecord, managerRecordTitle, relatableRecordTitleResolver } from './relation-records.ts';
+import { createPageRedirectUrl, editPageRedirectUrl, evaluatePageRedirect, type ResourcePageRedirect } from './resource-page-redirects.ts';
 export { builtNavigationViews, NavigationBuilder, NavigationGroup, NavigationItem, navigationGroupKey, navigationLabelText, type NavigationContext, type NavigationGroupReference, type NavigationGroupView, type NavigationItemView, type NavigationLabel } from './navigation.ts';
 import { builtNavigationViews, contentWidth, cssLength, NavigationBuilder, NavigationGroup, NavigationItem, navigationGroupKey, navigationGroupView, navigationHierarchyBreadcrumbs, navigationItemView, navigationLabelText, type NavigationContext, type NavigationGroupReference, type NavigationGroupView, type NavigationItemView, type NavigationLabel } from './navigation.ts';
 export { MenuItemGroups, type MenuItem, type MenuItemInput } from './menus.ts';
@@ -69,6 +72,8 @@ import { applyPanelMiddleware, middlewareFor, type PanelMiddleware, type PanelMi
 import { rewriteSpaLinks } from './spa.ts';
 import { findComponentPanel, getComponentPanels, registerComponentPanel, resolveComponentPanel } from './component-panels.ts';
 export { WidgetConfiguration, type WidgetEntry } from './widget-configuration.ts';
+export type { ResourcePageRedirect } from './resource-page-redirects.ts';
+export { InteractsWithRecord, type RecordPage, type RecordPageStatics } from './record-page.ts';
 export { InteractsWithPageTable, type PageTableWidget, type PageTableWidgetStatics } from './page-table.ts';
 export { ContentTabPosition, RelationManagerConfiguration, type RelationManagerEntries, type RelationManagerEntry } from './relation-managers.ts';
 import { ContentTabPosition, managersOfEntry, RelationManagerConfiguration, relationManagerEntries, relationManagerTabFromQuery, type MountedManager, type RelationManagerEntries, type RelationManagerEntry } from './relation-managers.ts';
@@ -91,6 +96,8 @@ export const ASSET_VERSION = '5.11.2.0';
 
 /** The signed-in user. Your auth provider may add any field (role, team…): policies receive it as-is. */
 export type User = { id: string | number; name: string; email: string; [key: string]: unknown };
+/** Avatar URL of a user or tenant without one of its own (Filament's `AvatarProvider`): a function, or an object with `get()`. */
+export type AvatarProvider = ((record: unknown, name: string, type: 'user' | 'tenant') => string) | { get(record: unknown, name: string, type: 'user' | 'tenant'): string };
 
 /**
  * Resource policy: one function per ability
@@ -123,6 +130,8 @@ export interface AuthProvider {
     getPasswordFingerprint?(user: User): MaybePromise<string>;
     /** Can this user use this panel? Checked on every request and at login (`false`: 403, or "credentials do not match" at login). */
     canAccessPanel?(user: User, panel: Panel): MaybePromise<boolean>;
+    /** The user's own avatar URL (Filament's `HasAvatar::getFilamentAvatarUrl()`); `null` uses the panel's default avatar provider. */
+    getAvatarUrl?(user: User): string | null;
     // --- multi-factor authentication (`AppAuthentication`, `SecurityKeyAuthentication`): `knexAuthProvider` implements them all.
     /** Stored authenticator app secret (encrypted by Navette), or `null`. */
     getAppAuthenticationSecret?(user: User): MaybePromise<string | null>;
@@ -550,7 +559,11 @@ export class Panel {
     /** Delay between typing and searching (`500ms` by default). */
     globalSearchDebounce(debounce: string): this { if (/^[0-9]+m?s$/.test(debounce)) this._globalSearchDebounce = debounce; return this; }
     getGlobalSearchDebounce(): string { return this._globalSearchDebounce; }
-    globalSearchFieldSuffix(suffix: string | null): this { this._globalSearchSuffix = suffix; return this; }
+    /**
+     * Text at the end of the field: a string, or a function of the browser's user agent (`Platform.detect(userAgent)` from
+     * `@navette-js/support` tells the platform), evaluated on every request.
+     */
+    globalSearchFieldSuffix(suffix: string | null | ((userAgent: string) => string | null)): this { this._globalSearchSuffix = suffix; return this; }
     /** Shows the first shortcut in the field, written for the browser's platform (`command+k` shows as "META+K" outside macOS). */
     globalSearchFieldKeyBindingSuffix(): this { this._globalSearchSuffix = (userAgent) => keyBindingSuffix(this._globalSearchKeyBindings, userAgent); return this; }
     getGlobalSearchFieldSuffix(userAgent = ''): string | null { return typeof this._globalSearchSuffix === 'function' ? this._globalSearchSuffix(userAgent) : this._globalSearchSuffix; }
@@ -920,10 +933,29 @@ export class Panel {
     getBrand(): Record<string, unknown> { return { name: this._brandName, logo: this._brandLogo, darkLogo: this._darkModeBrandLogo, height: this._brandLogoHeight }; }
     getFont(): typeof this._font { return this._font; }
 
-    /** Default avatar: the name's initials from the external ui-avatars.com service. */
-    getUserAvatarUrl(user: User): string { return this.getAvatarUrlFor(user.name); }
-    /** Tenant avatar: from the tenant provider (`getAvatarUrl`), otherwise its initials. */
-    getTenantAvatarUrl(tenant: unknown): string { return this.getTenantProvider().getAvatarUrl?.(tenant) ?? this.getAvatarUrlFor(navigationLabelText(this.getTenantProvider().getName(tenant))); }
+    private _defaultAvatarProvider: AvatarProvider | null = null;
+    /**
+     * Avatars of the users and tenants that have none of their own: `(record, name, type) => url`, or an object with a
+     * `get(record, name, type)` method. `name` is the display name of the user or tenant (`getNameForDefaultAvatar()`), `type`
+     * is `'user'` or `'tenant'`. Without it, the initials come from the external ui-avatars.com service.
+     */
+    defaultAvatarProvider(provider: AvatarProvider | null): this { this._defaultAvatarProvider = provider; return this; }
+    getDefaultAvatarProvider(): AvatarProvider | null { return this._defaultAvatarProvider; }
+    /** Name a default avatar is built from: the user's name, or the tenant's name from the tenant provider. */
+    getNameForDefaultAvatar(record: unknown, type: 'user' | 'tenant' = 'user'): string {
+        return type === 'tenant' ? navigationLabelText(this.getTenantProvider().getName(record)) : String((record as User | null)?.name ?? '');
+    }
+    /** Avatar of a user or tenant from the default avatar provider. */
+    getDefaultAvatarUrl(record: unknown, type: 'user' | 'tenant' = 'user'): string {
+        const name = this.getNameForDefaultAvatar(record, type);
+        const provider = this._defaultAvatarProvider;
+        if (!provider) return this.getAvatarUrlFor(name);
+        return typeof provider === 'function' ? provider(record, name, type) : provider.get(record, name, type);
+    }
+    /** User avatar: the auth provider's `getAvatarUrl(user)`, otherwise the default avatar provider's. */
+    getUserAvatarUrl(user: User): string { return this._auth?.getAvatarUrl?.(user) || this.getDefaultAvatarUrl(user, 'user'); }
+    /** Tenant avatar: from the tenant provider (`getAvatarUrl`), otherwise the default avatar provider's. */
+    getTenantAvatarUrl(tenant: unknown): string { return this.getTenantProvider().getAvatarUrl?.(tenant) || this.getDefaultAvatarUrl(tenant, 'tenant'); }
     private _spa = false;
     private _spaPrefetching = false;
     /**
@@ -957,6 +989,21 @@ export class Panel {
      */
     databaseTransactions(condition = true): this { this._databaseTransactions = condition; return this; }
     hasDatabaseTransactions(): boolean { return this._databaseTransactions; }
+    private _resourceCreatePageRedirect: ResourcePageRedirect = null;
+    private _resourceEditPageRedirect: ResourcePageRedirect = null;
+    /**
+     * Where every resource's create page sends the user after creating a record: `'index'` (the list), `'view'` or `'edit'`
+     * (the new record's page). Without it, or when the resource has no such page or the user may not open it: the view page,
+     * else the edit page, else the list. A page's own `getRedirectUrl()` still wins.
+     */
+    resourceCreatePageRedirect(page: ResourcePageRedirect): this { this._resourceCreatePageRedirect = page; return this; }
+    getResourceCreatePageRedirect(): string | null { return evaluatePageRedirect(this._resourceCreatePageRedirect); }
+    /**
+     * Where every resource's edit page sends the user after saving: `'index'` (the list) or `'view'` (the record's view page).
+     * Without it the user stays on the edit page. A page's own `getRedirectUrl()` still wins.
+     */
+    resourceEditPageRedirect(page: ResourcePageRedirect): this { this._resourceEditPageRedirect = page; return this; }
+    getResourceEditPageRedirect(): string | null { return evaluatePageRedirect(this._resourceEditPageRedirect); }
     private _strictAuthorization = false;
     /** Throws when a resource is checked for an ability its policy does not define, instead of allowing it. */
     strictAuthorization(condition = true): this { this._strictAuthorization = condition; return this; }
@@ -2804,8 +2851,11 @@ export abstract class Resource {
         if (page in this.relatedPages) return `${base}/${record}/${page}`;
         return page === 'index' ? base : page === 'create' ? `${base}/create` : page === 'view' ? `${base}/${record}` : `${base}/${record}/edit`;
     }
-    /** Related records pages: `{ comments: ManagePostComments }` is served at `<slug>/{record}/comments`. */
-    static relatedPages: Record<string, typeof ManageRelatedRecords | typeof EditRecord | typeof ViewRecord> = {};
+    /**
+     * Record pages: `{ comments: ManagePostComments }` is served at `<slug>/{record}/comments`. Related records pages
+     * (`ManageRelatedRecords`), other edit or view pages, and custom pages bound to the record (`InteractsWithRecord(Page)`).
+     */
+    static relatedPages: Record<string, typeof ManageRelatedRecords | typeof EditRecord | typeof ViewRecord | (typeof Page & { isRecordPage: true })> = {};
     /** Pages listed in a record's sub-navigation, in order: `['view', 'edit', 'comments']`. Empty: no sub-navigation. */
     static recordSubNavigation: string[] = [];
     /** Record sub-navigation: one tab per declared page, the current page's tab active. */
@@ -2928,6 +2978,11 @@ export abstract class Resource {
         const related: Record<string, typeof Page> = {};
         for (const [name, RelatedPage] of Object.entries(resource.relatedPages)) {
             // Another edit or view page of the record (`EditCustomerContact extends EditRecord`): served at `<slug>/{record}/<name>`.
+            // A custom page bound to the record (`InteractsWithRecord(Page)`): it reads the record through this resource.
+            if (isRecordPageClass(RelatedPage)) {
+                related[name] = class extends (RelatedPage as any) { static resource = resource; static slug = `${resource.slug}/{record}/${name}`; static shouldRegisterNavigation = false; } as unknown as typeof Page;
+                continue;
+            }
             if ((RelatedPage as any).prototype instanceof EditRecord || (RelatedPage as any).prototype instanceof ViewRecord) {
                 related[name] = class extends (RelatedPage as any) { static resource = resource; static slug = `${resource.slug}/{record}/${name}`; static shouldRegisterNavigation = false; } as unknown as typeof Page;
                 continue;
@@ -4657,6 +4712,20 @@ export class RelationManager extends ListRecords {
     static locked = ['ownerRecord', 'pageClass'];
     /** Class of the record page showing the manager, or `null` (mounted on its own). */
     getPageClass(): typeof Page | null { return this.pageClass ? (((this as any)._runtime?.classOf?.(this.pageClass) as typeof Page | null) ?? null) : null; }
+    /** Resource of the record page showing the manager (the owner's resource), or `null` (mounted on its own). */
+    getOwnerResource(): typeof Resource | null { const PageClass = this.getPageClass() as any; return PageClass?.resource ?? PageClass?.parentResource ?? null; }
+    /**
+     * The owner record (the record of the page showing the manager), read through the owner resource's adapter, in the current
+     * tenant, once per request; `null` when the manager is mounted on its own. `this.ownerRecord` is its key.
+     */
+    getOwnerRecord(): Promise<any> { return loadOwnerRecord(this, this.getOwnerResource(), this.ownerRecord); }
+    /**
+     * Title of a related record, in action modal headings and the attach and associate options: the table's `recordTitle()`,
+     * else `recordTitleAttribute`, else the related resource's title, else the model label. Override it to compute it yourself.
+     */
+    getRecordTitle(record: any): string { return managerRecordTitle(this, record); }
+    /** @internal Labels of the attach and associate options. */
+    getRelatableRecordTitleResolver(): ((record: any) => string) | null { return relatableRecordTitleResolver(this, RelationManager.prototype.getRecordTitle); }
     /**
      * Read-only mode: on a view page (unless `panel.readOnlyRelationManagersOnResourceViewPagesByDefault(false)`), the actions
      * that change the relationship (create, edit, delete, attach, detach, associate, dissociate, restore, reorder…) are hidden
@@ -4692,7 +4761,7 @@ export class RelationManager extends ListRecords {
                 return pivot.length ? form.components([...form.getComponents(), ...pivot]) : form;
             },
             pivotFieldNames: () => manager.pivotForm(Schema.make(this)).filter((component): component is Field => component instanceof Field).map((field) => field.getName()),
-        }, manager.getRelatedResource(), this.ownerRecord), { __owner: this.ownerRecord }));
+        }, manager.getRelatedResource(), this.ownerRecord), { __owner: this.ownerRecord, getRecordTitle: (record: any) => this.getRecordTitle(record) }));
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
@@ -4818,6 +4887,17 @@ export class ManageRelatedRecords extends ListRecords {
     getRecordKey(): string | null { return this.recordKey; }
     /** The owner's key, for the relationship actions (attach, associate…), as on a relation manager. */
     get ownerRecord(): string { return this.recordKey; }
+    /** The owner record, loaded (through the owner resource's adapter, in the current tenant) and authorized on every request. */
+    getOwnerRecord(): Promise<any> { return Promise.resolve(this._owner); }
+    /** The owner's resource. */
+    getOwnerResource(): typeof Resource { return this.related.parentResource; }
+    /**
+     * Title of a related record, in action modal headings and the attach and associate options: the table's `recordTitle()`,
+     * else `recordTitleAttribute`, else the related resource's title, else the model label. Override it to compute it yourself.
+     */
+    getRecordTitle(record: any): string { return managerRecordTitle(this as any, record); }
+    /** @internal Labels of the attach and associate options. */
+    getRelatableRecordTitleResolver(): ((record: any) => string) | null { return relatableRecordTitleResolver(this as any, ManageRelatedRecords.prototype.getRecordTitle); }
     // Relationship actions: the same static methods as on a `RelationManager` (see there).
     static relatedAdapter(_ownerKey: string): DataAdapter | null { return null; }
     static pivotForm(_schema: Schema): SchemaComponent[] { return []; }
@@ -4854,7 +4934,7 @@ export class ManageRelatedRecords extends ListRecords {
             getTitleCasePluralModelLabel: () => (page.pluralModelLabel ?? plural(page.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (page.recordTitleAttribute ? String(record?.[page.recordTitleAttribute] ?? '') : page.modelLabel),
             table: (table: Table) => page.table(table), form: (schema: Schema) => page.form(schema), infolist: (schema: Schema) => page.infolist(schema), getUrl: () => '',
-        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}), { __owner: this.recordKey }));
+        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}), { __owner: this.recordKey, getRecordTitle: (record: any) => this.getRecordTitle(record) }));
     }
     getTable(): Table {
         const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).queryStringIdentifier(lcfirst(this.related.name))).withoutComponentsHiddenOn(this);
@@ -5051,10 +5131,18 @@ export class CreateRecord extends ResourceFormPage {
     protected handleRecordCreation(data: Record<string, unknown>): Promise<any> { return this.getDataAdapter().create(data); }
     /** After creation (logging, sending a message…). */
     protected afterCreate(_record: any): void | Promise<void> {}
-    /** Where to go next; defaults to the new record's edit page. */
-    protected getRedirectUrl(record: any): string { return this.resource.getUrl('edit', this.getDataAdapter().getKey(record)); }
+    /**
+     * Where to go next: the panel's `resourceCreatePageRedirect()` if set, otherwise the new record's view page, else its edit
+     * page (each only if the resource has it and the user may open it), else the list.
+     */
+    protected getRedirectUrl(record: any): string | Promise<string> { return createPageRedirectUrl(this, record); }
     /** Success notification title; `null` to show nothing. */
     protected getCreatedNotificationTitle(): string | null { return t('filament-panels::resources/pages/create-record.notifications.created.title'); }
+    /** The notification sent after creating a record (body, icon, actions, duration…); `null` sends none. */
+    protected getCreatedNotification(_record: any): Notification | null | Promise<Notification | null> {
+        const title = this.getCreatedNotificationTitle();
+        return title === null || title === '' ? null : Notification.make().success().title(title);
+    }
 
     async create(another = false): Promise<void> {
         if (!(await this.validateForm())) return;
@@ -5067,10 +5155,9 @@ export class CreateRecord extends ResourceFormPage {
             return created;
         });
         this.rememberData();
-        const title = this.getCreatedNotificationTitle();
-        if (title !== null) Notification.make().success().title(title).send();
+        (await this.getCreatedNotification(record))?.send();
         if (another === true) { this.data = {}; fillSchema(this.getSchema('form'), this.data); this.rememberData(); return; }
-        this.redirect(this.getRedirectUrl(record), true);
+        this.redirect(await this.getRedirectUrl(record), true);
     }
     createAnother(): Promise<void> { return this.canCreateAnother() ? this.create(true) : Promise.resolve(); }
 }
@@ -5148,8 +5235,8 @@ export class EditRecord extends ResourceFormPage {
             await saveSchemaRelationships(part, record);
             return record;
         });
-        const title = notificationTitle ?? this.getSavedNotificationTitle();
-        if (title !== null) Notification.make().success().title(title).send();
+        if (notificationTitle !== null) Notification.make().success().title(notificationTitle).send();
+        else (await this.getSavedNotification(this._record))?.send();
     }
     static locked = ['recordKey', 'previousUrl'];
     _record: any = null;
@@ -5222,10 +5309,18 @@ export class EditRecord extends ResourceFormPage {
     protected handleRecordUpdate(record: any, data: Record<string, unknown>): Promise<any> { return this.getDataAdapter().update(this.getDataAdapter().getKey(record), data); }
     /** After saving. */
     protected afterSave(_record: any): void | Promise<void> {}
-    /** URL to go to after saving; `null` (default) stays on the page. */
-    protected getRedirectUrl(_record: any): string | null { return null; }
+    /**
+     * URL to go to after saving; `null` stays on the page. Defaults to the panel's `resourceEditPageRedirect()` if set; otherwise
+     * the user stays, unless they may no longer edit the record: then its view page (if they may view it), else the list.
+     */
+    protected getRedirectUrl(record: any): string | null | Promise<string | null> { return editPageRedirectUrl(this, record); }
     /** Success notification title; `null` to show nothing. */
     protected getSavedNotificationTitle(): string | null { return t('filament-panels::resources/pages/edit-record.notifications.saved.title'); }
+    /** The notification sent after saving (body, icon, actions, duration…); `null` sends none. */
+    protected getSavedNotification(_record: any): Notification | null | Promise<Notification | null> {
+        const title = this.getSavedNotificationTitle();
+        return title === null || title === '' ? null : Notification.make().success().title(title);
+    }
 
     async save(): Promise<void> {
         if (!(await this.validateForm())) return;
@@ -5238,9 +5333,8 @@ export class EditRecord extends ResourceFormPage {
             return record;
         });
         this.rememberData();
-        const title = this.getSavedNotificationTitle();
-        if (title !== null) Notification.make().success().title(title).send();
-        const url = this.getRedirectUrl(this._record);
+        (await this.getSavedNotification(this._record))?.send();
+        const url = await this.getRedirectUrl(this._record);
         if (url !== null) this.redirect(url, true);
     }
 }

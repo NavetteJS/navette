@@ -741,4 +741,6 @@ export { getHtmlSanitizerConfig, hasCustomHtmlSanitizerConfig, HtmlSanitizerConf
 export { cspNonce, cspNonceAttribute, getResponseCspNonce, runWithCspNonce, useCspNonce } from './csp.ts';
 export * from './enums.ts';
 export * from './relationships.ts';
+export { Platform } from './platform.ts';
+export { ModalComponent } from './modal-component.ts';
 export { fileUrlConfig, isSafeStorageKey, resolveStoredFileUrl, signedFileUrl, signFileUrl, temporaryFileUrlExpiry, verifyFileUrlSignature, type FileUrlStorage } from './file-urls.ts';

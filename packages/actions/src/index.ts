@@ -1,5 +1,5 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing, isLocalOrHttpUrl } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing, isLocalOrHttpUrl, ModalComponent } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
@@ -255,9 +255,10 @@ export class Action implements Renderable {
         return (this._cachedExtraModalFooterActions ??= this._extraModalFooterActions(this) ?? []);
     }
     // --- modal behavior
-    private _closeByClickingAway = true;
-    private _closeByEscaping = true;
-    private _closeButton = true;
+    // `null`: the app-wide default of `ModalComponent` (from `@navette-js/support`).
+    private _closeByClickingAway: boolean | null = null;
+    private _closeByEscaping: boolean | null = null;
+    private _closeButton: boolean | null = null;
     private _stickyHeader = false;
     private _stickyFooter = false;
     private _modalAlignment: 'start' | 'center' | null = null;
@@ -286,7 +287,7 @@ export class Action implements Renderable {
     private _hasCancel = true;
     private _unsavedChangesAlert: Lazy<boolean | null, ActionCallContext> = null;
     private _clickThrough: Lazy<boolean, ActionCallContext> = false;
-    private _autofocus: Lazy<boolean, ActionCallContext> = true;
+    private _autofocus: Lazy<boolean | null, ActionCallContext> = null;
     private _overlayParentActions: Lazy<boolean, ActionCallContext> = false;
     private _cancelParentActions: boolean | string | null = null;
     private _cancelParentActionsOnClose: boolean | string | null = null;
@@ -347,7 +348,7 @@ export class Action implements Renderable {
     /** The page behind the modal stays usable: no backdrop, no scroll lock; clicking away no longer closes the modal. */
     modalClickThrough(condition: Lazy<boolean, ActionCallContext> = true): this { this._clickThrough = condition; return this; }
     /** `false`: the first focusable element of the modal is not focused when it opens. */
-    modalAutofocus(condition: Lazy<boolean, ActionCallContext> = true): this { this._autofocus = condition; return this; }
+    modalAutofocus(condition: Lazy<boolean | null, ActionCallContext> = true): this { this._autofocus = condition; return this; }
     /** This action's modal opens on top of its parent's, which stays visible, instead of replacing it. */
     overlayParentActions(condition: Lazy<boolean, ActionCallContext> = true): this { this._overlayParentActions = condition; return this; }
     async shouldOverlayParentActions(ctx: ActionCallContext): Promise<boolean> { return Boolean(await evaluate(this._overlayParentActions, ctx)); }
@@ -771,8 +772,8 @@ export class Action implements Renderable {
         return views.render('filament-actions::modal', {
             // A wizard has its own buttons (back, next, submit): the modal has no footer.
             hasFooter: !this.isWizard() && footer.length > 0,
-            closeByClickingAway: this._closeByClickingAway && !clickThrough, closeByEscaping: this._closeByEscaping, closeButton: this._closeButton, stickyHeader: this._stickyHeader, stickyFooter: this._stickyFooter,
-            clickThrough, autofocus: Boolean(await evaluate(this._autofocus, ctx)),
+            closeByClickingAway: (this._closeByClickingAway ?? ModalComponent.isClosedByClickingAway) && !clickThrough, closeByEscaping: this._closeByEscaping ?? ModalComponent.isClosedByEscaping, closeButton: this._closeButton ?? ModalComponent.hasCloseButton, stickyHeader: this._stickyHeader, stickyFooter: this._stickyFooter,
+            clickThrough, autofocus: Boolean((await evaluate(this._autofocus, ctx)) ?? ModalComponent.isAutofocused),
             slideOverPosition: this._slideOverPosition ?? 'end',
             windowAttributes: mergeAttributeSets(await Promise.all(this._modalWindowAttributes.map((set) => evaluate(set, ctx)))),
             overlayAttributes: mergeAttributeSets(await Promise.all(this._modalOverlayAttributes.map((set) => evaluate(set, ctx)))),
