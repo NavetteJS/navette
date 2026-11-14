@@ -226,6 +226,61 @@ The state of a form is visible to the user in the browser, including the values 
 
 Uploaded files go to a temporary folder through a signed URL, valid for a few minutes, with the CSRF token, and only for a logged-in user. Their type is read from their content, never from their name. Always restrict the accepted types and the size, and keep private files out of public folders. See [file storage](/advanced/file-storage).
 
+### Restricting uploads to schema components
+
+The browser names the property an upload is for. Panel pages, resource pages, relation managers and widgets only accept a temporary upload for a visible upload field of their own schemas: a `FileUpload` (or a subclass), or the file attachments of a `RichEditor` or `MarkdownEditor`. The schemas checked are every `<name>Schema(schema)` builder of the component (`formSchema()`, `infolistSchema()`, `contentSchema()`…) and the forms of its mounted actions. Any other target, such as a text field, a hidden upload field or another public property, is rejected with a 403 error before the upload URL is signed, so a signed-in user cannot store files through a page that does not offer an upload. This is Filament's `RestrictsFileUploadsToSchemaComponents`, turned on by default for every panel component.
+
+A custom field that uploads files itself (calling `$wire.upload()` with its own state path) declares it with an `acceptsFileUploads()` method:
+
+```ts
+import { Field } from '@navette-js/forms';
+
+export class SignaturePad extends Field {
+    acceptsFileUploads(): boolean {
+        return true;
+    }
+}
+```
+
+A component that receives uploads for a property outside its schemas can turn the check off, or decide itself by overriding `isFileUploadForSchemaComponent(name)` (the name is the upload's state path, such as `data.photos.<uuid>`), and can add schemas built in another way by overriding `getFileUploadSchemas()`:
+
+```ts
+import { Page } from '@navette-js/panels';
+
+export class ImportPhotos extends Page {
+    static restrictFileUploadsToSchemaComponents = false;
+}
+```
+
+Components [outside a panel](/components/outside-a-panel/form) built on `LivewireComponent` are pages too, so they are restricted the same way. A component built directly on the wire runtime's `Component` opts in by declaring the same two methods, which the runtime calls for `_startUpload`, `_finishUpload`, `_uploadErrored` and `_removeUpload`:
+
+```ts
+import { Component } from '@navette-js/wire';
+import { FileUpload, isFileUploadForSchemas, TextInput } from '@navette-js/forms';
+import { Schema } from '@navette-js/schemas';
+
+export class ContactForm extends Component {
+    data: Record<string, unknown> = {};
+
+    form(): Schema {
+        return Schema.make(this).key('form').statePath('data').components([
+            TextInput.make('name'),
+            FileUpload.make('attachment'),
+        ]);
+    }
+
+    shouldRestrictFileUploadsToSchemaComponents(): boolean {
+        return true;
+    }
+
+    async isFileUploadForSchemaComponent(name: string): Promise<boolean> {
+        return isFileUploadForSchemas([this.form()], name);
+    }
+}
+```
+
+The check covers where a file is uploaded, not what is done with it: the field still validates the file's type and size when the form is submitted, and your save logic decides where it is stored.
+
 ## Scoping queries
 
 A policy answers "may they change **this** record?", it does not filter lists. To keep users away from records, restrict the adapter of the resource with its `modify` option: a record outside of its scope does not exist for the resource. See [restricting the records](/resources/authorization#restricting-the-records) and [multi-tenancy](/panels/tenancy#tenancy-security).

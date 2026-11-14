@@ -394,6 +394,9 @@ export class WireRuntime {
                 const store = this.uploads;
                 const target = call.params[0];
                 if (!store || typeof target !== 'string' || target.length > 500) throw new WireError(404, 'Uploads are not available.');
+                // A component may only accept uploads for the upload fields of its schemas (`shouldRestrictFileUploadsToSchemaComponents()`).
+                const restricting = component as { shouldRestrictFileUploadsToSchemaComponents?: () => boolean; isFileUploadForSchemaComponent?: (name: string) => boolean | Promise<boolean> };
+                if (typeof restricting.isFileUploadForSchemaComponent === 'function' && restricting.shouldRestrictFileUploadsToSchemaComponents?.() && !(await restricting.isFileUploadForSchemaComponent(target))) throw new WireError(403, `File uploads are not accepted for: ${target}`);
                 if (call.method === '_startUpload') {
                     component.dispatch('upload:generatedSignedUrl', { name: target, url: store.signedUrl(this.options.uploadPrefix ?? '/livewire') }, { self: true });
                     component._skipRender = true;

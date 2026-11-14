@@ -40,6 +40,7 @@ import { containedFile, deleteContainedFile, isStoredFileKey, serveContainedFile
 export type { FileRequest, FileResponse, LocalFileStorageOptions } from './file-storage.ts';
 import { signedFileUrl, temporaryFileUrlExpiry, type FileUrlStorage } from '@navette-js/support';
 export { safeFileUrl } from './file-upload-support.ts';
+export { acceptsFileUploads, findFileUploadComponent, isFileUploadForSchemas } from './upload-targets.ts';
 import { applyDisableOptionsWhenSelectedInSiblingRepeaterItems, applyFixIndistinctState, applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
 export { generateItemKey, getParentRepeaterItem, ItemsProcessingLimitError, siblingDistinctRules, type ItemKeyGenerator } from './repeater-items.ts';
 
