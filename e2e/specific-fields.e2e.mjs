@@ -64,7 +64,8 @@ try {
         assert.match(await wrapperOf('support_phone').innerText(), /support phone field format is invalid/);
         await field('support_phone').fill('+33612345678');
         await save();
-        assert.doesNotMatch(await wrapperOf('support_phone').innerText(), /format is invalid/);
+        await until(async () => !/format is invalid/.test(await wrapperOf('support_phone').innerText()), 'the error cleared');
+        assert.equal(await field('support_phone').inputValue(), '+33612345678');
         assert.equal(await field('description').getAttribute('cols'), '40');
     });
 

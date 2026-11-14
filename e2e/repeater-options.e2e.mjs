@@ -60,10 +60,13 @@ try {
     await step('saving runs the relationship hooks: create (price from the product), update (rounded price), delete', async () => {
         await rows().first().locator('input[type="number"]').first().fill('4');
         await rows().first().locator('input[type="number"]').last().fill('12.345');
+        await livewireDone();
         // Delete the last line, then add a line without a price.
         await rows().last().getByRole('button', { name: 'Delete' }).click();
+        await livewireDone();
         await until(async () => (await rows().count()) === LINES.length - 1, 'the line removed');
         await table().getByRole('button', { name: /^Add/ }).click();
+        await livewireDone();
         await until(async () => (await rows().count()) === LINES.length, 'the line added');
         const used = new Set([String(LINES[0].newProduct), ...LINES.slice(1, -1).map((line) => String(line.product_id))]);
         const added = rows().last().locator('select');
@@ -73,6 +76,7 @@ try {
         await added.selectOption(pick);
         await livewireDone();
         await rows().last().locator('input[type="number"]').first().fill('2');
+        await livewireDone();
         await page.getByRole('button', { name: 'Save changes' }).click();
         await until(() => lines().length === LINES.length && lines().some((line) => String(line.product_id) === pick), 'the saved lines');
         const saved = lines();
