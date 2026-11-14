@@ -59,3 +59,24 @@ test('rendering: clickable days and events, "+N more", week and list views, cust
     assert.match(renderCalendar(model({ view: 'list', events: [] })), /No events\./);
     assert.match(renderCalendar(model({ renderEvent: (event) => (event.id === 2 ? '<i data-custom>ok</i>' : null), renderDayFooter: (_day, list) => (list.length ? '<u>foot</u>' : '') })), /<i data-custom>ok<\/i>[^]*<u>foot<\/u>/);
 });
+test('labels and day names follow the current locale', async () => {
+    const { setLocale } = await import('@navette-js/support/i18n');
+    const { calendarLocale } = await import('../src/calendar.ts');
+    setLocale('fr');
+    try {
+        assert.equal(calendarLocale(), 'fr');
+        const html = renderCalendar(model({ labels: CALENDAR_LABELS, locale: calendarLocale(), maxEventsPerDay: 2 }));
+        assert.match(html, /title="Précédent"/);
+        assert.match(html, />Aujourd’hui<|>Aujourd&#039;hui<|>Aujourd'hui</);
+        assert.match(html, />Mois<\/button><button[^>]*>Semaine<\/button><button[^>]*>Liste</);
+        assert.match(html, />\+2 autres</);
+        assert.match(html, />novembre 2026</);
+        assert.match(html, />lun\.</);
+        assert.match(renderCalendar(model({ view: 'list', events: [], labels: CALENDAR_LABELS })), /Aucun événement\./);
+        // An override built from the defaults keeps the other translations.
+        assert.equal({ ...CALENDAR_LABELS, today: 'Maintenant' }.next, 'Suivant');
+    } finally { setLocale('en'); }
+    assert.equal(CALENDAR_LABELS.today, 'Today');
+    // A Laravel-style locale name is accepted by Intl.
+    assert.match(renderCalendar(model({ locale: 'pt_BR' })), /novembro de 2026/);
+});

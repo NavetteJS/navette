@@ -1,6 +1,7 @@
-// Calendar: date helpers, grid and rendering, with no runtime dependency.
+// Calendar: date helpers, grid and rendering.
 // `CalendarWidget` (index.ts) builds on this module; every part of the rendering can be replaced.
 import { Attributes, e, icon, isLocalOrHttpUrl } from '@navette-js/support';
+import { intlLocale, t, tc } from '@navette-js/support/i18n';
 
 /** A calendar event. `start` and `end` are `YYYY-MM-DD` dates or ISO date-times (`2026-11-12T09:30`); `end` is inclusive. */
 export type CalendarEvent = {
@@ -63,7 +64,20 @@ export function eventsOn(day: string, events: CalendarEvent[]): CalendarEvent[] 
 }
 
 export type CalendarLabels = { previous: string; next: string; today: string; month: string; week: string; list: string; more: (count: number) => string; empty: string };
-export const CALENDAR_LABELS: CalendarLabels = { previous: 'Previous', next: 'Next', today: 'Today', month: 'Month', week: 'Week', list: 'List', more: (count) => `+${count} more`, empty: 'No events.' };
+const label = (key: string) => t('navette-panels::calendar.' + key);
+/** Default labels, translated in the current locale each time they are read (`{ ...CALENDAR_LABELS, today: 'Now' }` works too). */
+export const CALENDAR_LABELS: CalendarLabels = {
+    get previous() { return label('actions.previous.label'); },
+    get next() { return label('actions.next.label'); },
+    get today() { return label('actions.today.label'); },
+    get month() { return label('views.month'); },
+    get week() { return label('views.week'); },
+    get list() { return label('views.list'); },
+    more: (count) => tc('navette-panels::calendar.more', count),
+    get empty() { return label('empty'); },
+};
+/** `Intl` locale of the current translation locale, for month and day names. */
+export const calendarLocale = (): string => intlLocale();
 
 export type CalendarModel = {
     heading: string | null;
@@ -114,7 +128,7 @@ export function renderCalendar(model: CalendarModel): string {
     const { view, anchor, today, firstDay, locale, labels } = model;
     const range = visibleRange(view, anchor, firstDay);
     const days = daysBetween(range.start, range.end);
-    const format = (options: Intl.DateTimeFormatOptions, day: string) => new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(toDate(day));
+    const format = (options: Intl.DateTimeFormatOptions, day: string) => new Intl.DateTimeFormat(intlLocale(locale), { ...options, timeZone: 'UTC' }).format(toDate(day));
     const title = view === 'week'
         ? `${format({ month: 'short', day: 'numeric' }, range.start)} – ${format({ month: 'short', day: 'numeric', year: 'numeric' }, range.end)}`
         : format({ month: 'long', year: 'numeric' }, anchor);

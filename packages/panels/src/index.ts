@@ -54,7 +54,7 @@ export { isSafeJsWidgetRendererUrl, jsWidgetContentHtml, resolveJsWidgetRenderer
 import { type ImportExportHistory } from './import-export.ts';
 import { DiskDownloadStore, downloaderOf, type DownloadStorage } from './downloads.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
-import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
+import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, calendarLocale, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 export { getCurrentPanel, getPluginId, PanelPlugin, type Plugin } from './plugins.ts';
@@ -3139,8 +3139,8 @@ export abstract class CalendarWidget extends Widget {
     getViews(): CalendarView[] { return ['month', 'week', 'list']; }
     /** 0 = Sunday, 1 = Monday… */
     getFirstDayOfWeek(): number { return 1; }
-    /** Locale for month and day names (`Intl`). */
-    getLocale(): string { return 'en-US'; }
+    /** Locale for month and day names (`Intl`); the current translation locale by default. */
+    getLocale(): string { return calendarLocale(); }
     getLabels(): CalendarLabels { return CALENDAR_LABELS; }
     /** In month view, beyond this number the cell shows "+N more" (which opens the list on that day). */
     getMaxEventsPerDay(): number { return 3; }
@@ -3243,7 +3243,7 @@ export abstract class CalendarPage extends Page {
     abstract getEvents(range: { start: string; end: string; view: CalendarView }): CalendarEvent[] | Promise<CalendarEvent[]>;
     getViews(): CalendarView[] { return ['month', 'week', 'list']; }
     getFirstDayOfWeek(): number { return 1; }
-    getLocale(): string { return 'en-US'; }
+    getLocale(): string { return calendarLocale(); }
     getLabels(): CalendarLabels { return CALENDAR_LABELS; }
     getMaxEventsPerDay(): number { return 3; }
     getCalendarHeading(): string | null { return null; }

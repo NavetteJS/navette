@@ -119,7 +119,7 @@ test('TextEntry: date formats, time zones, iso formats, since and tooltips', asy
     assert.match(await content({ d: '2024-03-05 10:11:12' }, TextEntry.make('d').isoDate()), />03\/05\/2024</);
     assert.match(await content({ d: '2024-03-05 10:11:12' }, TextEntry.make('d').isoTime()), />10:11 AM</);
     assert.match(await content({ d: new Date(Date.now() - 3 * 86400000).toISOString() }, TextEntry.make('d').since()), />3 days ago</);
-    assert.match(await content({ d: new Date(Date.now() + 2 * 3600000 + 60000).toISOString() }, TextEntry.make('d').since()), />2 hours from now</);
+    assert.match(await content({ d: new Date(Date.now() + 2 * 3600000 + 60000).toISOString() }, TextEntry.make('d').since()), />in 2 hours</);
     assert.match(await content({ d: '2024-03-05 10:11:12' }, TextEntry.make('d').since().dateTooltip()), /<span x-tooltip="\{ content: 'Mar 5, 2024', [^"]*">\d+ \w+ ago<\/span>/);
     // An unparsable value is shown as is.
     assert.match(await content({ d: 'soon' }, TextEntry.make('d').date()), />soon</);

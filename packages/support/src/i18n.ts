@@ -72,21 +72,44 @@ export function t(key: string, params: Record<string, string | number> = {}, loc
     return value;
 }
 
-/** Relative past duration in English, e.g. "2 months ago". Dates without a time zone are read as UTC. */
-export function diffForHumans(value: string | Date | null | undefined, now: Date = new Date()): string | null {
+/** BCP 47 tag of a locale for `Intl` (`pt_BR` → `pt-BR`); falls back to `en` when `Intl` does not accept it. */
+export function intlLocale(locale = currentLocale): string {
+    try { return Intl.getCanonicalLocales(locale.replace(/_/g, '-'))[0] ?? 'en'; } catch { return 'en'; }
+}
+const RTL_LANGUAGES = new Set(['ar', 'arc', 'ckb', 'dv', 'fa', 'he', 'ku', 'ps', 'sd', 'ug', 'ur', 'yi']);
+/** Text direction of a locale: `rtl` for Arabic, Hebrew, Persian, Urdu…, `ltr` otherwise. */
+export function localeDirection(locale = currentLocale): 'ltr' | 'rtl' {
+    const tag = intlLocale(locale);
+    try {
+        const info = new Intl.Locale(tag) as Intl.Locale & { getTextInfo?: () => { direction?: string }; textInfo?: { direction?: string } };
+        const direction = info.getTextInfo?.().direction ?? info.textInfo?.direction;
+        if (direction === 'rtl' || direction === 'ltr') return direction;
+    } catch { /* unknown locale: guess from the language below */ }
+    return RTL_LANGUAGES.has(tag.split('-')[0].toLowerCase()) ? 'rtl' : 'ltr';
+}
+
+/**
+ * Relative duration in the current locale, e.g. "2 months ago" or "il y a 2 mois"; a future date gives "in 3 days".
+ * Dates without a time zone are read as UTC.
+ */
+export function diffForHumans(value: string | Date | null | undefined, now: Date = new Date(), locale = currentLocale): string | null {
     if (value === null || value === undefined || value === '') return null;
     const date = value instanceof Date ? value : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : value.replace(' ', 'T') + 'Z');
     if (Number.isNaN(date.getTime())) return null;
-    const seconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-    const unit = (n: number, name: string) => `${n} ${name}${n === 1 ? '' : 's'} ago`;
+    const future = date.getTime() > now.getTime();
+    const [from, to] = future ? [now, date] : [date, now];
+    const seconds = Math.floor((to.getTime() - from.getTime()) / 1000);
+    const format = new Intl.RelativeTimeFormat(intlLocale(locale), { numeric: 'always' });
+    // `-0` keeps "0 seconds ago" in the past tense.
+    const unit = (n: number, name: Intl.RelativeTimeFormatUnit) => format.format(future ? n : -n, name);
     if (seconds < 60) return unit(seconds, 'second');
     if (seconds < 3600) return unit(Math.floor(seconds / 60), 'minute');
     if (seconds < 86400) return unit(Math.floor(seconds / 3600), 'hour');
     const days = Math.floor(seconds / 86400);
     if (days < 7) return unit(days, 'day');
     // Whole calendar months elapsed, not 30-day blocks.
-    let months = (now.getUTCFullYear() - date.getUTCFullYear()) * 12 + now.getUTCMonth() - date.getUTCMonth();
-    if (now.getUTCDate() < date.getUTCDate() || (now.getUTCDate() === date.getUTCDate() && now.getTime() % 86400000 < date.getTime() % 86400000)) months--;
+    let months = (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + to.getUTCMonth() - from.getUTCMonth();
+    if (to.getUTCDate() < from.getUTCDate() || (to.getUTCDate() === from.getUTCDate() && to.getTime() % 86400000 < from.getTime() % 86400000)) months--;
     if (months < 1) return unit(Math.floor(days / 7), 'week');
     if (months < 12) return unit(months, 'month');
     return unit(Math.floor(months / 12), 'year');

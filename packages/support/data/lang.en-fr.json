@@ -1301,6 +1301,16 @@
     "500.description": "Something went wrong on our side. Try again in a few moments.",
     "503.title": "Line under maintenance",
     "503.description": "We’re servicing the line. We’ll be back very soon."
+   },
+   "calendar": {
+    "actions.previous.label": "Previous",
+    "actions.next.label": "Next",
+    "actions.today.label": "Today",
+    "views.month": "Month",
+    "views.week": "Week",
+    "views.list": "List",
+    "more": "+:count more",
+    "empty": "No events."
    }
   },
   "fr": {
@@ -1669,6 +1679,16 @@
     "500.description": "Une erreur est survenue de notre côté. Réessayez dans quelques instants.",
     "503.title": "Ligne en maintenance",
     "503.description": "Nous entretenons la ligne. Nous revenons très vite."
+   },
+   "calendar": {
+    "actions.previous.label": "Précédent",
+    "actions.next.label": "Suivant",
+    "actions.today.label": "Aujourd'hui",
+    "views.month": "Mois",
+    "views.week": "Semaine",
+    "views.list": "Liste",
+    "more": "+:count autre|+:count autres",
+    "empty": "Aucun événement."
    }
   }
  },
