@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { Mark, Node, mergeAttributes, type Extensions } from '@tiptap/core';
 import Image from '@tiptap/extension-image';
-import { Color, HtmlString } from '@navette-js/support';
+import { Color, HtmlString, localOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { Action } from '@navette-js/actions';
 import { attachmentUrl, eachImage, type AttachmentStorage, type AttachmentsVisibility } from './rich-editor-attachments.ts';
@@ -308,7 +308,7 @@ export class RichContentRenderer {
                 const char = node.attrs?.char ?? '@', id = String(node.attrs?.id ?? '');
                 const label = labels.get(char)?.[id] ?? node.attrs?.label ?? '';
                 const url = this._mentions.find((candidate) => candidate.getTriggerCharacter() === char)?.getUrl(id, label) ?? null;
-                return { ...node, attrs: { ...node.attrs, label, href: url && /^(https?:\/\/|\/(?!\/)|mailto:)/i.test(url) ? url : null } };
+                return { ...node, attrs: { ...node.attrs, label, href: localOrHttpUrl(url, { extraSchemes: ['mailto'] }) } };
             }
             if (node.type === 'customBlock') {
                 const entry = this._blocks[String(node.attrs?.id ?? '')];

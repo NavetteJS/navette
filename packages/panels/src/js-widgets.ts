@@ -1,7 +1,7 @@
 // JavaScript widgets (Filament's `HasJsRenderer` widgets): the content of the widget is rendered in the browser by an ES
 // module the application brings (plain DOM code, React, Vue, Svelte…). The browser side is Filament's `js-widget.js` Alpine
 // component; this file builds its markup, as Filament's `filament-widgets::js-widget` view does.
-import { e } from '@navette-js/support';
+import { e, isLocalOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import {
     isJsRendererExpression, jsRendererExpression, jsRendererString, md5, normalizeRendererConfiguration, phpJsonEncode,
@@ -18,7 +18,7 @@ export type { JsonValue, Snapshot } from '@navette-js/schemas';
 export type JsWidgetRendererSource = JsRenderer | null;
 
 /** A module URL the widget may import: a path of the site (`/js/…`, not `//host`) or an `http(s)://` URL. */
-export const isSafeJsWidgetRendererUrl = (url: string): boolean => /^(\/(?![/\\])|https?:\/\/)[^\s"'<>`]*$/i.test(url);
+export const isSafeJsWidgetRendererUrl = (url: string): boolean => isLocalOrHttpUrl(url) && /^[^\s"'<>`]*$/.test(url);
 
 /** Checks a renderer: an unsafe URL (`javascript:`, `data:`, `//host`, a relative path…) is a programming error. */
 export function resolveJsWidgetRenderer(renderer: unknown): JsWidgetRendererSource {

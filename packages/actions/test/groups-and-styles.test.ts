@@ -20,6 +20,10 @@ test('trigger styles: link, icon button, badge, outlined and labeled from a brea
     assert.match(labeled, /fi-btn [^"]*fi-hidden md:fi-inline-grid"/);
     assert.match(clean(await Action.make('docs').label('Docs').url('/docs').link().toHtml(ctx)), /<a href="\/docs" wire:navigate[^>]*class="fi-ac-link-action fi-link/);
     assert.doesNotMatch(clean(await Action.make('bad').label('Bad').url('javascript:alert(1)').link().toHtml(ctx)), /javascript/);
+    // Protocol-relative URLs that browsers read as another site (`/\host`, `/<tab>/host`) are no links either.
+    for (const url of ['//evil.example', '/\\evil.example', '/\t/evil.example']) {
+        for (const html of [await Action.make('bad').label('Bad').url(url).link().toHtml(ctx), await Action.make('bad').label('Bad').url(url).toHtml(ctx)]) assert.doesNotMatch(html, /href="[^"]*evil\.example/, JSON.stringify(url));
+    }
 });
 
 test('action groups: custom trigger, dropdown options, sections with dividers, button group', async () => {

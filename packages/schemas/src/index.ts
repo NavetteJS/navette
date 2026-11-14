@@ -1,6 +1,6 @@
 // @navette-js/schemas — Schema, Component and the layout components.
 // Each component renders in two steps: async property resolution, then a synchronous EJS view (ADR 0003).
-import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing, isLocalOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -1608,7 +1608,7 @@ export class Image extends Component {
         const ctx = this.context();
         const url = String((await evaluate(this._url, ctx)) ?? '');
         // Relative and http(s) URLs, or an inline image (`data:image/…;base64,`: scripts never run in an <img>).
-        if (!/^(\/(?!\/)|https?:\/\/|data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$)/i.test(url)) return '';
+        if (!(isLocalOrHttpUrl(url) || /^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(url))) return '';
         const tooltip = tooltipExpression(await evaluate(this._tooltip, ctx));
         const attributes = new Attributes(this._extraAttributes)
             .class(['fi-sc-image', this._alignment ? `fi-align-${safeClass(this._alignment)}` : null])

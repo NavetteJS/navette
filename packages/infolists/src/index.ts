@@ -1,6 +1,6 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { loadMissingRelationships, loadRelationshipAggregates, normalizeRelationshipAggregates, readRecordPath, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregateFunction } from '@navette-js/support';
 import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
@@ -64,7 +64,7 @@ const cssLength = (value: number | string | null | undefined): string | null => 
     return /^(\d+(\.\d+)?|\.\d+)(px|rem|em|%|vh|vw|ch)$/.test(trimmed) || trimmed === 'auto' ? trimmed : null;
 };
 /** Image sources: same-site paths (`/…`) and http(s) URLs only. */
-const isImageUrl = (value: unknown): value is string => typeof value === 'string' && /^(\/(?!\/)|https?:\/\/)/i.test(value.trim());
+const isImageUrl = (value: unknown): value is string => typeof value === 'string' && isLocalOrHttpUrl(value.trim());
 
 /** Option that may depend on the record and on the state item. */
 export type PerItem<T> = T | ((record: any, state: unknown) => T);

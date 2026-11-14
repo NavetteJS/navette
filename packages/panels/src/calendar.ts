@@ -1,6 +1,6 @@
 // Calendar: date helpers, grid and rendering, with no runtime dependency.
 // `CalendarWidget` (index.ts) builds on this module; every part of the rendering can be replaced.
-import { Attributes, e, icon } from '@navette-js/support';
+import { Attributes, e, icon, isLocalOrHttpUrl } from '@navette-js/support';
 
 /** A calendar event. `start` and `end` are `YYYY-MM-DD` dates or ISO date-times (`2026-11-12T09:30`); `end` is inclusive. */
 export type CalendarEvent = {
@@ -91,7 +91,7 @@ export type CalendarModel = {
 
 const COLOR = /^[a-z][a-z0-9-]*$/;
 /** Only a same-site path (`/…`) or an http(s) URL becomes a link (no `javascript:` or protocol-relative URLs). */
-const safeUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
+const safeUrl = (url: unknown): string | null => (typeof url === 'string' && isLocalOrHttpUrl(url) ? url : null);
 const call = (method: string, argument: string | number) => `${method}(${JSON.stringify(String(argument)).replace(/"/g, "'")})`;
 
 /** Default event rendering: a link, a button or a plain block, depending on what a click can do. */

@@ -8,7 +8,7 @@
 import { Action, ActionHalt, type ActionCallContext } from '@navette-js/actions';
 import { Field, Select, TableSelect, saveSchemaRelationships, type TableConfiguration } from '@navette-js/forms';
 import type { Schema } from '@navette-js/schemas';
-import { configured, icons, js } from '@navette-js/support';
+import { configured, icons, js, isLocalOrHttpUrl } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
 import { TrashedFilter } from '@navette-js/tables';
 import type { DataAdapter } from '@navette-js/database';
@@ -19,7 +19,7 @@ type Context = ActionCallContext & Record<string, unknown>;
 type ResourceLike = typeof Resource | any;
 const ucfirst = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 const titleCase = (s: unknown) => String(s).split(' ').map(ucfirst).join(' ');
-const isSafeUrl = (url: unknown): url is string => typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url);
+const isSafeUrl = (url: unknown): url is string => isLocalOrHttpUrl(url);
 const managerOf = (livewire: any) => livewire.constructor as typeof RelationManager;
 const attributesOf = (record: any): Record<string, unknown> => (typeof record?.toJSON === 'function' ? record.toJSON() : { ...(record ?? {}) });
 

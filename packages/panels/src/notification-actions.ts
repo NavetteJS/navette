@@ -1,5 +1,5 @@
 // Actions of notifications (flash, database and broadcast): Filament's array format, checked, and their markup.
-import { Attributes, cls, e, icon, icons, js, type ColorManager } from '@navette-js/support';
+import { Attributes, cls, e, icon, icons, js, type ColorManager, localOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Action, ActionGroup } from '@navette-js/actions';
 
@@ -38,7 +38,7 @@ const LENGTH = /^[0-9.]+(px|rem|em|vh|%)$/;
 const SAFE_ATTRIBUTE = /^(?:data-[a-z0-9_.-]{1,60}|aria-[a-z]{1,30}|id|class|title|role|rel|lang|dir)$/;
 
 /** Only a same-site path (`/…`) or an http(s) URL can become a link (no `javascript:`, `data:` or protocol-relative URLs). */
-export const safeNotificationUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?![/\\])|https?:\/\/)/.test(url) && !/[\x00-\x1f\x7f]/.test(url) ? url : null);
+export const safeNotificationUrl = (url: unknown): string | null => localOrHttpUrl(url);
 /** Icon names that come from the browser or the database are untrusted: only a Heroicons-like name or `prefix:name` (an icon of a registered set). */
 export const safeNotificationIcon = (name: string | null | undefined, size: string, classes: string[], alias?: string): string => {
     if (!name || !ICON.test(name)) return '';

@@ -1,5 +1,5 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing, isLocalOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
@@ -207,7 +207,7 @@ export class Action implements Renderable {
         const tooltip = await this.tooltipAttribute(ctx);
         const disabled = this._disabled !== false && (await this.isDisabled(ctx));
         if (href !== null) {
-            if (!/^(\/(?!\/)|https?:\/\/)/.test(href)) return '';
+            if (!isLocalOrHttpUrl(href)) return '';
             if (this._postToUrl) return postForm(href, ctx, ['fi-ac-grouped-action'], `<button ${tooltip}role="menuitem" tabindex="-1" type="submit"${disabled ? ' disabled aria-disabled="true"' : ''} class="${cls(['fi-dropdown-list-item', ...colors, { 'fi-disabled': disabled }])}">${glyph}${label}</button>`);
             if (disabled) return `<span ${tooltip}aria-disabled="true" class="${cls(['fi-dropdown-list-item', 'fi-ac-grouped-action', 'fi-disabled', ...colors])}" role="menuitem" tabindex="-1">${glyph}${label}</span>`;
             return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} ${tooltip}class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}${label}</a>`;
@@ -712,7 +712,7 @@ export class Action implements Renderable {
         const alpineClick = await this.resolveAlpineClick(ctx);
         const linkDisabled = this.canBeDisabled() && (await this.isDisabled(ctx));
         // Only local or http(s) URLs become links (no `javascript:` or protocol-relative URLs).
-        if (href && /^(\/(?!\/)|https?:\/\/)/.test(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="fi-link-label">${e(label)}</span></a>`;
+        if (href && isLocalOrHttpUrl(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="fi-link-label">${e(label)}</span></a>`;
         const keys = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
         // Disabled: no click (a tooltip still shows), `disabled` when there is no tooltip.
         const rowClick = linkDisabled ? '' : alpineClick ? ` x-on:click="${e(alpineClick)}"` : ` ${this.clickAttribute()}="${e(raw)}"`;
@@ -943,7 +943,7 @@ export class Action implements Renderable {
         explicitMountContext ??= this._parentMountContext;
         // Explicit trigger styles (link, icon button, badge), and the icon button / labeled button pair of `labeledFrom()`.
         if (this._submit === null && (this._view === 'link' || this._view === 'icon-button' || this._view === 'badge' || this._labeledFrom)) {
-            const safeUrl = linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl) ? linkUrl : null;
+            const safeUrl = linkUrl !== null && isLocalOrHttpUrl(linkUrl) ? linkUrl : null;
             const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
             // JavaScript click handler (`actionJs()`): nothing is sent to the server.
             const mountExpression = (this._handler || this.hasModalContentOnly()) && !alpineClick ? this.mountExpressionFor(mountContext) : null;
@@ -962,12 +962,12 @@ export class Action implements Renderable {
             }
             return this.styledTriggerHtml(ctx, this._view as 'link' | 'icon-button' | 'badge', click.trim(), tag, target, disabled);
         }
-        if (linkUrl !== null && this._postToUrl && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl)) {
+        if (linkUrl !== null && this._postToUrl && isLocalOrHttpUrl(linkUrl)) {
             const classes = cls(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
             return postForm(linkUrl, ctx, [], `<button type="submit" ${await this.tooltipAttribute(ctx)}class="${classes}">${this._icon ? icon(this._icon) : ''}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}</button>`);
         }
         const tooltip = await this.tooltipAttribute(ctx);
-        if (linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl)) {
+        if (linkUrl !== null && isLocalOrHttpUrl(linkUrl)) {
             const link = new Attributes().class(['fi-ac-btn-action', 'fi-btn', { 'fi-disabled': disabled }, `fi-size-${this._size}`, ...(this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
             const linkIcon = this._icon ? icon(this._icon) : '';
             const badge = typeof this._badge === 'function' ? await this._badge() : this._badge;

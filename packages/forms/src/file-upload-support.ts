@@ -1,4 +1,5 @@
 // Helpers of the FileUpload field: URL checks and lazy option mapping.
+import { isLocalOrHttpUrl } from '@navette-js/support';
 import type { Lazy } from '@navette-js/support';
 
 /**
@@ -10,7 +11,7 @@ export function safeFileUrl(url: unknown): string | null {
     if (typeof url !== 'string' || url === '') return null;
     const encoded = url.replaceAll(' ', '%20');
     if (/[\u0000-\u001f\u007f\\]/.test(encoded) || /\s/.test(encoded)) return null;
-    if (/^\/(?!\/)/.test(encoded)) return encoded;
+    if (encoded.startsWith('/')) return isLocalOrHttpUrl(encoded) ? encoded : null;
     return /^https?:\/\/[^/?#]/i.test(encoded) ? encoded : null;
 }
 

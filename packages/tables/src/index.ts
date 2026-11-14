@@ -1,6 +1,6 @@
 // @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
-import { readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregate } from '@navette-js/support';
+import { readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregate, isLocalOrHttpUrl } from '@navette-js/support';
 import { addRelationshipsToQuery, ensureRelationshipSupport, groupScopeThroughRelationship, relationshipWriteTarget } from './relationships.ts';
 export { addRelationshipsToQuery, ensureRelationshipSupport } from './relationships.ts';
 import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
@@ -1085,7 +1085,7 @@ const cssLength = (value: string | number | null): string | null => {
 /** Only hex or simple functional colors are written into a style attribute (no CSS injection). */
 const sanitizeCssColor = (value: unknown): string | null => (typeof value === 'string' && /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch)a?\([0-9.,%\s/deg-]+\))$/.test(value.trim()) ? value.trim() : null);
 /** Only local or http(s) URLs become image sources. */
-const safeImageUrl = (value: unknown): string | null => (typeof value === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(value) ? value : null);
+const safeImageUrl = (value: unknown): string | null => (typeof value === 'string' && isLocalOrHttpUrl(value) ? value : null);
 /** Attributes of a copyable element (Filament's `filamentCopyable` Alpine component). */
 const copyableAttributes = (copied: string, label: string, message: string, duration: number): string[] => [
     'x-data="filamentCopyable"', 'x-bind="bindings"',
