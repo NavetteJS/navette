@@ -43,8 +43,8 @@ export class LabPrivateStorage extends LocalFileStorage {
 let privateStorage: LabPrivateStorage | null = null;
 /** Called by the demo server: where private attachments go, and the route serving their temporary URLs. */
 export function labPrivateAttachments(root: string, secret: string): { path: string; handler: (req: Request, res: Response) => void } {
-    privateStorage = new LabPrivateStorage(root, '/lab-private-files', secret);
-    return { path: '/lab-private-files', handler: privateStorage.handler() };
+    privateStorage = new LabPrivateStorage(root, '/lab-private-attachments', secret);
+    return { path: '/lab-private-attachments', handler: privateStorage.handler() };
 }
 
 /** A plugin adding a toolbar button (and enabling the built-in `highlight` one). */

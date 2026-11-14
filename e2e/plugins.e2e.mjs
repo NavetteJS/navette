@@ -54,7 +54,11 @@ try {
         const low = await rowNames();
         assert.ok(low.some((text) => text.includes(lowStock.name)));
         assert.ok(!low.some((text) => text.includes(wellStocked.name)), 'only products with less than 10 items');
-        assert.ok(low.length < all.length || all.length === 0);
+        // Each list shows a page of its own records (other specs may have added low stock products: compare with the database).
+        const count = (sql) => db.prepare(sql).get().total;
+        const perPage = 10;
+        assert.equal(all.length, Math.min(count('select count(*) as total from products'), perPage));
+        assert.equal(low.length, Math.min(count('select count(*) as total from products where qty < 10'), perPage));
         // Only the registration being shown is active in the navigation.
         const active = page.locator('.fi-sidebar-item.fi-active .fi-sidebar-item-label');
         assert.deepEqual((await active.allInnerTexts()).map((label) => label.trim()), ['Low stock']);

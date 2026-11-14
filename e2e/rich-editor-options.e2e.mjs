@@ -132,7 +132,7 @@ try {
         const image = content().locator('img[data-id]');
         await image.waitFor({ timeout: 15000 });
         const src = await image.getAttribute('src');
-        assert.match(src, /^\/lab-private-files\/lab-rich\/[0-9a-f-]+\.png\?expires=\d+&signature=[0-9a-f]{64}$/);
+        assert.match(src, /^\/lab-private-attachments\/lab-rich\/[0-9a-f-]+\.png\?expires=\d+&signature=[0-9a-f]{64}$/);
         await until(() => image.evaluate((element) => element.complete && element.naturalWidth === 1), 'the private image loads');
         const ok = await page.request.get(`${BASE}${src}`);
         assert.equal(ok.status(), 200);
