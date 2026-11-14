@@ -195,6 +195,30 @@ table.recordUrl((record) => `/legacy/orders/${record.id}`).spaRecordUrls(false);
 
 A sub-navigation item (`getSubNavigation()`) takes `spa: false`.
 
+## Page loading indicator
+
+While the next page loads, the panel covers the content area with a translucent overlay and a spinner: the sidebar and the topbar stay visible and usable, whatever the layout (sidebar, collapsed sidebar, top navigation, phone). It shows for SPA navigations and for full page loads started from the panel: links, forms, redirects after an action. It appears after 150 milliseconds, so fast pages do not flash, and goes away once the page is shown, when the request fails, and when the browser restores a page from its back/forward cache.
+
+To cover the whole screen instead, or to show nothing:
+
+```ts
+panel.pageLoadingIndicator('screen');
+
+panel.pageLoadingIndicator(false);
+```
+
+The delay can be changed, in milliseconds:
+
+```ts
+panel.pageLoadingIndicator('content', { delay: 300 });
+```
+
+The overlay replaces the progress bar of Livewire's navigation, which is never shown in a panel. While it is visible, the content region (`#nv-main-content`) has `aria-busy="true"` and a status region announces "Loading page…" (`navette-panels::layout.page_loading.label`) to screen readers. With the operating system's "reduce motion" setting, it appears without a fade and the spinner turns slower.
+
+A link or a form that should not show it, such as a link answered by a download, takes the `data-no-page-loading` attribute. Links with a `download` attribute or opening another tab never show it. If a full page load leaves the page in place (a download without the attribute), the overlay goes away after 15 seconds.
+
+`getPageLoadingIndicator()` returns the setting (`'content'`, `'screen'` or `false`) and `getPageLoadingDelay()` the delay. To restyle the overlay, see [styling the page loading indicator](/styling/overview#page-loading-indicator).
+
 ## Unsaved changes alerts
 
 The user may be warned before leaving a create or edit page whose form has changes that are not saved yet:

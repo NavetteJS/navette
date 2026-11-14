@@ -139,10 +139,37 @@ By default, the brand name is displayed as the logo. To use an image, see [setti
 
 ## Motion
 
-Navette adds light animations to the interface: the arrival of pages and of lazy-loaded content, a pressed state on buttons, the opening of modals and menus, and a "Loading…" pill at the top of the screen when a request takes more than 350 milliseconds. They follow the "reduce motion" setting of the operating system.
+Navette adds light animations to the interface: the arrival of pages and of lazy-loaded content, a pressed state on buttons, the opening of modals and menus, and a fade of the table content while it reloads. They follow the "reduce motion" setting of the operating system.
 
 To render the interface without them:
 
 ```ts
 panel.motion(false);
+```
+
+The [page loading indicator](/panels/configuration#page-loading-indicator) is a separate setting: `motion(false)` keeps it.
+
+## Page loading indicator
+
+The overlay shown while the next page loads (`panel.pageLoadingIndicator()`) is styled by these classes, which a [custom theme](#creating-a-custom-theme) or a stylesheet registered with `panel.assets()` may override:
+
+| Class | Element |
+| --- | --- |
+| `nv-page-loading` | Wrapper, with `data-mode="content"` or `data-mode="screen"` |
+| `nv-page-loading-overlay` | Backdrop over the content area or the screen; it has `data-active` while visible |
+| `nv-page-loading-card` | Card in the middle, holding the spinner and the text |
+| `nv-page-loading-spinner` | Spinner, in the primary color |
+| `nv-page-loading-text` | "Loading page…" |
+
+For instance, a darker backdrop without the card:
+
+```css
+.nv-page-loading-overlay {
+    background: rgb(0 0 0 / 0.35);
+}
+
+.nv-page-loading-card {
+    background: none;
+    box-shadow: none;
+}
 ```

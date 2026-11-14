@@ -1162,6 +1162,7 @@
    "layout": {
     "direction": "ltr",
     "skip_to_content.label": "Skip to content",
+    "page_loading.label": "Loading page…",
     "actions.billing.label": "Manage subscription",
     "actions.logout.label": "Sign out",
     "actions.open_database_notifications.label": "Notifications",
@@ -1547,6 +1548,7 @@
    },
    "layout": {
     "direction": "ltr",
+    "page_loading.label": "Chargement de la page…",
     "actions.billing.label": "Gérer l'abonnement",
     "actions.logout.label": "Déconnexion",
     "actions.open_database_notifications.label": "Ouvrir les notifications",

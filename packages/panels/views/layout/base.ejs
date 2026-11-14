@@ -98,6 +98,7 @@
         <% if (locals.themeCss) { %><style<%- cspNonceAttribute() %> data-navette-theme><%- themeCss %></style><% } %>
 
         <% if (locals.motion) { %><link rel="stylesheet" href="<%- assetUrl('navette/motion.css') %>" data-navigate-track /><% } %>
+        <% if (locals.pageLoading) { %><link rel="stylesheet" href="<%- assetUrl('navette/page-loading.css') %>" data-navigate-track /><% } %>
         <link rel="stylesheet" href="<%- assetUrl('navette/calendar.css') %>" data-navigate-track />
         <link rel="stylesheet" href="<%- assetUrl('navette/table-heading.css') %>" data-navigate-track />
         <% if (locals.securityKeys) { %><link rel="stylesheet" href="<%- assetUrl('navette/security-keys.css') %>" data-navigate-track /><% } %>
@@ -106,9 +107,10 @@
         <%- renderHook('panels::head.end', renderHookScopes) %>
     </head>
 
-    <body <% if (locals.bodyAttributes) { %><%- bodyAttributes %> <% } %>class="<%- cls(['nv-body', 'nv-panel-' + panelId, bodyClass]) %>">
+    <body <% if (locals.bodyAttributes) { %><%- bodyAttributes %> <% } %>class="<%- cls(['nv-body', 'nv-panel-' + panelId, bodyClass]) %>" data-no-progress-bar>
         <%- renderHook('panels::body.start', renderHookScopes) %>
         <%- body %>
+        <%- locals.pageLoading ?? '' %>
 
         <%- notifications %>
 
@@ -148,5 +150,6 @@
         <%- renderHook('panels::scripts.after', renderHookScopes) %>
         <%- renderHook('panels::body.end', renderHookScopes) %>
         <% if (locals.motion) { %><script<%- cspNonceAttribute() %> src="<%- assetUrl('navette/motion.js') %>" data-navigate-once defer></script><% } %>
+        <% if (locals.pageLoading) { %><script<%- cspNonceAttribute() %> src="<%- assetUrl('navette/page-loading.js') %>" data-navigate-once></script><% } %>
     </body>
 </html>

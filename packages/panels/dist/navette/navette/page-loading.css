@@ -1,0 +1,41 @@
+/* Page loading overlay (`Panel.pageLoadingIndicator()`), driven by page-loading.js. */
+.nv-page-loading-overlay {
+    position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--gray-50, #fafafa) 62%, transparent);
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+    visibility: hidden; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease-out, visibility 0s linear 0.2s;
+}
+.nv-page-loading[data-mode='screen'] .nv-page-loading-overlay { z-index: 60; }
+.nv-page-loading-overlay[data-active] {
+    visibility: visible; opacity: 1; pointer-events: auto; cursor: progress;
+    transition: opacity 0.2s ease-out, visibility 0s;
+}
+.dark .nv-page-loading-overlay { background: color-mix(in oklab, var(--gray-950, #09090b) 58%, transparent); }
+
+.nv-page-loading-card {
+    display: flex; flex-direction: column; align-items: center; gap: 0.875rem; padding: 1.5rem 2rem; border-radius: 1rem;
+    background: var(--color-white, #fff); box-shadow: 0 12px 32px rgb(0 0 0 / 0.1), 0 0 0 1px rgb(0 0 0 / 0.05);
+    transform: scale(0.96); transition: transform 0.25s ease-out;
+}
+.nv-page-loading-overlay[data-active] .nv-page-loading-card { transform: none; }
+.dark .nv-page-loading-card { background: var(--gray-900, #18181b); box-shadow: 0 12px 32px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.08); }
+.nv-page-loading-text { font-size: 0.875rem; font-weight: 500; color: var(--gray-600, #52525b); }
+.dark .nv-page-loading-text { color: var(--gray-300, #d4d4d8); }
+
+.nv-page-loading-spinner {
+    width: 2.5rem; height: 2.5rem; border-radius: 9999px;
+    border: 3px solid color-mix(in oklab, var(--primary-500, #f59e0b) 18%, transparent);
+    border-top-color: var(--primary-500, #f59e0b);
+    animation: nv-page-loading-spin 0.75s linear infinite;
+}
+.dark .nv-page-loading-spinner {
+    border-color: color-mix(in oklab, var(--primary-400, #fbbf24) 22%, transparent);
+    border-top-color: var(--primary-400, #fbbf24);
+}
+@keyframes nv-page-loading-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .nv-page-loading-overlay, .nv-page-loading-overlay[data-active], .nv-page-loading-card { transition: none; transform: none; }
+    .nv-page-loading-spinner { animation-duration: 1.8s; }
+}
