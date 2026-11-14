@@ -8,6 +8,7 @@ import {
     ReplicateAction, Tab, type AuthProvider, type Login,
 } from '@navette-js/panels';
 import { Section } from '@navette-js/schemas';
+import { labPluginExamples } from './lab-plugins.ts';
 import { Color } from '@navette-js/support';
 import {
     BulkActionGroup, Count, Filter, Group, IconColumn, Indicator, NumberConstraint, Panel as TablePanel, QueryBuilder, SelectColumn, SelectFilter, Split, Stack, Sum,
@@ -269,6 +270,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .setColors({ primary: Color.Violet })
         .login(options.login)
         .resources([LabProducts, LabCards, LabFields, LabCatalogBrands, LabCatalogProducts])
+        // Example plugins (`examples/`) and a configurable resource.
+        .plugin(labPluginExamples())
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
         .defaultThemeMode('dark')
         .auth(options.auth)

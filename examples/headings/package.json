@@ -1,0 +1,16 @@
+{
+    "name": "navette-headings",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Example standalone plugin for Navette: a heading component for any schema.",
+    "license": "MIT",
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "files": ["src", "views", "resources"],
+    "peerDependencies": {
+        "@navette-js/schemas": "*",
+        "@navette-js/support": "*"
+    }
+}

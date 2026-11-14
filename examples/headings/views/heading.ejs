@@ -1,0 +1,2 @@
+<%# Heading component. Variables: level (h1…h6), content (text), color (a color name, or null). %>
+<<%= level %> class="headings-component<%= color ? ' headings-component-colored' : '' %>"<%- color ? ` style="--headings-color: var(--${color}-600); --headings-dark-color: var(--${color}-400);"` : '' %>><%= content %></<%= level %>>

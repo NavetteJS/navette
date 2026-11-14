@@ -31,6 +31,10 @@ import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
+export { getCurrentPanel, getPluginId, PanelPlugin, type Plugin } from './plugins.ts';
+import { getCurrentPanel, getPluginId, runWithPanel, type Plugin } from './plugins.ts';
+export { PageConfiguration, ResourceConfiguration } from './configurable.ts';
+import { findConfiguration, getActiveConfiguration, isClosestNavigationUrl, getPanelConfigurations, PageConfiguration, resolvePageRegistration, resolveResourceRegistration, resolveUrlTarget, ResourceConfiguration, routeOrder, withConfiguration, withRequestConfiguration } from './configurable.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
@@ -56,8 +60,6 @@ export type User = { id: string | number; name: string; email: string; [key: str
  * A missing ability is allowed.
  */
 export type Policy<R = any> = Partial<Record<string, (user: User, record: R | null) => boolean | Promise<boolean>>>;
-/** A reusable bundle of configuration. `register` receives the panel being built; `boot` is called when the router is mounted. */
-export type Plugin = { id: string; register(panel: Panel): void; boot?(panel: Panel): void };
 /** Question asked to the panel's authorization hook. `resource`, `page` or `widget` tells what it is about. */
 export type AuthorizationCheck = { user: User; ability: string; resource: unknown | null; record: unknown | null; page: typeof Page | null; widget: typeof Widget | null };
 /** Return `true` or `false` to decide, or `undefined` to let the resource policy (or `canAccess` / `canView`) answer. */
@@ -265,7 +267,7 @@ export class Panel {
         // this panel's (and its theme's) colors only apply for the duration of the request.
         const withPanelColors = () => sharedColors.runWith(`${this._id}:${theme?.id ?? ''}`, this.colors.getColors(), fn);
         // A panel's render hooks only apply to its own requests.
-        return runWithRenderHooks(this._renderHooks, () => (theme?.colors ? this.colors.runWith(theme.id, theme.colors, withPanelColors) : withPanelColors()));
+        return runWithPanel(this, () => runWithRenderHooks(this._renderHooks, () => (theme?.colors ? this.colors.runWith(theme.id, theme.colors, withPanelColors) : withPanelColors())));
     }
     setColors(colors: Record<string, Palette | string>): this { this.colors.register(colors); return this; }
     /** Panel font. Without a URL, it is loaded from Bunny Fonts. */
@@ -300,13 +302,15 @@ export class Panel {
     }
     /** Name of the session cookie: per guard (shared), or per panel. */
     getSessionCookieName(): string { return this._authGuard !== null ? `navette_${this._authGuard}_session` : `navette_${this._id}_session`; }
-    pages(pages: (typeof Page)[]): this {
-        for (const page of pages) { this.registerCluster(page); this._pages.push(page); }
+    /** Registers pages; a configuration (`SettingsPage.make('advanced')`) registers the page once more, with its options. */
+    pages(pages: (typeof Page | PageConfiguration)[]): this {
+        for (const page of pages.map((entry) => resolvePageRegistration(this, entry))) { this.registerCluster(page); this._pages.push(page); }
         return this;
     }
     /** Registers resources: their pages and navigation items. */
-    resources(resources: (typeof Resource)[]): this {
-        for (const resource of resources) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
+    resources(resources: (typeof Resource | ResourceConfiguration)[]): this {
+        // A configuration (`OrderResource.make('archived')`) registers the resource once more, with its own slug and options.
+        for (const resource of resources.map((entry) => resolveResourceRegistration(this, entry))) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
         return this;
     }
     /** A page or resource in a cluster is served under the cluster's slug; the cluster page is registered with it. */
@@ -354,13 +358,26 @@ export class Panel {
     private _plugins: Plugin[] = [];
     /** Applies a plugin: an object that configures the panel (resources, pages, render hooks, themes…). */
     plugin(plugin: Plugin): this {
-        if (this._plugins.some((p) => p.id === plugin.id)) throw new Error(`Plugin already registered: ${plugin.id}`);
+        const id = getPluginId(plugin);
+        if (this.hasPlugin(id)) throw new Error(`Plugin already registered: ${id}`);
         this._plugins.push(plugin);
         plugin.register(this);
         return this;
     }
     plugins(plugins: Plugin[]): this { for (const plugin of plugins) this.plugin(plugin); return this; }
     getPlugins(): Plugin[] { return this._plugins; }
+    /** The plugin registered with this identifier: `panel.getPlugin('blog')`. Throws when it is not registered. */
+    getPlugin<T extends Plugin = Plugin>(id: string): T {
+        const plugin = this._plugins.find((candidate) => getPluginId(candidate) === id);
+        if (!plugin) throw new Error(`Plugin [${id}] is not registered for panel [${this._id}].`);
+        return plugin as T;
+    }
+    hasPlugin(id: string): boolean { return this._plugins.some((candidate) => getPluginId(candidate) === id); }
+    /** Configurations of resources registered on this panel (`OrderResource.make('archived')`). */
+    getResourceConfigurations(): ResourceConfiguration[] { return getPanelConfigurations(this, 'resource'); }
+    getResourceConfiguration(resource: typeof Resource, key: string): ResourceConfiguration | null { return findConfiguration(this, resource, key) as ResourceConfiguration | null; }
+    getPageConfigurations(): PageConfiguration[] { return getPanelConfigurations(this, 'page'); }
+    getPageConfiguration(page: typeof Page, key: string): PageConfiguration | null { return findConfiguration(this, page, key) as PageConfiguration | null; }
     private _renderHooks = new RenderHookRegistry();
     /**
      * Inserts HTML at a named location of this panel's UI (names: `PanelsRenderHook`, `TablesRenderHook`, `ActionsRenderHook`, `WidgetsRenderHook`).
@@ -811,12 +828,14 @@ export class Panel {
         return hidden;
     }
     getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[] }[] {
+        const menuUrls = this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => this.getUrl(p.slug));
         const items = [
             // The pages of a cluster are in its sub-navigation: the menu only shows the cluster.
             ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => {
                 const item = NavigationItem.make(p.getNavigationLabel()).url(this.getUrl(p.slug)).icon(typeof (p as any).getNavigationIcon === 'function' ? (p as any).getNavigationIcon() : p.navigationIcon).group(p.navigationGroup).sort(p.navigationSort).badge(badges.has(p.slug) ? badges.get(p.slug)! : p.navigationBadge, p.navigationBadgeColor).parentItem(p.navigationParentItem);
                 const base = this.getUrl(p.slug);
-                return (p as any).resource || p.prototype instanceof Cluster ? item.isActiveWhen((current) => current === base || current.startsWith(base + '/')) : item;
+                // Below another item's URL (`orders/archived` under `orders`), only that item is active.
+                return (p as any).resource || p.prototype instanceof Cluster ? item.isActiveWhen((current) => isClosestNavigationUrl(base, current, menuUrls)) : item;
             }),
             ...this._navigationItems,
         ].sort((a, b) => a._sort - b._sort);
@@ -1286,6 +1305,32 @@ export class Page extends BasePage {
     static isTenantSubscriptionRequired(panel: Panel): boolean { return panel.isTenantSubscriptionRequired(); }
     static getTitle(): string { return this.title ?? this.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
     static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
+    /** Class of the options of the page's registrations (`PageConfiguration` or a subclass): enables `make()`. */
+    static configurationClass: typeof PageConfiguration | null = null;
+    /** A registration of this page with its own options: `panel.pages([SettingsPage.make('advanced').slug('advanced-settings')])`. */
+    static make<P extends typeof Page>(this: P, key = 'default'): InstanceType<NonNullable<P['configurationClass']>> {
+        if (!this.configurationClass) throw new Error(`Page ${this.name} does not define a configurationClass.`);
+        return this.configurationClass.make(this, key) as InstanceType<NonNullable<P['configurationClass']>>;
+    }
+    /** Options of the registration being used, or `null` for the page's own (default) registration. */
+    static getConfiguration<P extends typeof Page>(this: P): InstanceType<NonNullable<P['configurationClass']>> | null { return getActiveConfiguration(this) as InstanceType<NonNullable<P['configurationClass']>> | null; }
+    static hasConfiguration(): boolean { return this.getConfiguration() !== null; }
+    /** Runs `fn` with the registration `key` of this page active (URLs, `getConfiguration()`). */
+    static withConfiguration<T>(key: string, fn: () => T): T { return withConfiguration(this, key, fn); }
+    /**
+     * URL of the page in the current panel (or `options.panel`): `{record}`-style parameters of the slug are filled from
+     * `parameters`, the others go to the query string. `options.configuration` targets a registration (`null`: the default one).
+     */
+    static getUrl(parameters: Record<string, string | number> = {}, options: { configuration?: string | null; panel?: Panel } = {}): string {
+        const panel = options.panel ?? getCurrentPanel();
+        const target = resolveUrlTarget(this, options.configuration, panel ?? undefined);
+        if (!panel) throw new Error(`${this.name}.getUrl() was called outside a panel request: pass options.panel.`);
+        const query = new URLSearchParams();
+        const path = target.slug.replace(/\{(\w+)\}/g, (_match, name: string) => encodeURIComponent(String(parameters[name] ?? '')));
+        for (const [name, value] of Object.entries(parameters)) if (!target.slug.includes(`{${name}}`)) query.set(name, String(value));
+        const search = query.toString();
+        return panel.getUrl(path) + (search ? `?${search}` : '');
+    }
 
     /** Every request, including browser updates, requires an authenticated user: a snapshot kept after logout is not enough. */
     async boot(): Promise<void> {
@@ -2063,7 +2108,22 @@ export abstract class Resource {
 
     static getPluralModelLabel(): string { return this.pluralModelLabel ?? plural(this.modelLabel); }
     static getTitleCasePluralModelLabel(): string { return this.getPluralModelLabel().split(' ').map(ucfirst).join(' '); }
-    static getUrl(page: string = 'index', record?: string | number): string {
+    /** Class of the options of the resource's registrations (`ResourceConfiguration` or a subclass): enables `make()`. */
+    static configurationClass: typeof ResourceConfiguration | null = null;
+    /** A registration of this resource with its own options: `panel.resources([OrderResource.make('archived').archived()])`. */
+    static make<R extends typeof Resource>(this: R, key = 'default'): InstanceType<NonNullable<R['configurationClass']>> {
+        if (!this.configurationClass) throw new Error(`Resource ${this.name} does not define a configurationClass.`);
+        return this.configurationClass.make(this, key) as InstanceType<NonNullable<R['configurationClass']>>;
+    }
+    /** Options of the registration being used, or `null` for the resource's own (default) registration. */
+    static getConfiguration<R extends typeof Resource>(this: R): InstanceType<NonNullable<R['configurationClass']>> | null { return getActiveConfiguration(this) as InstanceType<NonNullable<R['configurationClass']>> | null; }
+    static hasConfiguration(): boolean { return this.getConfiguration() !== null; }
+    /** Runs `fn` with the registration `key` of this resource active (URLs, `getConfiguration()`). */
+    static withConfiguration<T>(key: string, fn: () => T): T { return withConfiguration(this, key, fn); }
+    /** URL of a resource page; `options.configuration` targets a registration (`null`: the default one), the active one otherwise. */
+    static getUrl(page: string = 'index', record?: string | number, options: { configuration?: string | null } = {}): string {
+        const target = resolveUrlTarget(this, options.configuration);
+        if (target !== this) return target.getUrl(page, record);
         const base = this.panel.getUrl(this.slug);
         if (page in this.relatedPages) return `${base}/${record}/${page}`;
         return page === 'index' ? base : page === 'create' ? `${base}/create` : page === 'view' ? `${base}/${record}` : `${base}/${record}/edit`;
@@ -4669,8 +4729,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         return ctx;
     };
     // Notifications sent during the request go into a batch announced to the browser.
+    // Page components by name: an update of a configured page runs with its registration's configuration.
+    const pageComponents = new Map<string, typeof Page>();
+    const updatedPage = (req: Request): typeof Page | null => {
+        try { return pageComponents.get(String(JSON.parse(req.body?.components?.[0]?.snapshot ?? '{}')?.memo?.name ?? '')) ?? null; } catch { return null; }
+    };
     router.use(wireRouter(runtime, livewire, wireContext, async (ctx: PanelContext, _req, res, handle) => {
-        const { result, pending } = await runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle)));
+        const { result, pending } = await withRequestConfiguration(updatedPage(ctx.req), () => runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle))));
         if (panel.hasSpaPrefetching()) {
             for (const component of result.components as { effects: Record<string, any> }[]) {
                 if (typeof component.effects.html === 'string') component.effects.html = prefetch(component.effects.html);
@@ -4903,9 +4968,10 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             await panel.withTenant(ctx.tenant, () => billing.handle(req, res, ctx.tenant));
         });
     }
-    for (const PageClass of panel.getPages()) {
+    for (const PageClass of routeOrder(panel.getPages())) {
         const component = name(`pages.${(PageClass.slug || 'dashboard').replace(/[{}]/g, '')}`);
         runtime.register(component, PageClass);
+        pageComponents.set(component, PageClass);
         // `{record}` in the slug becomes a route parameter, passed to mount().
         router.get(panel.getBaseUrl(tenantSegment + PageClass.slug).replace(/\{(\w+)\}/g, ':$1'), async (req, res, next) => {
             if (notATenant(req)) return next();
@@ -4913,7 +4979,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (!ctx) return;
             if (await requiresSubscription(PageClass, ctx)) return res.redirect(panel.getTenantBillingUrl(ctx.tenant)!);
             const { tenant: _tenant, ...params } = req.params;
-            await guarded(res, () => document(req, res, ctx, { title: PageClass.getTitle(), component, layout: 'index', params }));
+            await guarded(res, () => withRequestConfiguration(PageClass, () => document(req, res, ctx, { title: PageClass.getTitle(), component, layout: 'index', params })));
         });
     }
     // Any other URL of a panel with a path is unknown. A panel at the root leaves them to the application (`panelNotFound()`).

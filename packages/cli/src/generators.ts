@@ -270,3 +270,156 @@ export function generateComponent(name: string): string {
 </div>
 `;
 }
+
+/**
+ * A plugin package in `plugins/<id>/`: a panel plugin (plugin class with an option, a page, a view and translations), or with
+ * `standalone`, a schema component usable in any form, infolist or page. Returns the files, by path inside the package.
+ */
+export function generatePlugin(name: string, options: { standalone?: boolean } = {}): { id: string; className: string; files: Record<string, string> } {
+    const base = name.replace(/Plugin$/, '') || name;
+    const id = snake(base).replace(/_/g, '-');
+    const title = headline(snake(base));
+    const files: Record<string, string> = {};
+    const packageJson = (description: string, peers: string[], folders: string[]) => JSON.stringify({
+        name: id, version: '0.1.0', private: true, description, license: 'MIT', type: 'module',
+        exports: { '.': './src/index.ts' },
+        files: ['src', ...folders],
+        peerDependencies: Object.fromEntries(peers.map((peer) => [peer, '*'])),
+    }, null, 4) + '\n';
+    if (options.standalone) {
+        const className = base;
+        files['package.json'] = packageJson(`${title}: a schema component for Navette.`, ['@navette-js/schemas', '@navette-js/support'], ['views']);
+        files['src/index.ts'] = `// ${title}: a schema component for Navette, usable in any form, infolist or page.
+import { views } from '@navette-js/support';
+
+// The package's views, rendered as \`${id}::<name>\`. An application may override them with \`views.overrideFrom(dir)\`.
+views.namespace('${id}', new URL('../views', import.meta.url));
+
+export { ${className} } from './${className}.ts';
+`;
+        files[`src/${className}.ts`] = `import { Component, type ComponentContext } from '@navette-js/schemas';
+import { configured, evaluate, views, type Lazy } from '@navette-js/support';
+
+/** ${title} component: \`${className}.make().content('Hello')\`. */
+export class ${className} extends Component {
+    protected _content: Lazy<string, ComponentContext> = '';
+
+    static make(): ${className} {
+        return configured(new ${className}());
+    }
+
+    /** A function receives the schema's context object (\`record\`, \`get\`, \`operation\`…). */
+    content(content: Lazy<string, ComponentContext>): this {
+        this._content = content;
+        return this;
+    }
+
+    async toHtml(): Promise<string> {
+        // The view escapes the content: print values with the escaping output tag only.
+        return views.render('${id}::${id}', { content: String((await evaluate(this._content, this.context())) ?? '') });
+    }
+}
+`;
+        files[`views/${id}.ejs`] = `<%# ${title} component. Variables: content (text). %>
+<div class="${id}"><%= content %></div>
+`;
+        files['README.md'] = `# ${title}
+
+A schema component for Navette panels, forms and infolists.
+
+\`\`\`ts
+import { ${className} } from '${id}';
+
+${className}.make().content('Hello');
+\`\`\`
+`;
+        return { id, className, files };
+    }
+    const className = `${base}Plugin`;
+    const pageClass = `${base}Page`;
+    files['package.json'] = packageJson(`${title}: a panel plugin for Navette.`, ['@navette-js/panels', '@navette-js/support'], ['views', 'lang']);
+    files['src/index.ts'] = `// ${title}: a panel plugin for Navette.
+import { views } from '@navette-js/support';
+import { loadTranslationsFrom } from '@navette-js/support/i18n';
+
+// The package's views (\`${id}::page\`) and translations (\`${id}::${id}.title\`), registered once when the package is imported.
+views.namespace('${id}', new URL('../views', import.meta.url));
+loadTranslationsFrom(new URL('../lang', import.meta.url), '${id}');
+
+export { ${className} } from './${className}.ts';
+export { ${pageClass} } from './${pageClass}.ts';
+`;
+    files[`src/${className}.ts`] = `import { PanelPlugin, type Panel } from '@navette-js/panels';
+import { ${pageClass} } from './${pageClass}.ts';
+
+/**
+ * Add it to a panel: \`panel.plugin(${className}.make())\`. Read its options anywhere during a request of that panel with
+ * \`${className}.get()\`.
+ */
+export class ${className} extends PanelPlugin {
+    protected _hasPage = true;
+
+    getId(): string {
+        return '${id}';
+    }
+
+    /** Whether the plugin adds its page to the panel. */
+    page(condition = true): this {
+        this._hasPage = condition;
+        return this;
+    }
+
+    hasPage(): boolean {
+        return this._hasPage;
+    }
+
+    /** Called by \`panel.plugin()\`: register resources, pages, widgets, render hooks, navigation items… */
+    register(panel: Panel): void {
+        if (this.hasPage()) {
+            panel.pages([${pageClass}]);
+        }
+    }
+
+    /** Called once, when \`panelRouter()\` serves the panel. Per-request work goes in \`panel.bootUsing()\`. */
+    boot(_panel: Panel): void {
+        //
+    }
+}
+`;
+    files[`src/${pageClass}.ts`] = `import { Page } from '@navette-js/panels';
+import { t } from '@navette-js/support/i18n';
+
+export class ${pageClass} extends Page {
+    static slug = '${id}';
+    static navigationIcon = 'o-puzzle-piece';
+    static view = '${id}::page';
+
+    static getTitle(): string {
+        return this.title ?? t('${id}::${id}.title');
+    }
+
+    getViewData(): Record<string, unknown> {
+        return { message: t('${id}::${id}.message') };
+    }
+}
+`;
+    files['views/page.ejs'] = `<%# Page of the ${title} plugin. Variables: page, message. %>
+<x-section :heading="page.getTitle()">
+    <p><%= message %></p>
+</x-section>
+`;
+    files[`lang/en/${id}.json`] = JSON.stringify({ title: title, message: `This page is added by the ${title} plugin.` }, null, 4) + '\n';
+    files['README.md'] = `# ${title}
+
+A panel plugin for Navette.
+
+\`\`\`ts
+import { ${className} } from '${id}';
+
+panel.plugin(${className}.make());
+\`\`\`
+
+Translations live in \`lang/<locale>/${id}.json\` (keys \`${id}::${id}.title\`, \`${id}::${id}.message\`), views in \`views/\`.
+`;
+    return { id, className, files };
+}

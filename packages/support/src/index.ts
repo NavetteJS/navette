@@ -604,7 +604,8 @@ export class ViewRegistry {
         return renderer({ ...props, attributes }, slot);
     }
 
-    namespace(name: string, dir: string): this { this.namespaces.set(name, dir); return this; }
+    /** Registers a view namespace: `views.namespace('blog', new URL('../views', import.meta.url))` resolves `blog::posts.card`. */
+    namespace(name: string, dir: string | URL): this { this.namespaces.set(name, dir instanceof URL ? fileURLToPath(dir) : dir); return this; }
     /** Application override directory: `<dir>/<namespace>/<path>.ejs` replaces the package view. */
     overrideFrom(dir: string): this { this.overrides.unshift(dir); this.compiled.clear(); return this; }
     share(data: Record<string, unknown>): this { Object.assign(this.shared, data); return this; }

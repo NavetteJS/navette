@@ -1,5 +1,6 @@
 // Translations: `namespace::group.key` keys, `:name` placeholders, English fallback.
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 type Bundle = Record<string, Record<string, Record<string, Record<string, string>>>>;
@@ -11,6 +12,52 @@ const NAMESPACES: Record<string, string> = {
 let currentLocale = 'en';
 export const setLocale = (locale: string) => { currentLocale = locale; };
 export const getLocale = () => currentLocale;
+
+type Translations = { [key: string]: string | Translations };
+/** Names that would reach the prototype of the translation objects. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const flatten = (entries: Translations, prefix = '', into: Record<string, string> = {}): Record<string, string> => {
+    for (const [key, value] of Object.entries(entries)) {
+        if (UNSAFE_KEYS.has(prefix + key)) continue;
+        if (typeof value === 'string') into[prefix + key] = value;
+        else if (value && typeof value === 'object') flatten(value, `${prefix}${key}.`, into);
+    }
+    return into;
+};
+/**
+ * Adds translations to a namespace, by locale then group: `addTranslations('blog', { en: { posts: { title: 'Posts' } } })`
+ * makes `t('blog::posts.title')` available. Nested objects give dotted keys. Keys added later replace earlier ones, so an
+ * application may also override the translations of a plugin, or Navette's own (`filament-panels`, `filament-forms`…).
+ */
+export function addTranslations(namespace: string, translations: Record<string, Record<string, Translations>>): void {
+    if (!/^[A-Za-z0-9_-]+$/.test(namespace) || UNSAFE_KEYS.has(namespace)) throw new Error(`Invalid translation namespace: ${namespace}`);
+    const pkg = (bundle[Object.hasOwn(NAMESPACES, namespace) ? NAMESPACES[namespace] : namespace] ??= {});
+    for (const [locale, groups] of Object.entries(translations)) {
+        if (UNSAFE_KEYS.has(locale)) throw new Error(`Invalid locale: ${locale}`);
+        for (const [group, entries] of Object.entries(groups)) {
+            if (UNSAFE_KEYS.has(group)) throw new Error(`Invalid translation group: ${group}`);
+            pkg[locale] ??= {};
+            pkg[locale][group] = { ...pkg[locale][group], ...flatten(entries) };
+        }
+    }
+}
+/**
+ * Loads a namespace's translations from a directory of JSON files, `<dir>/<locale>/<group>.json`:
+ * `loadTranslationsFrom(new URL('../lang', import.meta.url), 'blog')` reads `lang/en/posts.json` as the group `posts`.
+ */
+export function loadTranslationsFrom(directory: string | URL, namespace: string): void {
+    const root = directory instanceof URL ? fileURLToPath(directory) : directory;
+    if (!existsSync(root)) throw new Error(`Translation directory not found: ${root}`);
+    const translations: Record<string, Record<string, Translations>> = {};
+    for (const locale of readdirSync(root)) {
+        const folder = path.join(root, locale);
+        if (!statSync(folder).isDirectory()) continue;
+        for (const file of readdirSync(folder).filter((name) => name.endsWith('.json'))) {
+            (translations[locale] ??= {})[file.slice(0, -'.json'.length)] = JSON.parse(readFileSync(path.join(folder, file), 'utf8'));
+        }
+    }
+    addTranslations(namespace, translations);
+}
 
 /** Translates a key such as `t('filament-panels::auth/pages/login.form.email.label')`; returns the key when it is missing. */
 export function t(key: string, params: Record<string, string | number> = {}, locale = currentLocale): string {

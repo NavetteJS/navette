@@ -4,7 +4,7 @@ title: CLI reference
 
 ## Introduction
 
-Projects created with `npm create navette` include the `navette` command (package `@navette-js/cli`). It runs migrations, creates users, and generates resources, pages, widgets, migrations, custom fields, entries and columns, and view components. Run it from the root of the project:
+Projects created with `npm create navette` include the `navette` command (package `@navette-js/cli`). It runs migrations, creates users, and generates resources, pages, widgets, migrations, custom fields, entries and columns, view components, and plugin packages. Run it from the root of the project:
 
 ```bash
 npx navette make:resource Post --generate
@@ -28,6 +28,7 @@ Generators never overwrite an existing file: they stop with an error. Add `--for
 | `navette make:entry <Name>` | Creates a custom infolist entry in `src/entries` |
 | `navette make:column <Name>` | Creates a custom table column in `src/columns` |
 | `navette make:component <name>` | Creates a view component in `src/components`, used as `<x-name>` |
+| `navette make:plugin <Name> [--standalone]` | Creates a plugin package in `plugins/` |
 
 ## Running migrations
 
@@ -155,3 +156,13 @@ npx navette make:component stat-card
 ```
 
 Creates `src/components/stat-card.ejs`, a component that you can use in any view as `<x-stat-card>`. The generated server registers `src/components` with `views.components()`. A dot in the name is a folder: `make:component forms.hint` creates `src/components/forms/hint.ejs`, used as `<x-forms.hint>`. The name is converted to lowercase words separated by hyphens (`StatCard` becomes `stat-card`). See [creating components](/components/creating-components).
+
+## Generating a plugin
+
+```bash
+npx navette make:plugin Blog
+```
+
+Creates a panel plugin package in `plugins/blog/`: its `package.json`, an entry point registering its views and translations, a plugin class (`BlogPlugin`, with an option), a page, its view and its English translations, and a `README.md`. Add it to a panel with `.plugin(BlogPlugin.make())`, importing it from `../../plugins/blog/src/index.ts`.
+
+With `--standalone`, the package contains a schema component instead (`make:plugin PriceTag --standalone` creates `PriceTag` and its view), usable in any form, infolist or page. See [getting started with plugins](/plugins/getting-started).

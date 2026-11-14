@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Project CLI (`npx navette …`): migrations, users, and generators for resources, pages, widgets and form fields.
+// Project CLI (`npx navette …`): migrations, users, and generators for resources, pages, widgets, form fields and plugins.
 // Run it at the root of a project created with `npm create navette`.
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { readSecret } from './secret.ts';
-import { generateColumn, generateComponent, generateEntry, generateField, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
 if (existsSync(join(cwd, '.env'))) process.loadEnvFile(join(cwd, '.env'));
@@ -167,6 +167,18 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
             const type = flag('type') ?? 'stats';
             if (!['stats', 'chart', 'table'].includes(type)) fail('--type must be stats, chart or table.');
             write(join(cwd, 'src', panelOf(), 'widgets', `${name}.ts`), generateWidget(name, type as 'stats' | 'chart' | 'table'));
+        },
+    },
+    'make:plugin': {
+        usage: 'navette make:plugin <Name> [--standalone]           Create a plugin package in plugins/ (a panel plugin, or a schema component with --standalone)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the plugin a name, e.g. Blog'));
+            const { id, className, files } = generatePlugin(name, { standalone: flags.standalone === true });
+            for (const [file, content] of Object.entries(files)) write(join(cwd, 'plugins', id, ...file.split('/')), content);
+            const from = `'../../plugins/${id}/src/index.ts'`;
+            say(flags.standalone
+                ? `\n  Use it in a schema: import { ${className} } from ${from}; then ${className}.make().content('Hello')`
+                : `\n  Add it to a panel (src/panels/admin.ts): import { ${className} } from ${from}; then .plugin(${className}.make())`);
         },
     },
 };

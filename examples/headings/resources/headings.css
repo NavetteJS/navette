@@ -1,0 +1,20 @@
+.headings-component {
+    color: var(--gray-950);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+}
+.dark .headings-component {
+    color: var(--color-white, #fff);
+}
+.headings-component-colored {
+    color: var(--headings-color);
+}
+.dark .headings-component-colored {
+    color: var(--headings-dark-color);
+}
+h1.headings-component { font-size: 2rem; }
+h2.headings-component { font-size: 1.75rem; }
+h3.headings-component { font-size: 1.5rem; }
+h4.headings-component { font-size: 1.25rem; }
+h5.headings-component, h6.headings-component { font-size: 1rem; }

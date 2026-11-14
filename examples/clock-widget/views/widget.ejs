@@ -1,0 +1,12 @@
+<%# Clock widget. Variables: heading, description, timezone, time (rendered by the server, then updated every second). %>
+<x-section :heading="heading" :description="description">
+    <p
+        class="clock-widget-time"
+        x-data="{ time: <%= JSON.stringify(time) %>, timer: null }"
+        x-init="timer = setInterval(() => { time = new Intl.DateTimeFormat('en-GB', { timeZone: <%= JSON.stringify(timezone) %>, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date()) }, 1000)"
+        x-on:remove="clearInterval(timer)"
+        x-text="time"
+        data-timezone="<%= timezone %>"
+        style="font-size: 1.875rem; font-variant-numeric: tabular-nums; font-weight: 600;"
+    ><%= time %></p>
+</x-section>
