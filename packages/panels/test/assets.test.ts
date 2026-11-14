@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import http from 'node:http';
-import { mkdtempSync, writeFileSync, utimesSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import express from 'express';
@@ -58,6 +58,10 @@ test('registration is checked: ids, packages, missing files, and two files on on
     assert.throws(() => Css.make('../evil', 'x'), /Invalid asset id/);
     assert.throws(() => manager.register([Css.make('x', file('x.css', ''))], '../up'), /Invalid asset package/);
     assert.throws(() => manager.register([Css.make('missing', join(dir, 'nope.css'))]), /file not found/);
+    // A `/`-rooted path under an existing top-level directory is a file path, on every OS.
+    const topLevel = ['tmp', 'home', 'Users', 'Windows'].find((name) => existsSync(`/${name}`))!;
+    assert.throws(() => manager.register([Css.make('missing-rooted', `/${topLevel}/navette-missing-dir/nope.css`)]), /file not found/);
+    assert.equal(Css.make('site-url', '/css/navette-missing-dir/app.css').isUrl(), true);
     manager.register([Css.make('same', file('same.css', ''))]);
     // The same file again (another panel): accepted.
     manager.register([Css.make('same', join(dir, 'same.css'))], 'app', { panel: 'other' });

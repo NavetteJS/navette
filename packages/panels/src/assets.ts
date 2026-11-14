@@ -33,8 +33,16 @@ export abstract class Asset {
     getPath(): string | null { return this.path; }
     /** An URL (`https://…`, `//…` or a path of the application, `/js/local.js`): rendered as-is, not served by the panel. */
     isRemote(): boolean { return typeof this.path === 'string' && /^(https?:)?\/\//.test(this.path); }
-    /** An URL rather than a local file: remote, or a path starting with `/` that is not a file on disk. */
-    isUrl(): boolean { return this.isRemote() || (typeof this.path === 'string' && this.path.startsWith('/') && !fileExists(this.path)); }
+    /**
+     * An URL rather than a local file: remote, or a path starting with `/` that is not on disk. A missing file under an existing
+     * top-level directory (`/tmp/x/missing.css` on Linux) stays a file path, so the typo is reported instead of becoming a broken URL.
+     */
+    isUrl(): boolean {
+        if (this.isRemote()) return true;
+        if (typeof this.path !== 'string' || !this.path.startsWith('/') || fileExists(this.path)) return false;
+        const topLevel = this.path.split('/')[1];
+        return !topLevel || !directoryExists(`/${topLevel}`);
+    }
     /** Path of the file under the site root, as served: `css/<package>/<id>.css`. */
     abstract getRelativePublicPath(): string;
     /** Hash of the file's content, changing whenever the file does (cache busting). */
@@ -44,6 +52,7 @@ export abstract class Asset {
 }
 
 const fileExists = (path: string): boolean => { try { return statSync(path).isFile(); } catch { return false; } };
+const directoryExists = (path: string): boolean => { try { return statSync(path).isDirectory(); } catch { return false; } };
 const versions = new Map<string, { key: string; version: string }>();
 function fileVersion(path: string): string {
     let stat;
