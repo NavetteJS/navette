@@ -130,6 +130,66 @@ Stat.make('Open tasks', open)
     .url('/tasks')
 ```
 
+## Adding extra HTML attributes to a stat
+
+You may also pass extra HTML attributes to stats using `extraAttributes()`:
+
+```ts
+import { Stat } from '@navette-js/panels';
+
+Stat.make('Processed', '192.1k')
+    .color('success')
+    .extraAttributes({
+        class: 'cursor-pointer',
+        'wire:click': "$dispatch('setStatusFilter', { filter: 'processed' })",
+    })
+```
+
+The classes are added after the stat's own classes. Each call replaces the previous attributes; pass `true` as the second argument to merge them instead: `extraAttributes({ 'data-stat': 'processed' }, true)`.
+
+The attributes are written by you: names must be valid attribute names (`x-on:click`, `@click` and `wire:click.prevent` are accepted, others are left out), and values are escaped. Do not build a `wire:click` or `x-on:click` expression from user data, which would become code run in the page.
+
+In this example, the stat dispatches a browser event. A component listening to it, such as the dashboard, may apply a filter. The event's data comes from the browser, so the listener checks it:
+
+```ts
+import { Dashboard } from '@navette-js/panels';
+
+class OrdersDashboard extends Dashboard {
+    static listeners = { setStatusFilter: 'applyStatusFilter' };
+
+    applyStatusFilter(filter: unknown): void {
+        if (filter === 'processed' || filter === 'new') this.filters = { ...(this.filters ?? {}), status: filter };
+    }
+}
+```
+
+## Setting a placeholder for a stat
+
+Sometimes a stat's value may not be available — for example, when a dashboard has nothing to show for a specific period. You can use `placeholder()` to define what should be displayed instead when the value is blank:
+
+```ts
+import { Stat } from '@navette-js/panels';
+
+Stat.make('Unique views', uniqueViews)
+    .placeholder('-')
+```
+
+A value is blank when it is `null`, `undefined`, or a string with only whitespace. `0` and `'0'` are not blank. The placeholder is escaped.
+
+### Setting a default placeholder globally
+
+If you'd like every stat in your app to fall back to the same placeholder by default, you can use the static `configureUsing()` method, once at startup (where the panel is configured):
+
+```ts
+import { Stat } from '@navette-js/panels';
+
+Stat.configureUsing((stat) => {
+    stat.placeholder('-');
+});
+```
+
+Individual stats can still override this by calling `placeholder()` themselves. The callback applies to the stats created after it is registered.
+
 ## Adding a chart to a stat
 
 You may also add or chain a `chart()` to each stat to provide historical data. The `chart()` method accepts an array of data points to plot, or an object of values keyed by label:
@@ -185,6 +245,10 @@ export class StatsOverview extends StatsOverviewWidget {
     static isLazy = false;
 }
 ```
+
+### Customizing the loading placeholder
+
+While the widget loads, a gray box is displayed. You may replace it by overriding `placeholder()`: see [customizing the loading placeholder](/widgets/overview#customizing-the-loading-placeholder).
 
 ## Using the state of the table
 
@@ -256,6 +320,3 @@ export class StatsOverview extends StatsOverviewWidget {
 }
 ```
 
-<Aside variant="warning">
-Extra HTML attributes on a stat and custom placeholders are not available yet.
-</Aside>

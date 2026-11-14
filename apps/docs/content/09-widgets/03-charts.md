@@ -141,8 +141,113 @@ async getData() {
 ```
 
 <Aside variant="warning">
-The `filter` property is updated by the browser: check that its value is one of your filters before using it. Custom filter forms in a dropdown or a modal are not available yet.
+The `filter` property is updated by the browser: check that its value is one of your filters before using it.
 </Aside>
+
+### Custom filters
+
+You can use [schema components](/schemas/overview) to build custom filters for your chart widget. This approach offers a more flexible way to define filters. The form is displayed in a dropdown, opened by a button in the header of the widget.
+
+To get started, define the `filtersFormSchema()` method:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+import { ChartWidget } from '@navette-js/panels';
+import { type Schema } from '@navette-js/schemas';
+
+export class BlogPostsChart extends ChartWidget {
+    filtersFormSchema(schema: Schema): Schema {
+        return schema.components([
+            DatePicker.make('startDate').default(() => new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)),
+            DatePicker.make('endDate').default(() => new Date().toISOString().slice(0, 10)),
+        ]);
+    }
+}
+```
+
+A widget may name the method `filtersSchema()` instead: both work the same way.
+
+The filter values are accessible via the `this.filters` object. You can use these values inside your `getData()` method:
+
+```ts
+async getData() {
+    const startDate = this.filters?.startDate ?? null;
+    const endDate = this.filters?.endDate ?? null;
+
+    return {
+        // ...
+    };
+}
+```
+
+The `this.filters` object will always reflect the current form data. Please note that this data is not validated, as it is available live and can be changed by the browser: you must ensure that the data is valid before using it (a date matching `/^\d{4}-\d{2}-\d{2}$/`, a value among your options).
+
+<Aside variant="info">
+If you want to add filters that apply to multiple widgets at once, see [filtering widget data](/widgets/overview#filtering-widget-data) in the dashboard.
+</Aside>
+
+#### Deferring filter updates
+
+By default, filters using the `filtersFormSchema()` method update the chart data immediately as they are changed. However, for complex queries or better user experience, you may want to **defer** filter updates until the user clicks an "Apply" button.
+
+When deferred, filter changes are only applied when the user clicks the "Apply" button. This ensures that the chart only re-renders when the user has finished adjusting all of their filters.
+
+The chart will display data using the default filter values when the page first loads, ensuring users see meaningful data immediately without needing to take action.
+
+To enable deferred filters, set the static `hasDeferredFilters` property to `true`:
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+
+export class BlogPostsChart extends ChartWidget {
+    static hasDeferredFilters = true;
+
+    // ...
+}
+```
+
+If you need dynamic control over whether filters are deferred, you may override the `hasDeferredFilters()` method:
+
+```ts
+import { ChartWidget, type PanelContext } from '@navette-js/panels';
+
+export class BlogPostsChart extends ChartWidget {
+    hasDeferredFilters(): boolean {
+        return (this._ctx as PanelContext).user?.prefersDeferredFilters === true;
+    }
+}
+```
+
+While the form is edited, its state is in `this.deferredFilters`; "Apply" copies it to `this.filters`.
+
+#### Resetting filters to defaults
+
+When using deferred filters, a "Reset" button appears in the filter dropdown footer alongside the "Apply" button. Clicking it restores all filters to their default values as defined in the `filtersFormSchema()` method. For example, if you set `default()` on a `DatePicker`, the reset action will restore that default date, not an empty value.
+
+You may also call `this.resetFilters()` from your chart widget to restore the default filter values and refresh the chart data. This applies the defaults immediately, even when filter updates are deferred.
+
+#### Customizing filter actions
+
+You may customize the apply and reset actions that appear when using deferred filters. All methods that are available to [customize action trigger buttons](/actions/overview) can be used:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { ChartWidget } from '@navette-js/panels';
+
+export class BlogPostsChart extends ChartWidget {
+    filtersApplyAction(action: Action): Action {
+        return action
+            .label('Update Chart')
+            .color('success');
+    }
+
+    filtersResetAction(action: Action): Action {
+        return action
+            .label('Clear Filters')
+            .color('danger');
+    }
+}
+```
 
 To filter the data of several widgets at once from a dashboard, see [filtering widget data](/widgets/overview#filtering-widget-data).
 
@@ -166,9 +271,68 @@ export class RevenueChart extends ChartWidget {
 }
 ```
 
-<Aside variant="warning">
-Actions in the empty state are not available yet.
-</Aside>
+### Customizing when the empty state is shown
+
+By default, the empty state is shown when `getData()` returns an empty object. To customize when it is rendered, override the `isEmpty()` method:
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+
+export class RevenueChart extends ChartWidget {
+    async isEmpty(): Promise<boolean> {
+        const data = await this.getCachedData();
+
+        return !(data.datasets?.[0]?.data as unknown[] | undefined)?.length;
+    }
+}
+```
+
+### Adding empty state actions
+
+You can add [actions](/actions/overview) to the empty state to prompt users to take action by overriding the `getEmptyStateActions()` method:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { ChartWidget, Notification } from '@navette-js/panels';
+
+export class RevenueChart extends ChartWidget {
+    getEmptyStateActions() {
+        return [
+            Action.make('refresh')
+                .label('Refresh')
+                .action(() => {
+                    Notification.make().success().title('Revenue refreshed').send();
+                }),
+            Action.make('importOrders')
+                .label('Import orders')
+                .requiresConfirmation()
+                .action(async () => {
+                    // ...
+                }),
+            Action.make('newOrder')
+                .label('New order')
+                .url('/shop/orders/create'),
+        ];
+    }
+}
+```
+
+The actions are mounted on the widget: they may open a modal, with a confirmation or a form, and run on the server when submitted. Only the actions returned by `getEmptyStateActions()` can be mounted, and hidden or disabled actions are refused, even if the browser asks for them. An action may also call a method of the widget listed in its `static callable` property, with `action('refresh')`.
+
+### Using a custom empty state view
+
+You may use a completely custom empty state by overriding the `getEmptyState()` method. It returns HTML, written by you: escape the data you put in it with `e()` from `@navette-js/support`:
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+import { e } from '@navette-js/support';
+
+export class RevenueChart extends ChartWidget {
+    getEmptyState(): string {
+        return `<div class="fi-wi-chart-frame"><p>${e(`No revenue since ${this.filter}`)}</p></div>`;
+    }
+}
+```
 
 ## Live updating chart data (polling)
 
@@ -226,7 +390,28 @@ export class BlogPostsChart extends ChartWidget {
 }
 ```
 
-The options are serialized to JSON: functions (such as tick callbacks) are not supported.
+The options are serialized to JSON. If you want to return raw JavaScript from this method instead, you can return a `RawJs` object. This is useful if you want to use a JavaScript callback function, for example:
+
+```ts
+import { RawJs } from '@navette-js/forms';
+import { ChartWidget } from '@navette-js/panels';
+
+export class RevenueChart extends ChartWidget {
+    getOptions() {
+        return RawJs.make(`{
+            scales: {
+                y: {
+                    ticks: {
+                        callback: (value) => '€' + value,
+                    },
+                },
+            },
+        }`);
+    }
+}
+```
+
+The JavaScript is written into the page as it is: never build it from user data.
 
 ## Adding a heading and a description
 
@@ -285,6 +470,83 @@ export class BlogPostsChart extends ChartWidget {
 
 The text is escaped, and it is not displayed when the chart is empty.
 
-<Aside variant="warning">
-Custom Chart.js plugins are not available yet.
-</Aside>
+## Using custom Chart.js plugins
+
+Chart.js offers a powerful plugin system that allows you to extend its functionality and create custom chart behaviors. This guide details how to use them in a chart widget.
+
+### Step 1: Install the plugin with NPM
+
+To start with, install the plugin using NPM into your project. In this guide, we will install [`chartjs-plugin-datalabels`](https://chartjs-plugin-datalabels.netlify.app/guide/getting-started.html#installation):
+
+```bash
+npm install chartjs-plugin-datalabels --save-dev
+```
+
+### Step 2: Create a JavaScript file importing the plugin
+
+Create a new JavaScript file where you will define your custom plugin. In this guide, we'll call it `resources/js/chart-js-plugins.js`. Import the plugin, and add it to the `window.filamentChartJsPlugins` array:
+
+```ts
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+
+window.filamentChartJsPlugins ??= [];
+window.filamentChartJsPlugins.push(ChartDataLabels);
+```
+
+This is equivalent to including the plugins "inline" via `new Chart(..., { plugins: [...] })` when instantiating a Chart.js chart.
+
+It's important to initialize the array if it has not been already, before pushing onto it. This ensures that multiple JavaScript files (especially those from plugins) that register Chart.js plugins do not overwrite each other, regardless of the order they are loaded in.
+
+You can push as many plugins to the array as you would like to install, you do not need a separate file to import each plugin. A plugin may also be an object written in the file itself:
+
+```ts
+window.filamentChartJsPlugins ??= [];
+window.filamentChartJsPlugins.push({
+    id: 'chartAreaBorder',
+    afterDraw(chart) {
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.strokeRect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
+        ctx.restore();
+    },
+});
+```
+
+Additionally, you can also register any "global plugins" which will use `Chart.register([...])` in the `window.filamentChartJsGlobalPlugins` array:
+
+```ts
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+
+window.filamentChartJsGlobalPlugins ??= [];
+window.filamentChartJsGlobalPlugins.push(ChartDataLabels);
+```
+
+Global plugins are registered when the first chart of the page loads, so the file must run before that.
+
+### Step 3: Bundle the JavaScript file
+
+A file importing npm packages must be bundled for the browser, with esbuild, Vite or your bundler of choice. For example, with esbuild:
+
+```bash
+npx esbuild resources/js/chart-js-plugins.js --bundle --minify --outfile=public/js/chart-js-plugins.js
+```
+
+A file without `import` statements, like the `chartAreaBorder` example, can be served as it is.
+
+### Step 4: Register the JavaScript file in the panel
+
+The panel must load the file on its pages, before the charts are created. Serve the `public` folder with `express.static()`, and add the script tag with the `panels::scripts.before` [render hook](/advanced/render-hooks):
+
+```ts
+import express from 'express';
+import { Panel } from '@navette-js/panels';
+
+app.use(express.static('public'));
+
+const panel = Panel.make()
+    // ...
+    .renderHook('panels::scripts.before', () => '<script src="/js/chart-js-plugins.js"></script>');
+```
+
+The script is loaded on every page of the panel, before the chart widgets. Charts are loaded on demand, so they always find the plugins. A [panel plugin](/panels/plugins#registering-assets) registers its Chart.js plugins the same way, from its `register()` method.
