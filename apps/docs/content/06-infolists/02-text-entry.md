@@ -242,7 +242,7 @@ The macro formats (`LT`, `LTS`, `L`, `LL`, `LLL`, `LLLL` and their lowercase var
 
 #### Relative date formatting
 
-You may use the `since()` method to format the entry's state using a relative time, such as "2 days ago" or "3 hours from now":
+You may use the `since()` method to format the entry's state using a relative time, such as "2 days ago" or "in 3 hours", in the current locale (`setLocale()`):
 
 ```ts
 import { TextEntry } from '@navette-js/infolists';

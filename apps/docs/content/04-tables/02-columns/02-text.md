@@ -256,7 +256,7 @@ NavetteTimezone.set('America/New_York');
 
 #### Displaying a relative date
 
-`since()` displays how long ago the date was, such as `2 days ago`:
+`since()` displays how long ago the date was, such as `2 days ago` (`il y a 2 jours` with `setLocale('fr')`):
 
 ```ts
 import { TextColumn } from '@navette-js/tables';

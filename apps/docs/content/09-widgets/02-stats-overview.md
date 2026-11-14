@@ -352,3 +352,5 @@ export class StatsOverview extends StatsOverviewWidget {
 }
 ```
 
+The static `icon` and `iconColor` properties (or the `getIcon()` and `getIconColor()` methods) add an icon before the heading, as in a [chart widget](/widgets/charts#adding-an-icon-to-the-heading).
+

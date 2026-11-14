@@ -188,11 +188,8 @@ export function formatIsoDate(date: Date, format: string, timeZone = 'UTC'): str
         return tokens[token]();
     });
 }
-/** Relative date: "2 days ago", or "in 3 hours" style for a future date ("3 hours from now"). */
-function since(date: Date, now = new Date()): string {
-    if (date.getTime() <= now.getTime()) return diffForHumans(date, now) ?? '';
-    return (diffForHumans(now, date) ?? '').replace(/ ago$/, ' from now');
-}
+/** Relative date in the current locale: "2 days ago", or "in 3 hours" for a future date. */
+const since = (date: Date, now = new Date()): string => diffForHumans(date, now) ?? '';
 
 // ------------------------------------------------------------------ numbers
 /** PHP `number_format()`: rounded to `decimals`, with the given separators. */

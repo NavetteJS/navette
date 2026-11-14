@@ -1,5 +1,5 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing, isLocalOrHttpUrl, ModalComponent } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing, isLocalOrHttpUrl, isSpaNavigableUrl, ModalComponent } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
@@ -142,7 +142,7 @@ export class Action implements Renderable {
     canSubmitForm(): boolean { return this._submit !== null; }
     getFormToSubmit(): string | null { return this._submit; }
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
-    /** Navigation action, rendered as `<a href wire:navigate>`. */
+    /** Navigation action, rendered as a link (`<a href>`), followed with SPA navigation when it is a path of this site. */
     url(url: string | null | ((ctx: ComponentContext) => string | null)): this { if (typeof url === 'function') this._lazyUrl = url; else { this._url = url; this._lazyUrl = null; } return this; }
     /** On click, dispatches a Livewire event (to a listener of the page or of another component), with parameters. */
     dispatch(event: string, params: unknown[] | Record<string, unknown> = []): this { this.recordDispatch(event, params, false, null); return this.action(`$dispatch(${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`); }
@@ -227,10 +227,18 @@ export class Action implements Renderable {
     modalCancelActionLabel(label: string | null): this { this._cancelLabel = label; return this; }
     private _tooltip: Lazy<string | null, ComponentContext> = null;
     private _newTab = false;
+    private _spa = true;
     /** Tooltip shown on hover. */
     tooltip(text: Lazy<string | null, ComponentContext>): this { this._tooltip = text; return this; }
     /** Opens the action's URL in a new tab. */
     openUrlInNewTab(condition = true): this { this._newTab = condition; return this; }
+    /**
+     * `spa(false)`: the link loads its page normally, without SPA navigation (`wire:navigate`). Links to another site
+     * (an OAuth provider…) and links opened in a new tab never use it.
+     */
+    spa(condition = true): this { this._spa = condition; return this; }
+    /** Whether a link to this URL uses SPA navigation (`wire:navigate`). */
+    navigatesTo(url: string | null): boolean { return this._spa && !this._newTab && isSpaNavigableUrl(url); }
     private _postToUrl = false;
     /** Sends a `POST` request to the action's URL (a form with the CSRF token) instead of following a link. */
     postToUrl(condition = true): this { this._postToUrl = condition; return this; }
@@ -273,7 +281,7 @@ export class Action implements Renderable {
             if (!isLocalOrHttpUrl(href)) return '';
             if (this._postToUrl) return postForm(href, ctx, ['nv-ac-grouped-action'], `<button ${tooltip}role="menuitem" tabindex="-1" type="submit"${disabled ? ' disabled aria-disabled="true"' : ''} class="${cls(['nv-dropdown-list-item', ...colors, { 'nv-disabled': disabled }])}">${glyph}${label}</button>`);
             if (disabled) return `<span ${tooltip}aria-disabled="true" class="${cls(['nv-dropdown-list-item', 'nv-ac-grouped-action', 'nv-disabled', ...colors])}" role="menuitem" tabindex="-1">${glyph}${label}</span>`;
-            return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} ${tooltip}class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}${label}</a>`;
+            return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate && this.navigatesTo(href) ? ' wire:navigate' : ''} ${tooltip}class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}${label}</a>`;
         }
         // A handler or a modal: mounted on the menu's component; a string action is a method or a `$dispatch()`.
         const expression = this._handler || this._schema ? this.mountExpressionFor({}) : this._action;
@@ -758,9 +766,8 @@ export class Action implements Renderable {
         const href = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
         if (href) {
             const plainIcon = iconName ? icon(iconName, { attributes: new Attributes().class(color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []) }) : '';
-            // New-tab link: no `wire:navigate`.
             if (this._newTab) return `<a href="${e(href)}" target="_blank" role="menuitem" tabindex="-1" wire:key="${e(wireKey)}" class="${['nv-ac-grouped-action', 'nv-dropdown-list-item', ...colors].join(' ')}">${plainIcon}<span class="nv-dropdown-list-item-label">${e(label)}</span></a>`;
-            return `<a href="${e(href)}" wire:navigate wire:key="${e(wireKey)}" class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${plainIcon}<span class="nv-dropdown-list-item-label">${e(label)}</span></a>`;
+            return `<a href="${e(href)}"${this.navigatesTo(href) ? ' wire:navigate' : ''} wire:key="${e(wireKey)}" class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${plainIcon}<span class="nv-dropdown-list-item-label">${e(label)}</span></a>`;
         }
         if (this.canBeDisabled()) {
             // Conditionally disabled: this markup is used whether or not the action ends up disabled.
@@ -797,7 +804,7 @@ export class Action implements Renderable {
         const alpineClick = await this.resolveAlpineClick(ctx);
         const linkDisabled = this.canBeDisabled() && (await this.isDisabled(ctx));
         // Only local or http(s) URLs become links (no `javascript:` or protocol-relative URLs).
-        if (href && isLocalOrHttpUrl(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="nv-link-label">${e(label)}</span></a>`;
+        if (href && isLocalOrHttpUrl(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this.navigatesTo(href) ? 'wire:navigate ' : ''}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="nv-link-label">${e(label)}</span></a>`;
         const keys = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
         // Disabled: no click (a tooltip still shows), `disabled` when there is no tooltip.
         const rowClick = linkDisabled ? '' : alpineClick ? ` x-on:click="${e(alpineClick)}"` : ` ${this.clickAttribute()}="${e(raw)}"`;
@@ -1033,7 +1040,7 @@ export class Action implements Renderable {
             // JavaScript click handler (`actionJs()`): nothing is sent to the server.
             const mountExpression = (this._handler || this.hasModalContentOnly()) && !alpineClick ? this.mountExpressionFor(mountContext) : null;
             const wireClick = alpineClick ? null : (mountExpression ?? this._action);
-            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" ${alpineClick ? `x-on:click="${e(alpineClick)}" ` : ''}${wireClick ? `${mountExpression ? this.clickAttribute() : 'wire:click'}="${e(wireClick)}" ` : ''}`;
+            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : this.navigatesTo(safeUrl) ? 'wire:navigate ' : ''}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" ${alpineClick ? `x-on:click="${e(alpineClick)}" ` : ''}${wireClick ? `${mountExpression ? this.clickAttribute() : 'wire:click'}="${e(wireClick)}" ` : ''}`;
             const tag = safeUrl ? 'a' : 'button';
             const target = this._livewireTarget ?? wireClick;
             if (this._labeledFrom) {
@@ -1060,7 +1067,7 @@ export class Action implements Renderable {
             // Disabled with a tooltip: no link, but still focusable for the tooltip.
             const linkOff = disabled && tooltip !== '';
             const href = linkOff ? 'tabindex="0" ' : `href="${e(linkUrl)}" ${this._newTab ? 'target="_blank" ' : ''}`;
-            return `<a ${href}${tooltip}${this._newTab || linkOff ? '' : 'wire:navigate '}${disabled ? 'aria-disabled="true" ' : ''}${link.toHtml()}>${linkIcon}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}${badgeHtml}</a>`;
+            return `<a ${href}${tooltip}${linkOff || !this.navigatesTo(linkUrl) ? '' : 'wire:navigate '}${disabled ? 'aria-disabled="true" ' : ''}${link.toHtml()}>${linkIcon}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}${badgeHtml}</a>`;
         }
         const isSubmit = this._submit !== null;
         // Handler action: the click mounts the action on the server, with the host's context (e.g. the record).

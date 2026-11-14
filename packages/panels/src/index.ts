@@ -54,7 +54,7 @@ export { isSafeJsWidgetRendererUrl, jsWidgetContentHtml, resolveJsWidgetRenderer
 import { type ImportExportHistory } from './import-export.ts';
 import { DiskDownloadStore, downloaderOf, type DownloadStorage } from './downloads.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
-import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
+import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, calendarLocale, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 export { getCurrentPanel, getPluginId, PanelPlugin, type Plugin } from './plugins.ts';
@@ -84,7 +84,7 @@ import { ContentTabPosition, managersOfEntry, RelationManagerConfiguration, rela
 import { WidgetConfiguration, widgetClassOf, widgetPropertiesOf, type WidgetEntry } from './widget-configuration.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, cspNonce, getResponseCspNonce, hasCustomHtmlSanitizerConfig, HtmlString, isEnum, isEnumCase, RenderHookRegistry, runWithCspNonce, sanitizeHtml, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, readRecordPath, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Enum, type EnumCase, type Palette, type RenderHookCallback } from '@navette-js/support';
-import { getLocale, t, tc } from '@navette-js/support/i18n';
+import { getLocale, intlLocale, localeDirection, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import { Model as DatabaseModel, transaction as databaseTransaction, type DataAdapter } from '@navette-js/database';
@@ -3032,7 +3032,7 @@ export abstract class Resource {
 }
 
 /** Sub-navigation tab of a page; items with a `group` are gathered under its label. */
-export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
+export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; /** `false`: no SPA navigation for this link. */ spa?: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
 /** The cluster a page belongs to: its own, or its resource's. */
 export const clusterOf = (page: unknown): typeof Cluster | null => (page as any)?.cluster ?? (page as any)?.resource?.cluster ?? (page as any)?.parentResource?.cluster ?? null;
 type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
@@ -3048,6 +3048,19 @@ export abstract class Widget extends BasePage {
     static sort: number | null = null;
     /** Loaded when it becomes visible. */
     static isLazy = true;
+    /** Icon before the heading of the header, as in a section (`o-chart-bar`); none by default. */
+    static icon: string | null = null;
+    /** Color of the header icon (`primary`, `success`…); gray by default. */
+    static iconColor: string | null = null;
+    getIcon(): string | null { return (this.constructor as typeof Widget).icon; }
+    getIconColor(): string | null { return (this.constructor as typeof Widget).iconColor; }
+    /** The header icon, with the markup of a section header icon. */
+    protected headerIconHtml(): string {
+        const name = this.getIcon();
+        if (!name) return '';
+        const color = this.getIconColor();
+        return icon(name, { size: 'lg', attributes: new Attributes().class(color && color !== 'gray' && /^[a-z][a-z0-9-]*$/.test(color) ? ['nv-color', `nv-color-${color}`] : []) });
+    }
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
     /**
      * This widget with properties of its own (public properties of the widget), for a page or dashboard:
@@ -3139,8 +3152,8 @@ export abstract class CalendarWidget extends Widget {
     getViews(): CalendarView[] { return ['month', 'week', 'list']; }
     /** 0 = Sunday, 1 = Monday… */
     getFirstDayOfWeek(): number { return 1; }
-    /** Locale for month and day names (`Intl`). */
-    getLocale(): string { return 'en-US'; }
+    /** Locale for month and day names (`Intl`); the current translation locale by default. */
+    getLocale(): string { return calendarLocale(); }
     getLabels(): CalendarLabels { return CALENDAR_LABELS; }
     /** In month view, beyond this number the cell shows "+N more" (which opens the list on that day). */
     getMaxEventsPerDay(): number { return 3; }
@@ -3243,7 +3256,7 @@ export abstract class CalendarPage extends Page {
     abstract getEvents(range: { start: string; end: string; view: CalendarView }): CalendarEvent[] | Promise<CalendarEvent[]>;
     getViews(): CalendarView[] { return ['month', 'week', 'list']; }
     getFirstDayOfWeek(): number { return 1; }
-    getLocale(): string { return 'en-US'; }
+    getLocale(): string { return calendarLocale(); }
     getLabels(): CalendarLabels { return CALENDAR_LABELS; }
     getMaxEventsPerDay(): number { return 3; }
     getCalendarHeading(): string | null { return null; }
@@ -3434,7 +3447,7 @@ export abstract class StatsOverviewWidget extends Widget {
             return `<div wire:partial="schema-component::${key}" x-data="navetteSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${this.id}.${key}`)}" class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${stat.toHtml(this.panel, id)}</div></div>`;
         }).join('');
         const heading = this.getHeading(), description = this.getDescription();
-        const header = heading !== null || description !== null ? `<header class="nv-section-header"><div class="nv-section-header-content nv-section-header-content-has-heading"><div class="nv-section-header-text-ctn">${heading !== null ? `<h3 class="nv-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
+        const header = heading !== null || description !== null ? `<header class="nv-section-header">${this.headerIconHtml()}<div class="nv-section-header-content nv-section-header-content-has-heading"><div class="nv-section-header-text-ctn">${heading !== null ? `<h3 class="nv-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
         const interval = (this.constructor as typeof StatsOverviewWidget).pollingInterval;
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}` : '';
         return this.wrap(`<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymous} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component nv-grid-ctn"><div${poll} class="nv-sc-section"><section x-data="{
@@ -3582,7 +3595,7 @@ export abstract class ChartWidget extends Widget {
         const hasText = (heading !== null && heading !== '') || (description !== null && description !== '');
         const hasHeader = hasText || filter !== '' || filtersDropdown !== '';
         const header = hasHeader
-            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header"><div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="nv-section-header-text-ctn">${heading ? `<h2 class="nv-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="nv-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('nv-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('navette::components/section.actions.expand.label')))} : ${e(js(t('navette::components/section.actions.collapse.label')))}" aria-label="${e(t('navette::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="nv-icon-btn nv-size-md nv-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
+            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header">${hasText ? this.headerIconHtml() : ''}<div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="nv-section-header-text-ctn">${heading ? `<h2 class="nv-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="nv-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('nv-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('navette::components/section.actions.expand.label')))} : ${e(js(t('navette::components/section.actions.collapse.label')))}" aria-label="${e(t('navette::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="nv-icon-btn nv-size-md nv-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
             : '';
         const options = this.getOptions();
         const colors = ['bg', 'border', 'grid', 'text', 'tooltip-bg', 'tooltip-text', 'tooltip-border'];
@@ -3643,7 +3656,7 @@ export abstract class TableWidget extends Widget implements TableHost {
         const WidgetClass = this.constructor as typeof TableWidget;
         return WidgetClass.heading ?? WidgetClass.name.replace(/Widget$/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
     }
-    getTable(): Table<any> { return this.table(new Table().heading(this.getTableHeading()).paginationMode('simple')).withoutComponentsHiddenOn(this); }
+    getTable(): Table<any> { return this.table(new Table().heading(this.getTableHeading()).headingIcon(this.getIcon()).headingIconColor(this.getIconColor()).paginationMode('simple')).withoutComponentsHiddenOn(this); }
     mount(): void {
         const table = this.getTable();
         this.tableRecordsPerPage = table.getDefaultPageOption();
@@ -5563,7 +5576,7 @@ export function renderErrorPage(panel: Panel, req: Request, res: Response, statu
         const error = options.error instanceof Error ? options.error : null;
         const theme = panel.resolveTheme(req);
         return views.render('navette-panels::errors.page', {
-            status, locale: getLocale(), title: text('title'), heading: text('title'), description: options.description ?? text('description'),
+            status, locale: intlLocale(), dir: localeDirection(), title: text('title'), heading: text('title'), description: options.description ?? text('description'),
             illustration: errorIllustration(status, `${label}: ${text('title')}`), badge: uiBadge({ color: badgeColor, size: 'lg' }, e(label)), actions, css: ERROR_PAGE_CSS,
             // The stack only helps while developing: never shown otherwise.
             details: error && process.env.NODE_ENV === 'development' ? (error.stack ?? String(error)) : null,
@@ -5918,8 +5931,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         }, next);
     });
     router.use((req, _res, next) => { if (!belongsToPanel(req.path)) return next(); panel.boot(req).then(() => next(), next); });
-    // SPA mode: `wire:navigate` only on links to the application's pages outside `spaUrlExceptions()`; with prefetching, `wire:navigate.hover`.
-    const spaLinks = (html: string, req: Request): string => (panel.hasSpaMode() ? rewriteSpaLinks(html, { exceptions: panel.getSpaUrlExceptions(), prefetch: panel.hasSpaPrefetching(), origin: panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}` }) : html);
+    // SPA mode: `wire:navigate` only on links to the application's pages outside `spaUrlExceptions()`; with prefetching,
+    // `wire:navigate.hover`. Without SPA mode, links load their page normally.
+    const spaLinks = (html: string, req: Request): string => rewriteSpaLinks(html, { enabled: panel.hasSpaMode(), exceptions: panel.getSpaUrlExceptions(), prefetch: panel.hasSpaPrefetching(), origin: panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}` });
     /** `authMiddleware()` and `tenantMiddleware()` of a request whose user (and tenant) are known; `false` once one answered. */
     const runAccessMiddleware = async (req: Request, res: Response, ctx: PanelContext, kind: 'page' | 'component'): Promise<boolean> => {
         res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };
@@ -5992,7 +6006,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
 
     type DocumentOptions = { title: string; component: string; layout: 'simple' | 'index'; params?: Record<string, unknown> };
     // A page renders entirely with the request theme's colors, for the request's tenant.
-    const document = (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => panel.withTheme(req, () => panel.withTenant(ctx.tenant ?? null, () => renderDocument(req, res, ctx, options)));
+    // `Notification.send()` works while the page renders: the notifications component of the layout shows what `mount()` sent,
+    // and what is left (the page redirected) waits in the browser's mailbox for the next page.
+    const document = async (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => {
+        const { pending } = await runInRequest(ctx.mailbox, () => panel.withTheme(req, () => panel.withTenant(ctx.tenant ?? null, () => renderDocument(req, res, ctx, options))));
+        if (pending.length) publish(ctx.mailbox, pending);
+    };
     const renderDocument = async (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => {
         const request = { path: req.path, method: req.method, ctx };
         const mounted = await runtime.mountWithInstance(options.component, options.params ?? {}, request);
@@ -6024,6 +6043,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const { class: extraBodyClass, ...extraBodyAttributes } = ((mounted.component as any).getExtraBodyAttributes?.() ?? {}) as Record<string, AttrValue>;
         const bodyAttributes = Object.keys(extraBodyAttributes).length ? new Attributes(Object.fromEntries(Object.entries(extraBodyAttributes).filter(([attribute]) => /^[a-zA-Z_:@][a-zA-Z0-9_:.@-]*$/.test(attribute)))).toHtml() : '';
         res.send(spaLinks(views.render('navette-panels::layout.base', {
+            lang: intlLocale(), dir: localeDirection(),
             sidebarWidth: panel.getSidebarWidth(), collapsedSidebarWidth: panel.getCollapsedSidebarWidth(), errorNotifications,
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass: cls([bodyClass, typeof extraBodyClass === 'string' ? extraBodyClass : null]) || null, bodyAttributes, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),

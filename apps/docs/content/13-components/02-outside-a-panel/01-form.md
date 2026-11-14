@@ -223,7 +223,7 @@ Render each one with `<%- await schema('editPost') %>` and `<%- await schema('cr
 ```ts
 app.get('/shop', async (req, res) => {
     res.send(`<!DOCTYPE html>
-<html class="fi">
+<html class="nv">
 <head>${livewire.styles(req, res)}</head>
 <body class="nv-body">
     <h1>Our shop</h1>

@@ -4,7 +4,7 @@ import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database
 import { Action, useColorManager as useActionColorManager } from '@navette-js/actions';
 import { ColorManager, resetConfigurators, views } from '@navette-js/support';
 import '@navette-js/support/ui';
-import { t, tc } from '@navette-js/support/i18n';
+import { setLocale, t, tc } from '@navette-js/support/i18n';
 import {
     Average, BadgeColumn, ColumnGroup, Count, Filter, ImageColumn, IsRelatedToOperator, QueryBuilder, QueryBuilderOperator, Range, RelationshipConstraint, SelectColumn, SelectConstraint, SelectFilter, Sum, Table, TernaryFilter, TextColumn, TextConstraint,
     applyTableFilters, callTableColumnMethod, formatIsoDate, getFilterIndicators, getTableQuery, getTableRecords, limitText, limitWords, mergeIntoFirstTag, recordMatchesTableFilters, renderTable, updateTableColumnState, useColorManager, type TableHost,
@@ -62,6 +62,18 @@ test('column options: URL in a new tab, disabled click, header tooltip, alignmen
     // Neither column links to the record: one has its own URL, the other a disabled click.
     assert.doesNotMatch(html, /href="\/posts\//);
     assert.match(clean(await renderTable(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')]), host(), adapter)), /<a href="\/posts\/2"/);
+    // Heading icon: before the heading, like the icon of a section header; nothing without a heading.
+    const headed = clean(await renderTable(new Table<Post>().heading('Posts').headingIcon('o-document-text').headingIconColor('info').columns([TextColumn.make('title')]), host(), adapter));
+    assert.match(headed, /<div class="nv-ta-header-heading-ctn"><svg class="nv-color nv-color-info nv-icon nv-size-lg"[^>]*>[^]*?<\/svg>\s*<div>\s*<h2 class="nv-ta-header-heading">\s*Posts\s*<\/h2>/);
+    assert.doesNotMatch(clean(await renderTable(new Table<Post>().headingIcon('o-document-text').columns([TextColumn.make('title')]), host(), adapter)), /nv-ta-header-heading-ctn/);
+    // SPA navigation (`Alpine.navigate()`) only for paths of this site, unless turned off.
+    const links = async (table: Table<Post>) => clean(await renderTable(table, host(), adapter));
+    assert.match(await links(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')])), /<a href="\/posts\/2" x-on:click="[^"]*Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().recordUrl((record) => `https://example.org/posts/${record.id}`).columns([TextColumn.make('title')])), /Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).spaRecordUrls(false).columns([TextColumn.make('title')])), /Alpine\.navigate/);
+    assert.match(await links(new Table<Post>().columns([TextColumn.make('title').url((record) => `/posts/${record.id}`)])), /<a href="\/posts\/2" x-on:click="[^"]*Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().columns([TextColumn.make('title').url('https://example.org/')])), /Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().columns([TextColumn.make('title').url('/legacy').spa(false)])), /Alpine\.navigate/);
     assert.equal(TextColumn.make('a').alignLeft().getAlignment(), 'left');
     assert.equal(TextColumn.make('a').alignStart(false).getAlignment(), null);
     assert.equal(TextColumn.make('a').verticalAlignment('middle' as any).getVerticalAlignment(), null);
@@ -83,6 +95,8 @@ test('TextColumn: date tooltips, ISO formats, numbers and money with a locale, l
     assert.ok((await TextColumn.make('published_at').dateTimeTooltip('d/m/Y H:i').toHtml(record)).includes('content: &#039;05\\/03\\/2026 14:30&#039;'));
     assert.match(await TextColumn.make('published_at').timeTooltip().toHtml(record), /content: &#039;14:30:00&#039;/);
     assert.match(await TextColumn.make('published_at').date().sinceTooltip().toHtml(record), /content: &#039;\d+ \w+ ago&#039;/);
+    setLocale('fr');
+    try { assert.match(await TextColumn.make('published_at').since().toHtml(record), /il y a \d+ \w+/); } finally { setLocale('en'); }
     assert.ok((await TextColumn.make('published_at').isoDateTooltip().toHtml(record)).includes('content: &#039;03\\/05\\/2026&#039;'));
     assert.match(await TextColumn.make('published_at').isoDateTimeTooltip(null, 'Europe/Paris').toHtml(record), /content: &#039;March 5, 2026 3:30 PM&#039;/);
     assert.match(await TextColumn.make('published_at').isoTimeTooltip().toHtml(record), /content: &#039;2:30 PM&#039;/);

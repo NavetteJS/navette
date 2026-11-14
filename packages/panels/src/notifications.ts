@@ -32,6 +32,9 @@ export function runInRequest<T>(mailbox: string, fn: () => Promise<T>): Promise<
     return requestStore.run(store, async () => ({ result: await fn(), pending: store.pending }));
 }
 
+/** Removes and returns the notifications sent so far in the current request (by the `mount()` of the page being rendered). */
+export function takeSentNotifications(): NotificationData[] { return requestStore.getStore()?.pending.splice(0) ?? []; }
+
 // In-memory mailbox, keyed by browser (the CSRF token) then by batch.
 const mailboxes = new Map<string, Map<string, { at: number; notifications: NotificationData[] }>>();
 const TTL = 5 * 60 * 1000;
@@ -207,8 +210,12 @@ export class Notifications extends Component {
 
     private get mailbox(): string { return String((this._ctx as any)?.mailbox ?? ''); }
 
-    /** On a full document load (not SPA navigation or prefetch), pending notifications are pulled right away. */
+    /**
+     * Shows the notifications sent while rendering this page (its `mount()`). On a full document load (not SPA navigation or
+     * prefetch), notifications waiting in the mailbox (sent before a redirect) are pulled too.
+     */
     mount(): void {
+        for (const n of takeSentNotifications()) this.pushNotification(n);
         const req = (this._ctx as any)?.req;
         if (!req || req.method !== 'GET' || req.headers['sec-fetch-dest'] !== 'document' || req.headers['x-livewire-navigate'] !== undefined || String(req.headers['sec-purpose'] ?? '').toLowerCase().includes('prefetch')) return;
         for (const n of pull(this.mailbox, null)) this.pushNotification(n);

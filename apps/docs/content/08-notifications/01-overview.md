@@ -25,7 +25,21 @@ These "flash" notifications are displayed in the top-right corner of the panel a
 
 ## Sending notifications
 
-You may call `send()` while Navette handles a request coming from a page that is already displayed: an action function, a form submission, a lifecycle hook of a resource page (`afterCreate()`, `afterSave()`…), or a method called by a widget. The notification is collected during the request and displayed when the response reaches the browser.
+You may call `send()` whenever Navette handles a request: while a page renders (its `mount()` method), or for a page that is already displayed: an action function, a form submission, a lifecycle hook of a resource page (`afterCreate()`, `afterSave()`…), or a method called by a widget. The notification is collected during the request and displayed when the response reaches the browser.
+
+A notification sent from the `mount()` method of a page is displayed on that page:
+
+```ts
+import { Notification, Page } from '@navette-js/panels';
+
+export class Welcome extends Page {
+    static slug = 'welcome';
+
+    async mount() {
+        Notification.make().success().title('Welcome back').send();
+    }
+}
+```
 
 If the request ends with a redirect, the notification is displayed on the next page:
 
@@ -41,7 +55,7 @@ DeleteAction.make()
 ```
 
 <Aside variant="warning">
-`send()` throws an error outside of such a request, for example in the `mount()` method of a page during its first display, or in a background job. Pending notifications are kept in the memory of the Node.js process for five minutes: they are not shared between several processes and do not survive a restart.
+`send()` throws an error outside of a request, for example in a background job or a timer; use [database notifications](/notifications/database-notifications) there. Pending notifications are kept in the memory of the Node.js process for five minutes: they are not shared between several processes and do not survive a restart.
 </Aside>
 
 ## Setting a title

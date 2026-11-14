@@ -59,3 +59,20 @@ test('icon aliases: default group trigger and confirmation modal icons can be re
     // An explicit icon wins over the alias.
     assert.ok((await ActionGroup.make([Action.make('edit').action(() => {})]).icon('m-cog').toHtml(ctx)).includes(paths('m-cog')));
 });
+
+test('SPA navigation only for paths of this site, unless spa(false)', async () => {
+    const link = async (action: Action) => clean(await action.toHtml(ctx));
+    for (const view of ['link', 'button', 'iconButton', 'badge'] as const) {
+        const make = (url: string) => Action.make('go').label('Go').icon('m-arrow-right').url(url)[view]();
+        assert.match(await link(make('/admin/posts')), / wire:navigate /, view);
+        // An OAuth redirect to another origin: SPA navigation would be blocked by CORS.
+        assert.doesNotMatch(await link(make('https://steamcommunity.com/openid/login')), /wire:navigate/, view);
+        assert.doesNotMatch(await link(make('/auth/discord/redirect').spa(false)), /wire:navigate/, view);
+    }
+    const group = clean(await ActionGroup.make([Action.make('steam').url('https://steamcommunity.com/openid/login'), Action.make('home').url('/admin'), Action.make('full').url('/reports').spa(false)]).toHtml(ctx));
+    assert.doesNotMatch(group, /href="https:\/\/steamcommunity\.com\/openid\/login" wire:navigate/);
+    assert.match(group, /href="\/admin" wire:navigate/);
+    assert.doesNotMatch(group, /href="\/reports" wire:navigate/);
+    assert.equal(Action.make('a').url('/x').spa(false).navigatesTo('/x'), false);
+    assert.equal(Action.make('a').url('/x').navigatesTo('//evil.example/x'), false);
+});

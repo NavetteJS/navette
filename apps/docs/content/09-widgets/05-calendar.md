@@ -83,8 +83,8 @@ The other settings are methods to override:
 | Method | Default | Effect |
 |---|---|---|
 | `getFirstDayOfWeek()` | `1` | First day of the week: `0` for Sunday, `1` for Monday… |
-| `getLocale()` | `'en-US'` | Language of month and day names (`Intl`). |
-| `getLabels()` | English labels | Labels of the buttons: `{ previous, next, today, month, week, list, more, empty }`, where `more` is a function of the hidden count. |
+| `getLocale()` | current locale | Language of month and day names (`Intl`). Follows `setLocale()` by default. |
+| `getLabels()` | translated labels | Labels of the buttons: `{ previous, next, today, month, week, list, more, empty }`, where `more` is a function of the hidden count. The defaults (`CALENDAR_LABELS`) come from the `navette-panels::calendar.*` translations of the current locale. |
 | `getToday()` | today in UTC | Today's date, `YYYY-MM-DD`. Override it for another time zone. |
 | `getMaxEventsPerDay()` | `3` | In the month view, beyond this number a day shows a "+N more" button, which opens the list view on that day. |
 | `getHeading()` | static `heading` | Text displayed before the period ("Leave — November 2026"). |
@@ -94,7 +94,7 @@ import { CALENDAR_LABELS, CalendarWidget } from '@navette-js/panels';
 
 export class PlanningCalendar extends CalendarWidget {
     getLocale() {
-        return 'fr-FR';
+        return 'fr-CA';
     }
 
     getFirstDayOfWeek() {
@@ -106,10 +106,12 @@ export class PlanningCalendar extends CalendarWidget {
     }
 
     getLabels() {
-        return { ...CALENDAR_LABELS, today: 'Aujourd’hui', more: (count: number) => `+${count} autres` };
+        return { ...CALENDAR_LABELS, today: 'Maintenant', more: (count: number) => `+${count} de plus` };
     }
 }
 ```
+
+With `setLocale('fr')`, the calendar is already in French: there is no need to override `getLocale()` or `getLabels()`. To change one label in every calendar, override its translation key with `addTranslations('navette-panels', { fr: { calendar: { 'actions.today.label': 'Maintenant' } } })`.
 
 ## Handling clicks
 

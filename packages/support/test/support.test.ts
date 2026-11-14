@@ -42,3 +42,27 @@ test('Heroicons icon and translations', () => {
     assert.equal(t('navette-panels::auth/pages/login.form.email.label', {}, 'fr'), 'Adresse e-mail');
     assert.equal(t('navette-panels::auth/pages/login.messages.failed'), 'These credentials do not match our records.');
 });
+
+test('diffForHumans() is localized, keeps the rounding rules and handles the future', async () => {
+    const { diffForHumans, localeDirection, setLocale } = await import('../src/i18n.ts');
+    const now = new Date('2026-11-14T12:00:00Z');
+    assert.equal(diffForHumans('2026-11-14 11:59:30', now), '30 seconds ago');
+    assert.equal(diffForHumans('2026-11-11 12:00:00', now), '3 days ago');
+    assert.equal(diffForHumans('2026-10-20 12:00:00', now), '3 weeks ago');
+    assert.equal(diffForHumans('2026-09-15 12:00:00', now), '1 month ago');
+    assert.equal(diffForHumans('2024-11-14 12:00:00', now), '2 years ago');
+    assert.equal(diffForHumans(now, now), '0 seconds ago');
+    assert.equal(diffForHumans('2026-11-14T14:01:00Z', now), 'in 2 hours');
+    assert.equal(diffForHumans('', now), null);
+    assert.equal(diffForHumans('2026-09-10 10:00:00', now, 'fr'), 'il y a 2 mois');
+    setLocale('fr');
+    try {
+        assert.equal(diffForHumans('2026-11-11 12:00:00', now), 'il y a 3 jours');
+        assert.equal(diffForHumans('2026-11-17 13:00:00', now), 'dans 3 jours');
+    } finally { setLocale('en'); }
+    assert.equal(diffForHumans('2026-11-11 12:00:00', now, 'pt_BR'), 'há 3 dias');
+    assert.equal(localeDirection('ar'), 'rtl');
+    assert.equal(localeDirection('he_IL'), 'rtl');
+    assert.equal(localeDirection('fr'), 'ltr');
+    assert.equal(localeDirection('not a locale'), 'ltr');
+});

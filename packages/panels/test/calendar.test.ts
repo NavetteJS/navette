@@ -59,3 +59,33 @@ test('rendering: clickable days and events, "+N more", week and list views, cust
     assert.match(renderCalendar(model({ view: 'list', events: [] })), /No events\./);
     assert.match(renderCalendar(model({ renderEvent: (event) => (event.id === 2 ? '<i data-custom>ok</i>' : null), renderDayFooter: (_day, list) => (list.length ? '<u>foot</u>' : '') })), /<i data-custom>ok<\/i>[^]*<u>foot<\/u>/);
 });
+test('labels and day names follow the current locale', async () => {
+    const { setLocale } = await import('@navette-js/support/i18n');
+    const { calendarLocale } = await import('../src/calendar.ts');
+    setLocale('fr');
+    try {
+        assert.equal(calendarLocale(), 'fr');
+        const html = renderCalendar(model({ labels: CALENDAR_LABELS, locale: calendarLocale(), maxEventsPerDay: 2 }));
+        assert.match(html, /title="Précédent"/);
+        assert.match(html, />Aujourd’hui<|>Aujourd&#039;hui<|>Aujourd'hui</);
+        assert.match(html, />Mois<\/button><button[^>]*>Semaine<\/button><button[^>]*>Liste</);
+        assert.match(html, />\+2 autres</);
+        assert.match(html, />novembre 2026</);
+        assert.match(html, />lun\.</);
+        assert.match(renderCalendar(model({ view: 'list', events: [], labels: CALENDAR_LABELS })), /Aucun événement\./);
+        // An override built from the defaults keeps the other translations.
+        assert.equal({ ...CALENDAR_LABELS, today: 'Maintenant' }.next, 'Suivant');
+    } finally { setLocale('en'); }
+    assert.equal(CALENDAR_LABELS.today, 'Today');
+    // A Laravel-style locale name is accepted by Intl.
+    assert.match(renderCalendar(model({ locale: 'pt_BR' })), /novembro de 2026/);
+});
+
+test('rewriting SPA links: other sites, exceptions, panels without SPA mode, table click handlers', async () => {
+    const { rewriteSpaLinks } = await import('../src/spa.ts');
+    const click = ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"`;
+    const html = `<a href="/admin/a" wire:navigate>a</a><a href="https://discord.com/oauth2/authorize" wire:navigate>d</a><a href="/oauth/x" wire:navigate>x</a><a href="/admin/b"${click}>b</a><a href="https://steam.example/"${click}>s</a>`;
+    const options = { exceptions: ['/oauth/*'], prefetch: false, origin: 'https://app.example' };
+    assert.equal(rewriteSpaLinks(html, options), `<a href="/admin/a" wire:navigate>a</a><a href="https://discord.com/oauth2/authorize">d</a><a href="/oauth/x">x</a><a href="/admin/b"${click}>b</a><a href="https://steam.example/">s</a>`);
+    assert.equal(rewriteSpaLinks(html, { ...options, enabled: false }), '<a href="/admin/a">a</a><a href="https://discord.com/oauth2/authorize">d</a><a href="/oauth/x">x</a><a href="/admin/b">b</a><a href="https://steam.example/">s</a>');
+});

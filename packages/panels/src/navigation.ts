@@ -1,7 +1,7 @@
 // Panel navigation: items, groups, the navigation builder (`panel.navigation((builder) => …)`) and the views the sidebar
 // and topbar render. Labels may be HTML (`new HtmlString('<b>Shop</b>')`), written as-is: build them from escaped values.
 import { createHash } from 'node:crypto';
-import { Attributes, e, HtmlString, isEnumCase, type EnumCase } from '@navette-js/support';
+import { Attributes, e, HtmlString, isEnumCase, isSpaNavigableUrl, type EnumCase } from '@navette-js/support';
 
 export type NavigationLabel = string | HtmlString;
 /** What `visible()`, `hidden()` and computed badges receive. */
@@ -33,6 +33,7 @@ export class NavigationItem {
     _key: string | null = null;
     _url: string | null = '#';
     _newTab = false;
+    _spa = true;
     _icon: string | null = null;
     _activeIcon: string | null = null;
     _group: NavigationGroupReference = null;
@@ -67,6 +68,8 @@ export class NavigationItem {
     getUrl(): string | null { return this._url; }
     openUrlInNewTab(condition = true): this { this._newTab = condition; return this; }
     shouldOpenUrlInNewTab(): boolean { return this._newTab; }
+    /** `spa(false)`: in SPA mode, the link still loads its page normally. Links to another site never use SPA navigation. */
+    spa(condition = true): this { this._spa = condition; return this; }
     icon(icon: string | null): this { this._icon = icon; return this; }
     getIcon(): string | null { return this._icon; }
     /** Icon shown instead of `icon()` while the item is active (a solid variant, for example). */
@@ -180,6 +183,8 @@ export type NavigationItemView = {
     isHtmlLabel: boolean;
     url: string; icon: string | null; isActive: boolean; badge: string | number | null; badgeColorClasses: string[]; badgeTooltip: string | null;
     childItems: NavigationItemView[]; activeChildItems: boolean; newTab: boolean;
+    /** The link may use SPA navigation: a path of this site, without `spa(false)`. */
+    spa: boolean;
     /** Extra attributes of the item, as HTML. */
     extraAttributes: string;
 };
@@ -209,7 +214,7 @@ export function navigationItemView(item: NavigationItem, children: NavigationIte
         label: navigationLabelText(item._label), labelHtml: navigationLabelHtml(item._label), isHtmlLabel: item._label instanceof HtmlString,
         url: item._url ?? '', icon: isActive && item._activeIcon ? item._activeIcon : item._icon, isActive,
         badge: badge === '' ? null : badge ?? null, badgeColorClasses: options.badgeColorClasses(item.getBadgeColor(badge ?? null)), badgeTooltip: item.getBadgeTooltip(badge ?? null),
-        childItems, activeChildItems, newTab: item._newTab, extraAttributes: attributesHtml(item._extraAttributes),
+        childItems, activeChildItems, newTab: item._newTab, spa: item._spa && isSpaNavigableUrl(item._url), extraAttributes: attributesHtml(item._extraAttributes),
     };
 }
 /** The view of a group with its (already grouped) items. */

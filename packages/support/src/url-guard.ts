@@ -24,3 +24,11 @@ export function isLocalOrHttpUrl(url: unknown, options: { extraSchemes?: string[
 export function localOrHttpUrl(url: unknown, options: { extraSchemes?: string[] } = {}): string | null {
     return isLocalOrHttpUrl(url, options) ? url : null;
 }
+
+/**
+ * Whether a link may be followed with SPA navigation (`wire:navigate`): only a path of this site. An absolute URL may point
+ * to another origin, which the background request of SPA navigation cannot load (CORS), so it gets a normal page load.
+ */
+export function isSpaNavigableUrl(url: unknown): url is string {
+    return typeof url === 'string' && /^\/(?![/\\])/.test(url) && !CONTROL_CHARACTERS.test(url);
+}

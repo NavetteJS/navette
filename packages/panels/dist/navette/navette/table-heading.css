@@ -1,0 +1,9 @@
+/*
+ * Navette — icon before a table heading (`Table.headingIcon()`, the `icon` of a TableWidget), aligned like the icon of a
+ * section header.
+ */
+.nv-ta-header-heading-ctn { display: flex; align-items: flex-start; gap: calc(var(--spacing) * 3); }
+.nv-ta-header-heading-ctn > .nv-icon { flex-shrink: 0; color: var(--gray-400); }
+:where(.dark) .nv-ta-header-heading-ctn > .nv-icon { color: var(--gray-500); }
+.nv-ta-header-heading-ctn > .nv-icon.nv-color { color: var(--color-500); }
+:where(.dark) .nv-ta-header-heading-ctn > .nv-icon.nv-color { color: var(--color-400); }

@@ -51,6 +51,22 @@ export class LatestOrders extends TableWidget {
 }
 ```
 
+### Adding an icon to the heading
+
+The static `icon` property displays an icon before the heading, aligned like the icon of a section header; `iconColor` changes its color (gray by default). To compute them, override `getIcon()` and `getIconColor()`:
+
+```ts
+import { TableWidget } from '@navette-js/panels';
+
+export class LatestOrders extends TableWidget {
+    static heading = 'Orders of the last 30 days';
+    static icon = 'o-shopping-bag';
+    static iconColor = 'primary';
+}
+```
+
+Outside a widget, a table takes the same icon with `headingIcon()` and `headingIconColor()`.
+
 ## Supported table features
 
 A table widget supports:

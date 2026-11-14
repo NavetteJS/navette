@@ -22,7 +22,7 @@
                             <ul<% if (group.label) { %> x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %> class="nv-sidebar-group-items">
                                 <% group.items.forEach((item, index) => { %>
                                     <li class="<%- cls(['nv-sidebar-item', { 'nv-active': item.active }, 'nv-sidebar-item-has-url']) %>">
-                                        <a href="<%= item.url %>" wire:navigate<% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="nv-sidebar-item-btn">
+                                        <a href="<%= item.url %>"<% if (item.spa !== false) { %> wire:navigate<% } %><% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="nv-sidebar-item-btn">
                                             <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'nv-sidebar-item-icon' }) }) %><% } %>
                                             <% if (!item.icon && group.label) { %>
                                                 <div class="nv-sidebar-item-grouped-border">
@@ -56,7 +56,7 @@
                 <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="nv-dropdown-panel nv-width-xs" style="">
                     <div class="nv-dropdown-list">
                         <% for (const item of subNavigation) { %>
-                            <a href="<%= item.url %>" wire:navigate class="nv-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
+                            <a href="<%= item.url %>"<% if (item.spa !== false) { %> wire:navigate<% } %> class="nv-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
                         <% } %>
                     </div>
                 </div>
@@ -134,10 +134,10 @@
                 <nav class="nv-tabs nv-page-sub-navigation-tabs" aria-label="<%= t('navette::components/tabs.label') %>">
                     <% for (const group of subNavigationGroups) { %>
                         <% if (group.label) { %>
-                            <div x-data="navetteDropdown({ isMenu: true })" class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger"><button type="button" class="<%- cls(['nv-tabs-item', { 'nv-active': group.items.some((item) => item.active) }]) %>"><span class="nv-tabs-item-label"><%= group.label %></span></button></div><div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="nv-dropdown-panel" style=""><div class="nv-dropdown-list"><% for (const item of group.items) { %><a href="<%= item.url %>" wire:navigate class="nv-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a><% } %></div></div></div>
+                            <div x-data="navetteDropdown({ isMenu: true })" class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger"><button type="button" class="<%- cls(['nv-tabs-item', { 'nv-active': group.items.some((item) => item.active) }]) %>"><span class="nv-tabs-item-label"><%= group.label %></span></button></div><div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="nv-dropdown-panel" style=""><div class="nv-dropdown-list"><% for (const item of group.items) { %><a href="<%= item.url %>"<% if (item.spa !== false) { %> wire:navigate<% } %> class="nv-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a><% } %></div></div></div>
                         <% } else { %>
                             <% for (const item of group.items) { %>
-                                <a href="<%= item.url %>" wire:navigate class="<%- cls(['nv-tabs-item', { 'nv-active': item.active }]) %>"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-tabs-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
+                                <a href="<%= item.url %>"<% if (item.spa !== false) { %> wire:navigate<% } %> class="<%- cls(['nv-tabs-item', { 'nv-active': item.active }]) %>"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-tabs-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
                             <% } %>
                         <% } %>
                     <% } %>

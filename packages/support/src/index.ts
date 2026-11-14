@@ -735,7 +735,7 @@ export function hasRenderHook(name: string, scopes: unknown | unknown[] | null =
     return activeRegistries().some((registry) => registry.has(name, scopes));
 }
 views.share({ renderHook, hasRenderHook, cspNonceAttribute });
-export { isLocalOrHttpUrl, localOrHttpUrl } from './url-guard.ts';
+export { isLocalOrHttpUrl, isSpaNavigableUrl, localOrHttpUrl } from './url-guard.ts';
 export { getHtmlSanitizerConfig, hasCustomHtmlSanitizerConfig, HtmlSanitizerConfig, isSafeUrl, markdownToHtml, sanitizeHtml, sanitizeUrl, useHtmlSanitizerConfig } from './html.ts';
 export { cspNonce, cspNonceAttribute, getResponseCspNonce, runWithCspNonce, useCspNonce } from './csp.ts';
 export * from './enums.ts';

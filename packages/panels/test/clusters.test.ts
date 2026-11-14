@@ -30,7 +30,7 @@ test('clusters: their pages and resources are served under their URL, in their s
     class Profile extends Page { static slug = 'profile'; static title = 'Profile'; static cluster = SettingsCluster; static navigationSort = 2; }
     class Secret extends Page { static slug = 'secret'; static cluster = SettingsCluster; static canAccess() { return false; } }
     class Users extends Resource { static slug = 'users'; static adapter = adapter; static cluster = SettingsCluster; static navigationSort = 1; static modelLabel = 'user'; static navigationGroup = 'People'; }
-    const panel = Panel.make().id('clusters').key('clusters-key').authGuard('clusters').auth(auth).pages([Profile, Secret]).resources([Users]);
+    const panel = Panel.make().id('clusters').spa().key('clusters-key').authGuard('clusters').auth(auth).pages([Profile, Secret]).resources([Users]);
     assert.equal(SettingsCluster.getSlug(), 'settings');
     assert.equal(Profile.slug, 'settings/profile');
     assert.equal(Users.getUrl(), '/settings/users');

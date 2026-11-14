@@ -67,7 +67,9 @@ test('the panel answers its errors with its error pages: unknown URLs, forbidden
             assert.equal(await plain.text(), '404');
 
             setLocale('fr');
-            assert.match(await (await get('/admin/nowhere')).text(), /Perdu dans les nuages/);
+            const lost = await (await get('/admin/nowhere')).text();
+            assert.match(lost, /Perdu dans les nuages/);
+            assert.match(lost, /<html lang="fr" dir="ltr" class="nv">/);
             setLocale('en');
         });
         const environment = process.env.NODE_ENV;
@@ -97,4 +99,17 @@ test('a panel at the root leaves unknown URLs to the application, which may answ
         assert.equal(response.status, 503);
         assert.match(await response.text(), /Line under maintenance/);
     } finally { server.close(); }
+});
+
+test('the page document follows the current locale: lang, text direction, root class', async () => {
+    const panel = Panel.make().id('admin').path('admin').key('locale-key').authGuard('locale').auth(auth).pages([Dashboard]);
+    try {
+        await serve(panel, async (get) => {
+            assert.match(await (await get('/admin')).text(), /<html lang="en" dir="ltr" class="nv">/);
+            setLocale('fr');
+            assert.match(await (await get('/admin')).text(), /<html lang="fr" dir="ltr" class="nv">/);
+            setLocale('ar_EG');
+            assert.match(await (await get('/admin')).text(), /<html lang="ar-EG" dir="rtl" class="nv">/);
+        });
+    } finally { setLocale('en'); }
 });

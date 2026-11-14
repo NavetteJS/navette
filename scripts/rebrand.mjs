@@ -21,6 +21,10 @@ export const RULES = [
     [/(?<![\p{L}\p{N}_$])fi-/gu, 'nv-'],
     // ... also after an escape: `/\bfi-btn\b/`, `\u0022fi-icon` (JSON-escaped markup).
     [/(?<=\\(?:b|[nst]|u00[0-9A-Fa-f]{2}|x[0-9A-Fa-f]{2}))fi-/g, 'nv-'],
+    // The bare root class `fi` of `<html>`: in markup (`class="fi"`, `class="dark fi"`) and in selectors (`html.fi`,
+    // `:where(.fi)`, `.fi .x`). Locale codes (`"fi"`, `fi:`) and property accesses (`e.fi`) are not class names.
+    [/(\bclass=(["'])(?:[^"'<>\n]*\s)?)fi(?=[\s"'])/g, '$1nv'],
+    [/(\bhtml|(?<![\w$.\\-]))\.fi(?![\w$-])/g, '$1.nv'],
     // Asset paths.
     [/\b(js|css|fonts)\/filament\/filament\//g, '$1/navette/navette/'],
     [/\bjs\/filament\//g, 'js/navette/'],

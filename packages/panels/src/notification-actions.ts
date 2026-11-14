@@ -1,5 +1,5 @@
 // Actions of notifications (flash, database and broadcast): their array format, checked, and their markup.
-import { Attributes, cls, e, icon, icons, js, type ColorManager, localOrHttpUrl } from '@navette-js/support';
+import { Attributes, cls, e, icon, icons, js, type ColorManager, isSpaNavigableUrl, localOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Action, ActionGroup } from '@navette-js/actions';
 
@@ -8,7 +8,7 @@ export type NotificationActionDispatch = { event: string; data: Record<string, u
 export type NotificationActionView = 'link' | 'button' | 'icon-button' | 'badge';
 export type NotificationActionData = {
     name?: string;
-    label: string; url: string | null; openUrlInNewTab: boolean; close?: boolean; dispatch?: NotificationActionDispatch | null; color?: string | null; button?: boolean; outlined?: boolean;
+    label: string; url: string | null; openUrlInNewTab: boolean; spa?: boolean; close?: boolean; dispatch?: NotificationActionDispatch | null; color?: string | null; button?: boolean; outlined?: boolean;
     /** Database notifications only: marks the notification as read (or unread) when clicked. */
     markAsRead?: boolean; markAsUnread?: boolean;
     /** Trigger style: a link by default (`button: true` is the same as `view: 'button'`). */
@@ -123,7 +123,7 @@ export function notificationActionFromArray(raw: unknown, mapUrl?: (url: string)
     const view = viewOf(action.view) ?? 'link';
     const icon = typeof action.icon === 'string' ? action.icon.replace(/^heroicon-/, '') : null;
     const data: NotificationActionData = {
-        label, url, openUrlInNewTab: action.shouldOpenUrlInNewTab === true, close: action.shouldClose === true,
+        label, url, openUrlInNewTab: action.shouldOpenUrlInNewTab === true, ...(action.isSpa === false ? { spa: false } : {}), close: action.shouldClose === true,
         dispatch: event && (direction !== 'to' || component) ? { event, data: eventData(action.eventData), direction, component: direction === 'to' ? component : null } : null,
         color: typeof action.color === 'string' && COLOR.test(action.color) ? action.color : null,
         button: view === 'button', outlined: action.isOutlined === true,
@@ -159,7 +159,7 @@ export function notificationActionToArray(action: NotificationActionItem): Recor
         name: action.name ?? action.label, color: action.color ?? null, event: action.dispatch?.event ?? null, eventData: action.dispatch?.data ?? [], dispatchDirection: action.dispatch?.direction ?? false,
         dispatchToComponent: action.dispatch?.component ?? null, extraAttributes: action.extraAttributes ?? [], icon: action.icon ?? null, iconPosition: action.iconPosition ?? 'before', iconSize: null,
         isOutlined: action.outlined === true, isDisabled: action.disabled === true, label: action.label, shouldClose: action.close === true, shouldMarkAsRead: action.markAsRead === true,
-        shouldMarkAsUnread: action.markAsUnread === true, shouldOpenUrlInNewTab: action.openUrlInNewTab, size: action.size ?? 'sm', tooltip: action.tooltip ?? null, url: action.url,
+        shouldMarkAsUnread: action.markAsUnread === true, shouldOpenUrlInNewTab: action.openUrlInNewTab, ...(action.spa === false ? { isSpa: false as const } : {}), size: action.size ?? 'sm', tooltip: action.tooltip ?? null, url: action.url,
         view: viewName(actionView(action)),
     };
 }
@@ -214,7 +214,7 @@ const iconSizeFor = (view: NotificationActionView, size: string): string => (vie
 /**
  * One action of a notification: a link (only a local or http(s) URL), a button, an icon button or a badge. The Alpine handler
  * closes the notification or changes its read state, and the Livewire handler dispatches the event. A disabled
- * action has neither a link nor a click handler. `navigate`: local links use `wire:navigate`.
+ * action has neither a link nor a click handler. `navigate`: links to paths of this site use `wire:navigate`, unless the action has `spa: false`.
  */
 export function renderNotificationAction(action: NotificationActionData, options: RenderOptions = {}): string {
     const url = safeNotificationUrl(action.url);
@@ -235,7 +235,7 @@ export function renderNotificationAction(action: NotificationActionData, options
     const alpine = action.close ? (url && !action.openUrlInNewTab ? `${close}(true)` : `${close}()`) : action.markAsRead ? 'markAsRead()' : action.markAsUnread ? 'markAsUnread()' : null;
     const click = disabled ? '' : [livewire, alpine].filter(Boolean).join('; ');
     const onClick = click ? ` x-on:click="${e(click)}"` : '';
-    const href = url && !disabled ? `href="${e(url)}"${action.openUrlInNewTab ? ' target="_blank" rel="noopener noreferrer"' : url.startsWith('/') && options.navigate ? ' wire:navigate' : ''}` : '';
+    const href = url && !disabled ? `href="${e(url)}"${action.openUrlInNewTab ? ' target="_blank" rel="noopener noreferrer"' : isSpaNavigableUrl(url) && action.spa !== false && options.navigate ? ' wire:navigate' : ''}` : '';
     const tag = url ? 'a' : 'button';
     const opening = tag === 'a' ? `<a ${href}`.replace(/ $/, '') : `<button type="button"${disabled ? ' disabled' : ''}`;
     const iconHtml = safeNotificationIcon(action.icon, options.inGroup ? 'md' : iconSizeFor(view, size), []);
