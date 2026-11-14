@@ -1,7 +1,7 @@
 // Flash notifications: the Notification builder, a per-browser mailbox, and the component that displays them.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Attributes, e, icon, js } from '@navette-js/support';
+import { Attributes, e, icon, icons, js } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
 
@@ -106,10 +106,10 @@ export function renderNotification(n: NotificationData): string {
     const attributes = new Attributes()
         .merge({ role: n.status === 'danger' ? 'alert' : null, 'wire:key': `${n.id}.notifications.${n.id}`, 'x-on:close-notification.window': `if ($event.detail.id == ${js(n.id)}) close()` })
         .class(['fi-no-notification', n.status ? `fi-status-${n.status}` : null]);
-    const iconName = n.icon ?? (n.status ? STATUS_ICON[n.status] : null);
+    const iconName = n.icon ?? (n.status && Object.hasOwn(STATUS_ICON, n.status) ? icons.resolve(`notifications::notification.${n.status}`) ?? STATUS_ICON[n.status] : null);
     const iconColor = n.iconColor ?? n.status;
     const iconHtml = iconName ? icon(iconName, { size: 'lg', attributes: new Attributes().class([...(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${iconColor}`] : []), 'fi-no-notification-icon']) }) : '';
-    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${e(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark')}</button></div>`;
+    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${e(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
 /** Container component for flash notifications. */

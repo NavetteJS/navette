@@ -30,10 +30,10 @@
         <div class="fi-input-wrp-suffix">
             <div class="fi-input-wrp-actions">
                 <button title="<%= showLabel %>" aria-label="<%= showLabel %>" type="button" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-ref="showPasswordAction" x-show="! isPasswordRevealed" x-on:click="setPasswordRevealed(true)">
-                    <%- icon('m-eye') %>
+                    <%- icon('m-eye', { alias: 'forms::components.text-input.actions.show-password' }) %>
                 </button>
                 <button title="<%= hideLabel %>" aria-label="<%= hideLabel %>" type="button" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-cloak="x-cloak" x-ref="hidePasswordAction" x-show="isPasswordRevealed" x-on:click="setPasswordRevealed(false)">
-                    <%- icon('m-eye-slash') %>
+                    <%- icon('m-eye-slash', { alias: 'forms::components.text-input.actions.hide-password' }) %>
                 </button>
             </div>
         </div>

@@ -2,7 +2,7 @@
 // It is kept apart from `/admin`, whose pages are compared with Filament's demo.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
-import { Checkbox, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
+import { Checkbox, CheckboxList, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
     Cluster, DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, Tab, type AuthProvider, type Login,
@@ -15,6 +15,7 @@ import {
 } from '@navette-js/tables';
 
 class LabBrand extends Model { static tableName = 'brands'; }
+class LabCategory extends Model { static tableName = 'product_categories'; }
 export class LabProduct extends Model {
     static tableName = 'products';
     id!: number;
@@ -26,7 +27,10 @@ export class LabProduct extends Model {
     is_visible!: number;
     brand_id!: number | null;
     static get relationMappings() {
-        return { brand: { relation: Model.BelongsToOneRelation, modelClass: LabBrand, join: { from: 'products.brand_id', to: 'brands.id' } } };
+        return {
+            brand: { relation: Model.BelongsToOneRelation, modelClass: LabBrand, join: { from: 'products.brand_id', to: 'brands.id' } },
+            categories: { relation: Model.ManyToManyRelation, modelClass: LabCategory, join: { from: 'products.id', through: { from: 'product_category_product.product_id', to: 'product_category_product.product_category_id' }, to: 'product_categories.id' } },
+        };
     }
 }
 
@@ -71,6 +75,8 @@ class LabProducts extends Resource {
             Textarea.make('description').autosize().placeholder('A few words about the product'),
             Toggle.make('is_visible').label('Visible').onIcon('m-eye').offIcon('m-eye-slash').onColor('success'),
             Checkbox.make('featured').inline(false),
+            // Many-to-many relationship: the links are saved in `product_category_product` with the record.
+            CheckboxList.make('categories').relationship('categories', 'name', (query) => query.whereNull('parent_id')).searchable().searchDebounce(300).bulkToggleable().columns(3).columnSpanFull(),
         ]);
     }
 
@@ -187,7 +193,14 @@ class LabFields extends Resource {
                 FileUpload.make('gallery').multiple().image().panelLayout('grid').reorderable().imageDimensions({ minWidth: 200 }).dehydrated(false),
             ]).columnSpanFull().columns(2),
             Repeater.make('contacts').schema([TextInput.make('name').required(), TextInput.make('email').email()]).columns(2)
-                .itemLabel(({ state }) => (state.name as string) || null).collapsible().cloneable().reorderableWithButtons().defaultItems(1).columnSpanFull().dehydrated(false),
+                .itemLabel(({ state }) => (state.name as string) || null).collapsible().cloneable().reorderableWithButtons().defaultItems(1).columnSpanFull().dehydrated(false)
+                // Item actions: a confirmed delete, "Insert between", and an extra action that validates its item.
+                .deleteAction((action) => action.requiresConfirmation().modalHeading('Remove this contact?'))
+                .addBetweenAction((action) => action.visible())
+                .extraItemActions([
+                    Action.make('greet').icon('m-hand-raised').requiresConfirmation().modalDescription('Checks the contact, then says hello.')
+                        .action(async ({ arguments: args, component }: any) => { const contact = await component.getItemState(args.item); Notification.make().success().title(`Hello ${contact.name}`).send(); }),
+                ]),
             TextInput.make('website').url(),
         ]);
     }

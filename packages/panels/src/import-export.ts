@@ -7,7 +7,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { Action } from '@navette-js/actions';
 import { CheckboxList, FileUpload, Select } from '@navette-js/forms';
 import { Fieldset } from '@navette-js/schemas';
-import { configured } from '@navette-js/support';
+import { configured, icons } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
 import { getTableQuery } from '@navette-js/tables';
 import { Notification } from './notifications.ts';
@@ -150,7 +150,7 @@ const fileNameOf = (name: string) => name.replace(/[^A-Za-z0-9._-]+/g, '-').slic
 function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
     let exporter: typeof Exporter | null = null, maxRows = DEFAULT_MAX_EXPORT_ROWS, mapping = true, formats: ('csv' | 'xlsx')[] = ['csv', 'xlsx'], queued = false;
     const columnsOf = () => { if (!exporter) throw new Error('ExportAction: call exporter() with an Exporter class.'); return exporter.getColumns(); };
-    const action = Action.make(name).color('gray').icon('m-arrow-down-tray')
+    const action = Action.make(name).color('gray').icon(icons.resolve('actions::export-action.grouped') ?? 'm-arrow-down-tray')
         // Exporting reads the records: the resource's `viewAny` ability (or the host's own checks) applies.
         .authorize(async ({ livewire }) => (typeof livewire?.resource?.can === 'function' ? livewire.resource.can('viewAny', livewire._ctx?.user ?? null) : true))
         .label(({ livewire }) => t('filament-actions::export.label', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
@@ -487,7 +487,7 @@ export class ImportAction {
                 const panel = livewire._ctx?.panel;
                 livewire.redirect(panel.getDownloadUrl(panel.getDownloads().put(livewire._ctx.user.id, 'import-example.csv', 'text/csv; charset=utf-8', csv)));
             });
-        const action = Action.make(name).color('gray').icon('m-arrow-up-tray')
+        const action = Action.make(name).color('gray').icon(icons.resolve('actions::import-action.grouped') ?? 'm-arrow-up-tray')
             // Importing creates or updates records: the resource's `create` ability applies.
             .authorize(async ({ livewire }) => (typeof livewire?.resource?.can === 'function' ? livewire.resource.can('create', livewire._ctx?.user ?? null) : true))
             .label(({ livewire }) => t('filament-actions::import.label', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())

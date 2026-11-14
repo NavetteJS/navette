@@ -29,8 +29,9 @@ The function passed to `action()` runs on the server. It receives one context ob
 |---|---|
 | `record` | The record the action belongs to (a table row, or the record of an edit or view page), read again from the data adapter on every request. `null` when there is none. |
 | `data` | The validated state of the modal form, if the action has one. |
-| `arguments` | Arguments passed when the action was mounted (for example `{ date }` from a calendar). |
+| `arguments` | Arguments passed when the action was mounted (for example `{ date }` from a calendar, or `{ item }` for a [repeater item action](/forms/repeater#adding-extra-item-actions-to-a-repeater)). A component rendering an action sets them with `arguments()`. |
 | `livewire` | The component that hosts the action: the page, the relation manager or the table page. |
+| `component` | For an action of a form component (a field's affix action, a repeater's item action...): that component. |
 
 To collect input before running an action, define its modal's schema. The submitted data is available in `data`:
 

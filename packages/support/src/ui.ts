@@ -1,6 +1,6 @@
 // @navette-js/support/ui — base UI components (button, badge, modal…) usable on their own, outside a panel.
 // Each function returns an HTML string.
-import { Attributes, cls, e, icon, js, loadingIndicator, views, type ColorManager } from './index.ts';
+import { Attributes, cls, e, icon, icons, js, loadingIndicator, views, type ColorManager } from './index.ts';
 import { t, tc } from './i18n.ts';
 import { fileURLToPath } from 'node:url';
 
@@ -96,7 +96,7 @@ export function avatar(props: { src: string; alt?: string; size?: Size; circular
  * The last item is the current page.
  */
 export function breadcrumbs(items: { label: string; url?: string | null }[], label = 'Breadcrumb'): string {
-    const separators = icon('m-chevron-right', { attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) + icon('m-chevron-left', { attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) });
+    const separators = icon('m-chevron-right', { alias: 'breadcrumbs.separator', attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) + icon('m-chevron-left', { alias: 'breadcrumbs.separator.rtl', attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) });
     const list = items.map((item, index) => `<li class="fi-breadcrumbs-item">${index > 0 ? separators : ''}${((current) => (item.url === undefined || item.url === null ? `<span${current} class="fi-breadcrumbs-item-label">${e(item.label)}</span>` : `<a${item.url ? ` href="${e(item.url)}"` : ''}${current} class="fi-breadcrumbs-item-label">${e(item.label)}</a>`))(index === items.length - 1 ? ' aria-current="page"' : '')}</li>`);
     return `<nav class="fi-breadcrumbs" aria-label="${e(label)}"><ol class="fi-breadcrumbs-list">${list.join('')}</ol></nav>`;
 }
@@ -226,7 +226,7 @@ export function section(props: SectionProps = {}, slot = ''): string {
         }]);
     const text = hasText ? `<div class="fi-section-header-text-ctn">${props.heading ? `<${tag} class="fi-section-header-heading">${e(props.heading)}</${tag}>` : ''}${props.description ? `<p class="fi-section-header-description">${e(props.description)}</p>` : ''}</div>` : '';
     const content = hasText || props.afterHeader ? `<div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${text}${props.afterHeader ? `<div class="fi-section-header-after-ctn">${props.afterHeader}</div>` : ''}</div>` : '';
-    const toggle = collapsible ? iconButton({ color: 'gray', icon: 'm-chevron-up', label: collapsed ? expand : collapse, attributes: {
+    const toggle = collapsible ? iconButton({ color: 'gray', icon: icons.resolve('section.collapse-button') ?? 'm-chevron-up', label: collapsed ? expand : collapse, attributes: {
         'x-bind:aria-label': `isCollapsed ? ${js(expand)} : ${js(collapse)}`, 'aria-expanded': collapsed ? 'false' : 'true', 'x-bind:aria-expanded': '(! isCollapsed).toString()',
         'x-bind:aria-controls': "$id('fi-section-content')", 'x-on:click.stop': 'isCollapsed = ! isCollapsed', class: 'fi-section-collapse-btn',
     } }) : '';
@@ -304,7 +304,7 @@ export function modal(props: ModalProps, slot = ''): string {
     const iconColor = props.iconColor ?? 'primary';
     // Scrolling window (slide-over, sticky header or footer): the focus trap goes on the window itself, not its container.
     const trapOnWindow = props.slideOver === true || props.stickyHeader === true || props.stickyFooter === true;
-    const closeHtml = closeButton ? iconButton({ color: 'gray', icon: 'o-x-mark', label: t('filament::components/modal.actions.close.label'), attributes: { tabindex: closeByEscaping ? '-1' : null, 'x-on:click': close, class: 'fi-modal-close-btn' } }).replace('fi-icon fi-size-md', 'fi-icon fi-size-lg') : '';
+    const closeHtml = closeButton ? iconButton({ color: 'gray', icon: icons.resolve('modal.close-button') ?? 'o-x-mark', label: t('filament::components/modal.actions.close.label'), attributes: { tabindex: closeByEscaping ? '-1' : null, 'x-on:click': close, class: 'fi-modal-close-btn' } }).replace('fi-icon fi-size-md', 'fi-icon fi-size-lg') : '';
     const iconHtml = props.icon ? `<div class="fi-modal-icon-ctn"><div class="${cls([...colorMark(iconColor), 'fi-modal-icon-bg'])}">${icon(props.icon, { size: 'lg' })}</div></div>` : '';
     const header = hasHeading ? `<div wire:key="${e(key('header'))}" class="${cls(['fi-modal-header', { 'fi-vertical-align-center': !!props.icon && !props.eyebrow && !hasDescription && alignment === 'start' }])}">${closeHtml}${iconHtml}<div>${props.eyebrow ? `<p class="fi-modal-eyebrow">${e(props.eyebrow)}</p>` : ''}<h2 id="${e(id)}.heading" class="fi-modal-heading">${e(props.heading!)}</h2>${hasDescription ? `<p id="${e(id)}.description" class="fi-modal-description">${e(props.description!)}</p>` : ''}</div></div>` : '';
     const content = hasContent ? `<div wire:key="${e(key('content'))}" class="fi-modal-content">${slot}</div>` : '';

@@ -71,10 +71,6 @@ The saved value is a list of blocks. Store it in a JSON column:
 
 When the form is filled, the builder accepts this list, the same list as a JSON string, or an object of items keyed by item key. Items with an unknown block type are dropped. If you prefer to save the object of items keyed by item key, use `storedAsList(false)`.
 
-<Aside variant="warning">
-Block previews, labelling items based on their content, customizing the search prompt of the block picker, customizing the item actions, adding extra item actions and confirming item actions with a modal are not available yet.
-</Aside>
-
 ## Setting a block's label
 
 By default, the label of the block is generated from its name: `task_group` becomes "Task group". You may override it with the `label()` method:
@@ -85,6 +81,32 @@ import { Block } from '@navette-js/forms/builder';
 Block.make('task_group')
     .label('Group of tasks')
 ```
+
+### Labelling builder items based on their content
+
+You may add a label for a builder item using the same `label()` method. This method accepts a function that receives the item's data in `state`. If `state` is `null`, you should return the block label that should be displayed in the block picker. Otherwise, you should return a string to be used as the item label:
+
+```ts
+import { Block } from '@navette-js/forms/builder';
+import { TextInput } from '@navette-js/forms';
+
+Block.make('heading')
+    .schema(() => [
+        TextInput.make('content')
+            .live({ onBlur: true })
+            .required(),
+        // ...
+    ])
+    .label(({ state }) => {
+        if (state === null) {
+            return 'Heading';
+        }
+
+        return String(state.content ?? 'Untitled heading');
+    })
+```
+
+The function also receives the item's `key` and its zero-based `index`. `state` is the raw, unvalidated data sent by the browser; the label is escaped. Any fields that you use from `state` should be `live()` if you wish to see the item label update live as you use the form.
 
 ### Numbering builder items
 
@@ -158,6 +180,83 @@ return Builder.make('content')
             .schema(() => [
                 Textarea.make('content').required().rows(2),
             ]),
+    ])
+```
+
+## Previewing blocks
+
+If you prefer to render read-only previews in the builder instead of the blocks' forms, you can use the `blockPreviews()` method. This will render each block's `preview()` instead of the form. The preview is either the name of a view, rendered with the block data as variables, or a function of the block data:
+
+```ts
+import { HtmlString, e } from '@navette-js/support';
+import { Builder, Block } from '@navette-js/forms/builder';
+import { TextInput } from '@navette-js/forms';
+
+Builder.make('content')
+    .blockPreviews()
+    .blocks([
+        Block.make('heading')
+            .schema(() => [
+                TextInput.make('text')
+                    .placeholder('Default heading'),
+            ])
+            .preview('app::block-previews.heading'),
+        Block.make('quote')
+            .schema(() => [
+                TextInput.make('text'),
+            ])
+            .preview((data) => new HtmlString(`<blockquote>${e(data.text ?? '')}</blockquote>`)),
+    ])
+```
+
+```preview
+// state: {"content": {"a1": {"type": "heading", "data": {"text": "Our roadmap for 2026"}}, "b2": {"type": "quote", "data": {"text": "Ship small, ship often."}}}}
+// viewport: 900
+return Builder.make('content')
+    .blockPreviews()
+    .blocks([
+        Block.make('heading')
+            .schema(() => [TextInput.make('text')])
+            .preview((data) => new HtmlString(`<h2 style="font-size: 1.25rem; font-weight: 600">${e(data.text ?? 'Default heading')}</h2>`)),
+        Block.make('quote')
+            .schema(() => [TextInput.make('text')])
+            .preview((data) => new HtmlString(`<blockquote style="font-style: italic">${e(data.text ?? '')}</blockquote>`)),
+    ])
+```
+
+In the `app::block-previews.heading` view (an EJS file of a namespace registered with `views.namespace()`), you can access the block data like so:
+
+```ejs
+<h1><%= text ?? 'Default heading' %></h1>
+```
+
+The block data comes from the browser: `<%= %>` escapes it. A preview function returning a string is escaped as text; return an `HtmlString` to insert markup, and escape the data you put in it with `e()`.
+
+Clicking a preview, or the edit button of the item header, opens the block's form in a modal. Adding a block also opens its form in a modal first. The edit action can be customized with `editAction()`.
+
+Optionally, the `blockPreviews()` method accepts a boolean value to control if the builder should render block previews or not:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .blockPreviews(featureFlags.blockPreviews)
+```
+
+### Interactive block previews
+
+By default, preview content is not interactive, and clicking it will open the Edit modal for that block to manage its settings. If you have links and buttons that you'd like to remain interactive in the block previews, you can pass `{ areInteractive: true }` to the `blockPreviews()` method (or `true` as its second argument):
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blockPreviews({ areInteractive: true })
+    .blocks([
+        //
     ])
 ```
 
@@ -244,7 +343,7 @@ return Builder.make('content')
 
 ### Inserting items between other items
 
-A block picker is also displayed between items, so the user can insert a block at a precise position. You may change its label with `addBetweenActionLabel()`, or remove it with `addBetweenAction(false)`. In that case, you may display a label between items instead:
+A block picker is also displayed between items, so the user can insert a block at a precise position. You may change its label with `addBetweenActionLabel()`, customize its action with a function (see [customizing the builder item actions](#customizing-the-builder-item-actions)), or remove it with `addBetweenAction(false)`. In that case, you may display a label between items instead:
 
 ```ts
 import { Builder } from '@navette-js/forms/builder';
@@ -502,7 +601,36 @@ Builder.make('content')
     ])
 ```
 
-The search matches block labels in the browser, without making a server request, and is case-insensitive.
+The search matches block labels in the browser, without making a server request, and is case-insensitive. You may customize the placeholder of the search field using the `searchPrompt()` method, and the message displayed when no blocks match the search using the `noSearchResultsMessage()` method:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .searchable()
+    .searchPrompt('Search for a block')
+    .noSearchResultsMessage('No blocks found.')
+    .blocks([
+        // ...
+    ])
+```
+
+The search prompt is displayed as plain text. If you pass an `HtmlString` to `searchPrompt()`, its tags are removed and its HTML entities are decoded.
+
+#### Tweaking the search debounce
+
+By default, the block picker filters blocks immediately as the user types. You may debounce the search using the `searchDebounce()` method, which accepts the number of milliseconds to wait:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .searchable()
+    .searchDebounce(500)
+    .blocks([
+        // ...
+    ])
+```
 
 ## Limiting the number of times a block can be used
 
@@ -542,3 +670,90 @@ Builder.make('content')
 ```
 
 `minItems()` is checked on the server when the form is validated. `maxItems()` (100 by default) is a limit rather than a validation rule: the add buttons disappear once it is reached, the server ignores further additions and clones, and items beyond it are dropped.
+
+## Customizing the builder item actions
+
+This field uses action objects for easy customization of buttons within it. You can customize these buttons by passing a function to an action registration method. The function receives the `Action` object, which you can use to [customize it](/actions/overview). The following methods are available to customize the actions:
+
+- `addAction()`
+- `addBetweenAction()`
+- `cloneAction()`
+- `collapseAction()`
+- `collapseAllAction()`
+- `deleteAction()`
+- `editAction()` (with [block previews](#previewing-blocks))
+- `expandAction()`
+- `expandAllAction()`
+- `moveDownAction()`
+- `moveUpAction()`
+- `reorderAction()`
+
+Here is an example of how you might customize an action:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .collapseAllAction((action) => action.label('Collapse all content'))
+```
+
+`addBetweenAction(false)` still removes the picker between items.
+
+### Confirming builder actions with a modal
+
+You can confirm actions with a modal by using the `requiresConfirmation()` method on the action object. You may use any [modal customization method](/actions/modals) to change its content and behavior:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .deleteAction((action) => action.requiresConfirmation())
+```
+
+<Aside variant="info">
+The `collapseAction()`, `collapseAllAction()`, `expandAction()` and `expandAllAction()` methods do not support confirmation modals, as clicking their buttons does not make the network request that is required to show the modal. The `addAction()` and `addBetweenAction()` functions customize the block picker's button; picking a block runs the action.
+</Aside>
+
+Completing a drag that changes the block order invokes `reorderAction()`, which supports `requiresConfirmation()`. Clicking the drag handle alone does not invoke the action.
+
+### Adding extra item actions to a builder
+
+You may add new [action buttons](/actions/overview) to the header of each builder item by passing `Action` objects into `extraItemActions()`:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Builder, Block } from '@navette-js/forms/builder';
+import { TextInput } from '@navette-js/forms';
+
+Builder.make('content')
+    .blocks([
+        Block.make('contactDetails')
+            .schema(() => [
+                TextInput.make('email')
+                    .label('Email address')
+                    .email()
+                    .required(),
+                // ...
+            ]),
+        // ...
+    ])
+    .extraItemActions([
+        Action.make('sendEmail')
+            .icon('m-envelope')
+            .action(async ({ arguments: args, component }) => {
+                const itemData = await component.getItemState(args.item);
+
+                await mailer.send(itemData.email, 'Your details');
+            }),
+    ])
+```
+
+In this example, `arguments.item` gives you the key of the current builder item, checked on the server: an unknown key is refused before the action runs. You can validate the data in that builder item using the `getItemState()` method on the builder component. This method returns the validated data for the item. If the item is not valid, it will cancel the action and show an error message for that item in the form.
+
+If you want to get a snapshot of the current item's state without validating it, you can use `component.getItemStateSnapshot(args.item)` instead. The snapshot still applies state transformations. `component.getRawItemState(args.item)` returns the raw `{ type, data }` of the item.

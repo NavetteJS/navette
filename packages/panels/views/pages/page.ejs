@@ -14,7 +14,7 @@
                                         <%= group.label %>
                                     </span>
                                     <%- view('filament::components.icon-button', {
-                                        iconName: 'm-chevron-up', label: group.label, className: 'fi-sidebar-group-collapse-btn',
+                                        iconName: 'm-chevron-up', iconAlias: 'panels::sidebar.group.collapse-button', label: group.label, className: 'fi-sidebar-group-collapse-btn',
                                         extra: attrs({ 'x-bind:aria-expanded': '! $store.sidebar.groupIsCollapsed(label)', 'x-on:click.stop': '$store.sidebar.toggleCollapsedGroup(label)' }),
                                     }) %>
                                 </div>
@@ -51,7 +51,7 @@
             <div class="fi-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.before', renderHookScopes) %></div>
             <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-page-sub-navigation-dropdown">
                 <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
-                    <button class="fi-btn fi-size-md" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"><%= activeSubItem.label %><%- icon('m-chevron-down') %></button>
+                    <button class="fi-btn fi-size-md" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"><%= activeSubItem.label %><%- icon('m-chevron-down', { alias: 'panels::sub-navigation.mobile-menu.button' }) %></button>
                 </div>
                 <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel fi-width-xs" style="">
                     <div class="fi-dropdown-list">
@@ -71,8 +71,8 @@
                             <% breadcrumbs.forEach((crumb, i) => { %>
                                 <li class="fi-breadcrumbs-item">
                                     <% if (i > 0) { %>
-                                        <%- icon('m-chevron-right', { attributes: attrs({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) %>
-                                        <%- icon('m-chevron-left', { attributes: attrs({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) }) %>
+                                        <%- icon('m-chevron-right', { alias: 'breadcrumbs.separator', attributes: attrs({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) %>
+                                        <%- icon('m-chevron-left', { alias: 'breadcrumbs.separator.rtl', attributes: attrs({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) }) %>
                                     <% } %>
                                     <% if (crumb.url) { %>
                                         <a href="<%= crumb.url %>" wire:navigate class="fi-breadcrumbs-item-label">

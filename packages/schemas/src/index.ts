@@ -1,6 +1,6 @@
 // @navette-js/schemas — Schema, Component and the layout components.
 // Each component renders in two steps: async property resolution, then a synchronous EJS view (ADR 0003).
-import { Attributes, HtmlString, cls, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -486,7 +486,7 @@ export class Section extends Component {
             const tag = this.getHeadingTag();
             const text = hasHeading || hasDescription ? `<div class="fi-section-header-text-ctn">${hasHeading ? `<${tag}${headingId ? ` id="${e(headingId)}"` : ''} class="fi-section-header-heading">${e(heading)}</${tag}>` : ''}${hasDescription ? `<p${descriptionId ? ` id="${e(descriptionId)}"` : ''} class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : '';
             const headerContent = hasHeading || hasDescription || afterHeader ? `<div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasHeading || hasDescription }])}">${text}${afterHeader ? `<div class="fi-section-header-after-ctn">${afterHeader}</div>` : ''}</div>` : '';
-            const collapseButton = isCollapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(isCollapsed ? 'filament::components/section.actions.expand.label' : 'filament::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-expanded="${isCollapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()"${contentId ? ` aria-controls="${e(contentId)}"` : ''} class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up')}</button>` : '';
+            const collapseButton = isCollapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(isCollapsed ? 'filament::components/section.actions.expand.label' : 'filament::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-expanded="${isCollapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()"${contentId ? ` aria-controls="${e(contentId)}"` : ''} class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : '';
             header = `<header${isCollapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header">${iconHtml}${headerContent}${collapseButton}</header>`;
         }
         const body = hasContent ? `<div${contentId ? ` id="${e(contentId)}"` : ''}${isCollapsible && (isCollapsed || shouldPersistCollapsed) ? ' x-cloak' : ''} class="fi-section-content-ctn">${contentHtml}${footer ? `<footer class="fi-section-footer">${footer}</footer>` : ''}</div>` : '';
@@ -633,7 +633,7 @@ export class Tabs extends Component {
             const triggers = visible.map((tab, index) => {
                 const k = tab.getTabKey();
                 const badge = badges[index];
-                return `<button type="button" tabindex="-1" aria-hidden="true" data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="fi-tabs-item fi-active">${icon('m-chevron-down')}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${badge ? badgeHtml(badge, false) : ''}</button>`;
+                return `<button type="button" tabindex="-1" aria-hidden="true" data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="fi-tabs-item fi-active">${icon('m-chevron-down', { alias: 'schemas::components.tabs.dropdown-trigger-button' })}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${badge ? badgeHtml(badge, false) : ''}</button>`;
             });
             const items = visible.map((tab, index) => {
                 const k = tab.getTabKey();
@@ -641,7 +641,7 @@ export class Tabs extends Component {
                 const listBadge = badge ? `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', ...badgeColorClasses(this, badge.color)])}">${e(badge.label)}</span>` : '';
                 return `<div data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item fi-sc-tabs-overflow-placeholder">${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="fi-dropdown-list-item-label">${e(tab.getLabel())}</span>${listBadge}</div>`;
             });
-            overflow = `<div aria-hidden="true" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { $event.preventDefault(); toggleOverflow() }" class="fi-dropdown-trigger">${triggers.join('')}<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis tabindex="-1" aria-hidden="true" aria-label="${e(more)}" class="fi-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="fi-tabs-item-label">${icon('m-ellipsis-horizontal')}</span></button></div><div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.fi-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="fi-dropdown-panel fi-sc-tabs-overflow-panel"><div class="fi-dropdown-list">${items.join('')}</div></div></div>`;
+            overflow = `<div aria-hidden="true" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { $event.preventDefault(); toggleOverflow() }" class="fi-dropdown-trigger">${triggers.join('')}<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis tabindex="-1" aria-hidden="true" aria-label="${e(more)}" class="fi-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="fi-tabs-item-label">${icon('m-ellipsis-horizontal', { alias: 'schemas::components.tabs.more-tabs-button' })}</span></button></div><div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.fi-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="fi-dropdown-panel fi-sc-tabs-overflow-panel"><div class="fi-dropdown-list">${items.join('')}</div></div></div>`;
         }
         const panels: string[] = [];
         for (const tab of visible) {
@@ -1121,7 +1121,7 @@ export class Callout extends Component {
     /** Free-form controls (components and actions) on the right of the callout, replacing the control actions. */
     controls(items: InlineItem[] | null): this { this._controls = items; return this; }
     getColor(): string | null { return this._hasColor ? this._color : (this._color ?? this._status); }
-    getIcon(): string | null { return this._icon ?? (this._status ? (CALLOUT_ICONS[this._status] ?? null) : null); }
+    getIcon(): string | null { return this._icon ?? (this._status ? (icons.resolve(`schemas::components.callout.${this._status}`) ?? CALLOUT_ICONS[this._status] ?? null) : null); }
     /** Callout actions, mounted on the root schema. */
     getActions(): Renderable[] { return [...(this._footer ? actionsOf(this._footer) : this._footerActions), ...(this._controls ? actionsOf(this._controls) : this._controlActions)]; }
     async toHtml(): Promise<string> {

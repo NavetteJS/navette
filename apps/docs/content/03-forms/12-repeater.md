@@ -59,9 +59,7 @@ The keys of new items are UUIDs. Keys coming from the browser are checked: only 
 
 If you wish to define a repeater with several kinds of items that can be repeated in any order, use the [builder](/forms/builder).
 
-<Aside variant="warning">
-Extra item actions are limited to links (see [adding links to items](#adding-links-to-items)). Customizing the add, delete and clone actions, confirming them with a modal, and inserting items between other items are not available yet.
-</Aside>
+Item actions (add, delete, clone, move...) can be customized and confirmed with a modal, and you can add your own: see [customizing the repeater item actions](#customizing-the-repeater-item-actions).
 
 ## Setting empty default items
 
@@ -110,6 +108,31 @@ Repeater.make('members')
     ])
     .addActionAlignment('start')
 ```
+
+### Inserting items between other items
+
+An "Insert between" button may be displayed between two items, so the user can add an item at a precise position. It is hidden by default: make its action visible with `addBetweenAction()`:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('members')
+    .schema([
+        // ...
+    ])
+    .addBetweenAction((action) => action.visible())
+```
+
+```preview
+// state: {"members": {"a1": {"name": "Dan Harrin"}, "b2": {"name": "Ryan Chandler"}}}
+Repeater.make('members')
+    .schema([
+        TextInput.make('name').required(),
+    ])
+    .addBetweenAction((action) => action.visible())
+```
+
+You may change its label with `addBetweenActionLabel()`. The new item is inserted after the item whose key the button sends; the server checks that this item exists. When the button is not displayed, the [label between items](#adding-a-label-between-items) is shown instead, if you set one.
 
 ### Preventing the user from adding items
 
@@ -611,3 +634,95 @@ Repeater.make('members')
 ```
 
 Both are checked on the server when the form is validated. Once `maxItems()` is reached, the add button disappears and the server ignores further additions and clones. Without `maxItems()`, a repeater is limited to 500 items.
+
+## Customizing the repeater item actions
+
+This field uses action objects for easy customization of buttons within it. You can customize these buttons by passing a function to an action registration method. The function receives the `Action` object, which you can use to [customize it](/actions/overview), and returns it (or changes it in place). The following methods are available to customize the actions:
+
+- `addAction()`
+- `addBetweenAction()`
+- `cloneAction()`
+- `collapseAction()`
+- `collapseAllAction()`
+- `deleteAction()`
+- `expandAction()`
+- `expandAllAction()`
+- `moveDownAction()`
+- `moveUpAction()`
+- `reorderAction()`
+
+Here is an example of how you might customize an action:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('members')
+    .schema([
+        // ...
+    ])
+    .collapseAllAction((action) => action.label('Collapse all members'))
+```
+
+Hiding an action with `hidden()` or `visible()` also refuses it on the server. The restrictions of the field, such as `deletable(false)` or `maxItems()`, still apply whatever the action says.
+
+### Confirming repeater actions with a modal
+
+You can confirm actions with a modal by using the `requiresConfirmation()` method on the action object. You may use any [modal customization method](/actions/modals) to change its content and behavior:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('members')
+    .schema([
+        // ...
+    ])
+    .deleteAction((action) => action.requiresConfirmation())
+```
+
+The item stays in the form until the user confirms. If they cancel, nothing changes.
+
+<Aside variant="info">
+The `collapseAction()`, `collapseAllAction()`, `expandAction()` and `expandAllAction()` methods do not support confirmation modals, as clicking their buttons does not make the network request that is required to show the modal.
+</Aside>
+
+Completing a drag that changes the item order invokes `reorderAction()`, which supports `requiresConfirmation()`. Clicking the drag handle alone does not invoke the action.
+
+### Adding extra item actions to a repeater
+
+You may add new [action buttons](/actions/overview) to the header of each repeater item by passing `Action` objects into `extraItemActions()`. They are small gray icon buttons, unless you say otherwise:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Repeater, TextInput } from '@navette-js/forms';
+
+Repeater.make('members')
+    .schema([
+        TextInput.make('email')
+            .label('Email address')
+            .email()
+            .required(),
+        // ...
+    ])
+    .extraItemActions([
+        Action.make('sendEmail')
+            .icon('m-envelope')
+            .requiresConfirmation()
+            .action(async ({ arguments: args, component }) => {
+                const itemData = await component.getItemState(args.item);
+
+                await mailer.send(itemData.email, 'Welcome to the team!');
+            }),
+    ])
+```
+
+In this example, `arguments.item` gives you the key of the current repeater item, and `component` is the repeater. The key comes from the browser, so it is checked on the server: an action mounted with a key that is not an item of the repeater is refused before it runs.
+
+You can validate the data in that repeater item using the `getItemState()` method on the repeater component. This method returns the validated data for the item. If the item is not valid, it cancels the action and shows the error messages for that item in the form.
+
+If you want to get a snapshot of the current item's state without validating it, you can use `component.getItemStateSnapshot(args.item)` instead. The snapshot still applies the fields' state transformations. `component.getRawItemState(args.item)` returns the raw data of the item, or `null` for an unknown key.
+
+An extra item action can have a [modal form](/actions/modals): its `schema()` function receives the arguments as well, as `(schema, { arguments })`.
+
+<Aside variant="info">
+Extra item actions are also displayed in the rows of a [table repeater](#table-repeaters), next to the delete button. For a simple link, [`extraItemLink()`](#adding-links-to-items) is enough.
+</Aside>

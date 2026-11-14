@@ -1,7 +1,10 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, isSafeUrl, js, markdownToHtml, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeUrl, js, markdownToHtml, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
+import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
+
+export { setCodeHighlighterLoader } from './code-highlighter.ts';
 
 const headline = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
 /** Default label: "Department" for `department.name`. */
@@ -45,8 +48,9 @@ const isBlank = (value: unknown) => value === null || value === undefined || (ty
 const ALIGNMENTS = new Set(['start', 'center', 'end', 'left', 'right', 'justify', 'between']);
 const alignmentClass = (alignment: string | null | undefined) => (alignment && ALIGNMENTS.has(alignment) ? `fi-align-${alignment}` : null);
 const safeName = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '');
-const ICON_NAME = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
-const renderIcon = (name: unknown, options: { size?: string; attributes?: Attributes } = {}) => (typeof name === 'string' && ICON_NAME.test(name) ? icon(name, options) : '');
+// A Heroicons or registered name, an icon of a set (`lucide:house`), or an icon registered for an alias (`@…`, from `icons.resolve()`).
+const ICON_NAME = /^[a-zA-Z0-9][a-zA-Z0-9-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
+const renderIcon = (name: unknown, options: { size?: string; attributes?: Attributes } = {}) => (typeof name === 'string' && (ICON_NAME.test(name) || name.startsWith('@')) ? icon(name, options) : '');
 const tooltipJs = (text: unknown): string | null => (text === null || text === undefined || text === '' ? null : `{ content: ${js(String(text))}, theme: $store.theme, allowHTML: false }`);
 const decodeEntities = (html: string) => html.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, '&');
 const stripTags = (html: string) => decodeEntities(html.replace(/<[^>]*>/g, ''));
@@ -825,7 +829,7 @@ export class IconEntry extends Entry {
         const items = (Array.isArray(state) ? state : [state]).map((item) => {
             const on = item === true || item === 1 || item === '1';
             let name = resolveMap(this._icon, record, item);
-            if (!name && this._boolean && item !== null && item !== undefined) name = on ? (this._trueIcon === false ? null : this._trueIcon ?? 'o-check-circle') : (this._falseIcon === false ? null : this._falseIcon ?? 'o-x-circle');
+            if (!name && this._boolean && item !== null && item !== undefined) name = on ? (this._trueIcon === false ? null : this._trueIcon ?? icons.resolve('infolists::components.icon-entry.true') ?? 'o-check-circle') : (this._falseIcon === false ? null : this._falseIcon ?? icons.resolve('infolists::components.icon-entry.false') ?? 'o-x-circle');
             if (!name) return '';
             let color = resolveMap(this._color, record, item);
             if (!color && this._boolean && item !== null && item !== undefined) color = on ? this._trueColor ?? 'success' : this._falseColor ?? 'danger';
@@ -866,8 +870,9 @@ const phpPrettyJson = (value: unknown): string => (JSON.stringify(value, null, 4
 /** Background and text colors of the default themes (github-light / github-dark-high-contrast). */
 const PHIKI_DEFAULT_STYLE = 'background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;';
 /**
- * Read-only code, rendered as `<pre class="phiki …">` but WITHOUT syntax highlighting:
- * each line is a single escaped text token. An array or object is shown as indented JSON.
+ * Read-only code, rendered as `<pre class="phiki …">` like Filament's (Phiki) markup. With Shiki installed
+ * (optional peer dependency), it is highlighted on the server in a light and a dark theme; without it, each line
+ * is a single escaped text token. An array or object is shown as indented JSON.
  */
 export class CodeEntry extends Entry {
     private _grammar: string | null = null;
@@ -877,9 +882,9 @@ export class CodeEntry extends Entry {
     private _copyMessage: string | null = null;
     private _copyMessageDuration = 2000;
     static make(name: string): CodeEntry { return configured(new CodeEntry(name)); }
-    /** Language (`php`, `json`, `javascript`…) used in the `language-…` class; `html` by default, `json` for an array. */
+    /** Shiki grammar (`php`, `json`, `javascript`, `ts`…), also used in the `language-…` class; `html` by default, `json` for an array. */
     grammar(grammar: string | null): this { this._grammar = grammar; return this; }
-    /** Theme class names only: without a highlighter, colors stay those of the default themes. */
+    /** Shiki theme of the light mode (`github-light` by default) and of the dark mode (`github-dark-high-contrast`). */
     lightTheme(theme: string | null): this { this._lightTheme = theme; return this; }
     darkTheme(theme: string | null): this { this._darkTheme = theme; return this; }
     /** Clicking copies the code to the clipboard. */
@@ -896,10 +901,11 @@ export class CodeEntry extends Entry {
         const code = String(state);
         const language = (grammar ?? 'html').replace(/[^a-zA-Z0-9_+#-]/g, '');
         const light = (this._lightTheme ?? 'github-light').replace(/[^a-zA-Z0-9_-]/g, ''), dark = (this._darkTheme ?? 'github-dark-high-contrast').replace(/[^a-zA-Z0-9_-]/g, '');
-        const style = this._lightTheme === null && this._darkTheme === null ? ` style="${PHIKI_DEFAULT_STYLE}"` : '';
+        const highlighted = await highlightCode(code, language, light, dark);
+        const style = highlighted ? ` style="${e(highlighted.preStyle)}"` : this._lightTheme === null && this._darkTheme === null ? ` style="${PHIKI_DEFAULT_STYLE}"` : '';
         // One `<span class="line">` per line, the newline being the last token of each line.
         const lines = code.split('\n');
-        const linesHtml = lines.map((line, index) => `<span class="line">${line === '' ? '' : `<span class="token">${e(line)}</span>`}${index < lines.length - 1 ? '<span class="token">\n</span>' : ''}</span>`).filter((html, index) => !(index === lines.length - 1 && lines[index] === '' && lines.length > 1)).join('');
+        const linesHtml = highlighted ? highlightedLinesHtml(highlighted) : lines.map((line, index) => `<span class="line">${line === '' ? '' : `<span class="token">${e(line)}</span>`}${index < lines.length - 1 ? '<span class="token">\n</span>' : ''}</span>`).filter((html, index) => !(index === lines.length - 1 && lines[index] === '' && lines.length > 1)).join('');
         const pre = `<pre class="phiki language-${language} ${light} phiki-themes ${dark}" data-language="${language}"${style}><code>${linesHtml}</code></pre>`;
         if (!this._copyable) return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['fi-in-code']))}>${pre}</div>`);
         const tr = (key: string, params?: Record<string, string>) => t(`filament::components/copyable.${key}`, params);

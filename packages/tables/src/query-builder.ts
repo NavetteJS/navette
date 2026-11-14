@@ -7,7 +7,7 @@ import type { ListQuery } from '@navette-js/database';
 import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette-js/forms';
 import { Block, Builder, colorsOf, iconActionButton, isItemKey, shortKey, writeState } from '@navette-js/forms/builder';
 import { Component, Group, Schema } from '@navette-js/schemas';
-import { Attributes, e, js, views, configured } from '@navette-js/support';
+import { Attributes, e, icons, js, views, configured } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { createHash } from 'node:crypto';
 import type { FilterIndicator, FilterState, TableFilter, TableHost } from './index.ts';
@@ -400,10 +400,10 @@ export class QueryBuilderOperator {
 }
 const toOperator = (operator: QueryBuilderOperator | Operator): Operator => (operator instanceof QueryBuilderOperator ? operator.toOperator() : operator);
 
-export class TextConstraint extends Constraint { static make(name: string): TextConstraint { return configured(new TextConstraint(name, 'text', 'm-language')); } }
+export class TextConstraint extends Constraint { static make(name: string): TextConstraint { return configured(new TextConstraint(name, 'text', icons.resolve('query-builder::constraints.text') ?? 'm-language')); } }
 export class NumberConstraint extends Constraint {
     private _integer = false;
-    static make(name: string): NumberConstraint { return configured(new NumberConstraint(name, 'number', 'm-variable')); }
+    static make(name: string): NumberConstraint { return configured(new NumberConstraint(name, 'number', icons.resolve('query-builder::constraints.number') ?? 'm-variable')); }
     /** Whole numbers only: an integer field, and a rule with a decimal value has no effect. */
     integer(condition = true): this { this._integer = condition; return this; }
     getOperators(): Operator[] {
@@ -411,11 +411,11 @@ export class NumberConstraint extends Constraint {
         return [numberOperator('isMin', 'is_min', '>=', '<', integer, aggregatable), numberOperator('isMax', 'is_max', '<=', '>', integer, aggregatable), numberOperator('equals', 'equals', '=', '!=', integer, aggregatable), ...(this._nullable ? [isFilledOperator] : [])];
     }
 }
-export class BooleanConstraint extends Constraint { static make(name: string): BooleanConstraint { return configured(new BooleanConstraint(name, 'boolean', 'm-check-circle')); } }
+export class BooleanConstraint extends Constraint { static make(name: string): BooleanConstraint { return configured(new BooleanConstraint(name, 'boolean', icons.resolve('query-builder::constraints.boolean') ?? 'm-check-circle')); } }
 /** Date constraint; with `time()`, date and time (date-time picker, minute and hour presets and units). */
 export class DateConstraint extends Constraint {
     private _time = false;
-    static make(name: string): DateConstraint { return configured(new DateConstraint(name, 'date', 'm-calendar')); }
+    static make(name: string): DateConstraint { return configured(new DateConstraint(name, 'date', icons.resolve('query-builder::constraints.date') ?? 'm-calendar')); }
     time(condition = true): this { this._time = condition; return this; }
     hasTime(): boolean { return this._time; }
     getOperators(): Operator[] {
@@ -428,7 +428,7 @@ export class SelectConstraint extends Constraint {
     private _options: [string, string][] = [];
     private _multiple = false;
     private _searchable = false;
-    static make(name: string): SelectConstraint { return configured(new SelectConstraint(name, 'select', 'm-chevron-up-down')); }
+    static make(name: string): SelectConstraint { return configured(new SelectConstraint(name, 'select', icons.resolve('query-builder::constraints.select') ?? 'm-chevron-up-down')); }
     /** Options as `[value, label]` pairs or `{ value: label }`; only these values can filter. */
     options(options: [string | number, string][] | Record<string, string>): this {
         this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
@@ -532,7 +532,7 @@ export class RelationshipConstraint extends Constraint {
     private _selectable: IsRelatedToOperator | null = null;
     /** Labels of the related records cited by rules, loaded before indicators are computed. */
     private _relatedLabels = new Map<string, string>();
-    static make(name: string): RelationshipConstraint { return configured(new RelationshipConstraint(name, 'relationship', 'm-arrows-pointing-out')); }
+    static make(name: string): RelationshipConstraint { return configured(new RelationshipConstraint(name, 'relationship', icons.resolve('query-builder::constraints.relationship') ?? 'm-arrows-pointing-out')); }
     multiple(condition = true): this { this._multiple = condition; return this; }
     isMultiple(): boolean { return this._multiple; }
     emptyable(condition: boolean | null = true): this { this._emptyable = condition; return this; }
@@ -785,7 +785,7 @@ class SettingsGroup extends Component {
 function itemActions(builder: Builder, itemKey: string, path: string, cloneDisabled: boolean): string {
     const label = (name: string) => t(`filament-forms::components.builder.actions.${name}.label`);
     const danger = colorsOf(builder.livewire)?.getComponentClasses('icon-button', 'danger') ?? [];
-    return `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: label('clone'), icon: 'm-square-2-stack', expression: builder.actionExpression('clone', { item: itemKey }), disabled: cloneDisabled })}${iconActionButton({ label: label('delete'), icon: 'm-trash', expression: builder.actionExpression('delete', { item: itemKey }), colorClasses: danger })}</div></div></div>`;
+    return `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: label('clone'), icon: icons.resolve('forms::components.builder.actions.clone') ?? 'm-square-2-stack', expression: builder.actionExpression('clone', { item: itemKey }), disabled: cloneDisabled })}${iconActionButton({ label: label('delete'), icon: icons.resolve('forms::components.builder.actions.delete') ?? 'm-trash', expression: builder.actionExpression('delete', { item: itemKey }), colorClasses: danger })}</div></div></div>`;
 }
 
 /** Rule row: operator select, settings, actions. */
@@ -858,7 +858,7 @@ class OrGroups extends Field {
         for (const [index, groupKey] of groups.entries()) {
             const path = `${this.getStatePath()}.${groupKey}`;
             const [builder] = schemas[index].getComponents() as RuleBuilder[];
-            const remove = this.canDeleteGroup(groupKey) ? `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: tf('actions.delete.label'), icon: 'm-trash', expression: expression('delete', { item: groupKey }), colorClasses: danger })}</div></div></div>` : '';
+            const remove = this.canDeleteGroup(groupKey) ? `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: tf('actions.delete.label'), icon: icons.resolve('forms::components.repeater.actions.delete') ?? 'm-trash', expression: expression('delete', { item: groupKey }), colorClasses: danger })}</div></div></div>` : '';
             const content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymousScope(path)} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div role="group" aria-label="${e(tr('form.or_groups.group.label'))}" class="fi-sc-flex fi-from-default fi-vertical-align-center"><div wire:key="${e(builder.getLivewireKey() ?? '')}" x-data="filamentSchemaComponent(${e(js(builder.getAlpineScopeConfiguration()))})" class="fi-growable">${await builder.toHtml()}</div>${remove}</div></div></div></div>`;
             rows.push(`<li wire:ignore.self wire:key="${e(livewireKey)}.${e(groupKey)}.item" x-data="item(${e(js({ isCollapsed: false, collapseKey: null }))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(groupKey)}" class="fi-fo-repeater-item" x-bind:class="itemClasses"><div x-show="! isCollapsed" class="fi-fo-repeater-item-content">${content}</div></li>`);
             if (index < groups.length - 1) rows.push(`<li class="fi-fo-repeater-label-between-items-ctn"><div class="fi-fo-repeater-label-between-items-divider-before"></div><span class="fi-fo-repeater-label-between-items">${e(tr('item_separators.or'))}</span><div class="fi-fo-repeater-label-between-items-divider-after"></div></li>`);
@@ -887,11 +887,11 @@ export class RuleBuilder extends Builder {
                 ...filter.getConstraints().map((constraint) => Block.make(constraint.name).label(constraint.getLabel()).icon(constraint.getIcon()).pickerGroup(constraint.getPickerGroup())
                     .defaultData(() => constraint.getDefaultData())
                     .schema(({ builder, itemKey, data }) => [new RuleRow(builder as RuleBuilder, itemKey, constraint, data)])),
-                Block.make(OR).label(tr('form.or_groups.block.label')).icon('m-slash')
+                Block.make(OR).label(tr('form.or_groups.block.label')).icon(icons.resolve('query-builder::or-group.block') ?? 'm-slash')
                     .defaultData(() => ({ groups: { [shortKey()]: { rules: {} }, [shortKey()]: { rules: {} } } }))
                     .schema(({ builder, itemKey }) => [new OrGroups(builder as RuleBuilder, itemKey)]),
             ])
-            .addActionLabel(tr('actions.add_rule.label')).addActionIcon('c-plus').addActionAlignment('start')
+            .addActionLabel(tr('actions.add_rule.label')).addActionIcon(icons.resolve('query-builder::add-rule-action') ?? 'c-plus').addActionAlignment('start')
             .labelBetweenItems(tr('item_separators.and')).blockHeaders(false).addBetweenAction(false).storedAsList(false).cloneable().generateUuidUsing(shortKey)
             .blockPickerColumns(columns).blockPickerWidth(filter.getConstraintPickerWidth() ?? (columns === 2 ? 'md' : columns === 3 ? '2xl' : null))
             .extraClass('fi-fo-builder-not-contained').maxItems(filter.getMaxRules());

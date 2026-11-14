@@ -187,6 +187,21 @@ CheckboxList.make('technologies')
     .noSearchResultsMessage('No technologies found.')
 ```
 
+## Tweaking the search debounce
+
+By default, the search waits one second after the user stops typing before filtering the options. You may change this delay using the `searchDebounce()` method, which accepts the number of milliseconds to wait:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('technologies')
+    .options({
+        // ...
+    })
+    .searchable()
+    .searchDebounce(500)
+```
+
 ## Bulk toggling checkboxes
 
 You may allow users to toggle all checkboxes at once using the `bulkToggleable()` method. A "Select all" link is displayed above the options, and becomes "Deselect all" once every option is checked:
@@ -218,6 +233,105 @@ CheckboxList.make('technologies')
 
 The links are not displayed when the field is disabled.
 
+## Allowing HTML in the option labels
+
+By default, the option labels are escaped. If you need HTML in them, you can use the `allowHtml()` method:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('technology')
+    .options({
+        tailwind: '<span class="text-blue-500">Tailwind</span>',
+        alpine: '<span class="text-green-500">Alpine</span>',
+        laravel: '<span class="text-red-500">Laravel</span>',
+        livewire: '<span class="text-pink-500">Livewire</span>',
+    })
+    .searchable()
+    .allowHtml()
+```
+
+```preview
+// state: {"technology": ["alpine"]}
+CheckboxList.make('technology')
+    .options({
+        tailwind: '<strong>Tailwind</strong> CSS',
+        alpine: '<em>Alpine</em>.js',
+        laravel: '<strong>Laravel</strong>',
+    })
+    .allowHtml()
+```
+
+The labels are cleaned with the HTML sanitizer used for rich content (`sanitizeHtml()` from `@navette-js/support`): scripts, event handlers and dangerous URLs are removed. Still, avoid `allowHtml()` for labels that users can write.
+
+## Integrating with a relationship
+
+You may employ the `relationship()` method of the `CheckboxList` to point to a many-to-many relationship of the form's Objection model (`Model.ManyToManyRelation` in `relationMappings`). The second argument is the column of the related records to use as their label:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('technologies')
+    .relationship('technologies', 'name')
+```
+
+The options are the related records (1000 at most). When the form is filled, the records linked to the current record are checked. Once the record is saved, the checked records are linked and the unchecked ones are unlinked, through the join table. The field is not part of the record's own data.
+
+The name of the relationship defaults to the name of the field, so `relationship(null, 'name')` works when both are the same. The model is the one of the [data adapter](/advanced/data-adapters) of the page; you may pass another one with `relationship('technologies', 'name', null, { model: Product })`.
+
+Only the records offered by the field can be linked: keys sent by the browser that are not options (or are [disabled](#disabling-specific-options)) are refused by the validation and never linked.
+
+### Customizing the relationship query
+
+You may customize the database query that retrieves options using the third argument of the `relationship()` method:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('technologies')
+    .relationship('technologies', 'name', (query) => query.where('is_active', true))
+```
+
+### Customizing the relationship option labels
+
+If you'd like to customize the label of each option, maybe to be more descriptive, or to concatenate a first and last name, you could use the `getOptionLabelFromRecordUsing()` method:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('authors')
+    .relationship('authors', 'first_name')
+    .getOptionLabelFromRecordUsing((record) => `${record.first_name} ${record.last_name}`)
+```
+
+### Customizing the relationship option descriptions
+
+The `getOptionDescriptionFromRecordUsing()` method gives each option a description, displayed under its label:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('technologies')
+    .relationship('technologies', 'name')
+    .getOptionDescriptionFromRecordUsing((record) => record.description)
+```
+
+### Saving pivot data to the relationship
+
+If your pivot table has additional columns, you can use the `pivotData()` method to specify the data that should be saved in them when a record is linked:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('primaryTechnologies')
+    .relationship('technologies', 'name')
+    .pivotData({
+        is_primary: true,
+    })
+```
+
+The columns must be declared in the relationship's `join.through.extra`, as Objection requires.
+
 ## Making the field live
 
 You may call `live()` so the form is re-rendered as soon as an option is checked or unchecked. See [reactivity](/forms/overview#the-basics-of-reactivity).
@@ -226,6 +340,24 @@ You may call `live()` so the form is re-rendered as soon as an option is checked
 
 As well as all rules listed on the [validation](/forms/validation) page, the checkbox list checks that every submitted value is one of its options. A `required()` checkbox list needs at least one checked option.
 
-<Aside variant="warning">
-HTML labels, `relationship()`, customizing the bulk toggle actions (`selectAllAction()`, `deselectAllAction()`) and the search debounce are not available yet. To save a many-to-many relationship, handle the list of keys in your data adapter.
-</Aside>
+## Customizing the checkbox list action objects
+
+This field uses action objects for easy customization of buttons within it. You can customize these buttons by passing a function to an action registration method. The function receives the `Action` object, which you can use to [customize it](/actions/overview). The following methods are available to customize the actions:
+
+- `selectAllAction()`
+- `deselectAllAction()`
+
+Here is an example of how you might customize an action:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('technologies')
+    .options({
+        // ...
+    })
+    .bulkToggleable()
+    .selectAllAction((action) => action.label('Select all technologies'))
+```
+
+The checkboxes are toggled in the browser, so these actions accept a label, an icon, a color and visibility, but no modal.

@@ -42,3 +42,16 @@ test('action groups: custom trigger, dropdown options, sections with dividers, b
     assert.match(defaults, /<button title="Actions" aria-label="Actions" type="button"[^>]*class="fi-ac-icon-btn-group fi-icon-btn fi-size-md/);
     assert.match(defaults, /x-float\.placement\.bottom-end\.flip\.teleport\.offset="\{ offset: 8 \}"/);
 });
+
+test('icon aliases: default group trigger and confirmation modal icons can be replaced', async (t) => {
+    const { icon, icons } = await import('@navette-js/support');
+    t.after(() => icons.alias({ 'actions::action-group': null }));
+    const paths = (name: string) => icon(name).replace(/^<svg[^>]*>/, '');
+    const group = () => ActionGroup.make([Action.make('edit').action(() => {})]).toHtml(ctx);
+    assert.ok((await group()).includes(paths('m-ellipsis-vertical')));
+    icons.alias({ 'actions::action-group': 'm-bars-3' });
+    const replaced = await group();
+    assert.ok(replaced.includes(paths('m-bars-3')) && !replaced.includes(paths('m-ellipsis-vertical')));
+    // An explicit icon wins over the alias.
+    assert.ok((await ActionGroup.make([Action.make('edit').action(() => {})]).icon('m-cog').toHtml(ctx)).includes(paths('m-cog')));
+});

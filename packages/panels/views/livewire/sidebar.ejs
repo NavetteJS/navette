@@ -39,13 +39,13 @@
             <header class="fi-sidebar-header">
 <% if (!hasTopbar && isSidebarCollapsibleOnDesktop) { %>
                 <%- view('filament::components.icon-button', {
-                    iconName: 'o-chevron-right', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-sidebar-open-collapse-sidebar-btn',
+                    iconName: 'o-chevron-right', iconAlias: 'panels::sidebar.expand-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-sidebar-open-collapse-sidebar-btn',
                     extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.open()', 'x-show': '! $store.sidebar.isOpen' }),
                 }) %>
 <% } %>
 <% if (!hasTopbar && collapsible) { %>
                 <%- view('filament::components.icon-button', {
-                    iconName: 'o-chevron-left', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-sidebar-close-collapse-sidebar-btn',
+                    iconName: 'o-chevron-left', iconAlias: 'panels::sidebar.collapse-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.collapse.label'), className: 'fi-sidebar-close-collapse-sidebar-btn',
                     extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.close()', 'x-show': '$store.sidebar.isOpen' }),
                 }) %>
 <% } %>
@@ -78,7 +78,7 @@
                                     <%= group.label %>
                                 </span>
                                 <% if (group.collapsible !== false) { %><%- view('filament::components.icon-button', {
-                                    iconName: 'm-chevron-up', label: group.label, className: 'fi-sidebar-group-collapse-btn',
+                                    iconName: 'm-chevron-up', iconAlias: 'panels::sidebar.group.collapse-button', label: group.label, className: 'fi-sidebar-group-collapse-btn',
                                     extra: attrs({ 'aria-controls': group.itemsId, 'x-bind:aria-expanded': '! $store.sidebar.groupIsCollapsed(label)', 'x-on:click.stop': '$store.sidebar.toggleCollapsedGroup(label)' }),
                                 }) %><% } %>
                             </div>
