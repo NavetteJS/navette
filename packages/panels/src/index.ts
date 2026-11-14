@@ -9,7 +9,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
-import { Action, ActionHalt, AuthorizationResponse, useColorManager, ActionGroup } from '@navette-js/actions';
+import { Action, ActionHalt, AuthorizationResponse, useColorManager, ActionGroup, type ActionCallContext } from '@navette-js/actions';
 import { actionRateLimitKey, clearDefaultActionUrlScript, getActionRateLimitStore, MountedAction, readDefaultActionQuery, type MountedActionHost } from './action-support.ts';
 export { actionRateLimitKey, getActionRateLimitStore, MemoryActionRateLimitStore, MountedAction, readDefaultActionQuery, useActionRateLimitStore, type ActionRateLimitStore, type DefaultActionQuery } from './action-support.ts';
 export { AuthorizationResponse } from '@navette-js/actions';
@@ -40,6 +40,8 @@ export { decodeCsv, guessCsvDelimiter, ImportAction, ImportColumn, Importer, Imp
 export { DiskDownloadStore, registerDownloader, sendDownload, type Downloader, type DownloadPutOptions, type DownloadStorage, type StoredDownload } from './downloads.ts';
 export { XlsxCell, XlsxColor, XlsxOptions, XlsxStyle, type XlsxRowInput } from './xlsx.ts';
 export { buildXlsx, readXlsx } from './xlsx.ts';
+import { CreateAction, DeleteAction, DeleteBulkAction, ForceDeleteAction, RestoreAction, relatedRecordLabel, searchRelatedRecords, sendBulkActionOutcome, type RecordSelectOptions } from './record-actions.ts';
+export { AssociateAction, AttachAction, CreateAction, CustomizableAction, DeleteAction, DeleteBulkAction, DetachAction, DetachBulkAction, DissociateAction, DissociateBulkAction, EditAction, ForceDeleteAction, ForceDeleteBulkAction, RecordSelectAction, ReplicateAction, RestoreAction, RestoreBulkAction, sendActionFailure, sendActionSuccess, sendBulkActionOutcome, ViewAction, type BulkOutcome, type RecordSelectOptions } from './record-actions.ts';
 import { fillFiltersSchema, isFilterAction, normalizeFilterValuesFromQueryString, readQueryStringProperty, sanitizeFilterState } from './dashboard-filters.ts';
 export { FilterAction, isFilterAction } from './dashboard-filters.ts';
 import { type ImportExportHistory } from './import-export.ts';
@@ -1471,8 +1473,9 @@ abstract class BasePage extends Component implements SchemaHost {
         this.mountedActions.push(mounted);
         try {
             const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
+            // `beforeFormFilled()` / `afterFormFilled()` hooks around the initial state: field defaults, then `fillForm()`, then `mountUsing()`.
+            await action.callFormHook('beforeFormFilled', { ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
             if (schema) {
-                // Initial state: field defaults, then `fillForm()`.
                 const data: Record<string, unknown> = {};
                 mounted.data = data;
                 fillSchema(schema, data);
@@ -1481,8 +1484,9 @@ abstract class BasePage extends Component implements SchemaHost {
                 if (fill) { fillSchemaFromRecord(schema, data, fill); await loadSchemaRelationships(schema, data, fillContext.record); }
             }
             await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
+            await action.callFormHook('afterFormFilled', { ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
         } catch (error) {
-            // `halt()` / `cancel()` while mounting (or invalid parent data): the modal does not open.
+            // `halt()` / `cancel()` while mounting (from `mountUsing()` or a fill hook, or invalid parent data): the modal does not open.
             if (!(error instanceof ActionHalt)) throw error;
             this.mountedActions.splice(this.mountedActions.indexOf(mounted), 1);
             if (this.mountedActions.length) this.renderPartial('action-modals', await this.renderActionModals());
@@ -1552,13 +1556,23 @@ abstract class BasePage extends Component implements SchemaHost {
         const visibility = await this.assertActionVisible(action, mounted.context, callArguments);
         if (!(await this.authorizeMountedAction(action, visibility, false))) return;
         const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
-        if (schema) {
-            this._errors = await validateSchema(schema);
-            if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
-        }
-        const callContext = await this.actionContext(mounted);
+        const callContext: ActionCallContext = await this.actionContext(mounted);
         callContext.arguments = callArguments;
-        if (schema) { callContext.data = await getSchemaState(schema); callContext.schema = schema; }
+        try {
+            // `beforeFormValidated()` / `afterFormValidated()` hooks around the validation of the modal form.
+            await action.callFormHook('beforeFormValidated', { ...callContext, data: mounted.data ?? {}, action });
+            if (schema) {
+                this._errors = await validateSchema(schema);
+                if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
+                callContext.data = await getSchemaState(schema); callContext.schema = schema;
+            }
+            await action.callFormHook('afterFormValidated', { ...callContext, action });
+        } catch (error) {
+            // `action.halt()` from a validation hook: the modal stays open; `action.cancel()`: it closes.
+            if (!(error instanceof ActionHalt)) throw error;
+            if (error.closesModal) { this.mountedActions.pop(); await this.syncActionModals(); this.clearDefaultActionAfterClose(); }
+            return;
+        }
         const ran = await this.runMountedAction(action, callContext, this.mountedActions);
         // Rate limited, or `action.halt()`: the modal stays open; `action.cancel()`: it closes.
         if (ran === false) return;
@@ -3935,19 +3949,8 @@ export class ListRecords extends Page implements TableHost {
             }
         }
         const total = keys.length;
-        if (unauthorized + failed === 0) {
-            const title = action.getSuccessNotificationTitle();
-            if (title) Notification.make().success().title(title).send();
-        } else {
-            const reported = action.getBulkProcessingFailureMessages();
-            const reportedCount = action.getTotalSelectedRecordsCount() - action.getSuccessfulSelectedRecordsCount() - action.getBulkProcessingFailureWithoutMessageCount();
-            const unreported = Math.max(0, failed - reportedCount);
-            const body = [action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) && unauthorized ? action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) : null, ...reported, unreported ? action.getMissingBulkProcessingFailureNotificationMessage(unreported, total) : null].filter(Boolean).join(' ');
-            const notification = Notification.make().title(action.getFailureNotificationTitle(success, total) ?? action.getSuccessNotificationTitle() ?? '');
-            (success ? notification.warning() : notification.danger()).body(body || null).send();
-        }
-        action.markSelectedRecordsOutcomeNotified();
-        if (action.shouldDeselectRecordsAfterCompletion()) this.deselectAllTableRecords();
+        // Success notification and redirect, or failure notification (`failureNotification()`) and redirect.
+        await sendBulkActionOutcome(action, ctx as any, { total, success, unauthorized, failed });
         return { total, success, unauthorized, failed };
     }
     deselectAllTableRecords(): void {
@@ -4152,6 +4155,9 @@ export class TableSelectComponent extends ListRecords {
     async render(): Promise<string> { return this.renderTable(); }
 }
 
+/** Options of the attach and associate selects when a manager's search methods are called directly. */
+const defaultRecordSelectOptions: RecordSelectOptions = { modifyQuery: null, searchColumns: null, limit: 50, allowsDuplicates: false };
+
 /**
  * Table of records related to another one: a child component of the edit page, loaded when it becomes visible.
  * Subclasses declare `relationship`, `adapterFor()`, `table()` and `form()`.
@@ -4233,6 +4239,14 @@ export class RelationManager extends ListRecords {
         const hasEdit = table.getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])).some((a: Action) => a.getName() === 'edit');
         return hasEdit ? table.recordAction('edit') : table;
     }
+    /**
+     * Every record of the related model (Filament's relationship query without constraints): with it, `searchAttachable()`,
+     * `attachableLabel()`, `searchAssociable()` and `associableLabel()` need not be written. They offer its records matching
+     * the search in `recordTitleAttribute` (or the action's `recordSelectSearchColumns()`), within the action's
+     * `recordSelectOptionsQuery()`, except the records already related to the owner (`adapterFor()`), unless the table
+     * `allowDuplicates()`.
+     */
+    static relatedAdapter(_ownerKey: string): DataAdapter | null { return null; }
     // --- many-to-many: to be defined by managers offering Attach / Detach
     /** Attaches an existing record to the owner; `pivot` holds the values of the `pivotForm()` fields. */
     static attach(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown> = {}): Promise<void> { throw new Error('RelationManager.attach() must be defined.'); }
@@ -4246,19 +4260,37 @@ export class RelationManager extends ListRecords {
     static updatePivot(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown>): Promise<void> { throw new Error('RelationManager.updatePivot() must be defined when pivotForm() returns fields.'); }
     /** Detaches records from the owner without deleting them. */
     static detach(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('RelationManager.detach() must be defined.'); }
-    /** Attachable records matching the search: [key, label]. */
-    static searchAttachable(_ownerKey: string, _search: string): Promise<[string, string][]> { throw new Error('RelationManager.searchAttachable() must be defined.'); }
-    /** Label of an attachable record, or `null` if it is not attachable (also used as validation). */
-    static attachableLabel(_ownerKey: string, _recordKey: string): Promise<string | null> { throw new Error('RelationManager.attachableLabel() must be defined.'); }
+    /**
+     * Attachable records matching the search: [key, label]. `options` carries the attach action's settings: apply its
+     * `modifyQuery` (`recordSelectOptionsQuery()`), `searchColumns`, `limit` and `allowsDuplicates` when you write it yourself.
+     */
+    static searchAttachable(ownerKey: string, search: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<[string, string][]> {
+        if (this.relatedAdapter(ownerKey)) return searchRelatedRecords(this, ownerKey, search, options);
+        throw new Error('RelationManager.searchAttachable() (or relatedAdapter()) must be defined.');
+    }
+    /**
+     * Label of an attachable record, or `null` if it is not attachable: the server-side check of every key the attach modal
+     * submits. Keep it consistent with `searchAttachable()` and its `options`.
+     */
+    static attachableLabel(ownerKey: string, recordKey: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<string | null> {
+        if (this.relatedAdapter(ownerKey)) return relatedRecordLabel(this, ownerKey, recordKey, options);
+        throw new Error('RelationManager.attachableLabel() (or relatedAdapter()) must be defined.');
+    }
     // --- one-to-many: to be defined by managers offering Associate / Dissociate
     /** Sets the owner of an existing record (its foreign key). */
     static associate(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('RelationManager.associate() must be defined.'); }
     /** Clears the owner of records (their foreign key), without deleting them. */
     static dissociate(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('RelationManager.dissociate() must be defined.'); }
-    /** Associable records matching the search: [key, label]. */
-    static searchAssociable(_ownerKey: string, _search: string): Promise<[string, string][]> { throw new Error('RelationManager.searchAssociable() must be defined.'); }
-    /** Label of an associable record, or `null` if it is not associable (also used as validation). */
-    static associableLabel(_ownerKey: string, _recordKey: string): Promise<string | null> { throw new Error('RelationManager.associableLabel() must be defined.'); }
+    /** Associable records matching the search: [key, label]; `options` as for `searchAttachable()`. */
+    static searchAssociable(ownerKey: string, search: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<[string, string][]> {
+        if (this.relatedAdapter(ownerKey)) return searchRelatedRecords(this, ownerKey, search, { ...options, allowsDuplicates: false });
+        throw new Error('RelationManager.searchAssociable() (or relatedAdapter()) must be defined.');
+    }
+    /** Label of an associable record, or `null` if it is not associable: the server-side check of every submitted key. */
+    static associableLabel(ownerKey: string, recordKey: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<string | null> {
+        if (this.relatedAdapter(ownerKey)) return relatedRecordLabel(this, ownerKey, recordKey, { ...options, allowsDuplicates: false });
+        throw new Error('RelationManager.associableLabel() (or relatedAdapter()) must be defined.');
+    }
     getHeaderActions(): Action[] { return []; }
     placeholder(): string {
         return `<div role="status" aria-busy="true" style="height: 8rem; ;" class="fi-section fi-loading-section fi-grid-col"><span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
@@ -4319,6 +4351,32 @@ export class ManageRelatedRecords extends ListRecords {
         await (ListRecords.prototype as any).hydrate?.call(this);
     }
     getRecordKey(): string | null { return this.recordKey; }
+    /** The owner's key, for the relationship actions (attach, associate…), as on a relation manager. */
+    get ownerRecord(): string { return this.recordKey; }
+    // Relationship actions: the same static methods as on a `RelationManager` (see there).
+    static relatedAdapter(_ownerKey: string): DataAdapter | null { return null; }
+    static pivotForm(_schema: Schema): SchemaComponent[] { return []; }
+    static attach(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown> = {}): Promise<void> { throw new Error('ManageRelatedRecords.attach() must be defined.'); }
+    static updatePivot(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown>): Promise<void> { throw new Error('ManageRelatedRecords.updatePivot() must be defined when pivotForm() returns fields.'); }
+    static detach(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('ManageRelatedRecords.detach() must be defined.'); }
+    static associate(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('ManageRelatedRecords.associate() must be defined.'); }
+    static dissociate(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('ManageRelatedRecords.dissociate() must be defined.'); }
+    static searchAttachable(ownerKey: string, search: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<[string, string][]> {
+        if (this.relatedAdapter(ownerKey)) return searchRelatedRecords(this, ownerKey, search, options);
+        throw new Error('ManageRelatedRecords.searchAttachable() (or relatedAdapter()) must be defined.');
+    }
+    static attachableLabel(ownerKey: string, recordKey: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<string | null> {
+        if (this.relatedAdapter(ownerKey)) return relatedRecordLabel(this, ownerKey, recordKey, options);
+        throw new Error('ManageRelatedRecords.attachableLabel() (or relatedAdapter()) must be defined.');
+    }
+    static searchAssociable(ownerKey: string, search: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<[string, string][]> {
+        if (this.relatedAdapter(ownerKey)) return searchRelatedRecords(this, ownerKey, search, { ...options, allowsDuplicates: false });
+        throw new Error('ManageRelatedRecords.searchAssociable() (or relatedAdapter()) must be defined.');
+    }
+    static associableLabel(ownerKey: string, recordKey: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<string | null> {
+        if (this.relatedAdapter(ownerKey)) return relatedRecordLabel(this, ownerKey, recordKey, { ...options, allowsDuplicates: false });
+        throw new Error('ManageRelatedRecords.associableLabel() (or relatedAdapter()) must be defined.');
+    }
     /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
@@ -4523,294 +4581,7 @@ export class CreateRecord extends ResourceFormPage {
     createAnother(): Promise<void> { return this.create(true); }
 }
 
-/** Delete action with confirmation. */
-export class DeleteAction {
-    /** On an edit page, deletes the page's record and returns to the list. On a table row, deletes the row. */
-    static make(): Action {
-        return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'delete', record))
-            .label(t('filament-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon(icons.resolve('actions::delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::delete-action.grouped') ?? 'm-trash')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
-            // Hidden for an already soft-deleted record.
-            .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return target ? (livewire as any).getDataAdapter().isTrashed(target) : false; })
-            .modalHeading(({ livewire, record }) => t('filament-actions::delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
-            .modalSubmitActionLabel(t('filament-actions::delete.single.modal.actions.delete.label'))
-            .action(async (ctx) => {
-                const { livewire, record } = ctx;
-                const adapter = livewire.getDataAdapter();
-                const inTable = typeof livewire.getTable === 'function';
-                await adapter.delete(inTable ? adapter.getKey(record) : livewire.recordKey);
-                await finishAction(ctx.action!, ctx, t('filament-actions::delete.single.notifications.deleted.title'), inTable ? null : livewire.resource.getUrl());
-            });
-    }
-}
-
-/**
- * Success outcome of a prebuilt action: its notification (`successNotificationTitle()`, `successNotification()`), then the
- * redirect (`successRedirectUrl()`, or `fallbackUrl`). Only local or http(s) URLs are followed.
- */
-async function finishAction(action: Action, ctx: any, defaultTitle: string, fallbackUrl: string | null = null): Promise<void> {
-    let notification: any = Notification.make().success().title(action.getSuccessNotificationTitle() ?? defaultTitle);
-    const customize = action.getSuccessNotificationCustomizer();
-    if (customize) notification = customize(notification, ctx);
-    notification?.send();
-    const url = (await action.getSuccessRedirectUrl(ctx)) ?? fallbackUrl;
-    if (url && /^(\/(?!\/)|https?:\/\/)/.test(url)) ctx.livewire.redirect(url, true);
-}
-
-/** Replicate action: an `Action` with a list of attributes not to copy, and hooks around the saving of the copy. */
-export type ReplicateActionInstance = Action & {
-    excludeAttributes(attributes: string[]): ReplicateActionInstance;
-    /** Runs before the copy is saved, with its attributes (`replica`, changeable) and the modal form's data. */
-    beforeReplicaSaved(callback: (ctx: { replica: Record<string, unknown>; data: Record<string, unknown>; record: unknown }) => unknown): ReplicateActionInstance;
-    /** Runs after the copy is saved, with the saved record. */
-    afterReplicaSaved(callback: (ctx: { replica: unknown; data: Record<string, unknown>; record: unknown }) => unknown): ReplicateActionInstance;
-};
-
-/** Duplicates a table row: the copy takes the record's attributes, except its key, timestamps and excluded ones. */
-export class ReplicateAction {
-    static make(): ReplicateActionInstance {
-        let excluded: string[] = [];
-        let beforeSaved: ((ctx: any) => unknown) | null = null, afterSaved: ((ctx: any) => unknown) | null = null;
-        const action = Action.make('replicate').authorize(({ livewire, record }) => canOn(livewire, 'replicate', record))
-            .label(t('filament-actions::replicate.single.label')).tableIcon(icons.resolve('actions::replicate-action') ?? 'c-square-2-stack').groupedIcon(icons.resolve('actions::replicate-action.grouped') ?? 'm-square-2-stack')
-            .modalHeading(({ livewire, record }) => t('filament-actions::replicate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::replicate.single.modal.actions.replicate.label'))
-            // With a modal form (`schema()`), it is filled with the record's attributes; its data overrides them in the copy.
-            .fillForm(({ record }) => {
-                const source = typeof (record as any)?.toJSON === 'function' ? (record as any).toJSON() : { ...(record as any) };
-                for (const attribute of ['id', 'created_at', 'updated_at', ...excluded]) delete source[attribute];
-                return source;
-            })
-            .action(async (ctx) => {
-                const { livewire, record } = ctx;
-                const adapter = livewire.getDataAdapter();
-                const source = typeof (record as any)?.toJSON === 'function' ? (record as any).toJSON() : { ...(record as any) };
-                // No primary key, no created/updated timestamps.
-                for (const attribute of ['id', 'created_at', 'updated_at', ...excluded]) delete source[attribute];
-                const data = ctx.data ?? {};
-                const replica: Record<string, unknown> = { ...source, ...data };
-                await beforeSaved?.({ replica, data, record });
-                const saved = await adapter.create(replica);
-                await afterSaved?.({ replica: saved, data, record });
-                await finishAction(ctx.action!, { ...ctx, replica: saved }, t('filament-actions::replicate.single.notifications.replicated.title'));
-            }) as ReplicateActionInstance;
-        action.excludeAttributes = (attributes: string[]) => { excluded = attributes; return action; };
-        action.beforeReplicaSaved = (callback) => { beforeSaved = callback; return action; };
-        action.afterReplicaSaved = (callback) => { afterSaved = callback; return action; };
-        return action;
-    }
-}
-
-/** Create in a modal with the resource form. */
-export class CreateAction {
-    /** Without an argument, the resource (or relation manager) is the host component's. */
-    static make(resource: typeof Resource | null = null): Action {
-        const of = (livewire: any) => resource ?? livewire.resource;
-        return Action.make('create').authorize(({ livewire, record }) => canOn(livewire, 'create', record))
-            .label(({ livewire }) => t('filament-actions::create.single.label', { label: of(livewire).modelLabel }))
-            .modalHeading(({ livewire }) => t('filament-actions::create.single.modal.heading', { label: String(of(livewire).modelLabel).split(' ').map(ucfirst).join(' ') }))
-            .modalSubmitActionLabel(t('filament-actions::create.single.modal.actions.create.label'))
-            // A relation manager with a related resource: its create page instead of the modal.
-            .url(({ livewire }) => (resource ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('create') ?? null)))
-            .extraModalFooterActions([Action.make('createAnother').label(t('filament-actions::create.single.modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
-            .schema((schema: Schema) => of(schema.livewire).form(schema))
-            .action(async (ctx) => {
-                const record = await of(ctx.livewire).adapter.create(ctx.data);
-                await saveSchemaRelationships(ctx.schema, record);
-                await finishAction(ctx.action!, { ...ctx, record }, t('filament-actions::create.single.notifications.created.title'));
-            });
-    }
-}
-
-/** Edit a table row in a modal, with the resource form. */
-export class EditAction {
-    /** Without an argument, the resource (or relation manager) is the host component's. */
-    static make(resource: typeof Resource | null = null): Action {
-        const of = (livewire: any) => resource ?? livewire.resource;
-        return Action.make('edit').authorize(({ livewire, record }) => canOn(livewire, 'update', record))
-            .label(t('filament-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
-            .modalHeading(({ livewire, record }) => t('filament-actions::edit.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::edit.single.modal.actions.save.label'))
-            // A relation manager with a related resource: its edit page instead of the modal.
-            .url(({ livewire, record }) => (resource || !record ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('edit', (livewire as any).resource.adapter.getKey(record)) ?? null)))
-            .schema((schema: Schema) => of(schema.livewire).form(schema))
-            .fillForm(({ record }) => ({ ...record }))
-            .action(async (ctx) => {
-                const adapter = of(ctx.livewire).adapter;
-                const pivotNames: string[] = of(ctx.livewire).pivotFieldNames?.() ?? [];
-                let data = ctx.data;
-                if (pivotNames.length) {
-                    const pivot = Object.fromEntries(Object.entries(data ?? {}).filter(([name]) => pivotNames.includes(name)));
-                    data = Object.fromEntries(Object.entries(data ?? {}).filter(([name]) => !pivotNames.includes(name)));
-                    await managerOf(ctx.livewire).updatePivot(ctx.livewire.ownerRecord, adapter.getKey(ctx.record), pivot);
-                }
-                const saved = Object.keys(data ?? {}).length ? await adapter.update(adapter.getKey(ctx.record), data) : ctx.record;
-                await saveSchemaRelationships(ctx.schema, saved ?? ctx.record);
-                await finishAction(ctx.action!, ctx, t('filament-actions::edit.single.notifications.saved.title'));
-            });
-    }
-}
-
-/** Link to the record's view page (when the resource has one). */
-export class ViewAction {
-    static make(resource: typeof Resource | null = null): Action {
-        const of = (livewire: any) => resource ?? livewire.resource;
-        return Action.make('view').authorize(({ livewire, record }) => canOn(livewire, 'view', record))
-            .label(t('filament-actions::view.single.label')).color('gray').tableIcon(icons.resolve('actions::view-action') ?? 'c-eye').groupedIcon(icons.resolve('actions::view-action.grouped') ?? 'm-eye')
-            // Without a view page (simple resource, related records): the infolist opens in a modal.
-            .url(({ livewire, record }) => (record && of(livewire).hasViewPage ? of(livewire).getUrl('view', of(livewire).adapter.getKey(record)) : null))
-            .modalHeading(({ livewire, record }) => t('filament-actions::view.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
-            .modalSubmitAction(false).modalCancelActionLabel(t('filament-actions::view.single.modal.actions.close.label'))
-            .schema((schema: Schema) => (of(schema.livewire).hasViewPage || !of(schema.livewire).infolist ? null : of(schema.livewire).infolist(schema.operation('view'))));
-    }
-}
-
-const managerOf = (livewire: any) => livewire.constructor as typeof RelationManager;
-/** Attaches an existing record to a relation manager's owner. */
-export class AttachAction {
-    static make(): Action {
-        return Action.make('attach')
-            .label(t('filament-actions::attach.single.label')).color('gray').modalWidth('lg')
-            .modalHeading(({ livewire }) => t('filament-actions::attach.single.modal.heading', { label: String(livewire.resource.modelLabel).split(' ').map(ucfirst).join(' ') }))
-            .modalSubmitActionLabel(t('filament-actions::attach.single.modal.actions.attach.label'))
-            .extraModalFooterActions([Action.make('attachAnother').label(t('filament-actions::attach.single.modal.actions.attach_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
-            .schema((schema: Schema) => {
-                const livewire = schema.livewire as any;
-                return [Select.make('recordId').label(t('filament-actions::attach.single.modal.fields.record_id.label')).hiddenLabel().required()
-                    .getSearchResultsUsing((search) => managerOf(livewire).searchAttachable(livewire.ownerRecord, search))
-                    .getOptionLabelUsing((value) => managerOf(livewire).attachableLabel(livewire.ownerRecord, value)),
-                    ...managerOf(livewire).pivotForm(schema)];
-            })
-            .action(async ({ livewire, data }) => {
-                const { recordId, ...pivot } = data ?? {};
-                await managerOf(livewire).attach(livewire.ownerRecord, String(recordId), pivot);
-                Notification.make().success().title(t('filament-actions::attach.single.notifications.attached.title')).send();
-            });
-    }
-}
-/** Detaches a row from the owner without deleting it. */
-export class DetachAction {
-    static make(): Action {
-        return Action.make('detach')
-            .label(t('filament-actions::detach.single.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire, record }) => t('filament-actions::detach.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::detach.single.modal.actions.detach.label'))
-            .action(async ({ livewire, record }) => {
-                await managerOf(livewire).detach(livewire.ownerRecord, [livewire.resource.adapter.getKey(record)]);
-                Notification.make().success().title(t('filament-actions::detach.single.notifications.detached.title')).send();
-            });
-    }
-}
-/** Detaches the selected rows. */
-export class DetachBulkAction {
-    static make(): Action {
-        return Action.make('detach')
-            .label(t('filament-actions::detach.multiple.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire }) => t('filament-actions::detach.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::detach.multiple.modal.actions.detach.label'))
-            .action(async ({ livewire }) => {
-                // Selected keys come from the manager's current query, so they belong to the owner.
-                await managerOf(livewire).detach(livewire.ownerRecord, await livewire.getSelectedRecordKeys());
-                Notification.make().success().title(t('filament-actions::detach.multiple.notifications.detached.title')).send();
-                livewire.deselectAllTableRecords();
-            });
-    }
-}
-
-/** Gives an existing record to the owner of a one-to-many relation manager (its foreign key). */
-export class AssociateAction {
-    static make(): Action {
-        return Action.make('associate')
-            .label(t('filament-actions::associate.single.label')).color('gray').modalWidth('lg')
-            .modalHeading(({ livewire }) => t('filament-actions::associate.single.modal.heading', { label: String(livewire.resource.modelLabel).split(' ').map(ucfirst).join(' ') }))
-            .modalSubmitActionLabel(t('filament-actions::associate.single.modal.actions.associate.label'))
-            .extraModalFooterActions([Action.make('associateAnother').label(t('filament-actions::associate.single.modal.actions.associate_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
-            .schema((schema: Schema) => {
-                const livewire = schema.livewire as any;
-                return [Select.make('recordId').label(t('filament-actions::associate.single.modal.fields.record_id.label')).hiddenLabel().required()
-                    .getSearchResultsUsing((search) => managerOf(livewire).searchAssociable(livewire.ownerRecord, search))
-                    .getOptionLabelUsing((value) => managerOf(livewire).associableLabel(livewire.ownerRecord, value))];
-            })
-            .action(async ({ livewire, data }) => {
-                await managerOf(livewire).associate(livewire.ownerRecord, String(data.recordId));
-                Notification.make().success().title(t('filament-actions::associate.single.notifications.associated.title')).send();
-            });
-    }
-}
-/** Removes a row from the owner (clears its foreign key) without deleting it. */
-export class DissociateAction {
-    static make(): Action {
-        return Action.make('dissociate')
-            .label(t('filament-actions::dissociate.single.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire, record }) => t('filament-actions::dissociate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::dissociate.single.modal.actions.dissociate.label'))
-            .action(async ({ livewire, record }) => {
-                await managerOf(livewire).dissociate(livewire.ownerRecord, [livewire.resource.adapter.getKey(record)]);
-                Notification.make().success().title(t('filament-actions::dissociate.single.notifications.dissociated.title')).send();
-            });
-    }
-}
-/** Dissociates the selected rows. */
-export class DissociateBulkAction {
-    static make(): Action {
-        return Action.make('dissociate')
-            .label(t('filament-actions::dissociate.multiple.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire }) => t('filament-actions::dissociate.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::dissociate.multiple.modal.actions.dissociate.label'))
-            .action(async ({ livewire }) => {
-                // Selected keys come from the manager's current query, so they belong to the owner.
-                await managerOf(livewire).dissociate(livewire.ownerRecord, await livewire.getSelectedRecordKeys());
-                Notification.make().success().title(t('filament-actions::dissociate.multiple.notifications.dissociated.title')).send();
-                livewire.deselectAllTableRecords();
-            });
-    }
-}
-
-/** Restores a soft-deleted record. Only visible when the record is deleted. */
-/** Restores a soft-deleted record: the page's record, or a table row. Only visible when the record is deleted. */
-export class RestoreAction {
-    static make(): Action {
-        return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restore', record ?? (livewire as any)._record))
-            .label(t('filament-actions::restore.single.label')).color('gray').tableIcon(icons.resolve('actions::restore-action') ?? 'c-arrow-uturn-left').groupedIcon(icons.resolve('actions::restore-action.grouped') ?? 'm-arrow-uturn-left')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
-            .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
-            .modalHeading(({ livewire, record }) => t('filament-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
-            .modalSubmitActionLabel(t('filament-actions::restore.single.modal.actions.restore.label'))
-            .action(async (ctx) => {
-                const { livewire, record } = ctx;
-                const adapter = livewire.getDataAdapter();
-                if (typeof livewire.getTable === 'function') {
-                    await adapter.restore(adapter.getKey(record));
-                } else {
-                    await adapter.restore(livewire.recordKey);
-                    await livewire.hydrate();
-                }
-                await finishAction(ctx.action!, ctx, t('filament-actions::restore.single.notifications.restored.title'));
-            });
-    }
-}
-/** Permanently deletes a soft-deleted record. Only visible when the record is deleted. */
-export class ForceDeleteAction {
-    static make(): Action {
-        return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDelete', record ?? (livewire as any)._record))
-            .label(t('filament-actions::force-delete.single.label')).color('danger').tableIcon(icons.resolve('actions::force-delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::force-delete-action.grouped') ?? 'm-trash')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
-            .hidden(({ livewire, record }) => { const target = record ?? (livewire as any)._record; return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
-            .modalHeading(({ livewire, record }) => t('filament-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(record ?? livewire._record) }))
-            .modalSubmitActionLabel(t('filament-actions::force-delete.single.modal.actions.delete.label'))
-            .action(async (ctx) => {
-                const { livewire, record } = ctx;
-                const adapter = livewire.getDataAdapter();
-                const inTable = typeof livewire.getTable === 'function';
-                await adapter.forceDelete(inTable ? adapter.getKey(record) : livewire.recordKey);
-                await finishAction(ctx.action!, ctx, t('filament-actions::force-delete.single.notifications.deleted.title'), inTable ? null : livewire.resource.getUrl());
-            });
-    }
-}
+// The prebuilt record actions (create, edit, view, replicate, delete, restore, force-delete, attach, associate…) live in ./record-actions.ts.
 
 /** Actions of a list that may contain action groups: the groups' actions are mounted, never the groups. */
 const flattenActions = (actions: (Action | ActionGroup)[]): Action[] => actions.flatMap((action) => (action instanceof ActionGroup ? action.getActions() : [action]));
@@ -4821,79 +4592,6 @@ const trashedFilterValue = (livewire: any): string | null => {
     const value = filter ? livewire.tableFilters?.[filter.name]?.value : null;
     return value === '1' || value === '0' ? value : null;
 };
-
-/**
- * Deletes the records selected in a table. Without `authorizeIndividualRecords()`, the selection is deleted in one query;
- * with it, record by record, and the notification reports the records that could not be deleted.
- */
-export class DeleteBulkAction {
-    static make(): Action {
-        return Action.make('delete').authorize(({ livewire, record }) => canOn(livewire, 'deleteAny', record))
-            .label(t('filament-actions::delete.multiple.label')).color('danger').icon(icons.resolve('actions::delete-action') ?? 'm-trash')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
-            // Showing only deleted records: there is nothing left to delete.
-            .hidden(({ livewire }) => trashedFilterValue(livewire) === '0')
-            .modalHeading(({ livewire }) => t('filament-actions::delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::delete.multiple.modal.actions.delete.label'))
-            .successNotificationTitle(t('filament-actions::delete.multiple.notifications.deleted.title'))
-            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('filament-actions::delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
-            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
-            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
-            .deselectRecordsAfterCompletion()
-            .action(async ({ livewire, action }) => {
-                const adapter = livewire.getDataAdapterForTable();
-                if (action!.getIndividualRecordsAuthorization() !== null) { await livewire.processSelectedRecords(action, (record: any) => adapter.delete(adapter.getKey(record))); return; }
-                await adapter.deleteMany(await livewire.getSelectedRecordKeys());
-                Notification.make().success().title(action!.getSuccessNotificationTitle() ?? t('filament-actions::delete.multiple.notifications.deleted.title')).send();
-                livewire.deselectAllTableRecords();
-            });
-    }
-}
-
-/** Restores the soft-deleted records selected in a table, each one checked with the `restore` ability. */
-export class RestoreBulkAction {
-    static make(): Action {
-        return Action.make('restore').authorize(({ livewire, record }) => canOn(livewire, 'restoreAny', record))
-            .label(t('filament-actions::restore.multiple.label')).color('gray').icon(icons.resolve('actions::restore-action') ?? 'm-arrow-uturn-left')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
-            .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
-            .modalHeading(({ livewire }) => t('filament-actions::restore.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::restore.multiple.modal.actions.restore.label'))
-            .authorizeIndividualRecords('restore')
-            .successNotificationTitle(t('filament-actions::restore.multiple.notifications.restored.title'))
-            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::restore.multiple.notifications.restored_partial.title', success, { count: success, total }) : tc('filament-actions::restore.multiple.notifications.restored_none.title', total, { count: total, total })))
-            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_authorization_failure_message`, count, { count }))
-            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_processing_failure_message`, count, { count }))
-            .deselectRecordsAfterCompletion()
-            .action(async ({ livewire, action }) => {
-                const adapter = livewire.getDataAdapterForTable();
-                // Only deleted records are restored; the others count as failures.
-                await livewire.processSelectedRecords(action, (record: any) => adapter.isTrashed(record) && adapter.restore(adapter.getKey(record)));
-            });
-    }
-}
-
-/** Permanently deletes the soft-deleted records selected in a table, each one checked with the `forceDelete` ability. */
-export class ForceDeleteBulkAction {
-    static make(): Action {
-        return Action.make('forceDelete').authorize(({ livewire, record }) => canOn(livewire, 'forceDeleteAny', record))
-            .label(t('filament-actions::force-delete.multiple.label')).color('danger').icon(icons.resolve('actions::force-delete-action') ?? 'm-trash')
-            .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
-            .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
-            .modalHeading(({ livewire }) => t('filament-actions::force-delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::force-delete.multiple.modal.actions.delete.label'))
-            .authorizeIndividualRecords('forceDelete')
-            .successNotificationTitle(t('filament-actions::force-delete.multiple.notifications.deleted.title'))
-            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::force-delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('filament-actions::force-delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
-            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
-            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
-            .deselectRecordsAfterCompletion()
-            .action(async ({ livewire, action }) => {
-                const adapter = livewire.getDataAdapterForTable();
-                await livewire.processSelectedRecords(action, (record: any) => adapter.forceDelete(adapter.getKey(record)));
-            });
-    }
-}
 
 /** Record edit page. */
 export class EditRecord extends ResourceFormPage {
@@ -5747,3 +5445,6 @@ function assertAuthCapabilities(panel: Panel): void {
     if (panel.hasProfile()) missing('Profile', ['update']);
     if (panel.hasEmailChangeVerification()) missing('Email change verification', ['update', 'findByEmail']);
 }
+
+/** @deprecated `ReplicateAction` is now a class: use it as the type. */
+export type ReplicateActionInstance = import('./record-actions.ts').ReplicateAction;

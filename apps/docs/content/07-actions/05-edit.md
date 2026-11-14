@@ -49,7 +49,16 @@ The edit page of a regular resource is a page, not this action: its form, lifecy
 
 ## Customizing data before filling the form
 
-By default, the form is filled with all the attributes of the record. You may modify the data before it is filled into the form using the `fillForm()` method, which receives the action's context:
+You may wish to modify the data from a record before it is filled into the form. To do this, you may use the `mutateRecordDataUsing()` method to modify the `data` object, and return the modified version before it is filled into the form:
+
+```ts
+import { EditAction } from '@navette-js/panels';
+
+EditAction.make()
+    .mutateRecordDataUsing((data, { livewire }) => ({ ...data, user_id: livewire._ctx.user.id }))
+```
+
+The function receives the record's attributes and the action's context. To fill the form from scratch, `fillForm()` replaces the record's attributes altogether:
 
 ```ts
 import { EditAction } from '@navette-js/panels';
@@ -71,17 +80,16 @@ EditAction.make()
 
 ## Customizing the saving process
 
-You can tweak how the record is updated with the `action()` method. It replaces the default behavior, including the success notification:
+You can tweak how the record is updated with the `using()` method. It receives the context with the `record` and the validated `data`, and returns the saved record; the success notification and redirect stay:
 
 ```ts
-import { EditAction, Notification } from '@navette-js/panels';
+import { EditAction } from '@navette-js/panels';
 
 EditAction.make()
-    .action(async ({ record, data }) => {
-        await PostResource.adapter.update(record.id, { ...data, revised_at: new Date().toISOString() });
-        Notification.make().success().title('Post revised').send();
-    })
+    .using(async ({ record, data, livewire }) => livewire.getDataAdapter().update(record.id, { ...data, revised_at: new Date().toISOString() }))
 ```
+
+The `action()` method replaces the whole behavior instead, success notification included.
 
 ## Redirecting after saving
 
@@ -109,6 +117,28 @@ EditAction.make()
         // Runs after the record is updated. `record` holds the attributes read before the update.
     })
 ```
+
+The form has hooks of its own, run when the modal opens and when it is submitted:
+
+```ts
+import { EditAction } from '@navette-js/panels';
+
+EditAction.make()
+    .beforeFormFilled(async ({ data }) => {
+        // Runs when the modal opens, before the form is filled with its defaults and the record's attributes.
+    })
+    .afterFormFilled(async ({ data }) => {
+        // Runs when the modal opens, after the form is filled: `data` is its state, which you may change.
+    })
+    .beforeFormValidated(async ({ data }) => {
+        // Runs when the form is submitted, before it is validated.
+    })
+    .afterFormValidated(async ({ data }) => {
+        // Runs when the form is submitted, once it is valid, before `mutateDataUsing()`.
+    })
+```
+
+`action.halt()` in `beforeFormValidated()` keeps the modal open without validating the form; `action.cancel()` in `beforeFormFilled()` or `afterFormFilled()` does not open it. These hooks exist on every action with a modal form.
 
 ## Customizing the saved notification
 

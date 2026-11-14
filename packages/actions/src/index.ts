@@ -375,6 +375,7 @@ export class Action implements Renderable {
             const submit = Action.make('submit').label(submitLabel).color(this._color === 'gray' ? 'primary' : this._color).submit('callMountedAction');
             const cancel = Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
             const wizard = Action.stepsRenderer(steps, submit, cancel);
+            if (this._skippableSteps) wizard.skippable();
             return schema.components([this._modifyWizard?.(wizard) ?? wizard]);
         };
         return this;
@@ -454,7 +455,11 @@ export class Action implements Renderable {
     /** Marks a bulk action (set by the table for the actions of its bulk menus): it always accesses the selected records. */
     bulk(condition = true): this { this._bulk = condition; return this; }
     isBulk(): boolean { return this._bulk; }
-    /** `false`: `getSelectedRecords()` returns the selected keys instead of loading the records (faster for large selections). */
+    /**
+     * `false`: `getSelectedRecords()` returns the selected keys instead of loading the records (faster for large selections);
+     * prebuilt bulk actions then process the selected keys in one query, without `authorizeIndividualRecords()` checks or
+     * per-record adapter hooks.
+     */
     fetchSelectedRecords(condition = true): this { this._fetchSelectedRecords = condition; return this; }
     shouldFetchSelectedRecords(): boolean { return this._fetchSelectedRecords; }
     private selectionHost(method: string): any {
@@ -538,6 +543,39 @@ export class Action implements Renderable {
         if (typeof this._preserveData === 'function') return this._preserveData(data) ?? {};
         return Object.fromEntries(this._preserveData.filter((field) => Object.hasOwn(data, field)).map((field) => [field, data[field]]));
     }
+
+    // --- failure outcome, selected records, form lifecycle hooks, wizard (Filament's CanNotify, CanRedirect,
+    // CanFetchSelectedRecords, HasLifecycleHooks and HasWizard)
+    private _failureNotification: ((notification: any, ctx: ActionCallContext & Record<string, unknown>) => any) | null = null;
+    private _failureNotificationDisabled = false;
+    private _failureRedirectUrl: string | ((ctx: ActionCallContext & Record<string, unknown>) => string | null | Promise<string | null>) | null = null;
+    private _formHooks: Partial<Record<'beforeFormFilled' | 'afterFormFilled' | 'beforeFormValidated' | 'afterFormValidated', (ctx: ActionCallContext) => unknown>> = {};
+    private _skippableSteps = false;
+    /**
+     * Customizes the failure notification (a prebuilt action that could not process its record, a bulk action with failed
+     * records): the function receives the notification and the context, with `successCount`, `failureCount`, `totalCount` and
+     * `isAll` for a bulk action, and returns it (changed). `null` sends no failure notification.
+     */
+    failureNotification(customize: ((notification: any, ctx: ActionCallContext & Record<string, unknown>) => any) | null): this { this._failureNotification = customize; this._failureNotificationDisabled = customize === null; return this; }
+    getFailureNotificationCustomizer(): ((notification: any, ctx: ActionCallContext & Record<string, unknown>) => any) | null { return this._failureNotification; }
+    isFailureNotificationDisabled(): boolean { return this._failureNotificationDisabled; }
+    /** Where a prebuilt action redirects after a failure: a URL, or a function of the context. */
+    failureRedirectUrl(url: string | ((ctx: ActionCallContext & Record<string, unknown>) => string | null | Promise<string | null>) | null): this { this._failureRedirectUrl = url; return this; }
+    async getFailureRedirectUrl(ctx: ActionCallContext & Record<string, unknown>): Promise<string | null> { return typeof this._failureRedirectUrl === 'function' ? this._failureRedirectUrl(ctx) : this._failureRedirectUrl; }
+    /** Runs when the action is mounted, before its modal form is filled (defaults and `fillForm()`). */
+    beforeFormFilled(callback: ((ctx: ActionCallContext) => unknown) | null): this { return this.formHook('beforeFormFilled', callback); }
+    /** Runs when the action is mounted, after its modal form is filled. */
+    afterFormFilled(callback: ((ctx: ActionCallContext) => unknown) | null): this { return this.formHook('afterFormFilled', callback); }
+    /** Runs when the modal is submitted, before its form is validated; `action.halt()` keeps the modal open. */
+    beforeFormValidated(callback: ((ctx: ActionCallContext) => unknown) | null): this { return this.formHook('beforeFormValidated', callback); }
+    /** Runs when the modal is submitted, once its form is valid, before `mutateDataUsing()` and `before()`. */
+    afterFormValidated(callback: ((ctx: ActionCallContext) => unknown) | null): this { return this.formHook('afterFormValidated', callback); }
+    private formHook(name: 'beforeFormFilled' | 'afterFormFilled' | 'beforeFormValidated' | 'afterFormValidated', callback: ((ctx: ActionCallContext) => unknown) | null): this { if (callback) this._formHooks[name] = callback; else delete this._formHooks[name]; return this; }
+    /** @internal Runs a form lifecycle hook (called by the host component). */
+    async callFormHook(name: 'beforeFormFilled' | 'afterFormFilled' | 'beforeFormValidated' | 'afterFormValidated', ctx: ActionCallContext): Promise<void> { await this._formHooks[name]?.({ ...ctx, action: this }); }
+    /** With `steps()`: the steps can be visited in any order, without validating each one first (the form is still validated on submit). */
+    skippableSteps(condition = true): this { this._skippableSteps = condition; return this; }
+    isWizardSkippable(): boolean { return this._skippableSteps; }
     /** Stops the action from one of its hooks; the modal stays open. `true` rolls back its database transaction. */
     halt(shouldRollBackDatabaseTransaction = false): never { throw new ActionHalt(false, shouldRollBackDatabaseTransaction); }
     /** Stops the action from one of its hooks and closes the modal. `true` rolls back its database transaction. */

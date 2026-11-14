@@ -60,17 +60,16 @@ CreateAction.make()
 
 ## Customizing the creation process
 
-You can tweak how the record is created with the `action()` method. It replaces the default behavior, including the success notification:
+You can tweak how the record is created with the `using()` method. It receives the context with the validated `data`, and returns the created record (whose form relationships are then saved). The success notification and redirect stay:
 
 ```ts
-import { CreateAction, Notification } from '@navette-js/panels';
+import { CreateAction } from '@navette-js/panels';
 
 CreateAction.make()
-    .action(async ({ data }) => {
-        await PostResource.adapter.create({ ...data, status: 'draft' });
-        Notification.make().success().title('Draft created').send();
-    })
+    .using(async ({ data, livewire }) => livewire.getDataAdapter().create({ ...data, status: 'draft' }))
 ```
+
+The `action()` method replaces the whole behavior instead, success notification included.
 
 ## Redirecting after creation
 
@@ -103,18 +102,55 @@ CreateAction.make()
     })
 ```
 
-## Creating another record
-
-### Disabling create another
-
-The modal has a "Create & create another" button, which creates the record and keeps the modal open with an empty form. If you'd like to remove this button, you can pass an empty array of extra footer actions:
+The form has hooks of its own, run when the modal opens and when it is submitted:
 
 ```ts
 import { CreateAction } from '@navette-js/panels';
 
 CreateAction.make()
-    .extraModalFooterActions([])
+    .beforeFormFilled(async ({ data }) => {
+        // Runs when the modal opens, before the form is filled with its defaults.
+    })
+    .afterFormFilled(async ({ data }) => {
+        // Runs when the modal opens, after the form is filled: `data` is its state, which you may change.
+    })
+    .beforeFormValidated(async ({ data }) => {
+        // Runs when the form is submitted, before it is validated.
+    })
+    .afterFormValidated(async ({ data }) => {
+        // Runs when the form is submitted, once it is valid, before `mutateDataUsing()`.
+    })
 ```
+
+`action.halt()` in `beforeFormValidated()` keeps the modal open without validating the form; `action.cancel()` in `beforeFormFilled()` or `afterFormFilled()` does not open it. These hooks exist on every action with a modal form.
+
+## Creating another record
+
+The modal has a "Create & create another" button, which creates the record and keeps the modal open with an empty form.
+
+### Modifying the create another action
+
+If you'd like to modify the "create another" action, you may use the `createAnotherAction()` method, passing a function that receives the action and returns it changed:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .createAnotherAction((action) => action.label('Custom create another label'))
+```
+
+### Disabling create another
+
+If you'd like to remove the "create another" button from the modal, you can use the `createAnother(false)` method:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .createAnother(false)
+```
+
+Passing your own `extraModalFooterActions()` replaces the button too; `getCreateAnotherAction()` returns it, to place it among them.
 
 ## Customizing the created notification
 
@@ -191,4 +227,16 @@ CreateAction.make()
         Step.make('Address').schema([TextInput.make('street').required(), TextInput.make('city').required()]),
         Step.make('Contact').schema([TextInput.make('phone')]),
     ])
+```
+
+Steps are validated one at a time before the next one opens. To let the user move between steps freely, use `skippableSteps()`; the whole form is still validated when it is submitted:
+
+```ts
+import { CreateAction } from '@navette-js/panels';
+
+CreateAction.make()
+    .steps([
+        // ...
+    ])
+    .skippableSteps()
 ```

@@ -198,7 +198,30 @@ export class ProductCategoriesRelationManager extends RelationManager {
 const attachedTo = (ownerKey: string) => Category.knex()('category_product').select('category_id').where({ product_id: ownerKey });
 ```
 
-The attach modal contains a searchable select. Its options come from `searchAttachable()`, and the chosen key is checked again with `attachableLabel()` before `attach()` is called: a key sent by the browser that is not attachable is rejected by validation. `DetachBulkAction` only receives keys that belong to the owner, since the selection is reduced to the records of the manager's adapter.
+The attach modal contains a searchable select. Its options come from `searchAttachable()`, and the chosen key is checked again with `attachableLabel()` by validation, and once more by the action before `attach()` is called: a key sent by the browser that is not attachable is rejected. `DetachBulkAction` only receives keys that belong to the owner, since the selection is reduced to the records of the manager's adapter.
+
+### Offering the records of the related model
+
+Instead of writing `searchAttachable()` and `attachableLabel()`, you may give the manager a `relatedAdapter()`: an adapter over every record of the related model. The attach select then offers its records matching the search in the `recordTitleAttribute` of the manager (sorted by it), except the records already attached to the owner (the records of `adapterFor()`), and checks a submitted key the same way:
+
+```ts
+import { ObjectionAdapter } from '@navette-js/database';
+import { RelationManager } from '@navette-js/panels';
+
+export class ProductCategoriesRelationManager extends RelationManager {
+    static relationship = 'categories';
+    static modelLabel = 'category';
+    static recordTitleAttribute = 'name';
+
+    static relatedAdapter() {
+        return new ObjectionAdapter(Category);
+    }
+
+    // adapterFor(), attach(), detach() and table(), as above.
+}
+```
+
+The demo's lab panel has a complete example (`apps/demo/lab-prebuilt-actions.ts`).
 
 ### Saving pivot attributes
 
@@ -250,9 +273,141 @@ export class MembersRelationManager extends RelationManager {
 
 Only the fields declared in `pivotForm()` reach `attach()` and `updatePivot()`, after validation: a value the browser adds for another column is dropped. `updatePivot()` receives the owner key and the row key, so update the pivot row of this owner only, as above.
 
+### Preloading the attachment modal select options
+
+By default, as you search for a record to attach, options will load from the database as you type. If you wish to preload these options when the modal opens instead, you can use the `preloadRecordSelect()` method of `AttachAction`:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+
+AttachAction.make()
+    .preloadRecordSelect()
+```
+
 ### Scoping the options to attach
 
-`searchAttachable()` decides which records may be attached: filter them as you need, and keep `attachableLabel()` consistent with it, since it is the server-side check.
+You may want to scope the options available to `AttachAction`. `recordSelectOptionsQuery()` receives the query of the manager's `relatedAdapter()` (an Objection query with `ObjectionAdapter`) and the search term:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+
+AttachAction.make()
+    .recordSelectOptionsQuery((query) => query.where('team_id', currentTeamId()))
+```
+
+The scope is a security boundary: every key the modal submits is checked again against it on the server, so a record outside it cannot be attached, even with a forged request. When you write `searchAttachable()` and `attachableLabel()` yourself, they receive the action's settings as their last argument (`options.modifyQuery`, `options.searchColumns`, `options.limit`, `options.allowsDuplicates`): apply `options.modifyQuery(query, search)` in both.
+
+### Searching the options to attach across multiple columns
+
+By default, the options available to `AttachAction` will be searched in the `recordTitleAttribute` of the manager. If you wish to search across multiple columns, you can use the `recordSelectSearchColumns()` method:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+
+AttachAction.make()
+    .recordSelectSearchColumns(['title', 'description'])
+```
+
+### Attaching multiple records
+
+The `multiple()` method on the `AttachAction` component allows you to select multiple values; each one is checked, then attached:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+
+AttachAction.make()
+    .multiple()
+```
+
+### Customizing the select field in the attachment modal
+
+You may customize the select field object that is used during attachment by passing a function to the `recordSelect()` method:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+
+AttachAction.make()
+    .recordSelect((select) => select.placeholder('Select a post'))
+```
+
+To build the modal form yourself, `getRecordSelect()` returns this field (named `recordId`): `AttachAction.make().schema(...)` with `[action.getRecordSelect(), TextInput.make('role')]`, the other fields being passed to `attach()` as pivot values.
+
+#### Selecting records to attach using a modal table
+
+You may use the `tableSelect()` method to select records in the attachment modal using a full table, instead of a simple select dropdown. It takes a table configuration: an object (or a class) with a `name` and a `configure(table)` method that defines the table's columns and filters:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+import { TextColumn, type Table } from '@navette-js/tables';
+
+const ProductsTable = {
+    name: 'products',
+    configure: (table: Table) => table
+        .columns([
+            TextColumn.make('name').searchable(),
+            TextColumn.make('sku'),
+        ]),
+};
+
+AttachAction.make()
+    .tableSelect(ProductsTable)
+```
+
+The table lists the records of the manager's `relatedAdapter()`, within `recordSelectOptionsQuery()`, without the records already attached (unless the table allows duplicates).
+
+<Aside variant="danger">
+    Filtering the table's query (with `modifyQueryUsing()` in the configuration, or with filters) is **presentational**: it only changes which records are displayed for selection. It is **not** a security boundary. To restrict which records may actually be attached, scope the options with the [`recordSelectOptionsQuery()` method](#scoping-the-options-to-attach): the submitted keys are checked against it, so records outside it are rejected:
+
+    ```ts
+    AttachAction.make()
+        .tableSelect(ProductsTable)
+        .recordSelectOptionsQuery((query) => query.where('team_id', currentTeamId()))
+    ```
+</Aside>
+
+### Disabling "attach another"
+
+The modal has an "Attach & attach another" button, which keeps it open with an empty form. To remove it, use `attachAnother(false)`:
+
+```ts
+import { AttachAction } from '@navette-js/panels';
+
+AttachAction.make()
+    .attachAnother(false)
+```
+
+### Handling duplicates
+
+By default, you will not be allowed to attach a record more than once: the records already attached are not offered, and their keys are refused. To allow it, add the `allowDuplicates()` method to the table:
+
+```ts
+static table(table: Table): Table {
+    return table
+        .allowDuplicates();
+}
+```
+
+Each pivot row is then a row of the table: key the manager's adapter by the pivot row (select its `id` as the record key), so that `detach()` removes one pivot row at a time.
+
+### Improving the performance of detach bulk actions
+
+By default, `DetachBulkAction` loads the selected records, 100 at a time, and detaches them one by one, with a call to `detach()` for each record. If you are detaching a large number of records, you may use the `chunkSelectedRecords()` method to load fewer records at a time:
+
+```ts
+import { DetachBulkAction } from '@navette-js/panels';
+
+DetachBulkAction.make()
+    .chunkSelectedRecords(250)
+```
+
+Records are loaded first so that each one can be checked with `authorizeIndividualRecords()`, and so that a failure is reported for the records that could not be detached. If you need neither, the `fetchSelectedRecords(false)` method does not load them: every selected key is passed to `detach()` in one call:
+
+```ts
+import { DetachBulkAction } from '@navette-js/panels';
+
+DetachBulkAction.make()
+    .fetchSelectedRecords(false)
+```
 
 <Aside variant="warning">
 `AttachAction`, `DetachAction` and `DetachBulkAction` do not consult the policy of the manager. Add `authorize()` to them when not every user may attach or detach.
@@ -306,9 +461,100 @@ export class TeamMembersRelationManager extends RelationManager {
 
 As with attaching, the chosen key is checked again with `associableLabel()` before `associate()` is called, and `DissociateBulkAction` only receives keys of the manager's records. These actions do not consult the policy of the manager: add `authorize()` to them when not every user may use them.
 
+With a `relatedAdapter()` on the manager (see [offering the records of the related model](#offering-the-records-of-the-related-model)), `searchAssociable()` and `associableLabel()` need not be written: the select offers the related records not associated with the owner yet (including records of other owners, which move to this one).
+
+### Preloading the associate modal select options
+
+By default, as you search for a record to associate, options will load from the database as you type. If you wish to preload these options when the modal opens instead, you can use the `preloadRecordSelect()` method of `AssociateAction`:
+
+```ts
+import { AssociateAction } from '@navette-js/panels';
+
+AssociateAction.make()
+    .preloadRecordSelect()
+```
+
+### Scoping the options to associate
+
+You may want to scope the options available to `AssociateAction`. `recordSelectOptionsQuery()` receives the query of the manager's `relatedAdapter()` (an Objection query with `ObjectionAdapter`) and the search term:
+
+```ts
+import { AssociateAction } from '@navette-js/panels';
+
+AssociateAction.make()
+    .recordSelectOptionsQuery((query) => query.where('team_id', currentTeamId()))
+```
+
+The scope is a security boundary: every key the modal submits is checked again against it on the server, so a record outside it cannot be associated, even with a forged request. When you write `searchAssociateable()` and `associateableLabel()` yourself, they receive the action's settings as their last argument (`options.modifyQuery`, `options.searchColumns`, `options.limit`): apply `options.modifyQuery(query, search)` in both.
+
+### Searching the options to associate across multiple columns
+
+By default, the options available to `AssociateAction` will be searched in the `recordTitleAttribute` of the manager. If you wish to search across multiple columns, you can use the `recordSelectSearchColumns()` method:
+
+```ts
+import { AssociateAction } from '@navette-js/panels';
+
+AssociateAction.make()
+    .recordSelectSearchColumns(['title', 'description'])
+```
+
+### Associating multiple records
+
+The `multiple()` method on the `AssociateAction` component allows you to select multiple values; each one is checked, then associated:
+
+```ts
+import { AssociateAction } from '@navette-js/panels';
+
+AssociateAction.make()
+    .multiple()
+```
+
+### Customizing the select field in the associate modal
+
+You may customize the select field object that is used during association by passing a function to the `recordSelect()` method:
+
+```ts
+import { AssociateAction } from '@navette-js/panels';
+
+AssociateAction.make()
+    .recordSelect((select) => select.placeholder('Select a post'))
+```
+
+### Disabling "associate another"
+
+The modal has an "Associate & associate another" button, which keeps it open with an empty form. To remove it, use `associateAnother(false)`:
+
+```ts
+import { AssociateAction } from '@navette-js/panels';
+
+AssociateAction.make()
+    .associateAnother(false)
+```
+
+### Improving the performance of dissociate bulk actions
+
+By default, `DissociateBulkAction` loads the selected records, 100 at a time, and dissociates them one by one, with a call to `dissociate()` for each record. If you are dissociating a large number of records, you may use the `chunkSelectedRecords()` method to load fewer records at a time:
+
+```ts
+import { DissociateBulkAction } from '@navette-js/panels';
+
+DissociateBulkAction.make()
+    .chunkSelectedRecords(250)
+```
+
+Records are loaded first so that each one can be checked with `authorizeIndividualRecords()`, and so that a failure is reported for the records that could not be dissociated. If you need neither, the `fetchSelectedRecords(false)` method does not load them: every selected key is passed to `dissociate()` in one call:
+
+```ts
+import { DissociateBulkAction } from '@navette-js/panels';
+
+DissociateBulkAction.make()
+    .fetchSelectedRecords(false)
+```
+
+
 ## Deleting related records
 
-`DeleteAction` and `DeleteBulkAction` call `delete()` and `deleteMany()` on the manager's adapter. When deleting must also remove a pivot row, override those methods in the adapter, after checking that the record is in scope:
+`DeleteAction` and `DeleteBulkAction` call `delete()` on the manager's adapter (`DeleteBulkAction` calls `deleteMany()` with `fetchSelectedRecords(false)`). When deleting must also remove a pivot row, override those methods in the adapter, after checking that the record is in scope:
 
 ```ts
 class CustomerAddresses extends ObjectionAdapter<Address> {
@@ -492,6 +738,8 @@ export class PostResource extends Resource {
 The page title is "Manage {record title} Comments", and its breadcrumbs lead back to the list and to the record. `ViewAction` opens the infolist in a modal. `PostResource.getUrl('comments', post.id)` generates its URL.
 
 On every request, the owner record is read again with the adapter of the resource, and the user must have the `view` ability on it; otherwise the page answers 404 or 403.
+
+The relationship actions (`AttachAction`, `AssociateAction`, `DetachAction`, `DissociateAction` and their bulk versions) work on a relation page too: define the same static methods as on a relation manager (`relatedAdapter()`, `attach()`, `detach()`, `associate()`…).
 
 ### Adding relation pages to resource sub-navigation
 

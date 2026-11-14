@@ -47,7 +47,7 @@ table.groupedBulkActions([
 ])
 ```
 
-`DeleteBulkAction` deletes the selected records in one call to the adapter's `deleteMany()`, then clears the selection. It is visible to users allowed to `deleteAny` by the resource policy; the policy is not checked for each selected record. A resource list page offers it by default when the table does not declare its own bulk actions.
+`DeleteBulkAction` deletes the selected records one by one with the adapter's `delete()` (see [improving its performance](#improving-the-performance-of-delete-bulk-actions)), then clears the selection. It is visible to users allowed to `deleteAny` by the resource policy; the policy is checked for each selected record only with `authorizeIndividualRecords('delete')`. A resource list page offers it by default when the table does not declare its own bulk actions.
 
 ## Redirecting after deleting
 
@@ -62,7 +62,16 @@ DeleteAction.make()
 
 ## Customizing the deletion process
 
-You can replace the deletion with the `action()` method. This replaces the success notification and the redirect too. The demo uses this to keep its records:
+You can replace the deletion with the `using()` method. It receives the context with the `record`; return `false` to report a failure. The notifications and the redirect stay:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .using(async ({ record }) => archive(record))
+```
+
+The `action()` method replaces the whole behavior instead, success notification and redirect included. The demo uses this to keep its records:
 
 ```ts
 import { DeleteAction, DeleteBulkAction, Notification } from '@navette-js/panels';
@@ -140,6 +149,59 @@ DeleteAction.make()
 ```
 
 Only URLs starting with a single `/`, `http://` or `https://` are followed. On an edit page, the action returns to the list by default.
+
+## Customizing the failure notification
+
+When the record cannot be deleted (the adapter's `delete()` returns `false`, or the process given to `using()` does), no success notification is sent. A failure notification is sent instead if it has a title: set it with `failureNotificationTitle()`, and change the whole notification with `failureNotification()`, which receives it and returns it, or pass `null` to send none. `failureRedirectUrl()` sets the page opened after a failure:
+
+```ts
+import { DeleteAction } from '@navette-js/panels';
+
+DeleteAction.make()
+    .failureNotificationTitle('The post could not be deleted')
+    .failureNotification((notification) => notification.body('It is locked by another user.'))
+    .failureRedirectUrl('/admin/posts')
+```
+
+## Customizing the bulk notifications and redirect
+
+`DeleteBulkAction` sends its success notification when every selected record was deleted: `successNotificationTitle()`, `successNotification()` and `successRedirectUrl()` work as for the single action, and their functions also receive `successCount` and `totalCount`. When some records could not be deleted, it sends the failure notification instead, with a line for the records the user may not delete and one for the records that failed; `failureNotification()` receives it with `successCount`, `failureCount`, `totalCount` and `isAll` (nothing was deleted), and `failureRedirectUrl()` applies:
+
+```ts
+import { DeleteBulkAction } from '@navette-js/panels';
+
+DeleteBulkAction.make()
+    .successNotification((notification, { successCount }) => notification.title(`${successCount} posts deleted`))
+    .failureNotification((notification, { successCount, totalCount }) => notification.title(`${successCount} of ${totalCount} posts deleted`))
+    .successRedirectUrl('/admin/posts')
+```
+
+## Improving the performance of delete bulk actions
+
+By default, `DeleteBulkAction` loads the selected records, 100 at a time, and deletes them one by one. If you are deleting a large number of records, you may use the `chunkSelectedRecords()` method to load fewer records at a time:
+
+```ts
+import { DeleteBulkAction } from '@navette-js/panels';
+
+DeleteBulkAction.make()
+    .chunkSelectedRecords(250)
+```
+
+Records are loaded first for two reasons:
+
+- To check each one with a policy ability, using `authorizeIndividualRecords('delete')`.
+- To run the adapter's `delete()` for each record, with the logic your adapter adds there.
+
+If you need neither, the `fetchSelectedRecords(false)` method does not load the records: the selected keys are deleted in one call to the adapter's `deleteMany()` (one query with `ObjectionAdapter`), and no record is checked individually:
+
+```ts
+import { DeleteBulkAction } from '@navette-js/panels';
+
+DeleteBulkAction.make()
+    .fetchSelectedRecords(false)
+```
+
+The selected keys are always narrowed to the records the table can show. `using()` replaces the process: it receives the loaded `records` and their `keys` (only the `keys` with `fetchSelectedRecords(false)`), and returns `false` when it failed.
 
 ## Halting the process
 

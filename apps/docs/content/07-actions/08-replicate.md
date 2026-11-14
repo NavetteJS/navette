@@ -74,9 +74,29 @@ ReplicateAction.make()
     })
 ```
 
+## Customizing data before filling the form
+
+You may wish to modify the data from a record before it is filled into the form (or, without a form, before it becomes the copy). To do this, you may use the `mutateRecordDataUsing()` method to modify the `data` object, and return the modified version:
+
+```ts
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .mutateRecordDataUsing((data) => ({ ...data, title: `${data.title} (copy)`, status: 'draft' }))
+```
+
 ## Customizing the replication process
 
-You can replace the replication with the `action()` method, for example to change attributes of the copy. This replaces the success notification too:
+You can replace the saving of the copy with the `using()` method. It receives the context with the `record` and the modal form's `data`, and returns the copy; the notification and redirect stay:
+
+```ts
+import { ReplicateAction } from '@navette-js/panels';
+
+ReplicateAction.make()
+    .using(async ({ record, livewire }) => livewire.getDataAdapter().create({ title: `${record.title} (copy)`, status: 'todo' }))
+```
+
+The `action()` method replaces the whole behavior instead, for example to change attributes of the copy. This replaces the success notification too:
 
 ```ts
 import { Notification, ReplicateAction } from '@navette-js/panels';

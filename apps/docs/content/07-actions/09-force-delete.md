@@ -77,7 +77,19 @@ ForceDeleteAction.make()
 
 ## Customizing the force-deletion process
 
-You can replace the deletion with the `action()` method. This replaces the success notification and the redirect too:
+You can replace the deletion with the `using()` method. It receives the context with the `record`; return `false` to report a failure. The notifications and the redirect stay:
+
+```ts
+import { ForceDeleteAction } from '@navette-js/panels';
+
+ForceDeleteAction.make()
+    .using(async ({ livewire }) => {
+        await deleteProjectFiles(livewire.recordKey);
+        return livewire.getDataAdapter().forceDelete(livewire.recordKey);
+    })
+```
+
+The `action()` method replaces the whole behavior instead, success notification and redirect included:
 
 ```ts
 import { ForceDeleteAction, Notification } from '@navette-js/panels';
@@ -125,3 +137,56 @@ ForceDeleteAction.make()
 ```
 
 Only URLs starting with a single `/`, `http://` or `https://` are followed. By default, the action returns to the list.
+
+## Customizing the failure notification
+
+When the record cannot be deleted (the adapter's `forceDelete()` returns `false`, or the process given to `using()` does), no success notification is sent. A failure notification is sent instead if it has a title: set it with `failureNotificationTitle()`, and change the whole notification with `failureNotification()`, which receives it and returns it, or pass `null` to send none. `failureRedirectUrl()` sets the page opened after a failure:
+
+```ts
+import { ForceDeleteAction } from '@navette-js/panels';
+
+ForceDeleteAction.make()
+    .failureNotificationTitle('The post could not be deleted')
+    .failureNotification((notification) => notification.body('It is locked by another user.'))
+    .failureRedirectUrl('/admin/posts')
+```
+
+## Customizing the bulk notifications and redirect
+
+`ForceDeleteBulkAction` sends its success notification when every selected record was deleted: `successNotificationTitle()`, `successNotification()` and `successRedirectUrl()` work as for the single action, and their functions also receive `successCount` and `totalCount`. When some records could not be deleted, it sends the failure notification instead, with a line for the records the user may not force-delete and one for the records that failed; `failureNotification()` receives it with `successCount`, `failureCount`, `totalCount` and `isAll` (nothing was deleted), and `failureRedirectUrl()` applies:
+
+```ts
+import { ForceDeleteBulkAction } from '@navette-js/panels';
+
+ForceDeleteBulkAction.make()
+    .successNotification((notification, { successCount }) => notification.title(`${successCount} posts deleted`))
+    .failureNotification((notification, { successCount, totalCount }) => notification.title(`${successCount} of ${totalCount} posts deleted`))
+    .successRedirectUrl('/admin/posts')
+```
+
+## Improving the performance of force-delete bulk actions
+
+By default, `ForceDeleteBulkAction` loads the selected records, 100 at a time, and force-deletes them one by one. If you are force-deleting a large number of records, you may use the `chunkSelectedRecords()` method to load fewer records at a time:
+
+```ts
+import { ForceDeleteBulkAction } from '@navette-js/panels';
+
+ForceDeleteBulkAction.make()
+    .chunkSelectedRecords(250)
+```
+
+Records are loaded first for two reasons:
+
+- To check each one with a policy ability, using `authorizeIndividualRecords('forceDelete')` (the default of this action).
+- To run the adapter's `forceDelete()` for each record, with the logic your adapter adds there.
+
+If you need neither, the `fetchSelectedRecords(false)` method does not load the records: the selected keys are deleted in one call to the adapter's `forceDeleteMany()` (one query with `ObjectionAdapter`), and no record is checked individually:
+
+```ts
+import { ForceDeleteBulkAction } from '@navette-js/panels';
+
+ForceDeleteBulkAction.make()
+    .fetchSelectedRecords(false)
+```
+
+The selected keys are always narrowed to the records the table can show. `using()` replaces the process: it receives the loaded `records` and their `keys` (only the `keys` with `fetchSelectedRecords(false)`), and returns `false` when it failed.
