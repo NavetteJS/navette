@@ -17,6 +17,7 @@ import { CategoryResource } from './resources/CategoryResource.ts';
 import { LeaveRequestResource } from './resources/LeaveRequestResource.ts';
 import { ExpenseResource } from './resources/ExpenseResource.ts';
 import { ProjectResource } from './resources/ProjectResource.ts';
+import { ProjectTaskResource } from './resources/ProjectTaskResource.ts';
 import { AuthorResource, PostCategoryResource } from './resources/BlogResources.ts';
 import { PostResource } from './resources/PostResource.ts';
 import { TaskResource } from './resources/TaskResource.ts';
@@ -136,7 +137,9 @@ const panel = Panel.make()
         ...(process.env.NAVETTE_NO_THEMES ? [] : [...calendarPages, LiveNotificationsPage]),
     ])
     .widgets([...welcomeWidgets, ...shopWidgets, ...hrWidgets, ...calendarWidgets])
-    .resources([CustomerResource, DepartmentResource, OrderResource, ProductResource, BrandResource, EmployeeResource, CategoryResource, LeaveRequestResource, ExpenseResource, ProjectResource, TaskResource, TimesheetResource, PostResource, PostCategoryResource, AuthorResource])
+    .resources([CustomerResource, DepartmentResource, OrderResource, ProductResource, BrandResource, EmployeeResource, CategoryResource, LeaveRequestResource, ExpenseResource, ProjectResource, TaskResource, TimesheetResource, PostResource, PostCategoryResource, AuthorResource,
+        // Tasks nested under their project (left out of screenshot comparisons, where the relation manager uses modals).
+        ...(process.env.NAVETTE_NO_THEMES ? [] : [ProjectTaskResource])])
     // Same accounts and same session as the `/app` panel; only the demo account (the staff) may enter `/admin`.
     .auth(accounts)
     .canAccess((user) => String(user.id) === String(users[0].id));

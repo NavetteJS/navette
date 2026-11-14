@@ -79,8 +79,11 @@ class EditTask extends EditRecord {
     getHeaderActions(): Action[] { return [DeleteAction.make()]; }
 }
 
-/** Task table, shared with a project's relation manager (which hides the Project column and filter). */
-export function tasksTable(table: Table<Task>, projectScoped = false): Table<Task> {
+/**
+ * Task table, shared with a project's relation manager (which hides the Project column and filter). `editUrl`: where the
+ * "Edit" row action goes (the task's page under its project, from the relation manager).
+ */
+export function tasksTable(table: Table<Task>, projectScoped = false, editUrl: (task: Task) => string = (task) => TaskResource.getUrl('edit', task.id)): Table<Task> {
     return table
         .columns([
             TextColumn.make<Task>('title').searchable().sortable().weight('medium').limit(40).tooltip((record) => (record.title && record.title.length > 40 ? record.title : null)),
@@ -106,7 +109,7 @@ export function tasksTable(table: Table<Task>, projectScoped = false): Table<Tas
         ])
         .recordActions([
             ActionGroup.make([
-                Action.make('edit').label('Edit').icon('m-pencil-square').color('primary').url(({ record }) => TaskResource.getUrl('edit', (record as Task).id)),
+                Action.make('edit').label('Edit').icon('m-pencil-square').color('primary').url(({ record }) => editUrl(record as Task)),
                 Action.make('start').icon('m-play').color('success').visible(statusIs('backlog', 'todo')).action(change({ status: 'in_progress' }, 'Task started')),
                 Action.make('send_to_review').icon('m-eye').color('info').visible(statusIs('in_progress')).action(change({ status: 'in_review' }, 'Task sent to review')),
                 Action.make('complete').icon('m-check-circle').color('success').modalWidth('md').modalSubmitActionLabel('Complete').visible(statusIs('in_progress', 'in_review'))
@@ -153,22 +156,23 @@ export class TaskResource extends Resource {
     /** Tasks in progress (navigation badge). */
     static async getNavigationBadge(): Promise<string> { return String(Number(((await Task.query().where('status', 'in_progress').count({ n: '*' }).first()) as any)?.n ?? 0)); }
 
-    static form(schema: Schema): Schema {
-        return schema.components([
-            Section.make('Task Details').columns(2).columnSpanFull().schema([
-                TextInput.make('title').required().maxLength(255),
-                Select.make('project_id').label('Project').options(options('projects')).searchable().preload().required(),
-                assignee(),
-                toggle('status', TASK_STATUSES).live().default('backlog').columnSpanFull(),
-                Radio.make('priority').options(pairs(TASK_PRIORITIES)).inline().required().default('medium'),
-                hours('estimated_hours'),
-                DatePicker.make('due_date'),
-                RichEditor.make('description').columnSpanFull(),
-                CheckboxList.make('labels').options({ bug: 'Bug', feature: 'Feature', enhancement: 'Enhancement', documentation: 'Documentation', design: 'Design', testing: 'Testing', refactor: 'Refactor', urgent: 'Urgent' }).columns(4).columnSpanFull(),
-                DateTimePicker.make('completed_at').visible(({ get }) => get('status') === 'completed'),
-            ]),
-        ]);
-    }
+    static form(schema: Schema): Schema { return schema.components([taskDetailsSection()]); }
 
     static table(table: Table<Task>): Table<Task> { return tasksTable(table); }
+}
+
+/** The task form's section; without the project field for a task edited under its project. */
+export function taskDetailsSection(withProject = true): Section {
+    return Section.make('Task Details').columns(2).columnSpanFull().schema([
+        TextInput.make('title').required().maxLength(255),
+        ...(withProject ? [Select.make('project_id').label('Project').options(options('projects')).searchable().preload().required()] : []),
+        assignee(),
+        toggle('status', TASK_STATUSES).live().default('backlog').columnSpanFull(),
+        Radio.make('priority').options(pairs(TASK_PRIORITIES)).inline().required().default('medium'),
+        hours('estimated_hours'),
+        DatePicker.make('due_date'),
+        RichEditor.make('description').columnSpanFull(),
+        CheckboxList.make('labels').options({ bug: 'Bug', feature: 'Feature', enhancement: 'Enhancement', documentation: 'Documentation', design: 'Design', testing: 'Testing', refactor: 'Refactor', urgent: 'Urgent' }).columns(4).columnSpanFull(),
+        DateTimePicker.make('completed_at').visible(({ get }) => get('status') === 'completed'),
+    ]);
 }

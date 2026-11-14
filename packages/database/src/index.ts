@@ -67,6 +67,8 @@ export interface DataAdapter<T = any> {
     exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
     /** Runs `fn` in a database transaction (`panel.databaseTransactions()`); without it, `fn` runs as is. */
     transaction?<T>(fn: () => Promise<T>): Promise<T>;
+    /** A copy limited to the records whose `column` equals `value` (nested resources); optional. */
+    scopedTo?(column: string, value: string | number): DataAdapter<T>;
 }
 
 /** Transactions open in the current async context, by connection. */
@@ -137,6 +139,22 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
      * (the request's tenant; `null` means no filter). Set by the panel (`panel.tenant()`).
      */
     scopeToTenant(column: string, key: () => string | number | null): this { this.tenantScope = { column, key }; return this; }
+    private columnScopes: { column: string; value: string | number }[] = [];
+    /**
+     * A copy of this adapter limited to the records whose `column` equals `value` (the tasks of one project): every read filters on
+     * it, `create()` fills it, `update()` never changes it, and updates or deletions of a record outside the scope do nothing.
+     * Nested resources use it to scope their records to the parent record (`Resource.scopeAdapterToParent()`).
+     */
+    scopedTo(column: string, value: string | number): this {
+        const copy = Object.create(Object.getPrototypeOf(this)) as this;
+        Object.assign(copy, this);
+        copy.columnScopes = [...this.columnScopes, { column, value }];
+        return copy;
+    }
+    /** Whether a record is outside the column scopes (`scopedTo()`): writes to it are refused. */
+    private async isOutOfColumnScope(key: string | number): Promise<boolean> {
+        return this.columnScopes.length > 0 && !(await this.base('with').findById(key));
+    }
     /** A query of the model, in the open transaction if any. */
     private query(): QueryBuilder<M, M[]> { return this.model.query(currentTransaction(this.model.knex()) ?? undefined); }
     /** Runs `fn` in a transaction of the model's connection. */
@@ -145,6 +163,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         const q = this.query();
         const tenantKey = this.tenantScope?.key() ?? null;
         if (tenantKey !== null) q.where(`${this.model.tableName}.${this.tenantScope!.column}`, tenantKey);
+        for (const scope of this.columnScopes) q.where(`${this.model.tableName}.${scope.column}`, scope.value);
         if (this.modify) this.modify(q);
         if (this.softDeletes) {
             if (trashed === 'without') q.whereNull(this.softDeletes);
@@ -294,28 +313,31 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async findWithTrashed(key: string | number): Promise<M | null> { return ((await this.base('with').findById(key)) as M | undefined) ?? null; }
     async create(data: Record<string, unknown>): Promise<M> {
         const tenantKey = this.tenantScope?.key() ?? null;
-        return (await this.query().insertAndFetch((tenantKey !== null ? { ...data, [this.tenantScope!.column]: tenantKey } : data) as any)) as unknown as M;
+        const scoped = Object.fromEntries(this.columnScopes.map((scope) => [scope.column, scope.value]));
+        return (await this.query().insertAndFetch({ ...data, ...(tenantKey !== null ? { [this.tenantScope!.column]: tenantKey } : {}), ...scoped } as any)) as unknown as M;
     }
     async update(key: string | number, data: Record<string, unknown>): Promise<M | null> {
-        // Records outside the current tenant cannot be updated, and the tenant column never changes.
-        if (this.tenantScope && this.tenantScope.key() !== null) {
+        // Records outside the current tenant (or the column scopes) cannot be updated, and the scope columns never change.
+        const guarded = [...(this.tenantScope && this.tenantScope.key() !== null ? [this.tenantScope.column] : []), ...this.columnScopes.map((scope) => scope.column)];
+        if (guarded.length) {
             if (!(await this.base('with').findById(key))) return null;
-            data = Object.fromEntries(Object.entries(data).filter(([column]) => column !== this.tenantScope!.column));
+            data = Object.fromEntries(Object.entries(data).filter(([column]) => !guarded.includes(column)));
         }
         return ((await this.query().patchAndFetchById(key, data as any)) as unknown as M | undefined) ?? null;
     }
     /** With soft deletes, the record is timestamped instead of removed. */
     async delete(key: string | number): Promise<boolean> {
+        if (await this.isOutOfColumnScope(key)) return false;
         if (this.softDeletes) return (await this.query().findById(key).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any)) > 0;
         return (await this.query().deleteById(key)) > 0;
     }
     supportsSoftDeletes(): boolean { return this.softDeletes !== null; }
     isTrashed(record: M): boolean { return this.softDeletes !== null && (record as any)?.[this.softDeletes] != null; }
     async restore(key: string | number): Promise<boolean> {
-        if (!this.softDeletes) return false;
+        if (!this.softDeletes || (await this.isOutOfColumnScope(key))) return false;
         return (await this.query().findById(key).whereNotNull(this.softDeletes).patch({ [this.softDeletes]: null } as any)) > 0;
     }
-    async forceDelete(key: string | number): Promise<boolean> { return (await this.query().deleteById(key)) > 0; }
+    async forceDelete(key: string | number): Promise<boolean> { return !(await this.isOutOfColumnScope(key)) && (await this.query().deleteById(key)) > 0; }
     async exists(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
         const q = this.query().where(column, value as any);
         if (exceptKey !== null) q.whereNot(this.keyColumn, exceptKey);

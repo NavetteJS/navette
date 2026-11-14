@@ -4,7 +4,7 @@ import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Checkbox, CheckboxList, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, ModalTableSelect, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
-    Cluster, DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
+    Cluster, DeleteBulkAction, EditAction, EditRecord, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, Tab, type AuthProvider, type Login,
 } from '@navette-js/panels';
 import { Livewire, Section } from '@navette-js/schemas';
@@ -288,6 +288,47 @@ class LabFields extends Resource {
     static table(table: Table<any>): Table<any> { return table.columns([TextColumn.make('name').searchable(), TextColumn.make('website')]); }
 }
 
+/** The site settings: one row of the `settings` table (group "site", name "general"), its values in the JSON `payload` column. */
+class LabSetting extends Model {
+    static tableName = 'settings';
+    static jsonAttributes = ['payload'];
+    declare payload: Record<string, unknown> | null;
+}
+class EditSiteSettings extends EditRecord {
+    /** The form edits the keys of the payload. */
+    protected mutateFormDataBeforeFill(data: Record<string, unknown>): Record<string, unknown> { return { ...((data.payload as Record<string, unknown> | null) ?? {}) }; }
+    protected mutateFormDataBeforeSave(data: Record<string, unknown>): Record<string, unknown> { return { payload: data, updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ') }; }
+}
+/**
+ * Singular resource: a single record, edited at `/lab/site-settings`, without a list. Until the first save there is no row:
+ * the form shows its defaults, and saving creates the row.
+ */
+class LabSiteSettings extends Resource {
+    static slug = 'site-settings';
+    static modelLabel = 'site settings';
+    static navigationIcon = 'o-cog-6-tooth';
+    static navigationGroup = 'Forms';
+    static navigationSort = 10;
+    static isSingular = true;
+    static pages = { edit: EditSiteSettings };
+    static adapter = new ObjectionAdapter(LabSetting, { modify: (query) => { query.where({ group: 'site', name: 'general' }); } });
+    static getSingularRecordAttributes() { return { group: 'site', name: 'general', locked: 0 }; }
+    static form(schema: any) {
+        return schema.components([
+            Section.make('General').columns(2).schema([
+                TextInput.make('site_name').required().maxLength(100).default('Navette Lab'),
+                TextInput.make('tagline').maxLength(200),
+                TextInput.make('contact_email').email(),
+                Select.make('locale').options({ en: 'English', fr: 'French' }).default('en').required(),
+            ]),
+            Section.make('Maintenance').schema([
+                Toggle.make('maintenance_mode').live(),
+                Textarea.make('maintenance_message').visible(({ get }: any) => Boolean(get('maintenance_mode'))).required(),
+            ]),
+        ]);
+    }
+}
+
 /** Cluster: one menu item for the catalog pages, listed in its sub-navigation and served under `/lab/catalog`. */
 class CatalogCluster extends Cluster {
     static navigationIcon = 'o-squares-2x2';
@@ -321,8 +362,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .brandName('Navette Lab')
         .setColors({ primary: Color.Violet })
         .login(options.login)
-        // The framework-rendered field example is left out of the parity screenshots.
-        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields]), LabCatalogBrands, LabCatalogProducts])
+        // The framework-rendered field and singular settings examples are left out of the parity screenshots.
+        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields]), LabCatalogBrands, LabCatalogProducts, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabSiteSettings])])
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.
         .pages([LabWidgetsDashboard])
         .widgets(labWidgets)

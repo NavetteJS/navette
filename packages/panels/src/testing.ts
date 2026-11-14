@@ -11,7 +11,7 @@ import { Field, recordFailedRules } from '@navette-js/forms';
 import { getTableQuery, getTableRecords, getVisibleColumns, TernaryFilter, SelectFilter, type Summarizer } from '@navette-js/tables';
 import { hydrateValue, UploadStore, WireError, WireRuntime, type Call, type Component, type Effects, type Snapshot } from '@navette-js/wire';
 import { Notification, runInRequest, type NotificationData } from './notifications.ts';
-import { panelRouter, type Panel, type PanelContext, type User } from './index.ts';
+import { panelRouter, RelationManager, type Panel, type PanelContext, type User } from './index.ts';
 
 // ------------------------------------------------------------------ defaults (Filament: actingAs(), setCurrentPanel(), setTenant())
 let defaultPanel: Panel | null = null;
@@ -253,8 +253,8 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         const routeParams = Object.fromEntries(Object.entries(params).map(([key, value]) => [key, this.routeParam(value)]));
         const url = this.urlOf(routeParams);
         const name = componentNameOf(this.runtime, panel, this.componentClass);
-        // Relation managers and lazy widgets are loaded by the browser once visible: a placeholder first, then `__lazyLoad`.
-        const lazy = this.componentClass.relationship !== undefined || this.componentClass.isLazy === true;
+        // Relation managers and lazy widgets are loaded by the browser once visible (related records pages are not): a placeholder first, then `__lazyLoad`.
+        const lazy = this.componentClass.prototype instanceof RelationManager || this.componentClass.isLazy === true;
         try {
             const { result, pending, failedRules } = await this.inRequest(url, (ctx) => this.runtime.mountWithInstance(name, routeParams, { path: url.split('?')[0], method: 'GET', ctx, lazy }), query);
             this.snapshot = result.snapshot;
