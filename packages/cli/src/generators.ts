@@ -456,3 +456,131 @@ Translations live in \`lang/<locale>/${id}.json\` (keys \`${id}::${id}.title\`, 
 `;
     return { id, className, files };
 }
+
+/** `CreatePost` → `create-post` (Livewire component name, view file name). */
+export const kebab = (value: string): string => value.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z])([A-Z][a-z])/g, '$1-$2').toLowerCase();
+
+/** Form fields and their imports, from the database columns (or one placeholder field). */
+function formFieldsOf(columns: ColumnInfo[] | null): { imports: string[]; fields: string } {
+    const editable = (columns ?? []).filter((column) => !SKIPPED.has(column.name));
+    const kinds = new Set(editable.map(kindOf));
+    const imports = ['TextInput', ...(kinds.has('boolean') ? ['Toggle'] : []), ...(kinds.has('date') ? ['DatePicker'] : []), ...(kinds.has('dateTime') ? ['DateTimePicker'] : []), ...(kinds.has('longText') ? ['Textarea'] : [])];
+    const fields = editable.length ? editable.map((column) => `            ${formField(column)},`).join('\n') : `            TextInput.make('name').required().maxLength(255),`;
+    return { imports, fields };
+}
+
+/**
+ * A component with a form, rendered outside a panel (`make:livewire-form`): its class and its view. With a model, the form
+ * creates a record (or edits one, with `edit`); `columns` (`--generate`) gives the fields.
+ */
+export function generateLivewireForm(name: string, model: string | null, columns: ColumnInfo[] | null, options: { edit?: boolean } = {}): { component: string; view: string } {
+    const { imports, fields } = formFieldsOf(columns);
+    const view = kebab(name);
+    const edit = Boolean(options.edit && model);
+    const formImports = [...imports, 'fillSchema', 'fillSchemaFromRecord', 'getSchemaState', 'validateSchema'].filter((item) => edit || item !== 'fillSchemaFromRecord');
+    const component = `import { ${formImports.join(', ')} } from '@navette-js/forms';
+import { Notification } from '@navette-js/panels';
+import { LivewireComponent } from '@navette-js/panels/livewire';
+import type { Schema } from '@navette-js/schemas';
+${model ? `import { ObjectionAdapter } from '@navette-js/database';\n${edit ? `import { WireError } from '@navette-js/wire';\n` : ''}import { ${model} } from '../models/${model}.ts';\n` : ''}
+/**
+ * A form outside any panel. Register it with \`livewire.components([${name}])\`, then serve it as a page
+ * (\`app.get('/${view}${edit ? '/:record' : ''}', livewire.page(${name}))\`) or embed it: \`await livewire.mount('${view}', ${edit ? '{ record }' : '{}'}, req, res)\`.
+ */
+export class ${name} extends LivewireComponent {
+    static view = new URL('./${view}.ejs', import.meta.url);
+    /** Methods the browser may call. */
+    static callable = ['${edit ? 'save' : 'create'}'];
+${edit ? `    /** The key of the edited record: set on mount, never by the browser. */
+    static locked = ['record'];
+    record = '';
+` : ''}    data: Record<string, unknown> = {};
+
+    async mount(${edit ? '{ record }: Record<string, unknown>' : ''}): Promise<void> {
+${edit ? `        this.record = String(record ?? '');
+        // Authorize the user here: the record comes from the URL.
+        const found = await new ObjectionAdapter(${model}).find(this.record);
+        if (!found) throw new WireError(404, 'Record not found.');
+        fillSchemaFromRecord(this.getSchema('form'), this.data, found as unknown as Record<string, unknown>);
+` : `        fillSchema(this.getSchema('form'), this.data);
+`}    }
+
+    formSchema(schema: Schema): Schema {
+        return schema.components([
+${fields.replace(/^ {12}/gm, '            ')}
+        ]);
+    }
+
+    async ${edit ? 'save' : 'create'}(): Promise<void> {
+        const form = this.getSchema('form');
+        this._errors = await validateSchema(form);
+        if (Object.keys(this._errors).length) return;
+        const data = await getSchemaState(form);
+${model ? (edit ? `        await new ObjectionAdapter(${model}).update(this.record, data);
+        Notification.make().success().title('Saved').send();` : `        await new ObjectionAdapter(${model}).create(data);
+        fillSchema(form, (this.data = {}));
+        Notification.make().success().title('Created').send();`) : `        // Use the validated data here.
+        console.log(data);
+        Notification.make().success().title('Submitted').send();`}
+    }
+}
+`;
+    const viewCode = `<div>
+    <form wire:submit="${edit ? 'save' : 'create'}">
+        <%- await schema('form') %>
+
+        <div style="margin-top: 1.5rem;">
+            <x-button type="submit">${edit ? 'Save' : 'Submit'}</x-button>
+        </div>
+    </form>
+
+    <%- await modals() %>
+</div>
+`;
+    return { component, view: viewCode };
+}
+
+/** A component with a table, rendered outside a panel (`make:livewire-table`); `columns` (`--generate`) gives the table columns. */
+export function generateLivewireTable(name: string, model: string | null, columns: ColumnInfo[] | null): { component: string } {
+    const listed = (columns ?? []).filter((column) => !SKIPPED.has(column.name) || column.name === 'created_at');
+    const kinds = new Set(listed.map(kindOf));
+    const tableImports = ['TextColumn', ...(kinds.has('boolean') ? ['IconColumn'] : []), 'type Table'];
+    const cols = listed.length ? listed.filter((column) => kindOf(column) !== 'longText' || listed.length < 4).slice(0, 6).map((column) => `                ${tableColumn(column)},`).join('\n') : `                TextColumn.make('name').searchable().sortable(),`;
+    const view = kebab(name);
+    const component = `import { ObjectionAdapter, type DataAdapter } from '@navette-js/database';
+import { TableComponent } from '@navette-js/panels/livewire';
+import { ${tableImports.join(', ')} } from '@navette-js/tables';
+${model ? `import { ${model} } from '../models/${model}.ts';\n` : ''}
+/**
+ * A table outside any panel. Register it with \`livewire.components([${name}])\`, then serve it as a page
+ * (\`app.get('/${view}', livewire.page(${name}))\`) or embed it: \`await livewire.mount('${view}', {}, req, res)\`.
+ */
+export class ${name} extends TableComponent {
+    table(table: Table): Table {
+        return table
+            .columns([
+${cols}
+            ])
+            .filters([
+                // ...
+            ])
+            .recordActions([
+                // ...
+            ])
+            .toolbarActions([
+                // ...
+            ]);
+    }
+
+    getDataAdapterForTable(): DataAdapter {
+        return new ObjectionAdapter(${model ?? 'Model /* your model */'});
+    }
+}
+`;
+    if (model) return { component };
+    // Without a model: a placeholder one, to replace with yours.
+    return { component: component
+        .replace("import { ObjectionAdapter, type DataAdapter } from '@navette-js/database';", "import { Model, ObjectionAdapter, type DataAdapter } from '@navette-js/database';")
+        .replace('/**\n * A table outside', `/** The records of the table: replace it with your model. */\nclass Item extends Model { static tableName = 'items'; }\n\n/**\n * A table outside`)
+        .replace('Model /* your model */', 'Item') };
+}

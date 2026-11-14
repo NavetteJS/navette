@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { readSecret } from './secret.ts';
-import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateSchemaComponent, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateColumn, generateComponent, generateEntry, generateField, generateLivewireForm, generateLivewireTable, generatePlugin, kebab,generateResource, generateMigration, generatePage, generateSchemaComponent, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
 if (existsSync(join(cwd, '.env'))) process.loadEnvFile(join(cwd, '.env'));
@@ -54,6 +54,15 @@ function write(file: string, content: string): void {
     mkdirSync(join(file, '..'), { recursive: true });
     writeFileSync(file, content);
     say(`  ✔ Created ${relative(cwd, file).replaceAll('\\', '/')}`);
+}
+/** Columns of a database table (`--generate`), after running the pending migrations. */
+async function databaseColumns(table: string): Promise<ColumnInfo[]> {
+    const { db, migrate } = await project();
+    await migrate();
+    if (!(await db.schema.hasTable(table))) fail(`Table "${table}" not found. Create it with a migration first (npx navette make:migration create_${table}_table), or pass --table=.`);
+    const info = await db(table).columnInfo();
+    await db.destroy();
+    return Object.entries(info).map(([name, column]: [string, any]) => ({ name, type: String(column.type ?? ''), nullable: column.nullable !== false }));
 }
 const panelOf = () => {
     const panel = flag('panel') ?? 'admin';
@@ -120,6 +129,29 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
             if (!existsSync(join(cwd, 'src', 'models', `${model}.ts`))) write(join(cwd, 'src', 'models', `${model}.ts`), generateResource(model, table, columns).model);
             write(join(cwd, 'src', panel, 'resources', `${model}Resource.ts`), generateResource(model, table, columns).resource);
             say(`\n  Restart the server: the resource is discovered from src/${panel}/resources.`);
+        },
+    },
+    'make:livewire-form': {
+        usage: 'navette make:livewire-form <Name> [Model] [--edit] [--generate] [--table=]   Create a component with a form, outside any panel (src/livewire)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the component a name, e.g. CreatePost'));
+            const model = positional[1] ? studly(positional[1]) : null;
+            if (flags.edit && !model) fail('--edit needs a model: navette make:livewire-form EditPost Post --edit');
+            const columns = model && flags.generate ? await databaseColumns(flag('table') ?? tableName(model)) : null;
+            const { component, view } = generateLivewireForm(name, model, columns, { edit: flags.edit === true });
+            write(join(cwd, 'src', 'livewire', `${name}.ts`), component);
+            write(join(cwd, 'src', 'livewire', `${kebab(name)}.ejs`), view);
+            say(`\n  Register it with livewire.components([${name}]) and serve it: see "Rendering a form outside a panel" in the documentation.`);
+        },
+    },
+    'make:livewire-table': {
+        usage: 'navette make:livewire-table <Name> [Model] [--generate] [--table=]   Create a component with a table, outside any panel (src/livewire)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the component a name, e.g. ListProducts'));
+            const model = positional[1] ? studly(positional[1]) : null;
+            const columns = model && flags.generate ? await databaseColumns(flag('table') ?? tableName(model)) : null;
+            write(join(cwd, 'src', 'livewire', `${name}.ts`), generateLivewireTable(name, model, columns).component);
+            say(`\n  Register it with livewire.components([${name}]) and serve it: see "Rendering a table outside a panel" in the documentation.`);
         },
     },
     'make:page': {
