@@ -313,6 +313,8 @@ const COMPONENT_COLOR_MAPS = {
     link: linkColorMap,
     'dropdown-item': dropdownItemColorMap,
     'icon-column': iconColumnColorMap,
+    // Icons of a count summary (non-text contrast, 3:1, on gray-900 in dark mode).
+    'icon-count-summary': (palette: Palette, gray: Palette) => ({ text: findShade(palette, 'oklch(1 0 0)', { minRatio: 3 }) ?? 900, 'dark:text': findShade(palette, gray[900], { minRatio: 3, fromDarkest: true }) ?? 200 }),
     'icon-button': iconButtonColorMap,
     toggle: toggleColorMap,
     // Stat description and stat chart (the chart only gets `fi-color`).

@@ -401,7 +401,7 @@ Action groups may be used in `recordActions()`, `headerActions()` and `toolbarAc
 
 ## Toolbar actions
 
-`toolbarActions()` puts actions in the toolbar of the table, before the search field. They are mounted like [header actions](#header-actions). A `BulkActionGroup` among them adds its actions to the "Bulk actions" dropdown, like `groupedBulkActions()`:
+`toolbarActions()` puts actions in the toolbar of the table, before the search field. They are mounted like [header actions](#header-actions). A `BulkActionGroup` among them is a dropdown of bulk actions, shown while records are selected. Several groups make several dropdowns, each with its own label and icon: see [grouping bulk actions](/actions/grouping-actions#grouping-bulk-actions).
 
 ```ts
 import { Action } from '@navette-js/actions';

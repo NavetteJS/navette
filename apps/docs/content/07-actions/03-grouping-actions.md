@@ -147,6 +147,51 @@ ActionGroup.make([
 
 Action groups may also be used in the header actions of a page, and in the header and toolbar actions of a table. The actions of a group are mounted and authorized like any other action.
 
-<Aside variant="warning">
-Several `BulkActionGroup`s are merged into the single "Bulk actions" menu of the table: separate bulk menus with their own label and icon are not available yet.
-</Aside>
+## Grouping bulk actions
+
+In the toolbar of a table, a `BulkActionGroup` groups [bulk actions](/tables/actions#bulk-actions) in a dropdown, shown while records are selected. Each `BulkActionGroup` is its own dropdown, labeled "Bulk actions" by default. Like an action group, it accepts a `label()`, an `icon()`, a `color()`, a `tooltip()` and a `dropdownPlacement()`:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { DeleteBulkAction } from '@navette-js/panels';
+import { BulkActionGroup, type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .toolbarActions([
+            BulkActionGroup.make([
+                DeleteBulkAction.make(),
+            ]),
+            BulkActionGroup.make([
+                Action.make('publish').action(async ({ livewire }) => { /* ... */ }),
+                Action.make('unpublish').action(async ({ livewire }) => { /* ... */ }),
+            ])
+                .label('Status')
+                .icon('m-flag'),
+        ]);
+}
+```
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published"}, {"title": "Building your first panel", "status": "draft"}, {"title": "Ten tips for faster tables", "status": "published"}]
+// selected: [1, 2]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('status'),
+    ])
+    .toolbarActions([
+        BulkActionGroup.make([
+            Action.make('delete').label('Delete selected').icon('m-trash').color('danger').action(() => {}),
+        ]),
+        BulkActionGroup.make([
+            Action.make('publish').label('Publish').action(() => {}),
+            Action.make('unpublish').label('Unpublish').action(() => {}),
+        ])
+            .label('Status')
+            .icon('m-flag'),
+    ])
+```
+
+The actions of `groupedBulkActions()` form a first "Bulk actions" dropdown, before those of the toolbar. A group whose actions are all hidden is not displayed.

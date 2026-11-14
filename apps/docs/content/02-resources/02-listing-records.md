@@ -83,8 +83,48 @@ import { Tab } from '@navette-js/panels';
 Tab.make('Active').icon('m-check-circle').iconPosition('after')
 ```
 
-<Aside variant="warning">
-Extra attributes on tabs and `excludeQueryWhenResolvingRecord()` are not available yet.
+### Adding extra attributes to filter tabs
+
+You may also pass extra HTML attributes to filter tabs using `extraAttributes()`:
+
+```ts
+import { Tab } from '@navette-js/panels';
+
+Tab.make('Confirmed')
+    .extraAttributes({ 'data-cy': 'statement-confirmed-tab' })
+```
+
+The attributes are added to the tab button. A `class` is added to its classes; the attributes that the button needs (`id`, `type`, `tabindex`, `wire:click`…) cannot be replaced. Pass `true` as the second argument to merge them with the attributes given before.
+
+### Excluding the tab query when resolving records
+
+When a user interacts with a table record (e.g., clicking an action button), Navette resolves that record from the database. While a tab is active, its query is applied when resolving the record: a record that does not match the active tab is not found, and the action does not run.
+
+However, when a record's state changes after the user saw it in the table, you may still want the user to interact with it. For example, if you have an "Active" tab and an action sets a record to inactive, subsequent actions on that row (or in the same modal) would fail to resolve that record.
+
+You may mark a tab to be excluded when resolving records using the `excludeQueryWhenResolvingRecord()` method:
+
+```ts
+import { Resource, Tab } from '@navette-js/panels';
+
+export class CustomerResource extends Resource {
+    // ...
+
+    static tabs(): Record<string, Tab> {
+        return {
+            active: Tab.make('Active')
+                .query((query) => { query.where('active', 1); })
+                .excludeQueryWhenResolvingRecord(),
+            inactive: Tab.make('Inactive')
+                .query((query) => { query.where('active', 0); })
+                .excludeQueryWhenResolvingRecord(),
+        };
+    }
+}
+```
+
+<Aside variant="danger">
+Tabs are chosen by the browser and must not be your only tenant or ownership restriction. Apply mandatory restrictions with the `modify` option of the [adapter](/advanced/data-adapters#customizing-the-query) or with [tenancy](/panels/tenancy), and authorize operations separately. `excludeQueryWhenResolvingRecord()` only changes how records are resolved; it must not remove your application's authorization boundary.
 </Aside>
 
 ## Authorization

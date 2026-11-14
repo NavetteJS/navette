@@ -16,7 +16,7 @@ import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
 import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
-import { MAX_UNPAGINATED_RECORDS, makeTableSelectTable } from '@navette-js/tables';
+import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
 export { Notification, Notifications } from './notifications.ts';
 import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
@@ -2866,6 +2866,18 @@ export class Tab {
     /** False until `badgeColor()` is called: a lazy-loaded badge then gets no color class. */
     hasBadgeColor(): boolean { return this._hasBadgeColor; }
     getQuery(): ((query: any) => void) | null { return this._query; }
+    private _extraAttributes: Record<string, string | number | boolean | null> = {};
+    /** Extra HTML attributes of the tab button, e.g. `{ 'data-cy': 'statement-confirmed-tab' }`; `class` is added to its classes. */
+    extraAttributes(attributes: Record<string, string | number | boolean | null>, merge = false): this { this._extraAttributes = merge ? { ...this._extraAttributes, ...attributes } : { ...attributes }; return this; }
+    getExtraAttributes(): Record<string, string | number | boolean | null> { return this._extraAttributes; }
+    private _excludeQueryWhenResolvingRecord = false;
+    /**
+     * Row actions of the active tab normally only find records that still match the tab's query: with this, a record
+     * that left the tab (e.g. deactivated by the previous action) can still be acted upon. Never use it on a tab that restricts
+     * access (tenant, ownership): the tab is chosen by the browser.
+     */
+    excludeQueryWhenResolvingRecord(condition = true): this { this._excludeQueryWhenResolvingRecord = condition; return this; }
+    shouldExcludeQueryWhenResolvingRecord(): boolean { return this._excludeQueryWhenResolvingRecord; }
 }
 
 /** List page tabs: hidden when the page declares none. */
@@ -2890,6 +2902,10 @@ class ResourceTabs extends SchemaComponent {
         const id = page.id;
         const active = page.getActiveTabKey();
         const q = (k: string) => `'${k.replace(/[^A-Za-z0-9_-]/g, '')}'`;
+        // Extra attributes (`Tab.extraAttributes()`): those the button already has are not repeated; `class` joins its classes.
+        const reserved = new Set(['id', 'type', 'class', 'tabindex', 'data-tab-key', 'wire:click', 'x-show']);
+        const tabExtraAttributes = (tab: Tab) => { const extra = Object.entries(tab.getExtraAttributes()).filter(([name]) => !reserved.has(name)); return extra.length ? ` ${new Attributes(Object.fromEntries(extra)).toHtml()}` : ''; };
+        const extraTabClass = (tab: Tab) => { const value = tab.getExtraAttributes().class; return typeof value === 'string' ? value : null; };
         const buttons = tabs.map(([k, tab]) => {
             const d = `deferredBadges[${q(k)}]`;
             const badge = tab.hasBadge() ? `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="
@@ -2913,7 +2929,7 @@ class ResourceTabs extends SchemaComponent {
  ${d}?.badgeIconHtml &&
  ${d}?.badgeIconPosition === 'after'
  "><span x-html="${d}.badgeIconHtml"></span></template></span></template>` : '';
-            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})" class="${cls(['fi-tabs-item', { 'fi-active': k === active }])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}${badge}</button>`;
+            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})"${tabExtraAttributes(tab)} class="${cls(['fi-tabs-item', { 'fi-active': k === active }, extraTabClass(tab)])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}${badge}</button>`;
         });
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${Math.max(tabs.findIndex(([k]) => k === active), 0) + 1},
@@ -3169,8 +3185,14 @@ export class ListRecords extends Page implements TableHost {
         if (typeof context.recordKey !== 'string') return null;
         const adapter = this.resource.adapter;
         // The trashed filter shows deleted records: their row actions must find them, no other key is reachable this way.
-        if (trashedFilterValue(this) !== null && adapter.findWithTrashed) return (await adapter.findWithTrashed(context.recordKey)) ?? null;
-        return (await adapter.find(context.recordKey)) ?? null;
+        const record = trashedFilterValue(this) !== null && adapter.findWithTrashed ? await adapter.findWithTrashed(context.recordKey) : await adapter.find(context.recordKey);
+        if (!record) return null;
+        // As in Filament, the record must still match the active tab, unless the tab is `excludeQueryWhenResolvingRecord()`.
+        const tab = this.getTabs()[this.getActiveTabKey()];
+        const modifier = tab?.getQuery();
+        if (!modifier || tab!.shouldExcludeQueryWhenResolvingRecord()) return record;
+        const keys = await adapter.listKeys({ keys: [adapter.getKey(record)], trashed: trashedFilterValue(this) !== null ? 'with' : 'without', modifiers: [modifier] });
+        return keys.length ? record : null;
     }
     /**
      * Writes an editable cell. Everything comes from the browser: the column must exist and be editable and visible, the record
@@ -3244,11 +3266,16 @@ export class ListRecords extends Page implements TableHost {
     async renderTable(): Promise<string> {
         const resource = this.resource;
         const ctx = { livewire: this as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined };
-        const bulkActions: string[] = [];
-        for (const action of this.getBulkActions()) if (await action.isVisible(ctx)) bulkActions.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
         const table = this.getTable();
+        // One menu per `BulkActionGroup` (the default "Bulk actions" menu when the table declares none).
+        const bulkActionGroups: BulkActionMenu[] = [];
+        for (const group of table.getBulkActionGroups() ?? [TableBulkActionGroup.make(this.getBulkActions())]) {
+            const html: string[] = [];
+            for (const action of group.getActions()) if (await action.isVisible(ctx)) html.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
+            bulkActionGroups.push(group.toMenu(html));
+        }
         return renderTable(table, this, resource.adapter, {
-            bulkActions, headerActions: await this.renderTableHeaderActions(ctx), toolbarActions: await this.renderTableToolbarActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
+            bulkActionGroups, headerActions: await this.renderTableHeaderActions(ctx), toolbarActions: await this.renderTableToolbarActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
             filtersForm: table.getFilters().length ? await this.getSchema('tableFiltersForm').toHtml() : null,
             rowActionsHtml: table.getRecordActions().length ? async (record) => {
                 const key = resource.adapter.getKey(record);

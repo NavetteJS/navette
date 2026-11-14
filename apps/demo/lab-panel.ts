@@ -50,6 +50,14 @@ class LabProductImporter extends Importer {
     static async resolveRecord(data: Record<string, unknown>) { return (await LabProduct.query().findOne({ sku: String(data.sku) })) ?? null; }
 }
 
+/** Shows or hides the selected products (bulk actions of the "Visibility" menu). */
+async function setVisibility(livewire: any, visible: 0 | 1): Promise<void> {
+    const keys: string[] = await livewire.getSelectedRecordKeys();
+    for (const key of keys) await LabProducts.adapter.update(key, { is_visible: visible });
+    livewire.deselectAllTableRecords();
+    Notification.make().success().title(`${keys.length} product(s) ${visible ? 'shown' : 'hidden'}`).send();
+}
+
 /** Table configurations of the "Select" modals of the product form (`ModalTableSelect`). */
 class LabBrandsTable {
     static configure(table: Table<any>): Table<any> {
@@ -81,7 +89,9 @@ class LabProducts extends Resource {
         return {
             '': Tab.make('All').icon('m-squares-2x2'),
             visible: Tab.make('Visible').icon('m-eye').query((query) => { query.where('is_visible', 1); }),
-            low: Tab.make('Low stock').icon('m-exclamation-triangle').iconPosition('after').query((query) => { query.where('qty', '<', 10); }).badge(async () => (await LabProduct.query().where('qty', '<', 10).resultSize())).badgeColor('warning'),
+            low: Tab.make('Low stock').icon('m-exclamation-triangle').iconPosition('after').query((query) => { query.where('qty', '<', 10); }).badge(async () => (await LabProduct.query().where('qty', '<', 10).resultSize())).badgeColor('warning')
+                // A product restocked meanwhile can still be restocked from this tab. The attribute is left out of the parity screenshots.
+                .excludeQueryWhenResolvingRecord().extraAttributes(process.env.NAVETTE_NO_THEMES ? {} : { 'data-cy': 'low-stock-tab' }),
         };
     }
 
@@ -110,7 +120,8 @@ class LabProducts extends Resource {
                 TextColumn.make('price').money('usd').sortable().summarize([Sum.make().money('usd').label('Total'), Count.make().label('Over $100').query((query) => query.where('price', '>', 100))]),
                 TextColumn.make('qty').label('Stock').numeric().visibleFrom('md').summarize(Sum.make().suffix(' items').hiddenLabel()),
                 ToggleColumn.make('is_visible').label('Visible'),
-                IconColumn.make('featured').boolean(),
+                // Icon count summary: left out of the parity screenshots.
+                IconColumn.make('featured').boolean().summarize(process.env.NAVETTE_NO_THEMES ? [] : Count.make().icons()),
             ])
             .filters([
                 SelectFilter.make('brand').relationship('brand', 'name', null, true).multiple().searchable(),
@@ -125,6 +136,7 @@ class LabProducts extends Resource {
             .persistFiltersInSession()
             .persistSearchInSession()
             .groups([Group.make('brand_id').label('Brand').getTitleFromRecordUsing((record: any) => (record.brand_id ? `Brand #${record.brand_id}` : 'No brand'))])
+            .groupRecordsTriggerAction(process.env.NAVETTE_NO_THEMES ? null : (action) => action.button().label('Group records'))
             .headerActions([
                 ExportAction.make().exporter(LabProductExporter),
                 ImportAction.make().importer(LabProductImporter),
@@ -152,6 +164,13 @@ class LabProducts extends Resource {
                 BulkActionGroup.make([
                     ExportBulkAction.make().exporter(LabProductExporter),
                     DeleteBulkAction.make().authorizeIndividualRecords('delete'),
+                ]),
+                // A second bulk menu, with its own label and icon. Left out of the parity screenshots.
+                ...(process.env.NAVETTE_NO_THEMES ? [] : [
+                    BulkActionGroup.make([
+                        Action.make('show').label('Show').icon('m-eye').action(async ({ livewire }) => setVisibility(livewire, 1)),
+                        Action.make('hide').label('Hide').icon('m-eye-slash').action(async ({ livewire }) => setVisibility(livewire, 0)),
+                    ]).label('Visibility').icon('m-eye'),
                 ]),
             ])
             .checkIfRecordIsSelectableUsing((record) => Number(record.qty) >= 0)
