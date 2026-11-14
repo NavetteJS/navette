@@ -56,7 +56,7 @@ import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configur
 import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
-import type { DataAdapter } from '@navette-js/database';
+import { Model as DatabaseModel, transaction as databaseTransaction, type DataAdapter } from '@navette-js/database';
 import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
 import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
@@ -1158,12 +1158,16 @@ abstract class BasePage extends Component implements SchemaHost {
      * the panel's `authorizeUsing()`. Without a policy for the ability, it is allowed.
      */
     async inspectActionAbility(ability: string, record: unknown = null, _args: unknown[] = []): Promise<AuthorizationResponse> { return inspectOn(this, ability, record); }
-    /** Data adapter whose transactions wrap the actions with `databaseTransaction()`. */
-    protected getActionDataAdapter(): DataAdapter | null {
+    /**
+     * Opens the transactions of the actions with `databaseTransaction()`: the component's data adapter, or else the default
+     * database connection (`createConnection()`).
+     */
+    protected getActionTransactionRunner(): (<T>(fn: () => Promise<T>) => Promise<T>) | null {
         const self = this as any;
-        if (typeof self.getDataAdapterForTable === 'function') return self.getDataAdapterForTable();
-        if (typeof self.getDataAdapter === 'function') return self.getDataAdapter();
-        return self.resource?.adapter ?? null;
+        const adapter: DataAdapter | null = typeof self.getDataAdapterForTable === 'function' ? self.getDataAdapterForTable() : typeof self.getDataAdapter === 'function' ? self.getDataAdapter() : self.resource?.adapter ?? null;
+        if (typeof adapter?.transaction === 'function') return (fn) => adapter.transaction!(fn);
+        const knex = (DatabaseModel as any).knex?.();
+        return knex ? (fn) => databaseTransaction(knex, fn) : null;
     }
     /** Actions that can be mounted in a given context (page header by default). */
     protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
@@ -1388,8 +1392,7 @@ abstract class BasePage extends Component implements SchemaHost {
             const wait = await getActionRateLimitStore().attempt(key, limit, 60);
             if (wait > 0) { await this.sendRateLimitedActionNotification(action, wait, callContext); return false; }
         }
-        const adapter = this.getActionDataAdapter();
-        const transactional = ((await action.hasDatabaseTransactions(callContext)) ?? this.panel.hasDatabaseTransactions()) && typeof adapter?.transaction === 'function';
+        const runner = ((await action.hasDatabaseTransactions(callContext)) ?? this.panel.hasDatabaseTransactions()) ? this.getActionTransactionRunner() : null;
         // `halt()` and `cancel()` commit what was done, unless they ask for a rollback.
         const run = async (): Promise<ActionHalt | null> => {
             try { await action.call(callContext); return null; } catch (error) {
@@ -1398,7 +1401,7 @@ abstract class BasePage extends Component implements SchemaHost {
             }
         };
         let stopped: ActionHalt | null;
-        try { stopped = transactional ? await adapter!.transaction!(run) : await run(); } catch (error) {
+        try { stopped = runner ? await runner(run) : await run(); } catch (error) {
             if (error instanceof ActionHalt) stopped = error;
             else throw error;
         }
