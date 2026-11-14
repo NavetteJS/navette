@@ -15,6 +15,8 @@ export type Effects = {
 };
 export type Snapshot = { data: Record<string, unknown>; memo: Record<string, any>; checksum: string };
 export type Call = { method: string; params: unknown[]; metadata?: Record<string, unknown> };
+/** Child property bound to a parent property (`wire:model` on a child component). */
+export type ModelBinding = { property: string; outer: string; directive?: string };
 type ComponentClass = (new () => Component) & { componentName?: string; callable?: string[]; locked?: string[]; reactive?: string[]; listeners?: Record<string, string> };
 
 export class WireError extends Error {
@@ -45,8 +47,11 @@ export abstract class Component {
      * Mounts a child component and returns its HTML, to insert into the parent's render.
      * If the browser already has this child (same key), only a stub is rendered and the client keeps the child as is.
      * `lazy`: the child shows its `placeholder()` and loads once it becomes visible.
+     * `model`: binds a child property to a property of this component, like `wire:model` on a Livewire child with a
+     * `#[Modelable]` property: `{ property: 'state', outer: 'data.categories' }`. Pass the current outer value in `params`
+     * under the child property name; the parent sends it again whenever it renders the child's stub.
      */
-    async mountChild(name: string, params: Record<string, unknown> = {}, key: string, options: { lazy?: boolean } = {}): Promise<string> {
+    async mountChild(name: string, params: Record<string, unknown> = {}, key: string, options: { lazy?: boolean; model?: ModelBinding } = {}): Promise<string> {
         if (!this._runtime) throw new Error('mountChild(): component is not attached to a runtime.');
         const previous = this._previousChildren[key];
         if (previous) {
@@ -55,7 +60,7 @@ export abstract class Component {
             this._runtime.passPropsToChild(previous[1], params);
             return `<${previous[0]} wire:id="${previous[1]}" wire:name="${escapeAttr(name)}" wire:key="${escapeAttr(key)}"></${previous[0]}>`;
         }
-        const { html, component } = await this._runtime.mountWithInstance(name, params, { ...this._request, ctx: this._ctx, lazy: options.lazy, key });
+        const { html, component } = await this._runtime.mountWithInstance(name, params, { ...this._request, ctx: this._ctx, lazy: options.lazy, key, model: options.model });
         this._children[key] = [/^\s*<([a-zA-Z0-9-]+)/.exec(html)![1], component.id];
         return html;
     }
@@ -177,6 +182,13 @@ function uploadReferencesAreValid(value: unknown, store: UploadStore | null, dep
 
 /** Reactive props of a component (`static reactive`): set by the parent, never by the browser. */
 const reactiveProps = (component: Component): string[] => (component.constructor as ComponentClass).reactive ?? [];
+/** Alpine attributes binding a modelable child property to its parent's (`wire:model="$parent.x"`, `x-modelable`). */
+const modelAttributes = (bindings: Record<string, string>, directives: Record<string, string>): Record<string, string> => {
+    const [outer, inner] = Object.entries(bindings)[0] ?? [];
+    return outer ? { [directives[outer] ?? 'wire:model']: `$parent.${outer}`, 'x-modelable': `$wire.${inner}` } : {};
+};
+const SAFE_PATH = /^[A-Za-z_][A-Za-z0-9_]*(.[A-Za-z0-9_-]+)*$/;
+const SAFE_DIRECTIVE = /^wire:model(.[a-z]+)*$/;
 
 export class WireRuntime {
     private registry = new Map<string, ComponentClass>();
@@ -234,9 +246,9 @@ export class WireRuntime {
         for (const [k, v] of Object.entries(params)) if (known.has(k)) (component as any)[k] = v;
     }
 
-    private async renderRoot(component: Component, name: string): Promise<string> {
+    private async renderRoot(component: Component, name: string, bindings: { bindings: Record<string, string>; directives: Record<string, string> } | null = null): Promise<string> {
         const html = await component.render();
-        return insertAttributesIntoHtmlRoot(html, { 'wire:id': component.id, 'wire:name': name });
+        return insertAttributesIntoHtmlRoot(html, { 'wire:id': component.id, 'wire:name': name, ...(bindings ? modelAttributes(bindings.bindings, bindings.directives) : {}) });
     }
 
     /**
@@ -247,8 +259,11 @@ export class WireRuntime {
         return (await this.mountWithInstance(name, params, request)).html;
     }
     /** Like mount(), but also returns the mounted instance (to read its title, for example). */
-    async mountWithInstance(name: string, params: Record<string, unknown> = {}, request: { path?: string; method?: string; ctx?: unknown; lazy?: boolean; key?: string } = {}): Promise<{ html: string; component: Component; snapshot: Snapshot; effects: Effects }> {
+    async mountWithInstance(name: string, params: Record<string, unknown> = {}, request: { path?: string; method?: string; ctx?: unknown; lazy?: boolean; key?: string; model?: ModelBinding } = {}): Promise<{ html: string; component: Component; snapshot: Snapshot; effects: Effects }> {
         const component = this.make(name);
+        const model = request.model ?? null;
+        if (model && (!SAFE_PATH.test(model.outer) || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(model.property) || !SAFE_DIRECTIVE.test(model.directive ?? 'wire:model'))) throw new Error(`mountChild(): invalid model binding for ${name}.`);
+        const bindings = model ? { bindings: { [model.outer]: model.property }, directives: { [model.outer]: model.directive ?? 'wire:model' } } : null;
         component._ctx = request.ctx ?? null;
         component._id = randomId();
         component._runtime = this;
@@ -262,12 +277,12 @@ export class WireRuntime {
             html = insertAttributesIntoHtmlRoot(placeholder, { 'wire:id': component.id, 'wire:name': name });
         } else {
             await component.mount(params);
-            html = await this.renderRoot(component, name);
+            html = await this.renderRoot(component, name, bindings);
         }
         await component.dehydrate();
         const snapshot = this.snapshot(component, name, {
             path: request.path ?? '/', method: request.method ?? 'GET', release: 'a-a-a', children: Object.keys(component._children).length ? component._children : [], scripts: Object.keys((component._effects.scripts as Record<string, string> | undefined) ?? {}), assets: [],
-            ...(request.lazy ? { lazyLoaded: false, lazyIsolated: true } : {}), ...(reactiveProps(component).length ? { props: reactiveProps(component) } : {}), locale: this.options.locale ?? 'en', islands: [],
+            ...(request.lazy ? { lazyLoaded: false, lazyIsolated: true } : {}), ...(reactiveProps(component).length ? { props: reactiveProps(component) } : {}), ...(bindings ? { bindings: bindings.bindings, bindingsDirectives: bindings.directives } : {}), locale: this.options.locale ?? 'en', islands: [],
         });
         const { html: _h, ...effects } = component._effects;
         // Event listeners: the client calls `__dispatch(event, params)` when one fires.
@@ -309,6 +324,10 @@ export class WireRuntime {
         const reactive = new Set(reactiveProps(component));
         const passed = this.requestScope.getStore()?.childProps.get(component.id);
         if (passed) for (const prop of reactive) if (Object.prototype.hasOwnProperty.call(passed, prop) && known.has(prop)) (component as any)[prop] = passed[prop];
+        // Modelable property (`wire:model` on the child): seeded with the parent's value when the parent rendered it in this request.
+        // The bindings are part of the signed memo, so the browser cannot choose which property the parent seeds.
+        const bindings = snapshot.memo.bindings && typeof snapshot.memo.bindings === 'object' ? { bindings: snapshot.memo.bindings as Record<string, string>, directives: (snapshot.memo.bindingsDirectives ?? {}) as Record<string, string> } : null;
+        if (passed && bindings) for (const prop of Object.values(bindings.bindings)) if (Object.prototype.hasOwnProperty.call(passed, prop) && known.has(prop)) (component as any)[prop] = passed[prop];
         await component.boot();
         await component.hydrate();
 
@@ -393,11 +412,13 @@ export class WireRuntime {
         effects.returns = returns;
         if (awaitsLazyLoad && !lazyLoaded) component._skipRender = true;
         const rendered = !component._skipRender && !effects.redirect;
-        if (rendered) { effects.html = await this.renderRoot(component, name); effects.partials ??= {}; }
+        if (rendered) { effects.html = await this.renderRoot(component, name, bindings); effects.partials ??= {}; }
         await component.dehydrate();
         const { id: _i, name: _n, errors: _e, ...memo } = snapshot.memo;
         // After a full render, the children list is the one just rendered; otherwise it is kept.
         if (rendered) memo.children = Object.keys(component._children).length ? component._children : [];
+        // A partial render (a modal opened) may mount new children: they join the known ones, so the next render keeps them.
+        else if (Object.keys(component._children).length) memo.children = { ...(memo.children && typeof memo.children === 'object' && !Array.isArray(memo.children) ? memo.children : {}), ...component._children };
         if (lazyLoaded) { memo.lazyLoaded = true; delete memo.lazyIsolated; }
         // Scripts already run by the browser are not sent again.
         if (effects.scripts) {

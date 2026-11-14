@@ -46,8 +46,8 @@
 %>
 <div x-data="filamentTable({
                 areGroupsCollapsedByDefault: <%- grouping.collapsedByDefault ? 'true' : 'false' %>,
-                canTrackDeselectedRecords: true,
-                currentSelectionLivewireProperty: null,
+                canTrackDeselectedRecords: <%- selection ? 'false' : 'true' %>,
+                currentSelectionLivewireProperty: <%- selection ? js(selection.property) : 'null' %>,
                 maxSelectableRecords: <%- maxSelectableRecords ?? 'null' %>,
                 reorderMessage: <%- js(t('filament-tables::table.reordering.moved')) %>,
                 selectsCurrentPageOnly: <%- selectsCurrentPageOnly ? 'true' : 'false' %>,
@@ -286,7 +286,7 @@
                     <%= t('filament-tables::table.reorder_indicator') %>
                 </div>
             <% } %>
-            <% if (bulkActions.length) { %>
+            <% if (selection ? maxSelectableRecords !== 1 : bulkActions.length) { %>
                     <div x-cloak role="status" aria-live="polite" aria-atomic="true" x-bind:hidden="! getSelectedRecordsCount()" x-show="getSelectedRecordsCount()" wire:key="<%= id %>.table.selection.indicator" class="fi-ta-selection-indicator">
                         <div>
                             <%- loadingIndicator(attrs({ 'x-show': 'isLoading' })) %>
@@ -380,7 +380,7 @@
                     <% if (selectable || columns.some((c) => c.sortable)) { %>
                     <div class="fi-ta-content-header">
                         <% if (selectable) { %>
-                        <input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" />
+                        <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
                         <% } %>
                         <% if (columns.some((c) => c.sortable)) { %>
                                     <div x-data="{
@@ -468,7 +468,7 @@
                                 'fi-selected': <%- selectable ? 'true' : 'false' %> && isRecordSelected(<%= js(row.key) %>),
                             }">
                             <% if (selectable && row.selectable) { %>
-                            <input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox"<% if (maxSelectableRecords && maxSelectableRecords !== 1) { %> x-bind:disabled="! areRecordsToggleable([<%= js(row.key) %>])"<% } %> value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" />
+                            <input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox"<% if (selection?.disabled) { %> disabled<% } else if (maxSelectableRecords && maxSelectableRecords !== 1) { %> x-bind:disabled="! areRecordsToggleable([<%= js(row.key) %>])"<% } %> value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" />
                             <% } %>
                             <div class="fi-ta-record-content-ctn">
                                 <div>
@@ -581,7 +581,7 @@
                                     </div>
                                     <% } %>
 
-                                    <input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.stacked.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" />
+                                    <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.stacked.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
                                 </td>
                             </tr>
                         <% } %>
@@ -601,7 +601,7 @@
                             <% if (rows.length && !reorder?.active && hasRowActions && actionsPosition === 'before-cells') { %><th aria-label="<%= tc('filament-tables::table.columns.actions.label', 2) %>" scope="col" class="fi-ta-actions-header-cell fi-ta-empty-header-cell"></th><% } %>
                             <% if (rows.length && !reorder?.active && selectable) { %>
                             <th scope="col" class="fi-ta-cell fi-ta-selection-cell">
-                                <input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" />
+                                <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
                             </th>
                             <% } %>
                             <% if (rows.length && !reorder?.active && hasRowActions && actionsPosition === 'before-columns') { %><th aria-label="<%= tc('filament-tables::table.columns.actions.label', 2) %>" scope="col" class="fi-ta-actions-header-cell fi-ta-empty-header-cell"></th><% } %>
@@ -668,7 +668,7 @@
                             <tr<% if (group.ariaHidden) { %> aria-hidden="true"<% } %> class="<%- cls(['fi-ta-row fi-ta-group-header-row', { 'fi-ta-group-header-row-with-selection': selectable }]) %>">
                                 <% if (selectable) { %>
                                 <td class="fi-ta-cell fi-ta-group-selection-cell">
-                                    <input aria-label="<%= t('filament-tables::table.fields.bulk_select_group.label', { title: group.title ?? '' }) %>" type="checkbox" data-group-selectable-record-keys="<%= JSON.stringify(group.keys) %>" x-on:click="toggleSelectRecords(JSON.parse($el.dataset.groupSelectableRecordKeys))" x-bind:checked="
+                                    <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_group.label', { title: group.title ?? '' }) %>" type="checkbox" data-group-selectable-record-keys="<%= JSON.stringify(group.keys) %>" x-on:click="toggleSelectRecords(JSON.parse($el.dataset.groupSelectableRecordKeys))" x-bind:checked="
                                         const recordsInGroup = JSON.parse($el.dataset.groupSelectableRecordKeys)
 
                                         if (recordsInGroup.length && areRecordsSelected(recordsInGroup)) {
@@ -683,7 +683,7 @@
                                             recordsInGroup.length && areRecordsPartiallySelected(recordsInGroup)
 
                                         return null
-                                    " wire:key="<%= id %>.table.bulk_select_group.checkbox.<%= page.page %>" wire:loading.attr="disabled" wire:target="<%= targets %>" class="fi-ta-group-checkbox fi-checkbox-input" />
+                                    " wire:key="<%= id %>.table.bulk_select_group.checkbox.<%= page.page %>" wire:loading.attr="disabled" wire:target="<%= targets %>" class="fi-ta-group-checkbox fi-checkbox-input" /><% } %>
                                 </td>
                                 <% } %>
                                 <td colspan="<%= visibleColumns.length + (hasRowActions ? 1 : 0) %>" class="fi-ta-group-header-cell">
@@ -716,7 +716,7 @@
                                 <% } else { %><% if (hasRowActions && actionsPosition === 'before-cells') { %><% rowActionsCell(row) %><% } %><% } %>
                                 <% if (!reorder?.active && selectable) { %>
                                 <td class="fi-ta-cell fi-ta-selection-cell">
-                                    <% if (row.selectable) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox"<% if (maxSelectableRecords && maxSelectableRecords !== 1) { %> x-bind:disabled="! areRecordsToggleable([<%= js(row.key) %>])"<% } %> value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" /><% } %>
+                                    <% if (row.selectable) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_record.label', { key: row.key }) %>" type="checkbox"<% if (selection?.disabled) { %> disabled<% } else if (maxSelectableRecords && maxSelectableRecords !== 1) { %> x-bind:disabled="! areRecordsToggleable([<%= js(row.key) %>])"<% } %> value="<%= row.key %>" x-on:click="toggleSelectedRecord(<%= js(row.key) %>)" x-bind:checked="isRecordSelected(<%= js(row.key) %>) ? 'checked' : null" data-group="<%= row.groupKey ?? '' %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-record-checkbox fi-checkbox-input" /><% } %>
                                 </td>
                                 <% } %><%# end selection cell %>
                                 <% if (!reorder?.active && hasRowActions && actionsPosition === 'before-columns') { %><% rowActionsCell(row) %><% } %>

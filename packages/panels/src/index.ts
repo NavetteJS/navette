@@ -15,6 +15,7 @@ import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, For
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
+import { createTableSelectComponent } from './table-select.ts';
 export { Notification, Notifications } from './notifications.ts';
 import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
@@ -970,6 +971,8 @@ abstract class BasePage extends Component implements SchemaHost {
     }
     /** Actions of the page header (full layout). */
     getHeaderActions(): Action[] { return []; }
+    /** Name of the child component showing a `TableSelect`'s table in this panel. */
+    getTableSelectComponentName(): string { return `navette.${this.panel.getId()}.table-select`; }
 
     // --- lazy loaded schemas (`lazyLoaded()`): loaded when they enter the viewport, then kept loaded
     static callable = ['loadDeferredSchema'];
@@ -3304,6 +3307,9 @@ export class ListRecords extends Page implements TableHost {
     }
 }
 
+/** Table of a form's `TableSelect` (and of a `ModalTableSelect`'s modal): a child component of the page. */
+export const TableSelectComponent = createTableSelectComponent(ListRecords);
+
 /**
  * Table of records related to another one: a child component of the edit page, loaded when it becomes visible.
  * Subclasses declare `relationship`, `adapterFor()`, `table()` and `form()`.
@@ -4525,6 +4531,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtime.register(name('simple-user-menu'), SimpleUserMenu);
     runtime.register(name('global-search'), GlobalSearch);
     runtime.register(name('database-notifications'), DatabaseNotifications);
+    runtime.register(name('table-select'), TableSelectComponent);
     runtime.register('navette.notifications', Notifications);
     for (const [index, widget] of panel.getWidgets().entries()) runtime.register(name(`widgets.panel.${index}`), widget);
     for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${resource.slug.replace(/\//g, '.')}.${index}`), widget);

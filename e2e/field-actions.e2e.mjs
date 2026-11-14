@@ -67,7 +67,7 @@ try {
         const product = db.prepare('select id from products order by id limit 1').get();
         const categories = db.prepare('select id, name from product_categories where parent_id is null order by name limit 2').all();
         db.prepare('delete from product_category_product where product_id = ?').run(product.id);
-        await page.goto(`${BASE}/lab/products/${product.id}/edit`);
+        await page.goto(`${BASE}/lab/cards/${product.id}/edit`);
         const list = page.locator('.fi-fo-checkbox-list');
         await list.waitFor();
         for (const category of categories) await list.getByLabel(category.name, { exact: true }).check();

@@ -492,6 +492,185 @@ Select.make('product_id')
     })
 ```
 
+## Selecting options from a table in a modal
+
+`ModalTableSelect` opens a [table](/tables/overview) in a slide-over, where the user searches, filters, sorts and pages through the records, then checks the one to select. It suits a [relationship](#integrating-with-a-relationship) with many records. The field shows the label of the selected record and a "Select" button.
+
+The table is described by a table configuration: a class with a static `configure()` method that receives the table and returns it:
+
+```ts
+import { SelectFilter, TextColumn, type Table } from '@navette-js/tables';
+
+export class CategoriesTable {
+    static configure(table: Table): Table {
+        return table
+            .columns([
+                TextColumn.make('name').searchable().sortable(),
+                TextColumn.make('slug').searchable(),
+            ])
+            .filters([
+                SelectFilter.make('parent').relationship('parent', 'name'),
+            ]);
+    }
+}
+```
+
+Pass the class to `tableConfiguration()`. With `relationship()`, the table lists the related records, and the second argument is the column shown as the label of the selected record:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('category_id')
+    .relationship('category', 'name')
+    .tableConfiguration(CategoriesTable)
+```
+
+You can also use `multiple()` with a many-to-many relationship. Name the field after the relationship: the links are saved once the record is saved, like a [many-to-many select](#many-to-many-relationships). `maxItems()` and `minItems()` limit the number of selected records:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('categories')
+    .relationship('categories', 'name')
+    .multiple()
+    .maxItems(5)
+    .tableConfiguration(CategoriesTable)
+```
+
+The table's records come from the related model. A configuration may provide its own data adapter instead, in a static `adapter` property: the field then needs no relationship. A resource class is a valid configuration too: its `table()` method sets the table up, and its adapter, scoped to the current tenant, provides the records:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('category_id')
+    .tableConfiguration(CategoryResource)
+    .getOptionLabelFromRecordUsing((record) => record.name)
+```
+
+`tableConfiguration()` also accepts a function returning the configuration.
+
+<Aside variant="info">
+The table is a child component of the page, which finds its configuration again on each of its requests: the configuration is registered when the form is built. After a restart of the server, a table left open asks the user to reload the page.
+</Aside>
+
+### Customizing the modal table select actions
+
+Passing a function to `selectAction()` customizes the "Select" action, for example its label, the modal heading and the submit button label:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('category_id')
+    .relationship('category', 'name')
+    .tableConfiguration(CategoriesTable)
+    .selectAction((action) => action
+        .label('Select a category')
+        .modalHeading('Search categories')
+        .modalSubmitActionLabel('Confirm selection'))
+```
+
+`tableSelect()` customizes the `TableSelect` field shown in the modal in the same way.
+
+### Customizing the option labels in the modal table select
+
+`getOptionLabelFromRecordUsing()` builds the label of each selected record, for example from two columns:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('category_id')
+    .relationship('category', 'name')
+    .tableConfiguration(CategoriesTable)
+    .getOptionLabelFromRecordUsing((record) => `${record.name} (${record.slug})`)
+```
+
+`getOptionLabelUsing()` (for one value) and `getOptionLabelsUsing()` (for the values of `multiple()`) compute the labels without reading the records. Without any of these, the key itself is shown.
+
+By default, the labels of `multiple()` are shown as badges, and a single label as plain text. `badge()` changes this, and `badgeColor()` sets the badge color. `placeholder()` sets the text shown when nothing is selected:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('category_id')
+    .relationship('category', 'name')
+    .tableConfiguration(CategoriesTable)
+    .badge()
+    .placeholder('No category')
+
+ModalTableSelect.make('categories')
+    .relationship('categories', 'name')
+    .multiple()
+    .tableConfiguration(CategoriesTable)
+    .badgeColor('success')
+```
+
+### Passing additional arguments to the table in a modal select
+
+`tableArguments()` passes values from the form to the table configuration, for example to narrow the table's query with fields filled earlier. The function receives the field context, with `get()` to read other fields. The values must be plain JSON data:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('products')
+    .relationship('products', 'name')
+    .multiple()
+    .tableConfiguration(ProductsTable)
+    .tableArguments(({ get }) => ({
+        category_id: get('category_id'),
+        budget_limit: get('budget'),
+    }))
+```
+
+The configuration reads them with `table.getArguments()`, and narrows the query with `modifyQueryUsing()`, which receives the Objection query:
+
+```ts
+import { TextColumn, type Table } from '@navette-js/tables';
+
+export class ProductsTable {
+    static configure(table: Table): Table {
+        const { category_id, budget_limit } = table.getArguments();
+        return table
+            .modifyQueryUsing((query) => {
+                if (category_id) query.where('category_id', category_id);
+                if (budget_limit) query.where('price', '<=', budget_limit);
+            })
+            .columns([
+                TextColumn.make('name'),
+                TextColumn.make('price').money('usd'),
+            ]);
+    }
+}
+```
+
+### Validating the records selected in the table
+
+The keys sent by the browser are checked on the server when the modal is submitted, and again when the form is validated and saved: each key must be a record that the table itself can show and select. That is a record within the data adapter's scope (including the tenant), within the relationship's query (the third argument of `relationship()`), within the table's `modifyQueryUsing()` query, computed with the current arguments, and accepted by the table's `checkIfRecordIsSelectableUsing()`. Any other key, forged or no longer allowed, is rejected with "The selected category is invalid.". The filters and the search chosen in the table only narrow what is displayed.
+
+To restrict which records may be selected, restrict one of these queries:
+
+```ts
+import { ModalTableSelect } from '@navette-js/forms';
+
+ModalTableSelect.make('category_id')
+    .relationship('category', 'name', (query) => query.where('is_visible', true))
+    .tableConfiguration(CategoriesTable)
+```
+
+### Selecting options from a table in the form
+
+`TableSelect` shows the same table directly in the form, with a checkbox on each row. It takes the same `tableConfiguration()`, `tableArguments()`, `multiple()`, `maxItems()` and `minItems()` methods, and `relationship()` with the relationship name and an optional query function:
+
+```ts
+import { TableSelect } from '@navette-js/forms';
+
+TableSelect.make('categories')
+    .relationship('categories')
+    .multiple()
+    .tableConfiguration(CategoriesTable)
+```
+
+The selection is kept while the user searches, filters or changes page. The table shows no actions: the header, row, bulk and empty state actions of the configuration are left out.
+
 ## Select validation
 
 As well as all rules listed on the [validation](/forms/validation) page, the select always checks that the submitted value is valid:
@@ -504,6 +683,5 @@ The error message is "The selected author is invalid.".
 - With a relationship, the value must be a record of the relationship's query.
 - With `maxItems()` or `minItems()`, the number of selected items is checked.
 
-<Aside variant="warning">
-Selecting options from a table in a modal is not available yet.
-</Aside>
+The records selected in a table are checked against the table's query: see [validating the records selected in the table](#validating-the-records-selected-in-the-table).
+

@@ -2,7 +2,7 @@
 // It is kept apart from `/admin`, whose pages are compared with Filament's demo.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
-import { Checkbox, CheckboxList, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
+import { Checkbox, CheckboxList, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, ModalTableSelect, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
 import {
     Cluster, DeleteBulkAction, EditAction, NavigationGroup, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Panel, Resource,
     ReplicateAction, Tab, type AuthProvider, type Login,
@@ -50,6 +50,24 @@ class LabProductImporter extends Importer {
     static async resolveRecord(data: Record<string, unknown>) { return (await LabProduct.query().findOne({ sku: String(data.sku) })) ?? null; }
 }
 
+/** Table configurations of the "Select" modals of the product form (`ModalTableSelect`). */
+class LabBrandsTable {
+    static configure(table: Table<any>): Table<any> {
+        return table
+            .columns([TextColumn.make('name').searchable().sortable(), TextColumn.make('website').searchable().toggleable(), IconColumn.make('is_visible').label('Visible').boolean()])
+            .filters([TernaryFilter.make('is_visible').label('Visibility').trueLabel('Visible').falseLabel('Hidden')])
+            .defaultSort('name');
+    }
+}
+class LabCategoriesTable {
+    static configure(table: Table<any>): Table<any> {
+        return table
+            .columns([TextColumn.make('name').searchable().sortable(), TextColumn.make('slug').searchable()])
+            .filters([TernaryFilter.make('is_visible').label('Visibility')])
+            .defaultSort('name');
+    }
+}
+
 class LabProducts extends Resource {
     static slug = 'products';
     static modelLabel = 'product';
@@ -75,8 +93,11 @@ class LabProducts extends Resource {
             Textarea.make('description').autosize().placeholder('A few words about the product'),
             Toggle.make('is_visible').label('Visible').onIcon('m-eye').offIcon('m-eye-slash').onColor('success'),
             Checkbox.make('featured').inline(false),
-            // Many-to-many relationship: the links are saved in `product_category_product` with the record.
-            CheckboxList.make('categories').relationship('categories', 'name', (query) => query.whereNull('parent_id')).searchable().searchDebounce(300).bulkToggleable().columns(3).columnSpanFull(),
+            // Records picked in a table shown in a slide-over. Left out of the parity screenshots.
+            ...(process.env.NAVETTE_NO_THEMES ? [] : [
+                ModalTableSelect.make('brand_id').relationship('brand', 'name').tableConfiguration(LabBrandsTable).placeholder('No brand'),
+                ModalTableSelect.make('categories').relationship('categories', 'name').multiple().maxItems(5).tableConfiguration(LabCategoriesTable),
+            ]),
         ]);
     }
 
@@ -149,6 +170,13 @@ class LabCards extends Resource {
     // Shown below "Products lab" in the menu (nested navigation).
     static navigationParentItem = 'Products lab';
     static adapter = new ObjectionAdapter(LabProduct);
+    // Many-to-many relationship: the links are saved in `product_category_product` with the record.
+    static form(schema: any) {
+        return schema.components([
+            TextInput.make('name').required(),
+            CheckboxList.make('categories').relationship('categories', 'name', (query) => query.whereNull('parent_id')).searchable().searchDebounce(300).bulkToggleable().columns(3).columnSpanFull(),
+        ]);
+    }
     static table(table: Table<LabProduct>): Table<LabProduct> {
         return table
             .columns([
