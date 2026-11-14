@@ -31,13 +31,26 @@ table.recordActions([
 The action behaves differently depending on the resource:
 
 - When the resource has a "View" page, the action is a link to that page.
-- Otherwise (a simple resource, a relation manager), the action opens a modal displaying the resource's `infolist()` schema for the record, with a "Close" button and no submit button. If the resource has no `infolist()`, the modal has no content.
+- Otherwise (a simple resource, a relation manager), the action opens a modal displaying the resource's `infolist()` schema for the record, with a "Close" button and no submit button. If the resource has no infolist, the modal shows its `form()`, read-only, filled with the record's attributes.
 
 Without an argument, the action uses the resource (or relation manager) of the component that hosts it. You may pass another resource explicitly: `ViewAction.make(PostResource)`.
 
 The action is only visible for records the user is allowed to `view` according to the resource policy. To make a click on the row open it, call `recordAction('view')` on the table.
 
 A list page also opens this action when its URL has `?tableAction=view&tableActionRecord=<key>`, after the same visibility and authorization checks. Global search results of simple resources use this to open the record.
+
+## Customizing data before filling the form
+
+You may wish to modify the data from a record before it is filled into the read-only form. To do this, you may use the `mutateRecordDataUsing()` method to modify the `data` object, and return the modified version before it is filled into the form:
+
+```ts
+import { ViewAction } from '@navette-js/panels';
+
+ViewAction.make()
+    .mutateRecordDataUsing((data) => ({ ...data, email: String(data.email).toLowerCase() }))
+```
+
+An infolist displays the record itself: change what an entry shows with its `formatStateUsing()` instead.
 
 ## Displaying the modal as a slide-over
 

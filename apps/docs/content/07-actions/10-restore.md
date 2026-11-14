@@ -75,6 +75,19 @@ RestoreAction.make()
     })
 ```
 
+## Customizing the restoring process
+
+You can replace the default process with the `using()` method. The notifications, the redirect and the hooks stay; return `false` to report a failure:
+
+```ts
+import { RestoreAction } from '@navette-js/panels';
+
+RestoreAction.make()
+    .using(async ({ record, livewire }) => livewire.getDataAdapter().restore(record.id))
+```
+
+The `action()` method replaces the whole behavior instead, notifications and redirect included.
+
 ## Redirecting after restoring
 
 You may redirect the user after the record is restored from the `after()` hook:
@@ -120,3 +133,56 @@ RestoreAction.make()
 ```
 
 Only URLs starting with a single `/`, `http://` or `https://` are followed.
+
+## Customizing the failure notification
+
+When the record cannot be restored (the adapter's `restore()` returns `false`, or the process given to `using()` does), no success notification is sent. A failure notification is sent instead if it has a title: set it with `failureNotificationTitle()`, and change the whole notification with `failureNotification()`, which receives it and returns it, or pass `null` to send none. `failureRedirectUrl()` sets the page opened after a failure:
+
+```ts
+import { RestoreAction } from '@navette-js/panels';
+
+RestoreAction.make()
+    .failureNotificationTitle('The post could not be restored')
+    .failureNotification((notification) => notification.body('It is locked by another user.'))
+    .failureRedirectUrl('/admin/posts')
+```
+
+## Customizing the bulk notifications and redirect
+
+`RestoreBulkAction` sends its success notification when every selected record was restored: `successNotificationTitle()`, `successNotification()` and `successRedirectUrl()` work as for the single action, and their functions also receive `successCount` and `totalCount`. When some records could not be restored, it sends the failure notification instead, with a line for the records the user may not restore and one for the records that failed; `failureNotification()` receives it with `successCount`, `failureCount`, `totalCount` and `isAll` (nothing was restored), and `failureRedirectUrl()` applies:
+
+```ts
+import { RestoreBulkAction } from '@navette-js/panels';
+
+RestoreBulkAction.make()
+    .successNotification((notification, { successCount }) => notification.title(`${successCount} posts restored`))
+    .failureNotification((notification, { successCount, totalCount }) => notification.title(`${successCount} of ${totalCount} posts restored`))
+    .successRedirectUrl('/admin/posts')
+```
+
+## Improving the performance of restore bulk actions
+
+By default, `RestoreBulkAction` loads the selected records, 100 at a time, and restores them one by one. If you are restoring a large number of records, you may use the `chunkSelectedRecords()` method to load fewer records at a time:
+
+```ts
+import { RestoreBulkAction } from '@navette-js/panels';
+
+RestoreBulkAction.make()
+    .chunkSelectedRecords(250)
+```
+
+Records are loaded first for two reasons:
+
+- To check each one with a policy ability, using `authorizeIndividualRecords('restore')` (the default of this action).
+- To run the adapter's `restore()` for each record, with the logic your adapter adds there.
+
+If you need neither, the `fetchSelectedRecords(false)` method does not load the records: the selected keys are restored in one call to the adapter's `restoreMany()` (one query with `ObjectionAdapter`), and no record is checked individually:
+
+```ts
+import { RestoreBulkAction } from '@navette-js/panels';
+
+RestoreBulkAction.make()
+    .fetchSelectedRecords(false)
+```
+
+The selected keys are always narrowed to the records the table can show. `using()` replaces the process: it receives the loaded `records` and their `keys` (only the `keys` with `fetchSelectedRecords(false)`), and returns `false` when it failed.
