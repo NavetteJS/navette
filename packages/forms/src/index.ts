@@ -36,6 +36,9 @@ import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
 import { constants as fsConstants, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mapLazy, safeFileUrl } from './file-upload-support.ts';
+import { containedFile, deleteContainedFile, isStoredFileKey, serveContainedFiles, type LocalFileStorageOptions } from './file-storage.ts';
+export type { FileRequest, FileResponse, LocalFileStorageOptions } from './file-storage.ts';
+import { signedFileUrl, temporaryFileUrlExpiry, type FileUrlStorage } from '@navette-js/support';
 export { safeFileUrl } from './file-upload-support.ts';
 import { applyDisableOptionsWhenSelectedInSiblingRepeaterItems, applyFixIndistinctState, applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
 export { generateItemKey, getParentRepeaterItem, ItemsProcessingLimitError, siblingDistinctRules, type ItemKeyGenerator } from './repeater-items.ts';
@@ -4297,16 +4300,26 @@ type FieldLazy<T> = Lazy<T, ComponentContext>;
 /** Saved state item when the field does not store files itself (`storeFiles(false)`): an already saved file, or a temporary file to process. */
 export type FileUploadEntry = { key: string } | { file: TemporaryUpload };
 /** Where files go once the form is saved. */
-export interface FileStorage {
+export interface FileStorage extends FileUrlStorage {
     /** Stores a temporary file and returns its key (relative path); `name` is the file name to use instead of a random one. */
     store(file: TemporaryUpload, directory: string | null, name?: string | null, options?: FileStoreOptions): Promise<string>;
     info(key: string): Promise<UploadedFileInfo | null>;
     /** Public URL of a stored file, without reading it (used by `fetchFileInformation(false)`; `info()` otherwise). */
     url?(key: string): string | null | Promise<string | null>;
+    /** `'private'`: files are shown through `temporaryUrl()` (Filament's private visibility). `'public'` when left out. */
+    readonly visibility?: 'public' | 'private';
+    /** Temporary URL of a private file, valid until `expiresAt`, that nobody can forge or extend. */
+    temporaryUrl?(key: string, expiresAt: Date): string | null | Promise<string | null>;
+    /** Whether a stored file exists (`checkFileExistence()` of image entries and columns). */
+    exists?(key: string): boolean | Promise<boolean>;
+    /** Deletes a stored file (`deleteUploadedFileUsing()`); a key outside the storage is ignored. */
+    delete?(key: string): void | Promise<void>;
 }
-/** `move`: the temporary file may be moved instead of copied (`moveFiles()`); the field removes it afterwards either way. */
-export type FileStoreOptions = { move?: boolean };
-/** Local disk storage, served under a public URL. File names are random; the extension comes from the detected type. */
+/**
+ * `move`: the temporary file may be moved instead of copied (`moveFiles()`); the field removes it afterwards either way.
+ * `visibility`: the field's `visibility()`, for storages that keep public and private files apart.
+ */
+export type FileStoreOptions = { move?: boolean; visibility?: 'public' | 'private' };
 /**
  * A file name chosen by the application or the user, made safe for storage: no directory part, only letters, digits, `_` and
  * `-`, and always the extension detected from the file's content (an uploaded `shell.php` declared as an image is stored
@@ -4351,14 +4364,41 @@ function placeFile(source: string, target: string, move: boolean): void {
     copyFileSync(source, target, fsConstants.COPYFILE_EXCL);
     if (move) rmSync(source, { force: true });
 }
+/**
+ * Local disk storage. Public by default: the folder is served under `baseUrl` (`express.static()` or `serve()`).
+ * With `{ visibility: 'private', key }`, files are only served by `serve()`, behind temporary signed URLs.
+ * File names are random; the extension comes from the detected type.
+ */
 export class LocalFileStorage implements FileStorage {
     private root: string;
     private baseUrl: string;
-    constructor(root: string, baseUrl: string) { this.root = root; this.baseUrl = baseUrl.replace(/\/$/, ''); }
+    readonly visibility: 'public' | 'private';
+    private secret: string | Buffer | null;
+    constructor(root: string, baseUrl: string, options: LocalFileStorageOptions = {}) {
+        this.root = root; this.baseUrl = baseUrl.replace(/\/$/, '');
+        this.visibility = options.visibility === 'private' ? 'private' : 'public';
+        this.secret = options.key ?? null;
+        if (this.visibility === 'private' && (!this.secret || this.secret.length < 16)) throw new Error('LocalFileStorage: a private storage needs a key of at least 16 characters to sign its URLs.');
+    }
     private resolve(key: string): string | null {
-        if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,250}$/.test(key) || key.split('/').some((part) => part === '..' || part === '.')) return null;
+        if (!isStoredFileKey(key)) return null;
         return nodePath.join(this.root, ...key.split('/'));
     }
+    private encoded(key: string): string { return `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}`; }
+    /** Temporary URL of a file, signed with the storage's key (HMAC over the base URL, the key and the expiry). */
+    temporaryUrl(key: string, expiresAt: Date = temporaryFileUrlExpiry()): string | null {
+        if (!this.resolve(key)) return null;
+        if (!this.secret) throw new Error('LocalFileStorage: temporary URLs need a key (new LocalFileStorage(root, url, { key })).');
+        return signedFileUrl(this.secret, this.encoded(key), key, expiresAt, this.baseUrl);
+    }
+    exists(key: string): boolean { const target = this.resolve(key); return target !== null && existsSync(target) && containedFile(this.root, target) !== null; }
+    /** Deletes a file and its metadata; never follows a path or a link leading outside the folder. */
+    delete(key: string): void { deleteContainedFile(this.root, key); }
+    /**
+     * Express handler serving the folder: `app.use('/files', storage.serve())`, at the storage's base URL. A private storage
+     * refuses (403) any request without a valid, unexpired signature for that very file.
+     */
+    serve() { return serveContainedFiles(this.root, { isPrivate: this.visibility === 'private', key: this.secret, scope: this.baseUrl }); }
     async store(file: TemporaryUpload, directory: string | null, name: string | null = null, options: FileStoreOptions = {}): Promise<string> {
         let key = [directory, name === null ? `${randomUUID()}.${file.extension}` : safeStorageName(name, file.extension)].filter(Boolean).join('/');
         // A chosen name never overwrites another file: a short random suffix is added.
@@ -4381,7 +4421,11 @@ export class LocalFileStorage implements FileStorage {
         try { meta = JSON.parse(readFileSync(`${target}.meta.json`, 'utf8')); } catch { /* file dropped in without metadata */ }
         return { name: meta.name ?? nodePath.basename(key), size: statSync(target).size, type: meta.type ?? 'application/octet-stream', url: this.url(key)! };
     }
-    url(key: string): string | null { return this.resolve(key) ? `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}` : null; }
+    /** URL of a file: permanent for a public storage, temporary (signed) for a private one. */
+    url(key: string): string | null {
+        if (!this.resolve(key)) return null;
+        return this.visibility === 'private' ? this.temporaryUrl(key) : this.encoded(key);
+    }
 }
 
 /**
@@ -4405,6 +4449,8 @@ export class FileUpload extends Field {
     private _moveFiles: FieldLazy<boolean> = false;
     private _fetchFileInformation: FieldLazy<boolean> = true;
     private _storage: FieldLazy<FileStorage | null> = null;
+    private _visibility: FieldLazy<'public' | 'private' | null> = null;
+    private _deleteUploadedFileUsing: ((args: ComponentContext & { file: string; storage: FileStorage | null }) => unknown) | null = null;
     private _getUploadedFileUsing: ((key: string, ctx: ComponentContext) => UploadedFileInfo | null | Promise<UploadedFileInfo | null>) | null = null;
     private _openableFileUrlUsing: FileUrlResolver | null = null;
     private _downloadableFileUrlUsing: FileUrlResolver | null = null;
@@ -4526,6 +4572,22 @@ export class FileUpload extends Field {
     image(): this { return this.acceptedFileTypes(['image/*']); }
     directory(directory: FieldLazy<string | null>): this { this._directory = directory; return this; }
     storage(storage: FieldLazy<FileStorage | null>): this { this._storage = storage; return this; }
+    /**
+     * Visibility of the stored files (Filament's `visibility()`): `'private'` files are shown through temporary URLs of the
+     * storage. By default, the storage's own visibility (`'public'` for a storage without one).
+     */
+    visibility(visibility: FieldLazy<'public' | 'private' | null>): this { this._visibility = visibility; return this; }
+    async getVisibility(): Promise<'public' | 'private'> {
+        const visibility = await this.value(this._visibility);
+        if (visibility === 'public' || visibility === 'private') return visibility;
+        return (await this.getStorage())?.visibility === 'private' ? 'private' : 'public';
+    }
+    /**
+     * Called when the user removes a stored file from the field (Filament's `deleteUploadedFileUsing()`), with the file's key
+     * and the storage: `({ file, storage }) => storage?.delete?.(file)`. Only files the record really holds reach it (never a
+     * path sent by the browser), and only when the field is enabled and `deletable()`.
+     */
+    deleteUploadedFileUsing(callback: ((args: ComponentContext & { file: string; storage: FileStorage | null }) => unknown) | null): this { this._deleteUploadedFileUsing = callback; return this; }
     /** `false`: the field stores nothing itself; the data receives `FileUploadEntry` items for the adapter to process (media). */
     storeFiles(condition: FieldLazy<boolean> = true): this { this._storeFiles = condition; return this; }
     /** Moves temporary files into the storage instead of copying them (the storage receives `{ move: true }`). */
@@ -4615,6 +4677,7 @@ export class FileUpload extends Field {
         const savedNames = await this.savedFileNames();
         const storage = await this.getStorage();
         const shouldFetch = await this.shouldFetchFileInformation();
+        const visibility = await this.getVisibility();
         const openable = (await this.isOpenable()) ? this._openableFileUrlUsing : null;
         const downloadable = (await this.isDownloadable()) ? this._downloadableFileUrlUsing : null;
         const files: Record<string, UploadedFileInfo | null> = {};
@@ -4627,6 +4690,10 @@ export class FileUpload extends Field {
                 // Without file information: only the URL; FilePond reads the file itself to preview it.
                 const url = !storage ? null : storage.url ? await storage.url(value) : ((await storage.info(value))?.url ?? null);
                 info = url === null ? null : { name: value.split('/').pop() ?? value, size: 0, type: null, url };
+            }
+            // Private files: a temporary URL of the storage (Filament's `temporaryUrl()`), when it can make one.
+            if (info && !this._getUploadedFileUsing && visibility === 'private' && storage?.temporaryUrl) {
+                try { const temporary = await storage.temporaryUrl(value, temporaryFileUrlExpiry()); if (temporary) info = { ...info, url: temporary }; } catch { /* no temporary URLs */ }
             }
             // Only local or http(s) URLs are sent to the browser.
             const url = safeFileUrl(info?.url);
@@ -4642,15 +4709,28 @@ export class FileUpload extends Field {
         return files;
     }
     private writeState(entries: [string, string][]): void { writePath(this.livewire as any, this.getStatePath().split('.'), Object.fromEntries(entries)); }
-    /** Removes a file from the field. A stored file is only deleted by the application when the form is saved. */
-    async removeUploadedFile(fileKey: unknown): Promise<void> {
+    /**
+     * Removes a file from the field, and returns the stored key it removed (`null` for a temporary file or nothing).
+     * A stored file stays in the storage, unless `deleteUploadedFileUsing()` deletes it.
+     */
+    async removeUploadedFile(fileKey: unknown): Promise<string | null> {
         const removed = this.entries().find(([key]) => key === fileKey);
+        if (!removed || (await this.isDisabled())) return null;
         // `deletable(false)`: a saved file stays (a file just uploaded can still be removed).
-        if (removed && !this.isTemporary(removed[1]) && !(await this.isDeletable())) return;
-        if (removed && this.isTemporary(removed[1])) this.uploads?.remove(removed[1].slice('livewire-file:'.length));
+        if (!this.isTemporary(removed[1]) && !(await this.isDeletable())) return null;
+        if (this.isTemporary(removed[1])) this.uploads?.remove(removed[1].slice('livewire-file:'.length));
         this.writeState(this.entries().filter(([key]) => key !== fileKey));
+        return this.isTemporary(removed[1]) ? null : removed[1];
     }
-    deleteUploadedFile(fileKey: unknown): Promise<void> { return this.removeUploadedFile(fileKey); }
+    /** FilePond's "remove": removes the file, then runs `deleteUploadedFileUsing()` for a stored file the record holds. */
+    async deleteUploadedFile(fileKey: unknown): Promise<void> {
+        if (await this.isDisabled()) return;
+        const original = this.originalKeys();
+        const file = await this.removeUploadedFile(fileKey);
+        // A key the browser made up (not one of the record's files) never reaches the callback.
+        if (file === null || !this._deleteUploadedFileUsing || !(await this.isFilePathAuthorized(file, original))) return;
+        await this._deleteUploadedFileUsing({ ...this.context(), file, storage: await this.getStorage() });
+    }
     async reorderUploadedFiles(fileKeys: unknown): Promise<void> {
         if (!Array.isArray(fileKeys) || !(await this.isReorderable())) return;
         const entries = new Map(this.entries());
@@ -4722,7 +4802,7 @@ export class FileUpload extends Field {
                 const storage = await this.getStorage();
                 if (!storage) throw new Error('FileUpload: no storage configured (FileUpload.storage).');
                 const name = this._fileNameUsing ? await this._fileNameUsing(file, this.context()) : (await this.shouldPreserveFilenames()) ? file.name : null;
-                const stored = await storage.store(file, await this.getDirectory(), name, { move: await this.shouldMoveFiles() });
+                const stored = await storage.store(file, await this.getDirectory(), name, { move: await this.shouldMoveFiles(), visibility: await this.getVisibility() });
                 this._storedNames[stored] = file.name;
                 out.push(stored);
                 this.uploads?.remove(file.id);

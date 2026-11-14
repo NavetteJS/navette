@@ -394,6 +394,16 @@ export class Aside extends Component {
 
 The child schema shares the state path, record and operation of the parent schema. Declaring it in `getChildSchemas()` is required for the fields inside your component to be filled, validated and saved with the rest of the form. You may call `columns()` on the child schema to give it a grid.
 
+### Styling components outside the container grid
+
+Components using `liberatedFromContainerGrid()` are rendered outside the grid of their schema: instead of a grid column, they receive a `.fi-sc-liberated` Alpine scope wrapper with `display: contents`, so their contents still participate in the surrounding layout. `isLiberatedFromContainerGrid()` tells whether a component is liberated; a custom component class may also override it to return `true`, like the `RenderHook` component does. If your [custom CSS](/styling/css-hooks) targets their output as a direct child of `.fi-sc`, include `.fi-sc > .fi-sc-liberated > ...` in that selector too. The wrapper provides the scope for [calling component methods](#calling-component-methods-from-javascript), but does not generate its own layout box.
+
+```ts
+import { Text } from '@navette-js/schemas';
+
+Text.make('Shown without a grid column').key('notice').liberatedFromContainerGrid()
+```
+
 ## Rendering components with JavaScript frameworks
 
 You may render a schema component with a component of a JavaScript framework, such as React, Vue or Svelte, or with plain DOM code. Your application brings the framework and builds the component into an ES module; Navette loads the module, mounts it and keeps it up to date.

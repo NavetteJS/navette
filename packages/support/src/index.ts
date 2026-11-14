@@ -709,3 +709,4 @@ export { getHtmlSanitizerConfig, hasCustomHtmlSanitizerConfig, HtmlSanitizerConf
 export { cspNonce, cspNonceAttribute, getResponseCspNonce, runWithCspNonce, useCspNonce } from './csp.ts';
 export * from './enums.ts';
 export * from './relationships.ts';
+export { fileUrlConfig, isSafeStorageKey, resolveStoredFileUrl, signedFileUrl, signFileUrl, temporaryFileUrlExpiry, verifyFileUrlSignature, type FileUrlStorage } from './file-urls.ts';

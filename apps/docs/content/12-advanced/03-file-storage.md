@@ -121,7 +121,70 @@ When a file must become more than a key in a column (a row in a media table, for
 
 Files stored under a folder served by `express.static()` are public for anyone who knows their URL. The random names make URLs hard to guess, but not secret: they appear in the pages, the browser history and the logs.
 
-For private documents, store them outside of any static folder, and serve them through your own route, which checks the session and the rights of the user:
+### Temporary URLs for private files
+
+A `LocalFileStorage` created with `{ visibility: 'private', key }` keeps its files private: they are only served by its own `serve()` handler, behind temporary signed URLs, like the private disks of Filament:
+
+```ts
+import path from 'node:path';
+import { FileUpload, LocalFileStorage } from '@navette-js/forms';
+
+const contracts = new LocalFileStorage(path.resolve('./storage/contracts'), '/contracts', {
+    visibility: 'private',
+    key: process.env.APP_KEY, // the application key, at least 16 characters
+});
+
+// Serves the folder at the storage's base URL, checking every signature. Do not serve it with express.static().
+app.use('/contracts', contracts.serve());
+
+FileUpload.make('contract').storage(contracts);
+```
+
+`url()`, `info()` and `temporaryUrl(key, expiresAt)` give URLs such as `/contracts/2026/3f2a….pdf?expires=1767225599&signature=…`. The signature is an HMAC-SHA256, made with the key, of the storage's base URL, the file's key and the expiry: it cannot be forged without the key, it cannot be reused for another file, and it cannot be extended. Without a valid and unexpired signature, `serve()` answers 403. The file is sent with its detected type, `X-Content-Type-Options: nosniff` and a sandboxing `Content-Security-Policy`, so that an uploaded file is never run as a page of your site. Keys containing `..` or unexpected characters, metadata files, folders and symbolic links leading out of the folder are refused.
+
+Temporary URLs expire after `fileUrlConfig.temporaryFileUrlExpiryMinutes` (30 by default, Filament's `temporary_file_url_expiry_minutes`), rounded up to the end of that hour, so that the same URL is reused for a while and the browser can cache the file:
+
+```ts
+import { fileUrlConfig } from '@navette-js/support';
+
+fileUrlConfig.temporaryFileUrlExpiryMinutes = 10;
+```
+
+A field's [`visibility()`](/forms/file-upload#setting-the-visibility-of-files) and an image entry's [`visibility()`](/infolists/image-entry#public-images) use `temporaryUrl()` for private files. A public `LocalFileStorage` can also serve its folder with `serve()`, without signatures.
+
+<Aside variant="warning">
+A temporary URL gives access to the file to anyone who has it, until it expires: it is not tied to the session. For documents that must only be opened by users with a given right, also check that right in your own route, as below.
+</Aside>
+
+### Temporary URLs of your own storage
+
+A custom storage provides temporary URLs by implementing `temporaryUrl()`, and declares its default visibility with `visibility`. With an object storage service, return the service's presigned URL:
+
+```ts
+class BucketStorage implements FileStorage {
+    readonly visibility = 'private';
+
+    // …store() and info()…
+
+    temporaryUrl(key: string, expiresAt: Date): string {
+        return bucket.presignedGetUrl(key, { expiresAt });
+    }
+
+    exists(key: string): Promise<boolean> {
+        return bucket.exists(key);
+    }
+
+    async delete(key: string): Promise<void> {
+        await bucket.delete(key);
+    }
+}
+```
+
+To sign URLs served by your own route, use `signedFileUrl(key, url, fileKey, expiresAt, scope)` and `verifyFileUrlSignature(key, fileKey, expires, signature, scope)` from `@navette-js/support`.
+
+### Serving files through your own route
+
+To check the session and the rights of the user on each download, store the files outside of any static folder, and serve them through your own route:
 
 ```ts
 app.get('/files/contracts/:id', async (req, res) => {
@@ -137,6 +200,18 @@ app.get('/files/contracts/:id', async (req, res) => {
 
 Then return that URL from `info()` of your storage, or from `getUploadedFileUsing()` of the field.
 
-<Aside variant="warning">
-Navette does not generate temporary signed URLs for stored files yet: protect private files with your own route. A file removed from a field is not deleted from the storage either: delete it in your adapter if you need to. Image resizing and cropping on the server are not available.
+## Deleting files
+
+`FileStorage.delete(key)` deletes a stored file. `LocalFileStorage.delete()` also removes the file's metadata, ignores keys containing `..` or unexpected characters, never removes a folder, and never follows a symbolic link leading out of the storage folder.
+
+A file removed from a field is not deleted from the storage, as the file may be used elsewhere. To delete it, use the field's [`deleteUploadedFileUsing()`](/forms/file-upload#deleting-files):
+
+```ts
+FileUpload.make('attachments')
+    .multiple()
+    .deleteUploadedFileUsing(({ file, storage }) => storage?.delete?.(file))
+```
+
+<Aside variant="info">
+Image resizing and cropping on the server are not available: images are resized and cropped in the browser, by the [image editor](/forms/file-upload#image-editor) and the [automatic resizing options](/forms/file-upload#cropping-and-resizing-images-without-the-editor).
 </Aside>

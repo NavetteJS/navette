@@ -1,6 +1,6 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeUrl, js, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Enum, type EnumCase, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { loadMissingRelationships, loadRelationshipAggregates, normalizeRelationshipAggregates, readRecordPath, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregateFunction } from '@navette-js/support';
 import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
@@ -426,7 +426,10 @@ export class TextEntry extends Entry {
     private _prose = false;
     private _markdown = false;
     private _html = false;
-    private _characterLimit: { length: number; end: string } | null = null;
+    private _characterLimit: PerItem<number | null> = null;
+    private _characterLimitEnd: PerItem<string | null> = '...';
+    private _prefixActions: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[] = [];
+    private _suffixActions: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[] = [];
     private _wordLimit: { words: number; end: string } | null = null;
     private _listWithLineBreaks = false;
     private _bulleted = false;
@@ -538,7 +541,41 @@ export class TextEntry extends Entry {
     /** Text after the formatted state. A string is escaped; an `HtmlString` is inserted as is. */
     suffix(text: string | HtmlString | null): this { this._suffix = text; return this; }
     /** Truncates the text to `length` characters, followed by `end`. */
-    limit(length: number | null = 100, end = '...'): this { this._characterLimit = length && length > 0 ? { length: Math.floor(length), end } : null; return this; }
+    limit(length: PerItem<number | null> = 100, end: PerItem<string | null> = '...'): this { this._characterLimit = length; this._characterLimitEnd = end; return this; }
+    /** Character limit of `limit()` for a state item (`null`: no limit), e.g. to show the full text in a tooltip only when it is cut. */
+    getCharacterLimit(state: unknown = undefined, record: any = undefined): number | null {
+        const limit = resolveItem(this._characterLimit, record === undefined ? this.currentRecord() : record, state);
+        return typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : null;
+    }
+    /** Text added after a cut state (`...` by default). */
+    getCharacterLimitEnd(state: unknown = undefined, record: any = undefined): string | null { return resolveItem(this._characterLimitEnd, record === undefined ? this.currentRecord() : record, state) ?? null; }
+    /** Record of the entry, or `null` before it is placed in a schema. */
+    private currentRecord(): any { try { return this.context().record; } catch { return null; } }
+    /** Action before the text (Filament's `prefixAction()`), an icon button by default; a function returns it from the context. */
+    prefixAction(action: Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null)): this { return this.prefixActions([action]); }
+    prefixActions(actions: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[]): this { this._prefixActions = [...this._prefixActions, ...actions]; return this; }
+    /** Action after the text (Filament's `suffixAction()`), an icon button by default. */
+    suffixAction(action: Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null)): this { return this.suffixActions([action]); }
+    suffixActions(actions: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[]): this { this._suffixActions = [...this._suffixActions, ...actions]; return this; }
+    /** Prefix actions, small icon buttons unless their size or style was chosen. */
+    getPrefixActions(): Renderable[] { return this.affixActions(this._prefixActions); }
+    getSuffixActions(): Renderable[] { return this.affixActions(this._suffixActions); }
+    private affixActions(list: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[]): Renderable[] {
+        const actions: Renderable[] = [];
+        for (const item of list) {
+            const value = typeof item === 'function' ? (item as (ctx: ComponentContext) => Renderable | Renderable[] | null)(this.context()) : item;
+            for (const action of ([] as (Renderable | null)[]).concat(value ?? [])) {
+                if (!action) continue;
+                const a = action as any;
+                a.defaultSize?.('sm');
+                if (typeof a.getView === 'function' && a.getView() === null && typeof a.iconButton === 'function') a.iconButton();
+                actions.push(action);
+            }
+        }
+        return actions;
+    }
+    /** Slot actions and affix actions, mounted with this entry's key. */
+    getActions(): any[] { return [...super.getActions(), ...this.getPrefixActions(), ...this.getSuffixActions()]; }
     /** Truncates the text to a number of words, followed by `end`. */
     words(words: number | null = 100, end = '...'): this { this._wordLimit = words && words > 0 ? { words: Math.floor(words), end } : null; return this; }
     /** Clamps the text to a number of lines. */
@@ -587,7 +624,8 @@ export class TextEntry extends Entry {
             if (isHtml) text = this._markdown ? (/^\s*<[a-z][^>]*>/i.test(text) ? sanitize(text).replace(TIGHT_ITEM, '<li>$1</li>') : markdownToHtml(text)) : sanitize(text);
         }
         if (!isHtml) {
-            if (this._characterLimit && [...text].length > this._characterLimit.length) text = `${[...text].slice(0, this._characterLimit.length).join('').trimEnd()}${this._characterLimit.end}`;
+            const limit = this.getCharacterLimit(item, record);
+            if (limit !== null && [...text].length > limit) text = `${[...text].slice(0, limit).join('').trimEnd()}${this.getCharacterLimitEnd(item, record) ?? ''}`;
             if (this._wordLimit) {
                 const match = new RegExp(`^\\s*(?:\\S+\\s*){1,${this._wordLimit.words}}`, 'u').exec(text);
                 if (match && match[0].length !== text.length) text = `${match[0].trimEnd()}${this._wordLimit.end}`;
@@ -662,14 +700,24 @@ export class TextEntry extends Entry {
 
         let container = withClass(this.getExtraAttributesMap(), ['fi-in-text', { 'fi-numeric': isNumeric }]);
         container = withClass(container, [{ 'fi-in-text-has-badges': this._badge }, { 'fi-wrapped': this._wrap }, alignmentClass(alignment)]);
-        if (count === 1 && !this._bulleted) {
+        // Prefix and suffix actions (icon buttons by default), mounted with this entry's key.
+        const ctx = this.context();
+        const mountContext = { ...((this.livewire as any)?.getActionMountContext?.() ?? {}), schemaComponent: this.getKey() };
+        const affixHtml = async (actions: Renderable[]) => {
+            const html: string[] = [];
+            for (const action of actions) if (await action.isVisible(ctx)) html.push(await (action as any).toHtml(ctx, mountContext));
+            return html.length ? `<div class="fi-in-text-affix">${html.join('')}</div>` : '';
+        };
+        const prefixHtml = await affixHtml(this.getPrefixActions()), suffixHtml = await affixHtml(this.getSuffixActions());
+        const hasAffixActions = prefixHtml !== '' || suffixHtml !== '';
+        if (count === 1 && !this._bulleted && !hasAffixActions) {
             const { attributes, inner } = itemData(items[0]);
             return this.wrapEmbeddedHtml(`<div ${renderAttrs(mergeAttrs(attributes, container))}>${inner}</div>`);
         }
         container = withClass(container, [{ 'fi-bulleted': this._bulleted }, { 'fi-in-text-has-line-breaks': hasLineBreaks }]);
-        if (overLimit) {
+        if (overLimit || hasAffixActions) {
             const expandable = hasLineBreaks && this._expandableLimitedList;
-            container = withClass(mergeAttrs({ 'x-data': expandable ? '{ isLimited: true }' : null }, container), ['fi-in-text-list-limited']);
+            container = withClass(mergeAttrs({ 'x-data': expandable && overLimit ? '{ isLimited: true }' : null }, container), [{ 'fi-in-text-affixed': hasAffixActions, 'fi-in-text-list-limited': overLimit > 0 }]);
             const listItems = items.map((item, index) => {
                 const { attributes, inner } = itemData(item);
                 return `<li ${index >= listLimit ? 'x-show="! isLimited" x-cloak x-transition ' : ''}${renderAttrs(attributes)}>${inner}</li>`;
@@ -677,7 +725,9 @@ export class TextEntry extends Entry {
             const message = expandable
                 ? `<div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = false" x-show="isLimited" class="fi-link fi-size-xs">${e(tc('filament-infolists::components.entries.text.actions.expand_list', overLimit))}</div><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = true" x-cloak x-show="! isLimited" class="fi-link fi-size-xs">${e(tc('filament-infolists::components.entries.text.actions.collapse_list', overLimit))}</div>`
                 : e(tc('filament-infolists::components.entries.text.more_list_items', overLimit));
-            return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}><ul>${listItems}</ul><div class="fi-in-text-list-limited-message">${message}</div></div>`);
+            const limitedMessage = overLimit ? `<div class="fi-in-text-list-limited-message">${message}</div>` : '';
+            const body = `<ul>${listItems}</ul>${limitedMessage}`;
+            return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}>${prefixHtml}${hasAffixActions ? `<div class="fi-in-text-affixed-content">${body}</div>` : body}${suffixHtml}</div>`);
         }
         const listItems = items.map((item) => { const { attributes, inner } = itemData(item); return `<li ${renderAttrs(attributes)}>${inner}</li>`; }).join('');
         return this.wrapEmbeddedHtml(`<ul ${renderAttrs(container)}>${listItems}</ul>`);
@@ -753,7 +803,39 @@ export class ImageEntry extends Entry {
     private _defaultImageUrl: Lazy<string | null, ComponentContext> = null;
     private _extraImgAttributes: Record<string, string> = {};
     private _wrap = true;
+    private _storage: Lazy<FileUrlStorage | null, ComponentContext> = null;
+    private _visibility: Lazy<'public' | 'private' | null, ComponentContext> = null;
+    private _checkFileExistence: Lazy<boolean, ComponentContext> = true;
+    /**
+     * Application-wide storage of the images whose state is a stored file key (Filament's default disk), e.g.
+     * `ImageEntry.storage = FileUpload.storage`. Without one, only URLs are displayed.
+     */
+    static storage: FileUrlStorage | null = null;
     static make(name: string): ImageEntry { return configured(new ImageEntry(name)); }
+    /** Storage of the images (Filament's `disk()`): a `FileStorage` of `@navette-js/forms`, or anything giving URLs of keys. */
+    storage(storage: Lazy<FileUrlStorage | null, ComponentContext>): this { this._storage = storage; return this; }
+    /** `'private'`: images are shown through temporary URLs of the storage. By default, the storage's own visibility. */
+    visibility(visibility: Lazy<'public' | 'private' | null, ComponentContext>): this { this._visibility = visibility; return this; }
+    /** `false`: stored images are not checked before being displayed (a missing file shows the default image otherwise). */
+    checkFileExistence(condition: Lazy<boolean, ComponentContext> = true): this { this._checkFileExistence = condition; return this; }
+    async getStorage(): Promise<FileUrlStorage | null> { return (await evaluate(this._storage, this.context())) ?? ImageEntry.storage; }
+    async getVisibility(): Promise<'public' | 'private'> {
+        const visibility = await evaluate(this._visibility, this.context());
+        if (visibility === 'public' || visibility === 'private') return visibility;
+        return (await this.getStorage())?.visibility === 'private' ? 'private' : 'public';
+    }
+    async shouldCheckFileExistence(): Promise<boolean> { return Boolean(await evaluate(this._checkFileExistence, this.context())); }
+    /**
+     * URL of an image of the state, like Filament's `getImageUrl()`: a local or http(s) URL as is; a stored file key through
+     * the storage (`null` when it is missing and `checkFileExistence()` is on, a temporary URL when private).
+     */
+    async getImageUrl(state: unknown): Promise<string | null> {
+        if (isImageUrl(state)) return state.trim();
+        const storage = await this.getStorage();
+        if (!storage || !isSafeStorageKey(state)) return null;
+        const url = await resolveStoredFileUrl(storage, state, { visibility: await this.getVisibility(), checkExistence: await this.shouldCheckFileExistence() });
+        return isImageUrl(url) ? url.trim() : null;
+    }
     /** Height of the images: a CSS length (`40px`, `2.5rem`…) or a number of pixels; `8rem` by default. Any other value is ignored. */
     imageHeight(height: number | string | null): this { if (height === null) this._height = null; else this._height = cssLength(height) ?? this._height; return this; }
     /** Width of the images: a CSS length or a number of pixels. Any other value is ignored. */
@@ -783,8 +865,8 @@ export class ImageEntry extends Entry {
         const state = await this.getState();
         const fallback = await evaluate(this._defaultImageUrl, ctx);
         const defaultUrl = isImageUrl(fallback) ? fallback.trim() : null;
-        let sources = (isBlank(state) ? (defaultUrl ? [defaultUrl] : []) : Array.isArray(state) ? state : [state])
-            .map((source) => (isImageUrl(source) ? source.trim() : defaultUrl)).filter((source): source is string => source !== null);
+        const items = isBlank(state) ? (defaultUrl ? [defaultUrl] : []) : Array.isArray(state) ? state : [state];
+        let sources = (await Promise.all(items.map(async (item) => ({ item, src: (await this.getImageUrl(item)) ?? defaultUrl })))).filter((source): source is { item: unknown; src: string } => source.src !== null);
         if (!sources.length) return this.wrapEmbeddedHtml(this._placeholder !== null || this._emptyTooltip !== null ? this.emptyHtml(['fi-in-image']) : this.emptyHtml(['fi-in-image', { 'fi-wrapped': this._wrap }]));
         const count = sources.length;
         const overLimit = this._limit && count > this._limit ? count - this._limit : 0;
@@ -794,9 +876,10 @@ export class ImageEntry extends Entry {
         const width = this._width ?? (this._circular || this._square ? height : null);
         const size = [`height: ${height}`, width ? `width: ${width}` : null];
         const extraImg = escapeAttributes(Object.fromEntries(Object.entries(this._extraImgAttributes).filter(([name]) => isAllowedImgAttribute(name))));
-        const images = sources.map((source) => {
-            const alt = resolveItem(this._alt, ctx.record, source);
-            return `<img ${renderAttrs(withStyle(mergeAttrs({ alt: e(alt ?? ''), src: e(source), 'x-tooltip': tooltipJs(resolveItem(this._tooltip, ctx.record, source)) }, extraImg), size))} />`;
+        const images = sources.map(({ item, src }) => {
+            // Alt text and tooltip functions receive the state item (the URL, or the stored file key).
+            const alt = resolveItem(this._alt, ctx.record, item);
+            return `<img ${renderAttrs(withStyle(mergeAttrs({ alt: e(alt ?? ''), src: e(src), 'x-tooltip': tooltipJs(resolveItem(this._tooltip, ctx.record, item)) }, extraImg), size))} />`;
         }).join('');
         const remaining = overLimit && this._limitedRemainingText
             ? `<div ${renderAttrs(withStyle({ class: cls(['fi-in-image-limited-remaining-text', this._limitedRemainingTextSize ? `fi-size-${textSize(this._limitedRemainingTextSize)}` : null]) }, size))}>+${overLimit}</div>`
@@ -1004,7 +1087,18 @@ export class RepeatableEntry extends Entry {
     private _grid: Record<string, number> | number | null = null;
     private _itemColumns: Record<string, number> | number | null = null;
     private _contained = true;
+    private _maxItemsForProcessing: number | null = null;
     static make(name: string): RepeatableEntry { return configured(new RepeatableEntry(name)); }
+    /**
+     * Refuses to build more item schemas than this (Filament's `maxItemsForProcessing()`): above it, rendering stops with an
+     * HTTP 413 error instead of truncating the data. `null` (default) disables the limit.
+     */
+    maxItemsForProcessing(count: number | null): this { this._maxItemsForProcessing = count === null || !Number.isFinite(count) ? null : Math.max(0, Math.floor(count)); return this; }
+    getMaxItemsForProcessing(): number | null { return this._maxItemsForProcessing; }
+    private assertItemsForProcessing(count: number): void {
+        const max = this._maxItemsForProcessing;
+        if (max !== null && count > max) throw Object.assign(new Error(`The [${this._name ?? 'repeatable'}] entry has more than ${max} items to process.`), { status: 413 });
+    }
     /** Renders the items as a table with these columns, in the order of the schema's entries. */
     table(columns: RepeatableColumn[] | null): this { this._tableColumns = columns; return this; }
     /** Components repeated for each item. A function returns fresh instances for each item. */
@@ -1024,6 +1118,8 @@ export class RepeatableEntry extends Entry {
     async toHtml(): Promise<string> {
         const state = await this.getState();
         const items: unknown[] = Array.isArray(state) ? state : [];
+        // Counted before any item schema is built, in both layouts.
+        this.assertItemsForProcessing(items.length);
         const columns = this._tableColumns ?? [];
         if (!columns.length) {
             if (!items.length) return this.wrapEmbeddedHtml(this.emptyHtml(['fi-in-repeatable', { 'fi-contained': this._contained }]));

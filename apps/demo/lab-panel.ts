@@ -14,6 +14,9 @@ import { LabOrders } from './lab-orders.ts';
 import { labTableFeatureResources } from './lab-table-features.ts';
 import { LabColumns } from './lab-columns.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
+import { labJsWidgets, LabJsWidgetsDashboard } from './widgets/lab-d11-js-widget.ts';
+import { LabTabsPage } from './lab-d11-tabs.ts';
+import { labPrivateFiles, LabUiPage } from './lab-d11.ts';
 import { LabFrameworkFields } from './lab-framework-fields.ts';
 import { LabSpecificFields } from './lab-specific-fields.ts';
 import { LabRichEditorOptions } from './lab-rich-editor-options.ts';
@@ -369,6 +372,8 @@ class LabCatalogProducts extends Resource {
 }
 
 export function labPanel(options: { key: string; login: typeof Login; auth: AuthProvider; canAccess: (user: any) => boolean }): Panel {
+    // The private storage of the UI lab signs its URLs with the panel key.
+    labPrivateFiles(options.key);
     return Panel.make()
         .id('lab')
         .path('lab')
@@ -381,9 +386,10 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         // Example plugins (`examples/`) and a configurable resource.
         .plugin(labPluginExamples())
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.
-        // Action features (policy messages, rate limits, links, modal options): left out of the parity screenshots.
-        .pages([LabWidgetsDashboard, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabActionsPage])])
-        .widgets(labWidgets)
+        // Action features (policy messages, rate limits, links, modal options), tabs, JavaScript widgets, notification actions and
+        // private files labs: left out of the parity screenshots.
+        .pages([LabWidgetsDashboard, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabActionsPage, LabTabsPage, LabJsWidgetsDashboard, LabUiPage])])
+        .widgets([...labWidgets, ...(process.env.NAVETTE_NO_THEMES ? [] : labJsWidgets)])
         .renderHook('panels::scripts.before', () => '<script src="/js/lab-chart-plugins.js"></script>')
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
         // Collapsed to icons, the "Tables" group (it has an icon) opens a dropdown of its items.

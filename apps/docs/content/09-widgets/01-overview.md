@@ -18,6 +18,7 @@ A widget is a class extending one of the widget classes of `@navette-js/panels`:
 | `ChartWidget` | A Chart.js [chart](/widgets/charts). |
 | `TableWidget` | A [table](/widgets/table-widgets) of records. |
 | `CalendarWidget` | A month, week or list [calendar](/widgets/calendar) of events. |
+| `JsWidget` | Content rendered in the browser by your [JavaScript module](/widgets/javascript-widgets) (plain DOM code, React, Vue, Svelte…). |
 | `Widget` | Anything: you write the HTML (see [custom widgets](#custom-widgets)). |
 
 ```ts
@@ -406,6 +407,8 @@ export class Greeting extends Widget {
 ```
 
 `render()` may be asynchronous. Escape everything that comes from data with `e()`.
+
+To render the content in the browser with your own JavaScript module instead (plain DOM code, React, Vue, Svelte…), extend `JsWidget`: see [JavaScript widgets](/widgets/javascript-widgets).
 
 A widget is a stateful component: its public properties are sent to the browser with the widget's signed snapshot, and the browser may update them, unless they are listed in the static `locked` property. Only the methods listed in the static `callable` property can be called from the browser, for example with `wire:click="refreshStats"`:
 

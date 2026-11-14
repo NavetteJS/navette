@@ -23,8 +23,10 @@ test('Notification.fromArray(): the JSON of FilamentNotification is read, and wh
     assert.equal(data.id, 'greeting');
     assert.deepEqual([data.title, data.body, data.status, data.color, data.icon, data.iconColor, data.duration], ['Saved', 'Changes saved.', 'success', 'warning', 'o-document-text', 'info', 5000]);
     assert.deepEqual(data.actions, [
-        { label: 'View post', url: '/posts/1', openUrlInNewTab: true, close: false, dispatch: null, color: 'gray', button: true, outlined: false, markAsRead: false, markAsUnread: false },
-        { label: 'Undo', url: null, openUrlInNewTab: false, close: true, dispatch: { event: 'undoEditingPost', data: [5], direction: 'to', component: 'posts-table' }, color: null, button: false, outlined: false, markAsRead: false, markAsUnread: false },
+        { name: 'viewPost', label: 'View post', url: '/posts/1', openUrlInNewTab: true, close: false, dispatch: null, color: 'gray', button: true, outlined: false, markAsRead: false, markAsUnread: false },
+        { name: 'undo', label: 'Undo', url: null, openUrlInNewTab: false, close: true, dispatch: { event: 'undoEditingPost', data: [5], direction: 'to', component: 'posts-table' }, color: null, button: false, outlined: false, markAsRead: false, markAsUnread: false },
+        // Action groups are read too (Filament's `ActionGroup::fromArray()`).
+        { group: true, actions: [{ name: 'grouped', label: 'Grouped', url: null, openUrlInNewTab: false, close: false, dispatch: null, color: null, button: false, outlined: false, markAsRead: false, markAsUnread: false }], label: null, icon: null, color: null, size: 'sm', tooltip: null, view: 'link', dropdown: true, placement: null, width: null, offset: null, maxHeight: null, extraAttributes: undefined },
     ]);
 
     // Forged values: unsafe ids are replaced, unknown statuses, colors, icons and event names are dropped, durations are bounded.
@@ -34,7 +36,7 @@ test('Notification.fromArray(): the JSON of FilamentNotification is read, and wh
     }).getData();
     assert.match(forged.id, /^[0-9a-f-]{36}$/);
     assert.deepEqual([forged.status, forged.color, forged.icon, forged.iconColor, forged.duration], [null, null, null, null, 86_400_000]);
-    assert.deepEqual(forged.actions?.map((action) => action.dispatch), [null, null], 'no event without a valid name, nor "to" without a component');
+    assert.deepEqual(forged.actions?.map((action: any) => action.dispatch), [null, null], 'no event without a valid name, nor "to" without a component');
     assert.equal(Notification.fromArray({ duration: 'persistent' }).getData().duration, 'persistent');
     assert.equal(Notification.fromArray('nope').getData().title, null);
 
@@ -73,8 +75,10 @@ test('notifications component: a notification sent from JavaScript is pushed, cl
     const ids = (snap: Snapshot) => Object.keys((snap.data.notifications as any)[0]);
     const dispatch = (snap: Snapshot, event: string, params: unknown) => runtime.update(JSON.parse(JSON.stringify(snap)), {}, [{ method: '__dispatch', params: [event, params] }], { mailbox: 'm' });
     // `FilamentNotification.send()` dispatches `notificationSent` with `{ notification }`.
-    let next = await dispatch(snapshot, 'notificationSent', { notification: { id: 'js-1', title: '<b>Saved</b>', status: 'success', duration: 'persistent' } });
-    assert.match(next.effects.html!, /<h3 class="fi-no-notification-title">&lt;b&gt;Saved&lt;\/b&gt;<\/h3>/);
+    let next = await dispatch(snapshot, 'notificationSent', { notification: { id: 'js-1', title: '<b>Saved</b><img src=x onerror=alert(1)><script>alert(2)</script>', status: 'success', duration: 'persistent' } });
+    // Title and body are sanitized HTML, as in Filament: formatting stays, scripts and event handlers go.
+    assert.match(next.effects.html!, /<h3 class="fi-no-notification-title"><b>Saved<\/b>/);
+    assert.doesNotMatch(next.effects.html!, /onerror|<script|alert\(2\)/);
     assert.match(next.effects.html!, /x-on:close-notification\.window="if \(\$event\.detail\.id == &#039;js-1&#039;\) close\(\)"|x-on:close-notification\.window="if \(\$event\.detail\.id == 'js-1'\) close\(\)"/);
     assert.deepEqual(ids(next.snapshot), ['js-1']);
     // Invalid data is ignored.

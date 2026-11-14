@@ -65,7 +65,7 @@ KeyValueEntry.make('metadata')
 
 ## Customizing the placeholder text
 
-When there are no pairs, the table displays "No entries". You may change this text using the `placeholder()` method:
+When there are no pairs, the table displays "No entries". You may change this text using the `placeholder()` method, or its alias `emptyMessage()`:
 
 ```ts
 import { KeyValueEntry } from '@navette-js/infolists';
@@ -79,3 +79,5 @@ KeyValueEntry.make('metadata')
 KeyValueEntry.make('metadata')
     .placeholder('No metadata')
 ```
+
+`emptyMessage('No metadata')` does the same as `placeholder('No metadata')`.

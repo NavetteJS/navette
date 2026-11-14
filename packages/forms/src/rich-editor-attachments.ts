@@ -1,13 +1,7 @@
 // Rich editor file attachments: images carry the stored file's key in `data-id` (the `id` attribute of the image node), so
 // that their URL can be computed when the content is loaded or rendered: a temporary signed URL for private files.
+import { temporaryFileUrlExpiry } from '@navette-js/support';
 import { safeFileUrl } from './file-upload-support.ts';
-
-/** Expiry of a temporary URL, as Filament's: 30 minutes from now, rounded up to the end of the hour. */
-export function defaultTemporaryUrlExpiry(minutes = 30): Date {
-    const date = new Date(Date.now() + minutes * 60 * 1000);
-    date.setMinutes(59, 59, 999);
-    return date;
-}
 
 /** Where attached files are stored (a `FileStorage` of `@navette-js/forms`). */
 export type AttachmentStorage = {
@@ -44,7 +38,10 @@ export async function attachmentUrl(storage: AttachmentStorage | null, visibilit
     try { info = await storage.info(key); } catch { return null; }
     if (!info) return null;
     if (visibility === 'private' && typeof storage.temporaryUrl === 'function') {
-        const temporary = await storage.temporaryUrl(key, defaultTemporaryUrlExpiry());
+        // Expiry as Filament's: 30 minutes from now (`fileUrlConfig`), rounded up to the end of the hour. A storage that cannot
+        // sign (a public `LocalFileStorage` without a key) gives its usual URL.
+        let temporary: string | null = null;
+        try { temporary = await storage.temporaryUrl(key, temporaryFileUrlExpiry()); } catch { temporary = null; }
         if (temporary) return safeFileUrl(temporary);
     }
     return safeFileUrl(info.url);

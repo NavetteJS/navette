@@ -159,6 +159,59 @@ export class ${name} extends Page {
 `;
 }
 
+/** `RevenueOverview` → `revenue-overview`. */
+export const kebab = (value: string): string => value.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2').toLowerCase();
+
+/**
+ * JavaScript widget (`make:widget <Name> --js`): the widget class, which registers its renderer module as an asset loaded on
+ * request, and the framework-free renderer (Filament's `JsWidgetRenderer` starter). Paths are relative to the project root.
+ */
+export function generateJsWidget(name: string, panel: string): { classFile: string; rendererFile: string; files: Record<string, string> } {
+    const id = kebab(name);
+    const classFile = `src/${panel}/widgets/${name}.ts`;
+    const rendererFile = `resources/js/${panel}/widgets/${id}.js`;
+    const assetId = `${panel}/widgets/${id}`;
+    const widget = `import { fileURLToPath } from 'node:url';
+import { Js, JsWidget, NavetteAsset } from '@navette-js/panels';
+
+// The renderer module: served by the panel, and only loaded by the pages showing this widget.
+NavetteAsset.register([
+    Js.make('${assetId}', fileURLToPath(new URL('../../../${rendererFile}', import.meta.url))).loadedOnRequest(),
+]);
+
+export class ${name} extends JsWidget {
+    getRenderer(): string {
+        return NavetteAsset.getScriptSrc('${assetId}');
+    }
+
+    // Received by the renderer as \`props.configuration\`: JSON values only, and only what the user may see.
+    getRendererConfiguration(): Record<string, unknown> {
+        return {
+            heading: '${headline(snake(name))}',
+            description: 'Widget description',
+        };
+    }
+}
+`;
+    const renderer = `/** @param {import('@navette-js/panels').JsWidgetRendererContext} context */
+export default function mount${name}({ host, props: initialProps }) {
+    const heading = document.createElement('h2')
+    const paragraph = document.createElement('p')
+
+    const update = ({ configuration }) => {
+        heading.textContent = configuration.heading ?? 'Widget heading'
+        paragraph.textContent = configuration.description ?? 'Widget description'
+    }
+
+    update(initialProps)
+    host.append(heading, paragraph)
+
+    return { update, destroy: () => host.replaceChildren() }
+}
+`;
+    return { classFile, rendererFile, files: { [classFile]: widget, [rendererFile]: renderer } };
+}
+
 export function generateWidget(name: string, type: 'stats' | 'chart' | 'table'): string {
     if (type === 'chart') return `import { ChartWidget, type ChartData } from '@navette-js/panels';
 

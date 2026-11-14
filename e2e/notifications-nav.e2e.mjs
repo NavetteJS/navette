@@ -38,8 +38,7 @@ try {
         await flash('Hello from JavaScript').waitFor({ timeout: 5000 });
         const notification = flash('Hello from JavaScript');
         assert.ok(await notification.evaluate((el) => el.classList.contains('fi-status-success')));
-        // The body is escaped, not parsed as HTML.
-        assert.match(await notification.locator('.fi-no-notification-body').innerText(), /<img src=x/);
+        // The body is sanitized HTML, as in Filament: the image with an event handler is removed.
         assert.equal(await notification.locator('.fi-no-notification-body img').count(), 0);
         // The default label comes from the action name; only a local or http(s) URL becomes a link.
         const view = notification.locator('a.fi-btn', { hasText: 'View customers' });

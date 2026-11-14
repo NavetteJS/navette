@@ -212,6 +212,33 @@ Tab.make('Notifications')
     .badgeTooltip('Unread notifications')
 ```
 
+### Lazy loading tab badges
+
+If you have expensive queries powering your tab badges, the initial page load may be slow. You can lazy load tab badges using the `lazyLoadedBadge()` method, which will load the badge values asynchronously after the page has rendered:
+
+```ts
+import { Tab, Tabs } from '@navette-js/schemas';
+
+Tabs.make('Tabs')
+    .schema([
+        Tab.make('Notifications')
+            .badge(() => countUnreadNotifications())
+            .lazyLoadedBadge()
+            .schema([
+                // ...
+            ]),
+        // ...
+    ])
+```
+
+<Aside variant="warning">
+The `badge()` value must be returned from a function when using `lazyLoadedBadge()`. If you pass a raw value, such as the result of a query you ran yourself, the query runs immediately when the tab is built, defeating the purpose of lazy loading.
+</Aside>
+
+As well as allowing a static value, the `lazyLoadedBadge()` method also accepts a function, which receives the context object.
+
+While the badges are loading, a small loading indicator appears in place of each lazy-loaded badge. Once the data is fetched with the `getLazyLoadedTabBadges()` method of the tabs (an [exposed method](/schemas/custom-components#calling-component-methods-from-javascript)), the loading indicators are replaced with the badges, with their color, icon and tooltip. The badge value is inserted as text, never as HTML. Lazy-loaded badges also work in the overflow dropdown of [non-scrollable tabs](#disabling-scrollable-tabs). The former names `deferBadge()` and `getDeferredTabBadges()` are kept as deprecated aliases.
+
 ## Using grid columns within a tab
 
 You may use the `columns()` method to customize the [grid](/schemas/layouts#grid-system) within the tab:
@@ -448,6 +475,51 @@ Tabs.make('Settings')
 
 A value of the query string that is not the key of a visible tab is ignored, both when the page is rendered and in the browser.
 
-<Aside variant="warning">
-Lazy loading tab badges and tabs without content panels are not available in Navette yet. The content of a tab can be [lazy loaded](/schemas/overview#lazy-loading-a-child-schema) with `Tab.make('…').lazyLoaded()`: it loads when the tab is opened.
-</Aside>
+## Binding the active tab to a Livewire property
+
+Instead of being handled in the browser, the active tab can be stored in a public property of the component hosting the schema (a page or a custom component), using the `livewireProperty()` method. Pass the tabs as an object: its keys are the values written into the property when a tab is clicked. Only the content of the active tab is rendered, on the server:
+
+```ts
+import { Tab, Tabs } from '@navette-js/schemas';
+
+class PostsOverview extends Page {
+    activeStatus = 'all';
+
+    // ...
+
+    contentSchema(schema: Schema): Schema {
+        return schema.components([
+            Tabs.make('Status')
+                .livewireProperty('activeStatus')
+                .schema({
+                    all: Tab.make('All').schema([
+                        // ...
+                    ]),
+                    published: Tab.make('Published').schema([
+                        // ...
+                    ]),
+                }),
+        ]);
+    }
+}
+```
+
+Clicking a tab sets the property with `$set()`, which re-renders the component: the property can then be used anywhere in the component, to filter a query for example. A value that is not the key of a visible tab selects no tab. The property name must be a JavaScript identifier, since it is written into the page. Like any public property, its value comes from the browser: check it before using it in a query.
+
+## Using tabs without content panels
+
+If your `livewireProperty()` tabs change a filter instead of showing separate content panels, use `tabPanels(false)`. This renders a labelled group of buttons with a pressed state (`aria-pressed`) rather than a tablist. Each button remains reachable using Tab:
+
+```ts
+import { Tab, Tabs } from '@navette-js/schemas';
+
+Tabs.make('Status')
+    .livewireProperty('activeStatus')
+    .tabPanels(false)
+    .schema({
+        all: Tab.make('All'),
+        published: Tab.make('Published'),
+    })
+```
+
+Resource list tabs use this mode automatically. With `scrollable(false)`, the tabs that do not fit move to a dropdown menu of buttons. As well as allowing a static value, the `tabPanels()` method also accepts a function, which receives the context object.

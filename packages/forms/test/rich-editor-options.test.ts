@@ -192,7 +192,7 @@ test('private attachments: no URL saved, a temporary signed URL from the storage
     forged.data.body = doc(image({ id: key }));
     await forgedSchema.toHtml();
     assert.equal((forged.data.body as any).content[0].content[0].attrs.src, undefined);
-    // A storage without `temporaryUrl()` gives its usual URL.
+    // A storage that cannot sign temporary URLs (a public LocalFileStorage without a key) gives its usual URL.
     assert.equal(await (form(host({}), [RichEditor.make('body').fileAttachmentsStorage(new LocalFileStorage(root, '/p')).fileAttachmentsVisibility('private')]).getFlatComponents()[0] as RichEditor).getFileAttachmentUrl(key), `/p/${key}`);
 });
 

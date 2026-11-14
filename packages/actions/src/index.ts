@@ -11,6 +11,8 @@ export { mergeIntoRootTag, mergeAttributeSets, attributesToHtml, type ExtraAttri
 /** Policy abilities required by `authorize('update')` (all) or `authorizeAny([...])` (one). */
 type ActionAuthorization = { type: 'all' | 'any'; abilities: string[]; arguments: unknown[] };
 const isAbilityAuthorization = (value: unknown): value is ActionAuthorization => typeof value === 'object' && value !== null && !(value instanceof AuthorizationResponse) && Array.isArray((value as ActionAuthorization).abilities);
+import { actionFromArray, actionGroupFromArray, actionGroupToArray, actionToArray, type ActionArray, type ActionGroupArray } from './action-array.ts';
+export type { ActionArray, ActionGroupArray } from './action-array.ts';
 
 views.namespace('filament-actions', fileURLToPath(new URL('../views', import.meta.url)));
 
@@ -126,7 +128,7 @@ export class Action implements Renderable {
     url(url: string | null | ((ctx: ComponentContext) => string | null)): this { if (typeof url === 'function') this._lazyUrl = url; else { this._url = url; this._lazyUrl = null; } return this; }
     /** A string: host component method called on click (`wire:click`). A function: the action handler, mounted through `mountAction()` (with its modal, if any). */
     /** On click, dispatches a Livewire event (to a listener of the page or of another component), with parameters. */
-    dispatch(event: string, params: unknown[] | Record<string, unknown> = []): this { return this.action(`$dispatch(${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`); }
+    dispatch(event: string, params: unknown[] | Record<string, unknown> = []): this { this.recordDispatch(event, params, false, null); return this.action(`$dispatch(${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`); }
     action(action: string | ((ctx: ActionCallContext) => unknown | Promise<unknown>) | null): this {
         if (typeof action === 'function') { this._handler = action; this._action = null; } else { this._action = action; this._handler = null; }
         return this;
@@ -1007,6 +1009,52 @@ export class Action implements Renderable {
             formLoader: loadingIndicator(new Attributes({ 'x-cloak': 'x-cloak', 'x-show': 'isProcessing' })),
         });
     }
+
+    // Notification actions (Filament's `CanClose`, `CanMarkAsRead`, `CanDispatch`) and the array format.
+    private _shouldClose = false;
+    private _shouldMarkAsRead = false;
+    private _shouldMarkAsUnread = false;
+    private _event: string | null = null;
+    private _eventData: unknown[] | Record<string, unknown> = [];
+    private _dispatchDirection: 'self' | 'to' | false = false;
+    private _dispatchToComponent: string | null = null;
+    private recordDispatch(event: string, data: unknown[] | Record<string, unknown>, direction: 'self' | 'to' | false, component: string | null): void {
+        this._event = event; this._eventData = data; this._dispatchDirection = direction; this._dispatchToComponent = component;
+    }
+    /** In a notification: the click closes it. */
+    close(condition = true): this { this._shouldClose = condition; return this; }
+    shouldClose(): boolean { return this._shouldClose; }
+    /** In a database notification: the click marks it as read. */
+    markAsRead(condition = true): this { this._shouldMarkAsRead = condition; return this; }
+    shouldMarkAsRead(): boolean { return this._shouldMarkAsRead; }
+    /** In a database notification: the click marks it as unread. */
+    markAsUnread(condition = true): this { this._shouldMarkAsUnread = condition; return this; }
+    shouldMarkAsUnread(): boolean { return this._shouldMarkAsUnread; }
+    /** On click, dispatches a Livewire event to the component showing the action only. */
+    dispatchSelf(event: string, params: unknown[] | Record<string, unknown> = []): this {
+        this.action(`$dispatchSelf(${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`);
+        this.recordDispatch(event, params, 'self', null);
+        return this;
+    }
+    /** On click, dispatches a Livewire event to the components with this name. */
+    dispatchTo(component: string, event: string, params: unknown[] | Record<string, unknown> = []): this {
+        this.action(`$dispatchTo(${js(component)}, ${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`);
+        this.recordDispatch(event, params, 'to', component);
+        return this;
+    }
+    getEvent(): string | null { return this._event; }
+    getEventData(): unknown[] | Record<string, unknown> { return this._eventData; }
+    getDispatchDirection(): 'self' | 'to' | false { return this._dispatchDirection; }
+    getDispatchToComponent(): string | null { return this._dispatchToComponent; }
+    /** URL of the action without a component context (a URL function is called with an empty context). */
+    getUrl(): string | null { return actionToArray(this).url; }
+    getSize(): string { return this._size; }
+    getIconPosition(): 'before' | 'after' { return this._iconAfter ? 'after' : 'before'; }
+    isOutlined(): boolean { return this._outlined; }
+    /** Filament's array of the action (notifications store their actions this way). */
+    toArray(): ActionArray { return actionToArray(this); }
+    /** Rebuilds an action from its array (data from the database or the browser is checked). */
+    static fromArray(data: unknown): Action { return actionFromArray(Action, data); }
 }
 
 /** Removes the click behavior (href, `x-on:`, `wire:click`, `wire:navigate`) from rendered attributes. */
@@ -1044,12 +1092,12 @@ export class ActionGroup {
     label(label: string | null): this { this._label = label; return this; }
     icon(icon: string): this { this._icon = icon; return this; }
     color(color: string): this { this._color = color; return this; }
-    size(size: string): this { this._size = size; return this; }
+    size(size: string): this { this._size = size; this._sizeSet = true; return this; }
     tooltip(tooltip: string | null): this { this._tooltip = tooltip; return this; }
     /** Labeled button trigger. */
-    button(): this { this._view = 'button'; return this; }
-    link(): this { this._view = 'link'; return this; }
-    iconButton(): this { this._view = 'icon-button'; return this; }
+    button(): this { this._view = 'button'; this._viewSet = true; return this; }
+    link(): this { this._view = 'link'; this._viewSet = true; return this; }
+    iconButton(): this { this._view = 'icon-button'; this._viewSet = true; return this; }
     /** `false`: inside another group, the actions form a section of its menu (with a divider). */
     dropdown(condition = true): this { this._dropdown = condition; return this; }
     hasDropdown(): boolean { return this._dropdown; }
@@ -1119,4 +1167,21 @@ export class ActionGroup {
         const style = this._maxHeight ? ` style="max-height: ${this._maxHeight}"` : '';
         return `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${this.triggerHtml()}</div><div x-cloak x-float.placement.${this._placement ?? 'bottom-end'}${this._flip ? '.flip' : ''}.teleport.offset="{ offset: ${this._offset ?? 8} }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="fi-dropdown-list" role="group">${items.join(' ')}</div>`).join('')}</div></div>`;
     }
+
+    private _viewSet = false;
+    /** Trigger style used unless `button()`, `link()` or `iconButton()` was called (notifications use a link). */
+    defaultTriggerView(view: 'button' | 'link' | 'icon-button'): this { if (!this._viewSet) this._view = view; return this; }
+    getTriggerView(): 'button' | 'link' | 'icon-button' { return this._view; }
+    /** Size used unless `size()` was called. */
+    defaultSize(size: string): this { if (!this._sizeSet) this._size = size; return this; }
+    private _sizeSet = false;
+    getLabel(): string | null { return this._label; }
+    getIcon(): string | null { return this._icon; }
+    getColor(): string { return this._color; }
+    getSize(): string { return this._size; }
+    getTooltip(): string | null { return this._tooltip; }
+    /** Filament's array of the group and its actions. */
+    toArray(): ActionGroupArray { return actionGroupToArray(this); }
+    /** Rebuilds a group from its array (data from the database or the browser is checked). */
+    static fromArray(data: unknown): ActionGroup { return actionGroupFromArray(Action, ActionGroup, data); }
 }
