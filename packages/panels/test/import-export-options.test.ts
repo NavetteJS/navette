@@ -164,7 +164,7 @@ test('import columns: guesses, casting, multiple values with nested rules, valid
     const name = ItemImporter.getColumns()[0];
     assert.deepEqual(name.getExamples(), ['Lamp', 'Desk']);
     assert.equal(name.getExampleHeader(), 'Item name');
-    assert.equal((ItemImporter.getColumns()[5].getSelect(['tags']) as any)._belowContent, 'Tag keys, separated by commas.');
+    assert.equal((ItemImporter.getColumns()[5].getSelect(['tags']) as any)._slots.belowContent, 'Tag keys, separated by commas.');
     assert.throws(() => ImportColumn.make('x').rules(['not_a_rule']), /Unknown validation rule/);
     // Each value of a multiple column is validated.
     const result = await ItemImporter.test({ adapter }).import({ name: 'Rated', sku: 'R-1', ratings: '3|9' });
