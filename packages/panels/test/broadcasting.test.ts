@@ -279,7 +279,7 @@ test('a notification coming back from the browser is rebuilt from checked values
     assert.equal(stored.status, null);
     assert.equal(stored.icon, null);
     assert.equal(stored.iconColor, null);
-    assert.equal(stored.duration, 3_600_000);
+    assert.equal(stored.duration, 86_400_000);
     assert.deepEqual(stored.actions.map((action: any) => action.label), ['Bad', 'Event', 'Open']);
     assert.equal(stored.actions[1].dispatch, null);
     const html = component.render();
