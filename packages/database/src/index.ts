@@ -28,6 +28,8 @@ export type ListQuery = {
     page: number;
     perPage: number;
 };
+/** Aggregates of one group of records (`DataAdapter.aggregateGroups()`). */
+export type AggregateGroup = { key: unknown; count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> };
 export type Page<T> = { records: T[]; total: number; page: number; perPage: number; lastPage: number; from: number | null; to: number | null };
 
 /** What the framework needs to list, read and write records, independently of the ORM. */
@@ -38,6 +40,12 @@ export interface DataAdapter<T = any> {
     sum(query: Omit<ListQuery, 'page' | 'perPage'>, columns: string[]): Promise<Record<string, number>>;
     /** Aggregates over the records of a list query: count, and column sums, averages, minimums and maximums. */
     aggregate(query: Omit<ListQuery, 'page' | 'perPage'>, columns?: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] }): Promise<{ count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> }>;
+    /**
+     * Same aggregates, one row per group of a grouped query: `group` receives the aggregate query (selecting from the list
+     * query, aliased with the table name) and must group it, e.g. `(query) => query.groupBy('status')`. Each row has the value
+     * of the first grouping expression as `key`. Optional: without it, groups are aggregated one query at a time.
+     */
+    aggregateGroups?(query: Omit<ListQuery, 'page' | 'perPage'>, columns: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] }, group: (query: any) => void): Promise<AggregateGroup[]>;
     getLabel(): string;
     count(): Promise<number>;
     paginate(query: ListQuery): Promise<Page<T>>;
@@ -179,6 +187,33 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
             min: Object.fromEntries((columns.min ?? []).map((column) => [column, row[`min_${column}`] ?? null])),
             max: Object.fromEntries((columns.max ?? []).map((column) => [column, row[`max_${column}`] ?? null])),
         };
+    }
+    async aggregateGroups(query: Omit<ListQuery, 'page' | 'perPage'>, columns: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] }, group: (query: any) => void): Promise<AggregateGroup[]> {
+        const knex = this.model.knex();
+        const table = this.model.tableName;
+        // Like Laravel's summary query: the list query becomes a subquery named after the table, so `posts.status` and `status` both work.
+        const q = knex.from(this.filtered(query).toKnexQuery().as(table)).count({ __count: '*' });
+        const qualify = (column: string) => `${table}.${column}`;
+        for (const column of columns.sum ?? []) q.sum({ [`sum_${column}`]: qualify(column) });
+        for (const column of columns.avg ?? []) q.avg({ [`avg_${column}`]: qualify(column) });
+        for (const column of columns.min ?? []) q.min({ [`min_${column}`]: qualify(column) });
+        for (const column of columns.max ?? []) q.max({ [`max_${column}`]: qualify(column) });
+        group(q);
+        // The first grouping expression is selected too, to tell the groups apart (as Filament does).
+        const grouping = ((q as any)._statements as any[]).find((statement) => statement.grouping === 'group');
+        if (!grouping) throw new Error('The group query of a summary must group the records, e.g. query.groupBy(column).');
+        const expression = grouping.type === 'groupByRaw' ? grouping.value : Array.isArray(grouping.value) ? grouping.value[0] : grouping.value;
+        if (typeof expression === 'string') q.select({ __group: expression });
+        else q.select(knex.raw(`${expression.sql} as ??`, [...(expression.bindings ?? []), '__group']));
+        const rows = (await q) as Record<string, unknown>[];
+        return rows.map((row) => ({
+            key: row.__group ?? null,
+            count: Number(row.__count ?? 0),
+            sum: Object.fromEntries((columns.sum ?? []).map((column) => [column, Number(row[`sum_${column}`] ?? 0)])),
+            avg: Object.fromEntries((columns.avg ?? []).map((column) => [column, Number(row[`avg_${column}`] ?? 0)])),
+            min: Object.fromEntries((columns.min ?? []).map((column) => [column, row[`min_${column}`] ?? null])),
+            max: Object.fromEntries((columns.max ?? []).map((column) => [column, row[`max_${column}`] ?? null])),
+        }));
     }
     /**
      * Monthly trend over the filtered query (count, or average of `average`): one value per month from `start` to `end`,

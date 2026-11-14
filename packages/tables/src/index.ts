@@ -69,6 +69,10 @@ export abstract class Column<R = any> {
 
     constructor(name: string) { this.name = name; }
     label(label: string): this { this._label = label; return this; }
+    protected _summarizers: Summarizer[] = [];
+    /** Summary row below the table. */
+    summarize(summarizer: Summarizer | Summarizer[]): this { this._summarizers = Array.isArray(summarizer) ? summarizer : [summarizer]; return this; }
+    getSummarizers(): Summarizer[] { return this._summarizers; }
     /** `column`: column (or query alias) to sort by when it differs from the name, e.g. for a relationship. */
     sortable(condition: boolean | { column: string; inverted?: boolean } = true): this { this._sortable = condition !== false; this._sortColumn = typeof condition === 'object' ? condition.column : null; this._sortInverted = typeof condition === 'object' && condition.inverted === true; return this; }
     getSortColumn(): string { return this._sortColumn ?? this.name; }
@@ -132,6 +136,8 @@ export abstract class Column<R = any> {
     protected enumCaseOf(record: R, item: unknown): EnumCase<string | number> | null { return resolveEnumCase(item, { enum: this._enum, record, attribute: this.name }); }
     /** Fixed state, or a function of the record (alias of `getStateUsing()` for a value). */
     state(state: unknown | ((record: R) => unknown)): this { this._state = typeof state === 'function' ? ({ record }) => (state as (record: R) => unknown)(record) : () => state; return this; }
+    /** True when the state is the record attribute named like the column (no custom state, no relationship). */
+    hasAttributeState(): boolean { return this._state === null && !this.name.includes('.'); }
     protected _default: unknown = null;
     /** Value used when the state is empty. */
     default(value: unknown): this { this._default = value; return this; }
@@ -218,7 +224,6 @@ export class TextColumn<R = any> extends Column<R> {
     private _since = false;
     private _numeric = false;
     private _decimals: number | null = null;
-    private _summarizers: Summarizer[] = [];
     private _limit: number | null = null;
     private _words: number | null = null;
     private _prefix: string | null = null;
@@ -260,9 +265,6 @@ export class TextColumn<R = any> extends Column<R> {
     timezone(timeZone: string | null): this { this._timeZone = timeZone; return this; }
     /** Number formatted with thousands separators; `numeric(1)`: fixed number of decimals. */
     numeric(condition: boolean | number = true): this { this._numeric = condition !== false; this._decimals = typeof condition === 'number' ? condition : null; return this; }
-    /** Summary row below the table. */
-    summarize(summarizer: Summarizer | Summarizer[]): this { this._summarizers = Array.isArray(summarizer) ? summarizer : [summarizer]; return this; }
-    getSummarizers(): Summarizer[] { return this._summarizers; }
     /** Font weight: `thin`, `light`, `medium`, `semibold`, `bold`… */
     weight(weight: PerItem<R, string | null>): this { this._weight = weight; return this; }
     /** Text size: `xs`, `sm` (default), `md` or `lg`. */
@@ -456,7 +458,9 @@ export class TextColumn<R = any> extends Column<R> {
 
 /** Values a summarizer works from: aggregates over the query (all records) or over the displayed page. */
 export type SummaryValues = { count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> };
-export type SummaryItem = { type: 'text' | 'range' | 'values'; label: string | null; value: string; labelHidden?: boolean; values?: string[]; bulleted?: boolean };
+/** Occurrences of one icon (and color) of an icon column, for `Count.make().icons()`. */
+export type IconCount = { icon: string; color: string | null; count: number };
+export type SummaryItem = { type: 'text' | 'range' | 'values' | 'icon-count'; label: string | null; value: string; labelHidden?: boolean; values?: string[]; bulleted?: boolean; icons?: IconCount[] };
 /** Records a custom summarizer works on: all records, the displayed page, or a group. */
 export type SummaryDataset = { column: string; records: () => Promise<any[]> };
 
@@ -529,12 +533,19 @@ export class Average extends Summarizer {
     getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.average.label'); }
     summarize(column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.avg[column] ?? 0); }
 }
-/** Record count. */
+/** Record count, or the occurrences of each icon of an icon column with `icons()`. */
 export class Count extends Summarizer {
     readonly kind = 'count';
+    private _icons = false;
     static make(): Count { return configured(new Count()); }
-    getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.count.label'); }
-    summarize(_column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.count); }
+    /** Counts how many times each icon (and color) of an `IconColumn` appears, instead of the records. */
+    icons(condition = true): this { this._icons = condition; return this; }
+    hasIcons(): boolean { return this._icons; }
+    getLabel(): string | null { return this._label ?? (this._icons ? null : t('filament-tables::table.summary.summarizers.count.label')); }
+    summarize(_column: string, values: SummaryValues, customValue?: unknown): SummaryItem {
+        if (this._icons) return { type: 'icon-count', label: this.getLabel(), value: '', labelHidden: this._labelHidden, icons: Array.isArray(customValue) ? (customValue as IconCount[]) : [] };
+        return this.item(customValue ?? values.count);
+    }
 }
 /** Distinct values of the column, as a (bulleted) list. */
 export class Values extends Summarizer {
@@ -590,6 +601,30 @@ export class Group<R = any> {
     /** Orders the query by group, when ordering by the column is not right (e.g. a status with a custom order). */
     orderQueryUsing(order: ((query: any, direction: SortDirection) => void) | null): this { this._orderUsing = order; return this; }
     getOrderQueryUsing(): ((query: any, direction: SortDirection) => void) | null { return this._orderUsing; }
+    private _groupQueryUsing: ((query: any, column: string) => void) | null = null;
+    /**
+     * Groups the summary query by group, so that the summaries of every group come from one query: by default
+     * `query.groupBy(column)` (`date(column)` for date groups). Needed with `getKeyFromRecordUsing()`: the first grouping
+     * expression must give the same key as the records, e.g. `(query) => query.groupByRaw("case when … end")`.
+     */
+    groupQueryUsing(callback: ((query: any, column: string) => void) | null): this { this._groupQueryUsing = callback; return this; }
+    /**
+     * Groups an aggregate query by group, or `null` when the groups must be aggregated one at a time: custom key or scope
+     * without `groupQueryUsing()`, or a column of a related table.
+     */
+    getGroupQuery(): ((query: any) => void) | null {
+        const column = this.getColumn();
+        if (this._groupQueryUsing) return (query) => { this._groupQueryUsing!(query, column); };
+        if (this._keyUsing || this._scopeUsing || column.includes('.')) return null;
+        return this._date ? (query) => { query.groupByRaw('date(??)', [column]); } : (query) => { query.groupBy(column); };
+    }
+    /** Group key of a value selected by the group query (`null` for the empty group, which is aggregated on its own). */
+    getKeyFromGroupValue(value: unknown): string | null {
+        if (value === null || value === undefined || value === '') return null;
+        if (typeof value === 'boolean') return value ? '1' : '0';
+        if (value instanceof Date) return value.toISOString().slice(0, 10);
+        return this._date ? String(value).slice(0, 10) : String(value);
+    }
     static make<R = any>(id: string): Group<R> { return configured(new Group<R>(id)); }
     label(label: string | null): this { this._label = label; return this; }
     /** Query column holding the group value, when it differs from the id (relationship). */
@@ -950,6 +985,8 @@ export class IconColumn<R = any> extends Column<R> {
         const on = item === true || item === 1 || item === '1';
         return on ? (this._trueColor ?? 'success') : (this._falseColor ?? 'danger');
     }
+    /** Icon and color shown for one item of the state (icon count summaries). */
+    getIconAndColor(record: R, item: unknown): { icon: string | null; color: string | null } { return { icon: this.iconOf(record, item), color: this.colorOf(record, item) }; }
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
         const align = this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null;
@@ -1801,13 +1838,39 @@ export class FiltersAction {
 }
 type FiltersActionView = ReturnType<FiltersAction['resolve']> & { customized: boolean };
 
-/** Bulk actions grouped in the "Bulk actions" dropdown of the toolbar (`toolbarActions([BulkActionGroup.make([...])])`). */
+/**
+ * Bulk actions grouped in a dropdown of the toolbar, shown while records are selected (`toolbarActions([BulkActionGroup.make([...])])`).
+ * Each group is its own menu, "Bulk actions" by default, with its own label, icon and color.
+ */
 export class BulkActionGroup {
     private _actions: any[];
+    private _label: string | null = null;
+    private _icon: string | null = null;
+    private _color: string | null = null;
+    private _tooltip: string | null = null;
+    private _placement: string | null = null;
     constructor(actions: any[]) { this._actions = actions; }
     static make(actions: any[]): BulkActionGroup { return configured(new BulkActionGroup(actions)); }
     getActions(): any[] { return this._actions; }
+    label(label: string | null): this { this._label = label; return this; }
+    icon(icon: string | null): this { this._icon = icon; return this; }
+    /** Color of the trigger button (gray by default). */
+    color(color: string | null): this { this._color = color; return this; }
+    tooltip(tooltip: string | null): this { this._tooltip = tooltip; return this; }
+    /** Placement of the menu (`bottom-start` by default), e.g. `bottom-end`. */
+    dropdownPlacement(placement: string | null): this { this._placement = placement !== null && /^(top|bottom|left|right)(-(start|end))?$/.test(placement) ? placement : null; return this; }
+    getLabel(): string { return this._label ?? t('filament-tables::table.actions.open_bulk_actions.label'); }
+    getIcon(): string { return this._icon ?? icons.resolve('tables::actions.open-bulk-actions') ?? 'm-ellipsis-vertical'; }
+    getColor(): string { return this._color ?? 'gray'; }
+    getTooltip(): string | null { return this._tooltip; }
+    getDropdownPlacement(): string { return this._placement ?? 'bottom-start'; }
+    /** Menu of the toolbar with the HTML of the visible actions (`renderTable({ bulkActionGroups })`). */
+    toMenu(actions: string[]): BulkActionMenu {
+        return { label: this.getLabel(), icon: this.getIcon(), color: this.getColor(), tooltip: this.getTooltip(), placement: this.getDropdownPlacement(), actions, customized: this._label !== null || this._icon !== null || this._color !== null || this._tooltip !== null || this._placement !== null };
+    }
 }
+/** A bulk actions dropdown of the toolbar: the look of its trigger and the HTML of its actions. */
+export type BulkActionMenu = { label: string; icon: string; color: string; tooltip: string | null; placement: string; actions: string[]; customized?: boolean };
 
 /** Upper bound on the rows loaded by an unpaginated table or the `'all'` page option. */
 export const MAX_UNPAGINATED_RECORDS = 10000;
@@ -1919,6 +1982,15 @@ export class Table<R = any> {
         if (this._bulkActions === null && !groups.length) return null;
         return [...(this._bulkActions ?? []), ...groups.flatMap((group) => group.getActions())];
     }
+    /**
+     * Bulk action menus: one "Bulk actions" menu for `groupedBulkActions()`, then one per `BulkActionGroup` of `toolbarActions()`;
+     * `null` when none is declared.
+     */
+    getBulkActionGroups(): BulkActionGroup[] | null {
+        const groups = this._toolbarActions.filter((action) => action instanceof BulkActionGroup) as BulkActionGroup[];
+        if (this._bulkActions === null && !groups.length) return null;
+        return [...(this._bulkActions?.length ? [BulkActionGroup.make(this._bulkActions)] : []), ...groups];
+    }
     private _toolbarActions: any[] = [];
     /** Actions in the toolbar, left of the search field: buttons, and a `BulkActionGroup` for the bulk actions dropdown. */
     toolbarActions(actions: any[]): this { this._toolbarActions = actions; return this; }
@@ -1996,6 +2068,15 @@ export class Table<R = any> {
         if (!configure) return { ...defaults, hidden: false, customized: false };
         const action = new FiltersAction();
         return { ...(configure(action) ?? action).resolve(defaults), customized: true };
+    }
+    private _groupRecordsTriggerAction: ((action: FiltersAction) => FiltersAction | void) | null = null;
+    /** Customizes the button that opens the grouping settings: `groupRecordsTriggerAction((action) => action.button().label('Group records'))`. */
+    groupRecordsTriggerAction(configure: ((action: FiltersAction) => FiltersAction | void) | null): this { this._groupRecordsTriggerAction = configure; return this; }
+    getGroupRecordsTriggerActionView(): FiltersActionView {
+        const defaults = { label: t('filament-tables::table.actions.group.label'), icon: icons.resolve('tables::actions.group') ?? 'm-rectangle-stack', color: 'gray', view: 'icon-button' as const };
+        if (!this._groupRecordsTriggerAction) return { ...defaults, hidden: false, customized: false };
+        const action = new FiltersAction();
+        return { ...(this._groupRecordsTriggerAction(action) ?? action).resolve(defaults), customized: true };
     }
     private _filtersFormSchema: ((filters: Record<string, any>) => any[]) | null = null;
     /**
@@ -2178,12 +2259,13 @@ export async function isTableFilterRemovable<R>(table: Table<R>, host: TableHost
 }
 
 /** Markup of a customized filters action: an icon button, a button or a link, with an optional badge. */
-function filterActionHtml(view: FiltersActionView, attributes: string, badge: string | null): string {
+function filterActionHtml(view: FiltersActionView, attributes: string, badge: string | null, forceEnabled = false): string {
+    const force = forceEnabled ? ['fi-force-enabled'] : [];
     const colors = (component: 'button' | 'link' | 'icon-button') => (view.color && view.color !== 'gray' ? (colorManager?.getComponentClasses(component, view.color) ?? []) : []);
     const iconHtml = view.icon ? icon(view.icon) : '';
     if (view.view === 'icon-button') return `<button title="${e(view.label)}" aria-label="${e(view.label)}" ${attributes} class="${cls(['fi-force-enabled', 'fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-md', ...colors('icon-button')])}">${iconHtml}${badge !== null ? `<div class="fi-icon-btn-badge-ctn">${badge}</div>` : ''}</button>`;
-    if (view.view === 'link') return `<button ${attributes} class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...colors('link')])}">${iconHtml}<span class="fi-link-label">${e(view.label)}</span>${badge !== null ? `<div class="fi-link-badge-ctn">${badge}</div>` : ''}</button>`;
-    return `<button ${attributes} class="${cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="fi-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+    if (view.view === 'link') return `<button ${attributes} class="${cls([...force, 'fi-ac-link-action', 'fi-link', 'fi-size-md', ...colors('link')])}">${iconHtml}<span class="fi-link-label">${e(view.label)}</span>${badge !== null ? `<div class="fi-link-badge-ctn">${badge}</div>` : ''}</button>`;
+    return `<button ${attributes} class="${cls([...force, 'fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="fi-btn-badge-ctn">${badge}</div>` : ''}</button>`;
 }
 
 /** Keys whose record passes `checkIfRecordIsSelectableUsing()`, loaded in chunks. Without a check, the keys are returned as they are. */
@@ -2245,6 +2327,8 @@ export type RenderTableOptions<R> = {
     /** Already rendered HTML of the row actions (ActionGroup…), replacing the `rowActions` links. */
     rowActionsHtml?: (record: R) => Promise<string>;
     bulkActions?: string[];
+    /** Several bulk action menus (each `BulkActionGroup`); takes precedence over `bulkActions`, which is a single "Bulk actions" menu. */
+    bulkActionGroups?: BulkActionMenu[];
     /** HTML of the filters form (`tableFiltersForm` schema), if there are filters. */
     filtersForm?: string | null;
     /**
@@ -2266,6 +2350,10 @@ type SummaryPlaceholders = { selection: boolean; actions: boolean; actionsBefore
 function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, placeholders: SummaryPlaceholders): string {
     const items = (cell: SummaryCell) => cell.items.map((item) => {
         const label = item.label !== null && item.label !== '' ? `<span class="fi-ta-${item.type}-summary-label${item.labelHidden ? ' fi-sr-only' : ''}">${e(item.label)}</span>` : '';
+        if (item.type === 'icon-count') {
+            const iconCounts = item.icons ?? [];
+            return `<div class="fi-ta-icon-count-summary">${label}${iconCounts.length ? `<ul>${iconCounts.map((entry) => `<li><span>${e(String(entry.count))}</span>${icon(entry.icon, { size: 'lg', attributes: new Attributes().class(entry.color && entry.color !== 'gray' ? (colorManager?.getComponentClasses('icon-count-summary', entry.color) ?? []) : []) })}</li>`).join('')}</ul>` : ''}</div>`;
+        }
         if (item.type === 'values') return `<div class="fi-ta-values-summary">${label}${item.values?.length ? `<ul${item.bulleted ? ' class="fi-bulleted"' : ''}>${item.values.map((value) => `<li>${e(value)}</li>`).join('')}</ul>` : ''}</div>`;
         return `<div class="fi-ta-${item.type}-summary">${label}<span>${e(item.value)}</span></div>`;
     }).join('');
@@ -2282,14 +2370,15 @@ function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, plac
 async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, visible: Column<R>[], page: { records: R[]; lastPage: number }, options: { group: Group<R> | null; groupsOnly: boolean; placeholders: SummaryPlaceholders }) {
     // Groups only: the grouped column has no summary cell (its label already leads the row).
     const columns = options.groupsOnly && options.group ? visible.filter((c) => c.name !== options.group!.getColumn()) : visible;
-    const lists = columns.map((c) => (c instanceof TextColumn ? c.getSummarizers().filter((summarizer) => !summarizer.isHidden()) : []));
+    const lists = columns.map((c) => c.getSummarizers().filter((summarizer) => !summarizer.isHidden()));
     if (!lists.some((list) => list.length) || !page.records.length) return null;
     // The first cell holds the row label and spans up to the first summarized column after it.
     const next = lists.findIndex((list, i) => i > 0 && list.length > 0);
     const span = options.groupsOnly ? 0 : next < 0 ? columns.length : next;
     const columnOf = (c: Column<R>) => c.getSortColumn?.() ?? c.name;
     const names = (kind: Summarizer['kind']) => [...new Set(columns.filter((_, i) => lists[i].some((s) => s.kind === kind)).map(columnOf))];
-    const aggregate = (query: Omit<ListQuery, 'page' | 'perPage'>): Promise<SummaryValues> => adapter.aggregate(query, { sum: names('sum'), avg: names('avg'), min: names('range'), max: names('range') });
+    const aggregateColumns = () => ({ sum: names('sum'), avg: names('avg'), min: names('range'), max: names('range') });
+    const aggregate = (query: Omit<ListQuery, 'page' | 'perPage'>): Promise<SummaryValues> => adapter.aggregate(query, aggregateColumns());
     const query = getTableQuery(table, host);
     const all = await aggregate(query);
     const present = (name: string) => page.records.map((record) => (record as any)[name]).filter((v) => v !== null && v !== undefined && v !== '');
@@ -2304,6 +2393,30 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     const loader = (dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]) => { let cache: Promise<R[]> | null = null; return () => (cache ??= Array.isArray(dataset) ? Promise.resolve(dataset) : adapter.paginate({ ...dataset, page: 1, perPage: MAX_UNPAGINATED_RECORDS }).then((result) => result.records)); };
     // The displayed page as a query (its record keys), for summarizers scoped with `query()`.
     const pageQuery = { ...query, keys: page.records.map((record) => adapter.getKey(record)) };
+    /**
+     * Occurrences of each icon (by color, then icon) of an icon column: from one grouped count query when the state is the
+     * column's attribute, otherwise from the records.
+     */
+    const iconCounts = async (c: Column<R>, dataset: Omit<ListQuery, 'page' | 'perPage'> | R[], records: () => Promise<R[]>): Promise<IconCount[]> => {
+        if (!(c instanceof IconColumn)) throw new Error(`The [${c.name}] column must be an IconColumn to show an icon count summary.`);
+        let entries: { record: R; count: number }[];
+        if (!Array.isArray(dataset) && adapter.aggregateGroups && c.hasAttributeState()) {
+            entries = (await adapter.aggregateGroups(dataset, {}, (query) => { query.groupBy(c.name); })).map((row) => ({ record: { [c.name]: row.key } as R, count: row.count }));
+        } else entries = (await records()).map((record) => ({ record, count: 1 }));
+        const byColor = new Map<string, Map<string, number>>();
+        for (const { record, count } of entries) {
+            const state = await c.getState(record);
+            if (isBlankState(state)) continue;
+            for (const item of Array.isArray(state) ? state : [state]) {
+                const { icon: name, color } = c.getIconAndColor(record, item);
+                if (!name) continue;
+                const icons = byColor.get(JSON.stringify(color)) ?? new Map<string, number>();
+                icons.set(name, (icons.get(name) ?? 0) + count);
+                byColor.set(JSON.stringify(color), icons);
+            }
+        }
+        return [...byColor].flatMap(([color, icons]) => [...icons].map(([name, count]) => ({ icon: name, color: JSON.parse(color) as string | null, count })));
+    };
     const cells = async (values: SummaryValues, dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]): Promise<SummaryCell[]> => {
         const records = loader(dataset);
         const datasetQuery = Array.isArray(dataset) ? pageQuery : dataset;
@@ -2311,10 +2424,11 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
             alignment: c.getAlignment() ?? 'start',
             items: (await Promise.all(lists[i + span].map(async (s) => {
                 const scope = s.getQueryScope();
-                if (!scope) return s.summarize(columnOf(c), values, s.hasCustomCalculation() ? await s.compute({ column: c.name, records }) : undefined);
+                const icons = s instanceof Count && s.hasIcons();
+                if (!scope) return s.summarize(columnOf(c), values, icons ? await iconCounts(c, dataset, records) : s.hasCustomCalculation() ? await s.compute({ column: c.name, records }) : undefined);
                 // Scoped summarizer: its own aggregates and records, on the dataset restricted by its query.
                 const scoped = { ...datasetQuery, modifiers: [...(datasetQuery.modifiers ?? []), (q: any) => { scope(q); }] };
-                return s.summarize(columnOf(c), await aggregate(scoped), s.hasCustomCalculation() ? await s.compute({ column: c.name, records: loader(scoped) }) : undefined);
+                return s.summarize(columnOf(c), await aggregate(scoped), icons ? await iconCounts(c, scoped, loader(scoped)) : s.hasCustomCalculation() ? await s.compute({ column: c.name, records: loader(scoped) }) : undefined);
             }))).filter((item): item is SummaryItem => item !== null),
         })));
     };
@@ -2336,12 +2450,22 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
             ...(showAll ? [{ heading: t('filament-tables::table.summary.subheadings.all', { label }), cells: await cells(all, query), striped: false }] : []),
         ]
         : isMultiPage || !(showPage || showAll) ? [] : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: await cells(all, query), striped: true }];
+    const groupedValues = new Map<Group<R>, Promise<Map<string, SummaryValues>>>();
     return {
         html: header + rows.map(rowHtml).join(''),
         /** Group summary row: aggregates over all the group's records (not only those on the page). */
         group: async (group: Group<R>, key: string | null, title: string | null): Promise<string> => {
             const groupQuery = { ...query, modifiers: [...(query.modifiers ?? []), (q: any) => group.scope(q, key)] };
-            const values = await aggregate(groupQuery);
+            // Aggregates of every group in one grouped query (`groupQueryUsing()`); a group it does not return is aggregated alone.
+            const groupQueryCallback = group.getGroupQuery();
+            if (groupQueryCallback && adapter.aggregateGroups && !groupedValues.has(group)) {
+                groupedValues.set(group, adapter.aggregateGroups(query, aggregateColumns(), groupQueryCallback).then((rows) => {
+                    const map = new Map<string, SummaryValues>();
+                    for (const { key: value, ...values } of rows) { const groupKey = group.getKeyFromGroupValue(value); if (groupKey !== null && !map.has(groupKey)) map.set(groupKey, values); }
+                    return map;
+                }));
+            }
+            const values = (key !== null ? (await groupedValues.get(group))?.get(key) : undefined) ?? await aggregate(groupQuery);
             return rowHtml({ heading: options.groupsOnly ? (title ?? '') : t('filament-tables::table.summary.subheadings.group', { group: title ?? '', label }), cells: await cells(values, groupQuery), striped: false });
         },
     };
@@ -2354,7 +2478,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     const reorderColumn = options.canReorder === false ? null : table.getReorderColumn();
     const reordering = reorderColumn !== null && host.isTableReordering === true;
     // Reordering: all rows of the query, in position order, without pagination or actions.
-    if (reordering) options = { ...options, bulkActions: [], headerActions: options.headerActions, rowActions: undefined, rowActionsHtml: undefined, filtersForm: null };
+    if (reordering) options = { ...options, bulkActions: [], bulkActionGroups: [], headerActions: options.headerActions, rowActions: undefined, rowActionsHtml: undefined, filtersForm: null };
     const grouping = reordering ? null : getTableGrouping(table, host);
     // Groups only: no pagination and no record rows, just one summary row per group.
     const groupsOnly = grouping !== null && table.isGroupsOnly();
@@ -2366,7 +2490,10 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     const visible = getVisibleColumns(table, host);
     const rows = [];
     const selectionOnly = !reordering && !!options.selection;
-    const hasBulk = (options.bulkActions ?? []).length > 0 || selectionOnly;
+    // Bulk action menus: those given, or one "Bulk actions" menu with `bulkActions`; menus without a visible action are left out.
+    const bulkMenus = (options.bulkActionGroups ?? ((options.bulkActions ?? []).length ? [BulkActionGroup.make([]).toMenu(options.bulkActions!)] : [])).filter((menu) => menu.actions.length > 0);
+    const bulkActionsHtml = bulkMenus.flatMap((menu) => menu.actions);
+    const hasBulk = bulkActionsHtml.length > 0 || selectionOnly;
     const selectable = (hasBulk || reordering) && !groupsOnly;
     const filled = (value: string | null) => value !== null && value.trim() !== '';
     // A new group starts when the title changes; the previous group then gets its summary row.
@@ -2439,7 +2566,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         hook: (name: string, data: Record<string, unknown> = {}) => renderHook(name, scopes, data), hasHook: (name: string) => hasRenderHook(name, scopes),
         visibleColumns: visible, isReordering: reordering,
         groups: reordering || table.areGroupingSettingsHidden() ? [] : table.getGroups().map((g) => ({ id: g.getId(), label: g.getLabel() })),
-        grouping: { active: grouping !== null, directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
+        grouping: { active: grouping !== null, trigger: table.getGroupRecordsTriggerActionView(), directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
         id: host.id, targets: LOADING_TARGETS, table, rows, page, number,
         reorder: reorderColumn !== null ? { active: reordering } : null,
         // No checkboxes without bulk actions (or in groups-only mode), no actions column without row actions.
@@ -2453,10 +2580,10 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() === 'simple' ? rows.length : page.total,
         columns: visible.map((c) => ({ name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), responsive: c.getResponsiveClasses(), width: c.getWidth(), growable: c.getWidth() === null && c.canGrow(), wrapHeader: c.canHeaderWrap(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none' })),
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'), grayButtonClasses: classes('button', 'gray'), indicatorColorClasses: (color: string) => classes('badge', color),
-        bulkActions: options.bulkActions ?? [],
+        bulkActions: bulkActionsHtml, bulkMenus, bulkMenuColors: (component: 'button' | 'icon-button', color: string) => (color === 'gray' ? [] : (colorManager?.getComponentClasses(component, color) ?? [])),
         filtersForm: options.filtersForm ?? null, activeFiltersCount: countActiveFilters(table, host), filtersLayout: table.getFiltersLayout(), filterIndicators: table.areFilterIndicatorsHidden() ? [] : getFilterIndicators(table, host),
         filterActions: { trigger: table.getFiltersActionView('trigger'), apply: table.getFiltersActionView('apply'), reset: table.getFiltersActionView('reset') },
-        filterActionHtml: (view: FiltersActionView, attributes: string, badge: string | null = null) => filterActionHtml(view, attributes, badge),
+        filterActionHtml: (view: FiltersActionView, attributes: string, badge: string | null = null, forceEnabled = false) => filterActionHtml(view, attributes, badge, forceEnabled),
         filtersDeferred: table.hasDeferredFilters(), filtersResetPosition: table.getFiltersResetActionPosition(), filtersFormWidth: table.getFiltersFormWidth(), filtersFormMaxHeight: table.getFiltersFormMaxHeight(), modal,
         hasColumnManager: !reordering && table.hasToggleableColumns(),
         afterContainer: options.after ?? '', heading: table.getHeading(), headerActions: options.headerActions ?? [], summaryHtml: summary?.html ?? '', trailingGroupSummary,
