@@ -336,19 +336,19 @@ export class Constraint {
     protected _extraOperators: Operator[] = [];
     protected _leadingOperators: Operator[] = [];
     /** Replaces the operators of the constraint. */
-    operators(operators: (QueryBuilderOperator | Operator)[]): this { this._operatorsOverride = operators.map(toOperator); this._leadingOperators = []; this._extraOperators = []; return this; }
+    operators(operators: OperatorInput[]): this { this._operatorsOverride = operators.map((operator) => toOperator(operator, this)); this._leadingOperators = []; this._extraOperators = []; return this; }
     /** Adds operators after the default ones. */
-    pushOperators(operators: (QueryBuilderOperator | Operator)[]): this {
-        if (this._operatorsOverride) { this._operatorsOverride = [...this._operatorsOverride, ...operators.map(toOperator)]; return this; }
-        this._extraOperators = [...this._extraOperators, ...operators.map(toOperator)];
+    pushOperators(operators: OperatorInput[]): this {
+        if (this._operatorsOverride) { this._operatorsOverride = [...this._operatorsOverride, ...operators.map((operator) => toOperator(operator, this))]; return this; }
+        this._extraOperators = [...this._extraOperators, ...operators.map((operator) => toOperator(operator, this))];
         return this;
     }
     /**
      * Adds operators before the default ones (each one first, in turn). An operator with the name of an existing one replaces it,
      * as in Filament.
      */
-    unshiftOperators(operators: (QueryBuilderOperator | Operator)[]): this {
-        for (const operator of operators.map(toOperator)) {
+    unshiftOperators(operators: OperatorInput[]): this {
+        for (const operator of operators.map((entry) => toOperator(entry, this))) {
             if (this._operatorsOverride) { this._operatorsOverride = [operator, ...this._operatorsOverride.filter((existing) => existing.name !== operator.name)]; continue; }
             this._leadingOperators = [operator, ...this._leadingOperators.filter((existing) => existing.name !== operator.name)];
             this._extraOperators = this._extraOperators.filter((existing) => existing.name !== operator.name);
@@ -424,7 +424,87 @@ export class QueryBuilderOperator {
         };
     }
 }
-const toOperator = (operator: QueryBuilderOperator | Operator): Operator => (operator instanceof QueryBuilderOperator ? operator.toOperator() : operator);
+/** What `operators()`, `pushOperators()` and `unshiftOperators()` take: custom operators, or built-in ones (`IsFilledOperator.make()`...). */
+export type OperatorInput = QueryBuilderOperator | BuiltInOperator | IsRelatedToOperator | Operator;
+const toOperator = (operator: OperatorInput, constraint: Constraint): Operator => {
+    if (operator instanceof QueryBuilderOperator) return operator.toOperator();
+    if (operator instanceof BuiltInOperator) return operator.toOperator(constraint);
+    if (operator instanceof IsRelatedToOperator) {
+        if (!(constraint instanceof RelationshipConstraint)) throw new Error(`Constraint ${constraint.name}: IsRelatedToOperator needs a RelationshipConstraint.`);
+        return operator.toOperator(constraint);
+    }
+    return operator;
+};
+
+/**
+ * A built-in operator, to choose the operators of a constraint with `operators()`, `pushOperators()` or `unshiftOperators()`:
+ * `TextConstraint.make('name').operators([ContainsOperator.make(), IsFilledOperator.make()])`. It works as the constraint's own
+ * operator of that name (an `EqualsOperator` compares text on a text constraint, numbers on a number constraint, the number
+ * of related records on a multiple relationship constraint), and is read again when the constraint changes (`integer()`,
+ * `time()`...).
+ */
+export class BuiltInOperator {
+    readonly name: string;
+    private readonly fallback: (constraint: Constraint) => Operator;
+    constructor(name: string, fallback: (constraint: Constraint) => Operator) { this.name = name; this.fallback = fallback; }
+    /** The operator as the constraint uses it. */
+    resolveFor(constraint: Constraint): Operator { return constraint.getOperators().find((operator) => operator.name === this.name) ?? this.fallback(constraint); }
+    /** @internal An operator that follows the constraint's later changes. */
+    toOperator(constraint: Constraint): Operator {
+        const current = () => this.resolveFor(constraint);
+        return {
+            name: this.name,
+            label: (inverse) => current().label(inverse),
+            defaults: () => current().defaults(),
+            fields: () => current().fields(),
+            resolve: (settings, inverse, target) => this.resolveFor(target).resolve(settings, inverse, target),
+            get onBaseQuery() { return current().onBaseQuery; },
+        };
+    }
+}
+const builtIn = <T extends BuiltInOperator>(Class: new (name: string, fallback: (constraint: Constraint) => Operator) => T, name: string, fallback: (constraint: Constraint) => Operator): T => configured(new Class(name, fallback));
+const needs = (operator: string, constraint: string) => (target: Constraint): never => { throw new Error(`Constraint ${target.name}: ${operator} needs a ${constraint}.`); };
+const dateOperatorNamed = (name: string) => OPERATORS.date.find((operator) => operator.name === name)!;
+/** "Is filled" / "is blank" (any constraint; `nullable()` adds it to the defaults). */
+export class IsFilledOperator extends BuiltInOperator { static make(): IsFilledOperator { return builtIn(IsFilledOperator, 'isFilled', () => isFilledOperator); } }
+/** Text contains. */
+export class ContainsOperator extends BuiltInOperator { static make(): ContainsOperator { return builtIn(ContainsOperator, 'contains', () => textOperator('contains', 'contains', (text) => `%${likeEscape(text)}%`)); } }
+/** Text starts with. */
+export class StartsWithOperator extends BuiltInOperator { static make(): StartsWithOperator { return builtIn(StartsWithOperator, 'startsWith', () => textOperator('startsWith', 'starts_with', (text) => `${likeEscape(text)}%`)); } }
+/** Text ends with. */
+export class EndsWithOperator extends BuiltInOperator { static make(): EndsWithOperator { return builtIn(EndsWithOperator, 'endsWith', () => textOperator('endsWith', 'ends_with', (text) => `%${likeEscape(text)}`)); } }
+/** Equals: text, number, or number of related records, depending on the constraint. */
+export class EqualsOperator extends BuiltInOperator {
+    static make(): EqualsOperator {
+        return builtIn(EqualsOperator, 'equals', (constraint) => (constraint.type === 'number' ? numberOperator('equals', 'equals', '=', '!=') : constraint.type === 'relationship' ? relationshipCountOperator('equals', 'equals', '=', '!=') : textOperator('equals', 'equals', () => null)));
+    }
+}
+/** Number is at least. */
+export class IsMinOperator extends BuiltInOperator { static make(): IsMinOperator { return builtIn(IsMinOperator, 'isMin', () => numberOperator('isMin', 'is_min', '>=', '<')); } }
+/** Number is at most. */
+export class IsMaxOperator extends BuiltInOperator { static make(): IsMaxOperator { return builtIn(IsMaxOperator, 'isMax', () => numberOperator('isMax', 'is_max', '<=', '>')); } }
+/** Boolean is true. */
+export class IsTrueOperator extends BuiltInOperator { static make(): IsTrueOperator { return builtIn(IsTrueOperator, 'isTrue', () => OPERATORS.boolean[0]); } }
+/** Date is after (an absolute date or a relative one). */
+export class IsAfterOperator extends BuiltInOperator { static make(): IsAfterOperator { return builtIn(IsAfterOperator, 'isAfter', (constraint) => windowOperator('isAfter', 'is_after', '>=', '<', constraint instanceof DateConstraint && constraint.hasTime())); } }
+/** Date is before (an absolute date or a relative one). */
+export class IsBeforeOperator extends BuiltInOperator { static make(): IsBeforeOperator { return builtIn(IsBeforeOperator, 'isBefore', (constraint) => windowOperator('isBefore', 'is_before', '<=', '>', constraint instanceof DateConstraint && constraint.hasTime())); } }
+/** Date is the given day. */
+export class IsDateOperator extends BuiltInOperator { static make(): IsDateOperator { return builtIn(IsDateOperator, 'isDate', () => dateOperatorNamed('isDate')); } }
+/** Date is in the given month. */
+export class IsMonthOperator extends BuiltInOperator { static make(): IsMonthOperator { return builtIn(IsMonthOperator, 'isMonth', () => dateOperatorNamed('isMonth')); } }
+/** Date is in the given year. */
+export class IsYearOperator extends BuiltInOperator { static make(): IsYearOperator { return builtIn(IsYearOperator, 'isYear', () => dateOperatorNamed('isYear')); } }
+/** Select constraint: is one of the options. */
+export class IsOperator extends BuiltInOperator { static make(): IsOperator { return builtIn(IsOperator, 'is', needs('IsOperator', 'SelectConstraint')); } }
+/** Relationship constraint: has at least this many related records. */
+export class HasMinOperator extends BuiltInOperator { static make(): HasMinOperator { return builtIn(HasMinOperator, 'hasMin', () => relationshipCountOperator('hasMin', 'has_min', '>=', '<')); } }
+/** Relationship constraint: has at most this many related records. */
+export class HasMaxOperator extends BuiltInOperator { static make(): HasMaxOperator { return builtIn(HasMaxOperator, 'hasMax', () => relationshipCountOperator('hasMax', 'has_max', '<=', '>')); } }
+/** Relationship constraint: has no related record. */
+export class IsEmptyOperator extends BuiltInOperator {
+    static make(): IsEmptyOperator { return builtIn(IsEmptyOperator, 'isEmpty', (constraint) => (constraint instanceof RelationshipConstraint ? constraint.isEmptyOperator() : needs('IsEmptyOperator', 'RelationshipConstraint')(constraint))); }
+}
 
 export class TextConstraint extends Constraint { static make(name: string): TextConstraint { return configured(new TextConstraint(name, 'text', icons.resolve('query-builder::constraints.text') ?? 'm-language')); } }
 export class NumberConstraint extends Constraint {
@@ -631,14 +711,18 @@ export class RelationshipConstraint extends Constraint {
         return [
             ...(this._selectable ? [this._selectable.toOperator(this)] : []),
             ...(this._multiple ? [relationshipCountOperator('hasMin', 'has_min', '>=', '<'), relationshipCountOperator('hasMax', 'has_max', '<=', '>'), relationshipCountOperator('equals', 'equals', '=', '!=')] : []),
-            ...(this.canBeEmpty() ? [{
-                name: 'isEmpty', label: label('relationship', 'is_empty'), defaults: () => null, fields: () => [], onBaseQuery: true,
-                resolve: (_settings: Settings, inverse: boolean): Resolved => {
-                    const modify = this.getModifyRelationshipQueryUsing();
-                    return { condition: { kind: 'related', relationship: this.getRelationshipName(), keys: null, negate: !inverse, ...(modify ? { modify } : {}) }, summary: summary('relationship', 'is_empty', inverse, { relationship: this.getAttributeLabel() }) };
-                },
-            } satisfies Operator] : []),
+            ...(this.canBeEmpty() ? [this.isEmptyOperator()] : []),
         ];
+    }
+    /** @internal The "has no related record" operator. */
+    isEmptyOperator(): Operator {
+        return {
+            name: 'isEmpty', label: label('relationship', 'is_empty'), defaults: () => null, fields: () => [], onBaseQuery: true,
+            resolve: (_settings: Settings, inverse: boolean): Resolved => {
+                const modify = this.getModifyRelationshipQueryUsing();
+                return { condition: { kind: 'related', relationship: this.getRelationshipName(), keys: null, negate: !inverse, ...(modify ? { modify } : {}) }, summary: summary('relationship', 'is_empty', inverse, { relationship: this.getAttributeLabel() }) };
+            },
+        };
     }
     getRelatedLabel(key: Key): string | null { return this._relatedLabels.get(String(key)) ?? null; }
     /** Options of the related records (all of them up to 1,000, a search, or some keys), with the operator's label callback. */
