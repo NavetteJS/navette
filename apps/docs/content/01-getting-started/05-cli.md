@@ -4,7 +4,7 @@ title: CLI reference
 
 ## Introduction
 
-Projects created with `npm create navette` include the `navette` command (package `@navette-js/cli`). It runs migrations, creates users, and generates resources, pages, widgets, migrations, custom fields, entries and columns, view components, and plugin packages. Run it from the root of the project:
+Projects created with `npm create navette` include the `navette` command (package `@navette-js/cli`). It runs migrations, creates users, and generates panels, clusters, resources, relation managers, pages, widgets, themes, migrations, custom fields, entries and columns, view components, and plugin packages. Run it from the root of the project:
 
 ```bash
 npx navette make:resource Post --generate
@@ -22,8 +22,13 @@ Generators never overwrite an existing file: they stop with an error. Add `--for
 | `navette make:migration <name>` | Creates a migration file |
 | `navette make:user [--admin]` | Creates a user, with the `admin` role when `--admin` is given |
 | `navette make:resource <Name>` | Creates a resource and its model |
-| `navette make:page <Name>` | Creates a custom page |
-| `navette make:widget <Name>` | Creates a dashboard widget |
+| `navette make:relation-manager <Resource> <relationship>` | Creates a relation manager of a resource |
+| `navette make:page <Name> [--resource=]` | Creates a custom page, or a page of a resource |
+| `navette make:widget <Name> [--resource=]` | Creates a dashboard widget, or a widget of a resource |
+| `navette make:panel <id>` | Creates a panel and its folders |
+| `navette make:cluster <Name>` | Creates a cluster gathering pages and resources under one navigation item |
+| `navette make:theme` | Creates a Tailwind theme for a panel, and the npm script compiling it |
+
 | `navette make:field <Name>` | Creates a custom form field in `src/fields` |
 | `navette make:entry <Name>` | Creates a custom infolist entry in `src/entries` |
 | `navette make:column <Name>` | Creates a custom table column in `src/columns` |
@@ -86,6 +91,10 @@ Restart the server: the resource is discovered and appears in the navigation, at
 | `--generate` | Reads the columns of the table and generates the form fields and table columns from them |
 | `--table=` | Table name, when it is not the plural of the resource name (`--table=blog_posts`) |
 | `--panel=` | Panel to add the resource to: `app` writes to `src/app/resources` (default: `admin`) |
+| `--simple` | A single page: records are created and edited in modals. See [simple resources](/resources/overview#simple-modal-resources) |
+| `--view` | Adds a View page, with an infolist listing the columns |
+| `--soft-deletes` | Adds the trashed filter, and the restore and force-delete bulk actions, to a table with a `deleted_at` column |
+| `--nested=` | Nests the resource in a parent resource (`--nested=CourseResource`). See [nesting resources](/resources/nesting) |
 | `--force` | Overwrite the resource file if it exists |
 
 ### Generating the form and table from the database
@@ -110,13 +119,40 @@ The generated code is a starting point: edit the resource to add validation, rel
 A typical flow: `npx navette make:migration create_posts_table`, edit the migration, then `npx navette make:resource Post --generate`.
 </Aside>
 
+## Generating a relation manager
+
+```bash
+npx navette make:relation-manager PostResource comments body
+```
+
+Creates `src/admin/resources/Post/RelationManagers/CommentsRelationManager.ts`, a relation manager of the `comments` of a post, whose records are titled by their `body` column (`name` when omitted). Register it in the `relations` of the resource. See [managing relationships](/resources/managing-relationships).
+
+| Option | Effect |
+| --- | --- |
+| `--model=` | Model of the related records, when it is not the singular of the relationship (`--model=Comment`) |
+| `--foreign-key=` | Column linking the records to their owner (default: `post_id`) |
+| `--associate` | Adds the associate and dissociate actions (one-to-many) |
+| `--attach` | A many-to-many relationship: adds the attach and detach actions; `--pivot-table=` names the pivot table |
+| `--soft-deletes` | Adds the trashed filter, and the restore and force-delete actions |
+| `--view` | Adds a view action, opening the record in a modal |
+| `--related-resource=` | Uses the form, table and pages of another resource (`--related-resource=CommentResource`) instead of its own |
+| `--panel=` | Panel of the resource (default: `admin`) |
+
 ## Generating a page
 
 ```bash
 npx navette make:page Settings
 ```
 
-Creates `src/admin/pages/Settings.ts`, a page at `/admin/settings` with a section to fill. Use `--panel=app` for the user panel. See [custom pages](/resources/custom-pages).
+Creates `src/admin/pages/Settings.ts`, a page at `/admin/settings` with a section to fill. Use `--panel=app` for the user panel. See [custom pages](/panels/pages).
+
+### Generating a page of a resource
+
+```bash
+npx navette make:page ManagePostComments --resource=PostResource --type=ManageRelatedRecords --relationship=comments
+```
+
+Creates `src/admin/resources/Post/Pages/ManagePostComments.ts`, and prints how to register it in the resource. `--type=` is the kind of page: `ManageRelatedRecords` (the default, a [relation page](/resources/managing-relationships#relation-pages), with `--relationship=` and `--model=`), `EditRecord`, `ViewRecord`, `CreateRecord` or `ListRecords`. See [custom pages of a resource](/resources/custom-pages).
 
 ## Generating a widget
 
@@ -133,6 +169,32 @@ Creates `src/admin/widgets/SalesChart.ts`. The dashboard of the panel displays i
 | `table` | A table widget. See [table widgets](/widgets/table-widgets) |
 
 Use `--panel=app` for the user panel.
+
+With `--resource=PostResource`, the widget is created in `src/admin/resources/Post/Widgets`, for the resource's pages: a stats widget reads the [table of the list page](/resources/widgets#accessing-page-table-data-in-the-widget), a chart or table widget the resource's records. Register it in the `widgets` and `headerWidgets` of the resource.
+
+## Generating a panel
+
+```bash
+npx navette make:panel app
+```
+
+Creates `src/panels/app.ts`, a panel served at `/app` with its dashboard, and the `src/app/pages`, `src/app/resources` and `src/app/widgets` folders it discovers. Restart the server to serve it. See [panel configuration](/panels/configuration).
+
+## Generating a cluster
+
+```bash
+npx navette make:cluster Settings
+```
+
+Creates `src/admin/clusters/SettingsCluster.ts`. Add `static cluster = SettingsCluster` to the pages and resources it gathers. See [clusters](/panels/clusters).
+
+## Generating a theme
+
+```bash
+npx navette make:theme --panel=admin
+```
+
+Creates `resources/css/admin/theme.css`, a Tailwind stylesheet importing the panel's styles and scanning your code for classes, and adds the `build:theme:admin` script to `package.json`. Install Tailwind (`npm install -D tailwindcss @tailwindcss/cli`), compile it with `npm run build:theme:admin`, and use it with `.theme('/storage/css/admin/theme.css')` in the panel. See [themes](/styling/overview).
 
 ## Generating a custom field, entry, column or schema component
 
@@ -169,3 +231,23 @@ npx navette make:plugin Blog
 Creates a panel plugin package in `plugins/blog/`: its `package.json`, an entry point registering its views and translations, a plugin class (`BlogPlugin`, with an option), a page, its view and its English translations, and a `README.md`. Add it to a panel with `.plugin(BlogPlugin.make())`, importing it from `../../plugins/blog/src/index.ts`.
 
 With `--standalone`, the package contains a schema component instead (`make:plugin PriceTag --standalone` creates `PriceTag` and its view), usable in any form, infolist or page. See [getting started with plugins](/plugins/getting-started).
+
+## Customizing the generated files
+
+A project changes what the generators write in `navette.generators.ts`, at its root. Its default export maps a generator name to a function receiving the generated files (path → content) and the options of the command, and returning the files to write. It may change their content, rename them, add files or drop some:
+
+```ts
+// navette.generators.ts
+import type { GeneratorOverrides } from '@navette-js/cli';
+
+export default {
+    resource(files, { model }) {
+        return Object.fromEntries(Object.entries(files).map(([path, content]) => [path, content.replace("'o-rectangle-stack'", "'o-document-text'")]));
+    },
+    'relation-manager'(files) {
+        return { ...files, 'docs/relation-managers.md': '# Relation managers\n' };
+    },
+} satisfies GeneratorOverrides;
+```
+
+The generator names are `resource`, `page`, `resource-page`, `widget`, `resource-widget`, `panel`, `cluster`, `relation-manager`, `theme`, `migration`, `field`, `entry`, `column`, `schema-component`, `component` and `plugin`. Paths are relative to the root of the project: an absolute path, or one going up with `..`, is refused.

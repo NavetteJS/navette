@@ -76,7 +76,23 @@ The relation managers of a resource are displayed under the form of the edit pag
 
 ### Read-only mode
 
-A relation manager without actions is read-only. As the list page offers `DeleteBulkAction` when no bulk action is declared, remove it explicitly:
+On a [view page](/resources/viewing-records), relation managers are read-only: the actions that change the relationship (create, edit, delete, attach, detach, associate, dissociate, restore, force-delete, reorder) are hidden, and refused if they are called anyway. To keep them on the view pages of a panel:
+
+```ts
+panel.readOnlyRelationManagersOnResourceViewPagesByDefault(false)
+```
+
+A manager may decide for itself by overriding `isReadOnly()`. `getPageClass()` returns the class of the record page that shows it:
+
+```ts
+export class CommentsRelationManager extends RelationManager {
+    isReadOnly(): boolean {
+        return false;
+    }
+}
+```
+
+A manager without actions is read-only everywhere. As the list page offers `DeleteBulkAction` when no bulk action is declared, remove it explicitly:
 
 ```ts
 static table(table: Table): Table {
@@ -85,6 +101,21 @@ static table(table: Table): Table {
         .groupedBulkActions([]);
 }
 ```
+
+### Hiding a field, column or filter in the relation manager
+
+When a manager reuses the form or table of a resource, `hiddenOn()` and `visibleOn()` accept the class of a relation manager, besides an operation name. The owner's column is useless in the manager of its own records:
+
+```ts
+static table(table: Table): Table {
+    return table.columns([
+        TextColumn.make('title'),
+        TextColumn.make('project.name').hiddenOn(TasksRelationManager),
+    ]);
+}
+```
+
+It works for form fields, table columns and filters, and also with a page class (`hiddenOn(EditProject)`).
 
 ## Listing related records
 
@@ -396,6 +427,55 @@ export class InvoicesRelationManager extends RelationManager {
 }
 ```
 
+## Passing properties to a relation manager
+
+`make()` registers a manager with properties of its own, assigned to its public properties of the same name. The same manager can then appear twice with different settings. List these properties in `static locked`, so that the browser cannot change them:
+
+```ts
+export class CommentsRelationManager extends RelationManager {
+    static relationship = 'comments';
+    static locked = ['status'];
+    status = 'approved';
+
+    getTable(): Table {
+        return super.getTable().modifyQueryUsing((query) => query.where('status', this.status));
+    }
+}
+
+export class PostResource extends Resource {
+    static relations = {
+        approved: CommentsRelationManager.make({ status: 'approved' }),
+        pending: CommentsRelationManager.make({ status: 'pending' }),
+    };
+}
+```
+
+`static getDefaultProperties()` returns properties given to every instance of the manager.
+
+## Loading relation managers
+
+A relation manager is loaded by the browser once its tab is displayed, after the page. Set `isLazyLoaded` to `false` to render it with the page instead:
+
+```ts
+export class TasksRelationManager extends RelationManager {
+    static isLazyLoaded = false;
+}
+```
+
+## Opening an action of a relation manager from a link
+
+A page opens one of its actions from its URL (`?action=create`, or `?tableAction=edit&tableActionRecord=12` for a row action). A relation manager has no identifier in these links by default. Return a stable one from `getDefaultActionUrlIdentifier()`, and add `actionComponent=<identifier>` to the link:
+
+```ts
+export class CommentsRelationManager extends RelationManager {
+    getDefaultActionUrlIdentifier(): string | null {
+        return 'comments';
+    }
+}
+
+// /admin/posts/1/edit?relation=comments&actionComponent=comments&tableAction=view&tableActionRecord=12
+```
+
 ## Customizing the relation manager tabs
 
 ### Adding an icon and a badge
@@ -415,6 +495,17 @@ export class TasksRelationManager extends RelationManager {
 
 A fixed badge can be set with `static badge = 'New'`.
 
+A badge that is expensive to compute can be loaded after the page is displayed, and given a tooltip:
+
+```ts
+export class TasksRelationManager extends RelationManager {
+    static isBadgeLazyLoaded = true;
+    static badgeTooltip = 'Open tasks';
+}
+```
+
+Override `static shouldLazyLoadBadge(ownerRecord, pageClass)` to decide per record or per page.
+
 ### Grouping relation managers
 
 `RelationGroup` shows several managers under one tab, one below the other:
@@ -430,6 +521,15 @@ export class CustomerResource extends Resource {
 }
 ```
 
+The group's badge may be lazy loaded too, with `lazyLoadedBadge()`, and `badgeTooltip()` sets its tooltip. `tab()` builds the whole tab from the owner record:
+
+```ts
+RelationGroup.make('Contact', [PhonesRelationManager, EmailsRelationManager])
+    .tab((customer) => Tab.make(`Contact of ${customer.name}`).icon('m-user'))
+```
+
+A manager may build its own tab the same way, with `static getTabComponent(ownerRecord, pageClass)`.
+
 ### Combining the managers with the form in tabs
 
 To show the form as the first tab, next to the managers, return `true` from `hasCombinedRelationManagerTabsWithContent()` on the edit page (or the view page, for its infolist). The tab is named "Edit" ("View"); change its label and icon:
@@ -444,6 +544,57 @@ export class EditProject extends EditRecord {
 }
 ```
 
+#### Placing the content tab after the managers
+
+The content tab comes first. `getContentTabPosition()` moves it after the managers:
+
+```ts
+import { ContentTabPosition, EditRecord } from '@navette-js/panels';
+
+export class EditProject extends EditRecord {
+    hasCombinedRelationManagerTabsWithContent(): boolean { return true; }
+    getContentTabPosition(): ContentTabPosition | null { return ContentTabPosition.After; }
+}
+```
+
+#### Adding your own tabs
+
+`getTabComponents()` returns the tabs by key: the content tab under `''` (built by `getContentTabComponent()`), and the managers under their keys. Override it to reorder them or add tabs of your own. `getRelationManagerTabComponents(except)` returns the managers' tabs without some keys, and `getRelationManagerTabComponent(key)` the tab of one entry:
+
+```ts
+import { Tab, Text } from '@navette-js/schemas';
+
+export class EditProject extends EditRecord {
+    hasCombinedRelationManagerTabsWithContent(): boolean { return true; }
+
+    getTabComponents(): Record<string, Tab> {
+        return {
+            tasks: this.getRelationManagerTabComponent('tasks')!,
+            '': this.getContentTabComponent(),
+            help: Tab.make('Help').schema([Text.make('Tasks are listed first.')]),
+            ...this.getRelationManagerTabComponents(['tasks']),
+        };
+    }
+}
+```
+
+The keys of the entries are those of `relations` when it is an object, and `'0'`, `'1'`… when it is a list.
+
+### Keeping the active tab in the URL
+
+The key of the active tab is kept in the query string (`?relation=tasks`), so that a reload or a shared link opens the same tab. Name the entries with an object to get readable keys, change the query string key, or set it to `null` to keep the tab out of the URL. With `relationManagerQueryStringHistory`, each tab change adds a browser history entry:
+
+```ts
+export class ProjectResource extends Resource {
+    static relations = { tasks: TasksRelationManager, members: MembersRelationManager };
+}
+
+export class EditProject extends EditRecord {
+    static relationManagerQueryStringKey: string | null = 'tab';
+    static relationManagerQueryStringHistory = true;
+}
+```
+
 ### Choosing the managers of a page
 
 By default, the edit and view pages show the resource's `relations`. A page can show its own list with `static relationManagers`:
@@ -453,6 +604,21 @@ export class ViewProject extends ViewRecord {
     static relationManagers = [TasksRelationManager];
 }
 ```
+
+To decide in code, override `getRelationManagers()` on the page. It returns the same entries as `relations`:
+
+```ts
+import { EditRecord, type RelationManagerEntries } from '@navette-js/panels';
+
+export class EditProject extends EditRecord {
+    getRelationManagers(): RelationManagerEntries {
+        const project = this.getRecord() as Project;
+        return project.archived ? [TasksRelationManager] : super.getRelationManagers();
+    }
+}
+```
+
+A manager can also hide itself for some records or pages with [`canViewForRecord()`](#showing-a-relation-manager-conditionally).
 
 ## Relation pages
 

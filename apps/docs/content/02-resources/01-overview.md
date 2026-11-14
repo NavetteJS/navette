@@ -212,7 +212,14 @@ static pluralModelLabel = 'people';
 
 ### Automatic model label capitalization
 
-Labels are written in lower case, and Navette capitalizes them where needed: "Post Categories" in the page title, "New post category" on the button.
+Labels are written in lower case, and Navette capitalizes them where needed: "Post Categories" in the page title, "New post category" on the button. When a label must stay as written ("eBook"), turn it off:
+
+```ts
+export class EbookResource extends Resource {
+    static modelLabel = 'eBook';
+    static hasTitleCaseModelLabel = false;
+}
+```
 
 ## Resource navigation items
 
@@ -277,6 +284,17 @@ The list page opens a row action when its URL carries the action name and the re
 ```
 
 [Global search](/resources/global-search) uses these URLs for the records of simple resources.
+
+### Registering a resource in several panels
+
+The same resource class may be registered in several panels. Each panel serves it under its own path, with its own authorization, and its links point to the panel of the request. `getUrl()` accepts the panel to target another one:
+
+```ts
+PostResource.getUrl('edit', post);                       // in the current panel
+PostResource.getUrl('edit', post, {}, { panel: 'staff' }); // /staff/posts/1/edit
+```
+
+`PostResource.getPanels()` returns the panels it is registered in. Pages registered with `pages([...])` work the same way. In a panel with tenancy, pass `tenant` as well.
 
 ## Customizing the resource query
 
