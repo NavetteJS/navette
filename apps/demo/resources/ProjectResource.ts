@@ -10,6 +10,7 @@ import { Tab, Tabs, type Schema } from '@navette-js/schemas';
 import { IconColumn, SelectFilter, Sum, TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 import { PROJECT_STATUSES, TASK_PRIORITIES, TASK_STATUSES, type EnumCase } from './enums.ts';
 import { Task, Tasks, tasksTable } from './TaskResource.ts';
+import { ProjectTaskResource } from './ProjectTaskResource.ts';
 import { Timesheets, type Timesheet } from './TimesheetResource.ts';
 
 export class Project extends Model {
@@ -109,9 +110,13 @@ class ViewProject extends ViewRecord {
     getHeaderActions(): Action[] { return [...workflowActions(), this.editAction()]; }
 }
 
-/** The task table, limited to the project. */
+/**
+ * The task table, limited to the project. Tasks are created and edited on their own pages under the project (the nested
+ * ProjectTaskResource); in modals for screenshot comparisons.
+ */
 export class TasksRelationManager extends RelationManager {
     static relationship = 'tasks';
+    static relatedResource = process.env.NAVETTE_NO_THEMES ? null : () => ProjectTaskResource;
     static icon = 'm-clipboard-document-check';
     /** Number of open tasks, on the tab. */
     static async getBadge(ownerRecord: any): Promise<number> { return Number(((await Task.query().where('project_id', ownerRecord.id).whereNot('status', 'done').count({ n: '*' }).first()) as any)?.n ?? 0); }
@@ -129,7 +134,7 @@ export class TasksRelationManager extends RelationManager {
             DatePicker.make('due_date'),
         ]);
     }
-    static table(table: Table): Table { return tasksTable(table as Table<Task>, true).headerActions([CreateAction.make()]); }
+    static table(table: Table): Table { return (process.env.NAVETTE_NO_THEMES ? tasksTable(table as Table<Task>, true) : ProjectTaskResource.table(table as Table<Task>)).headerActions([CreateAction.make()]); }
 }
 /** Tasks of a project: a task created here is attached to it, whatever data is received. */
 class ProjectTasks extends Tasks {
