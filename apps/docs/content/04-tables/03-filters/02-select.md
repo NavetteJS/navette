@@ -156,6 +156,18 @@ SelectFilter.make('tags')
 
 The second argument is the column used as the option label. The relationship must be declared in the model's `relationMappings`, and the table must use an `ObjectionAdapter`.
 
+### Customizing the option labels
+
+`getOptionLabelFromRecordUsing()` computes the label of each option, and of the active filter indicator, from the related record instead of reading the title attribute:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('author')
+    .relationship('author', 'last_name')
+    .getOptionLabelFromRecordUsing((author) => `${author.first_name} ${author.last_name}`)
+```
+
 ### Customizing the relationship query
 
 The third argument modifies the query of the related records. It changes both the options and the records the filter matches:

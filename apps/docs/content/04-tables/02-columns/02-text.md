@@ -75,6 +75,17 @@ TextColumn.make<User>('email')
     .icon(() => 'm-envelope')
 ```
 
+`iconPosition('after')` puts the icon after the text, and `iconColor()` gives it a color:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<User>('email')
+    .icon(() => 'm-envelope')
+    .iconPosition('after')
+    .iconColor('primary')
+```
+
 ```preview
 // records: [{"name": "Ada Lovelace", "email": "ada@example.com"}, {"name": "Grace Hopper", "email": "grace@example.com"}, {"name": "Alan Turing", "email": "alan@example.com"}]
 new Table()
@@ -121,6 +132,10 @@ new Table()
 ```
 
 Without `color()`, a badge uses the `primary` color.
+
+<Aside variant="info">
+`BadgeColumn` is deprecated, as in Filament: `BadgeColumn.make('status')` is the same as `TextColumn.make('status').badge()`. Likewise, `BooleanColumn` is `IconColumn.make(name).boolean()`.
+</Aside>
 
 You may add other things to the badge, like an [icon](#adding-an-icon), and a label instead of the raw value with [`formatStateUsing()`](#formatting). When the attribute is cast to an [enum](/advanced/enums#casting-model-attributes-to-an-enum) on the model, or with `enum()`, the label, color and icon of each value come from the enum instead:
 
@@ -240,6 +255,34 @@ TextColumn.make('created_at')
     .since()
 ```
 
+#### Displaying the date in a tooltip
+
+`dateTooltip()`, `dateTimeTooltip()`, `timeTooltip()` and `sinceTooltip()` show the date in a tooltip, for example the exact date next to a relative one. They take the same format and time zone arguments as `date()`, `dateTime()` and `time()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('created_at')
+    .since()
+    .dateTimeTooltip()
+```
+
+An empty state has no tooltip.
+
+#### Using Carbon's `isoFormat()` formats
+
+`isoDate()`, `isoDateTime()` and `isoTime()` format the date like Carbon's `isoFormat()` (Moment.js tokens): `L` (`11/09/2026`), `LLL` (`November 9, 2026 2:30 PM`) and `LT` (`2:30 PM`) by default, or any format such as `dddd D MMMM YYYY` or `HH:mm [h]` (text in brackets is kept as is). `isoDateTooltip()`, `isoDateTimeTooltip()` and `isoTimeTooltip()` do the same in a tooltip:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('published_at')
+    .isoDate('Do MMMM YYYY')
+    .isoDateTimeTooltip(null, 'Europe/Paris')
+```
+
+The macro formats (`LT`, `LTS`, `L`, `LL`, `LLL`, `LLLL` and their lowercase forms) and the names of months and days are in English.
+
 ### Number formatting
 
 The `numeric()` method allows you to format a number with thousands separators:
@@ -270,7 +313,23 @@ TextColumn.make('hours')
     .numeric(1)
 ```
 
-Numbers are formatted for the `en-US` locale (`1,234.5`).
+Numbers are formatted for the `en-US` locale (`1,234.5`) by default. Like Filament's `numeric($decimalPlaces, $decimalSeparator, $thousandsSeparator, $maxDecimalPlaces, $locale)`, the other arguments set fixed separators, a maximum number of decimals, or a locale. You may pass them in an object instead:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+// 1 234,50 (French formatting)
+TextColumn.make('amount')
+    .numeric({ decimalPlaces: 2, locale: 'fr' })
+
+// 1.234,5 (fixed separators)
+TextColumn.make('amount')
+    .numeric(1, ',', '.')
+
+// At most two decimals: 3.14, 2.5, 7
+TextColumn.make('ratio')
+    .numeric({ maxDecimalPlaces: 2 })
+```
 
 ### Money formatting
 
@@ -302,7 +361,19 @@ TextColumn.make<Payment>('amount')
     .money((record) => record.currency)
 ```
 
-The state is the amount itself (`19.99`), not an amount in cents.
+The state is the amount itself (`19.99`). For an amount stored in cents, pass `divideBy`: `money('eur', 100)` shows `1999` as `€19.99`. The next arguments are the locale and the number of decimal places, as in Filament's `money($currency, $divideBy, $locale, $decimalPlaces)`, or pass an object in place of `divideBy`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+// 1 999,00 € (French formatting of 199900 cents)
+TextColumn.make('price_in_cents')
+    .money('eur', 100, 'fr')
+
+// $20 (no decimals)
+TextColumn.make('price_in_cents')
+    .money('usd', { divideBy: 100, decimalPlaces: 0 })
+```
 
 ## Customizing the font weight
 
@@ -329,7 +400,7 @@ new Table()
 
 ### Limiting text length
 
-You may `limit()` the length of the cell's text. Longer text is cut and followed by `...`:
+You may `limit()` the length of the cell's text (100 characters by default). Longer text is cut and followed by `...`, or by the text passed as second argument, such as `limit(50, ' (more)')`:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
@@ -350,15 +421,16 @@ new Table()
 
 ### Adding a tooltip
 
-You may display the full text in a tooltip when it is cut. Pass a function that receives the record to `tooltip()`, and return `null` for no tooltip:
+You may display the full text in a tooltip when it is cut. Pass a function that receives the record to `tooltip()`, and return `null` for no tooltip. `getCharacterLimit()` returns the limit set by `limit()` (`getWordLimit()` the one of `words()`), so you do not repeat it:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
 
-TextColumn.make<Task>('title')
-    .limit(40)
-    .tooltip((record) => (record.title.length > 40 ? record.title : null))
+const title = TextColumn.make<Task>('title').limit(40);
+title.tooltip((record) => (record.title.length > (title.getCharacterLimit() ?? Infinity) ? record.title : null));
 ```
+
+As in Filament, `limit()` and `words()` do not apply to [HTML or Markdown](#rendering-html) states: cutting them could break their markup.
 
 A tooltip may also be a fixed string. Tooltip content is displayed as text, never as HTML.
 
@@ -384,6 +456,19 @@ new Table()
 ```
 
 The copied text is the displayed text, for example the formatted amount of a `money()` column. A "Copied!" tooltip confirms the copy.
+
+To copy something else than the displayed text, such as the raw value, use `copyableState()` with a string or a function of the record and the value. `copyMessage()` and `copyMessageDuration()` (in milliseconds, 2000 by default) customize the confirmation:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<Order>('total')
+    .money('usd')
+    .copyable()
+    .copyableState((record) => String(record.total))
+    .copyMessage('Amount copied')
+    .copyMessageDuration(1500)
+```
 
 <Aside variant="warning">
 This feature only works when SSL is enabled for the app, because browsers only expose the clipboard API in secure contexts (or on `localhost`).
@@ -482,7 +567,11 @@ TextColumn.make('weight')
 
 ### Limiting the number of words
 
-`words()` truncates the text to a number of words, like `limit()` does with characters.
+`words()` truncates the text to a number of words (100 by default), like `limit()` does with characters. Its second argument replaces the `...` ending: `words(10, '…')`.
+
+### Displaying the text inline
+
+`inline()` renders the text without its block layout, so that it flows with the content around it, for example inside a [stacked layout](/tables/layout).
 
 ## Combining display options
 
@@ -521,6 +610,12 @@ TextColumn.make('description')
 ```
 
 The HTML is sanitized before it is rendered. Only formatting elements are kept: paragraphs, line breaks, emphasis, headings, lists, quotes, code, and links with safe URLs. Their `style`, `class` and event attributes are removed, as are scripts, images, frames and forms. `sanitizeHtml()` and `markdownToHtml()` from `@navette-js/support` do the same work if you need them elsewhere.
+
+<Aside variant="warning">
+This is stricter than Filament, whose HTML sanitizer keeps inline `style` attributes (which allow CSS-based attacks such as `background: url(...)`). Navette always sanitizes, even for trusted content: to render your own markup as it is, use a [view column](/tables/columns/custom-columns) and escape the record data yourself.
+</Aside>
+
+Both `html()` and `markdown()` accept a function of the record and of the value, to render only some values as HTML. `limit()` and `words()` are not applied to an HTML or Markdown state.
 
 <Aside variant="info">
 Without `html()` or `markdown()`, the text is always escaped: a value containing `<b>` shows those characters.

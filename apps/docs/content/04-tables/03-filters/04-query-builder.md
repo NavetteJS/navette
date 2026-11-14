@@ -232,6 +232,25 @@ SelectConstraint.make('status')
     })
 ```
 
+`native(false)` uses the JavaScript select without search, and `optionsLimit()` changes how many options it lists at once (50 by default).
+
+#### Searching select options on the server
+
+For a long list, `getSearchResultsUsing()` computes the options of each search on the server, as Filament's select constraint does. Give the labels of the picked values with `getOptionLabelUsing()` (or `getOptionLabelsUsing()` for several values at once): they are used by the select and by the filter indicator:
+
+```ts
+import { SelectConstraint } from '@navette-js/tables';
+
+SelectConstraint.make('customer_id')
+    .label('Customer')
+    .getSearchResultsUsing(async (search) => Object.fromEntries(
+        (await Customer.query().where('name', 'like', `%${search}%`).limit(50)).map((customer) => [customer.id, customer.name]),
+    ))
+    .getOptionLabelUsing(async (value) => (await Customer.query().findById(value))?.name ?? null)
+```
+
+Without fixed options, the picked values cannot be checked against a list: any string (of at most 255 characters) reaches the query, as a bound parameter, so an unknown value matches no record.
+
 #### Multi-select constraints
 
 By default, select constraints will only allow the user to select a single option. If you'd like to allow the user to select multiple options, you can use the `multiple()` method:
@@ -281,7 +300,19 @@ RelationshipConstraint.make('creator') // Filter the `creator` relationship
     )
 ```
 
-The `IsRelatedToOperator` is used to configure the "Is" and "Is not" operators (or "Contains" and "Does not contain" for a [multiple relationship](#multiple-relationships)). It provides a select field which allows the user to filter the relationship by which records are attached to it. The `titleAttribute()` method is used to specify which attribute should be used to identify each related record in the list; the related records are listed in its order, up to 1,000. The `searchable()` method makes the list searchable, and the `multiple()` method allows the user to select multiple related records: the table is then filtered to show records that match any of them.
+The `IsRelatedToOperator` is used to configure the "Is" and "Is not" operators (or "Contains" and "Does not contain" for a [multiple relationship](#multiple-relationships)). It provides a select field which allows the user to filter the relationship by which records are attached to it. The `titleAttribute()` method is used to specify which attribute should be used to identify each related record in the list; the related records are listed in its order, up to 1,000. The `searchable()` method makes the list searchable: as in Filament, the related records are then searched on the server (at most `optionsLimit()` of them, 50 by default) instead of being listed, unless `preload()` is also called. `getOptionLabelFromRecordUsing()` computes the label of each related record from the record itself. The `multiple()` method allows the user to select multiple related records: the table is then filtered to show records that match any of them.
+
+```ts
+import { IsRelatedToOperator, RelationshipConstraint } from '@navette-js/tables';
+
+RelationshipConstraint.make('author')
+    .selectable(
+        IsRelatedToOperator.make()
+            .titleAttribute('last_name')
+            .searchable()
+            .getOptionLabelFromRecordUsing((author) => `${author.first_name} ${author.last_name}`),
+    )
+```
 
 Navette finds the model of the table through the data adapter of the list page. If the constraint is used elsewhere, pass the model to the query builder with `model()`:
 
@@ -483,7 +514,7 @@ The SQL for dates, months, years and text searches is written for SQLite, MySQL 
 
 ## Custom operators
 
-You may add your own operators to a constraint with `pushOperators()`, or replace its operators with `operators()`. An operator has a name, labels, an optional settings form, the condition it adds to the query, and the summary shown in the filter indicator:
+You may add your own operators to a constraint with `pushOperators()` (after the default ones) or `unshiftOperators()` (before them: the first one becomes the default operator of a new rule), or replace its operators with `operators()`. An operator given to `unshiftOperators()` with the name of an existing operator replaces it. An operator has a name, labels, an optional settings form, the condition it adds to the query, and the summary shown in the filter indicator:
 
 ```ts
 import { TextInput } from '@navette-js/forms';
@@ -524,7 +555,25 @@ CustomConstraint.make('popularity')
 
 ## Grouping constraints in the picker
 
-Pass the constraints as an object to group them under labels in the constraint picker:
+Like Filament's `['Group' => [...]]` arrays, pass an object of groups to group the constraints under labels in the constraint picker. It may be given alone, or among ungrouped constraints, which are listed first:
+
+```ts
+import { QueryBuilder, TextConstraint } from '@navette-js/tables';
+
+QueryBuilder.make()
+    .constraints([
+        TextConstraint.make('title'),
+        { People: [TextConstraint.make('author'), TextConstraint.make('editor')] },
+    ])
+```
+
+`pickerGroup()` sets the group of one constraint:
+
+```ts
+TextConstraint.make('slug').pickerGroup('Content')
+```
+
+With the object form alone:
 
 ```ts
 import { DateConstraint, NumberConstraint, QueryBuilder, TextConstraint } from '@navette-js/tables';
@@ -553,3 +602,16 @@ QueryBuilder.make()
     .constraintPickerColumns(3)
     .constraintPickerWidth('4xl')
 ```
+
+## Global settings
+
+`QueryBuilder.configureUsing()` applies options to every query builder created afterwards, and each constraint class has its own `configureUsing()`:
+
+```ts
+import { DateConstraint, QueryBuilder } from '@navette-js/tables';
+
+QueryBuilder.configureUsing((filter) => filter.maxRules(20).constraintPickerColumns(2));
+DateConstraint.configureUsing((constraint) => constraint.nullable());
+```
+
+Call them once, when the application starts. Options set on a filter or a constraint override them.

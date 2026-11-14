@@ -66,7 +66,16 @@ IconColumn.make('is_featured')
     .trueColor('warning')
 ```
 
-`false` as an icon displays nothing for that value.
+`false` as an icon displays nothing for that value. `trueColor()` and `falseColor()` replace the `success` and `danger` colors:
+
+```ts
+import { IconColumn } from '@navette-js/tables';
+
+IconColumn.make('is_paid')
+    .boolean()
+    .trueColor('info')
+    .falseColor('warning')
+```
 
 ## Displaying multiple icons
 

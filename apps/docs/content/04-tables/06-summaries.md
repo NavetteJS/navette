@@ -189,7 +189,21 @@ new Table()
     ])
 ```
 
-The range is displayed as `minimum - maximum`. Empty values are ignored.
+The range is displayed as `minimum - maximum`. Empty values are ignored; `excludeNull(false)` counts empty strings as bounds too (SQL's `MIN()` and `MAX()` always skip `null` values).
+
+### Text range
+
+`minimalTextualDifference()` shortens text bounds to the first character that differs, as in an encyclopedia's volume labels: "Alpaca" and "Alpine" become `Alpa - Alpi`, and a single value is shown when both bounds are equal. `limit()` cuts each bound to a number of characters:
+
+```ts
+import { Range, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('name')
+    .summarize(Range.make().minimalTextualDifference())
+
+TextColumn.make('title')
+    .summarize(Range.make().limit(10)) // "A very lon... - Zebra"
+```
 
 ### Date range
 
@@ -281,7 +295,7 @@ Sum, Average and Count are labelled "Sum", "Average" and "Count" by default. A r
 
 ## Formatting
 
-Values are formatted as numbers, with thousands separators, for the `en-US` locale.
+Values are formatted as numbers, with thousands separators, for the `en-US` locale unless you pass another locale to `numeric()` or `money()`.
 
 ### Currency formatting
 
@@ -307,7 +321,18 @@ new Table()
     ])
 ```
 
-The summarizer does not inherit the column's formatting: set `money()` on the summarizer too.
+The summarizer does not inherit the column's formatting: set `money()` on the summarizer too. Like the column's `money()`, it accepts `divideBy` (for amounts in cents), a locale and a number of decimal places, or an object:
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('total_in_cents')
+    .money('eur', 100, 'fr')
+    .summarize(Sum.make().money('eur', 100, 'fr')) // 1 234,56 €
+
+TextColumn.make('total_in_cents')
+    .summarize(Sum.make().money('usd', { divideBy: 100, decimalPlaces: 0 })) // $1,235
+```
 
 ### Number formatting
 
@@ -318,6 +343,19 @@ import { Average, TextColumn } from '@navette-js/tables';
 
 TextColumn.make('rating')
     .summarize(Average.make().numeric(2))
+```
+
+Its other arguments are those of the column's [`numeric()`](/tables/columns/text#number-formatting): `decimalSeparator`, `thousandsSeparator`, `maxDecimalPlaces` and `locale`, or an object such as `numeric({ decimalPlaces: 1, locale: 'de' })`.
+
+### Limiting the length
+
+`limit()` cuts the formatted value to a number of characters (100 by default), followed by `...` or the text passed as second argument:
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('views')
+    .summarize(Sum.make().limit(8, '…'))
 ```
 
 ### Custom formatting
