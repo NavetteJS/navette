@@ -53,6 +53,8 @@ const teams: TenantProvider = {
 };
 ```
 
+`getName()` may return an `HtmlString` (from `@navette-js/support`) to render HTML in the tenant menu, for instance an icon next to the name. Its text, without the tags, is used in the avatar's `alt` text. Escape the parts that come from your users yourself.
+
 Optional methods:
 
 | Method | Description |
@@ -218,11 +220,24 @@ await panel.withTenant(team, async () => {
 });
 ```
 
+## Running middleware once the tenant is known
+
+`tenantMiddleware()` registers Express middleware that run on the pages of a tenant, once the tenant of the request is resolved and the user's access to it is checked. `res.locals.navette` holds `{ panel, user, tenant }`. Pass `true` as the second argument to run them on component updates too, as with the panel's [`middleware()`](/panels/configuration#registering-middleware-on-the-panel):
+
+```ts
+panel.tenantMiddleware([
+    (req, res, next) => {
+        setTenantTimezone(res.locals.navette.tenant.timezone);
+        next();
+    },
+], true);
+```
+
 ## Customizing the tenant menu
 
 The tenant menu is displayed at the top of the sidebar. It shows the current tenant with its avatar, the other tenants of the user to switch to, and links to the tenant profile and registration pages.
 
-To add items, pass actions with a URL to `tenantMenuItems()`. A negative `sort()` places the item above the list of tenants:
+To add items, pass actions to `tenantMenuItems()`. A negative `sort()` places the item above the list of tenants:
 
 ```ts
 import { Action } from '@navette-js/actions';
@@ -232,15 +247,29 @@ panel.tenantMenuItems([
 ]);
 ```
 
-### Customizing the registration and profile links
+The items work as in the [user menu](/panels/navigation#customizing-the-user-menu): a list of groups separates them, `ActionGroup` items form a group of their own, an action without a URL runs on the server (and may open a modal), and `postToUrl()` sends a `POST` request.
 
-Register an item under the `register` or `profile` key to replace the default link:
+### Customizing the registration, profile and billing links
+
+Register an item under the `register`, `profile` or `billing` key to replace the default link, or a function to change it:
 
 ```ts
 panel.tenantMenuItems({
-    // A function: the URL is computed for the tenant of each request.
+    // An action: the URL is computed for the tenant of each request.
     profile: Action.make('profile').label('Team settings').icon('m-cog-6-tooth').url(() => panel.getUrl('settings')),
+    // A function: the default link, changed.
+    billing: (action) => action.label('Plans and invoices'),
 });
+```
+
+The `billing` item only exists with a [billing provider](#adding-billing).
+
+### Disabling the tenant switcher
+
+`tenantSwitcher(false)` removes the list of other tenants from the menu. The menu stays, with the current tenant and its links:
+
+```ts
+panel.tenantSwitcher(false);
 ```
 
 ### Searching tenants in the menu
@@ -276,7 +305,7 @@ const billing: TenantBillingProvider<Team> = {
 panel.tenantBillingProvider(billing);
 ```
 
-Change the URL segment with `tenantBillingRouteSlug('subscription')`. Replace the link by registering an item under the `billing` key in `tenantMenuItems()`.
+Change the URL segment with `tenantBillingRouteSlug('subscription')`. Replace or change the link with the [`billing` key](#customizing-the-registration-profile-and-billing-links) of `tenantMenuItems()`.
 
 ### Requiring a subscription
 

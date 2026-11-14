@@ -62,10 +62,7 @@ panel.setColors({ brand: '#0ea5e9' });
 Action.make('export').color('brand')
 ```
 
-The palette of the new color is available as CSS variables (`--brand-50` to `--brand-950`), and components receive the classes `fi-color fi-color-brand`.
-
-<Aside variant="warning">
-Navette does not yet generate the CSS rule that maps a new color name to the color variables of components. Add it yourself, for example in a [custom theme](/styling/overview#creating-a-custom-theme) or with the `panels::styles.after` render hook, with one variable per shade:
+The palette of the new color is available as CSS variables (`--brand-50` to `--brand-950`), and components receive the classes `fi-color fi-color-brand`. The panel also writes the rule mapping that class to the color variables of components, next to the palette variables, so a button, a badge or an icon colored `brand` uses it with nothing else to add:
 
 ```css
 .fi-color-brand {
@@ -75,7 +72,8 @@ Navette does not yet generate the CSS rule that maps a new color name to the col
     --color-950: var(--brand-950);
 }
 ```
-</Aside>
+
+The default colors (`primary`, `danger`, `gray`, `info`, `success`, `warning`) already have their rules in Navette's stylesheet.
 
 ## Using a non-Tailwind color
 
