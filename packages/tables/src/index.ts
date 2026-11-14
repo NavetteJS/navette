@@ -974,7 +974,7 @@ export class Split<R = any> extends ColumnLayout<R> {
     private _from: string | null = null;
     static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Split<R> { return configured(new Split<R>(children)); }
     from(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._from = breakpoint; return this; }
-    getClasses(): string[] { return ['nv-ta-split', ...(this._from ? [`${this._from}:nv-ta-split`] : [])]; }
+    getClasses(): string[] { return ['nv-ta-split', `${this._from ?? 'default'}:nv-ta-split`]; }
 }
 /** Columns stacked vertically. */
 export class Stack<R = any> extends ColumnLayout<R> {

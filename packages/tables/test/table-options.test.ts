@@ -111,6 +111,8 @@ test('column layouts: `Grid`, collapsible `Panel`, `View`, `contentGrid()`, `gro
     assert.match(html, /role="list" class="nv-grid md:nv-grid-cols xl:nv-grid-cols nv-ta-content nv-ta-content-grid" style="--cols-md: repeat\(2, minmax\(0, 1fr\)\); --cols-xl: repeat\(3, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
     assert.match(html, /<div class="nv-grid-col nv-ta-col" style="--col-span-default: span 1 \/ span 1;"><div class="nv-ta-text/, 'grow(false)');
     assert.match(html, /class="nv-grid-col nv-growable md:nv-hidden"[^>]*><div class="nv-ta-stack/);
+    assert.match(html, /<div class="nv-ta-split default:nv-ta-split">/, 'Split without from() is a row at every width');
+    assert.deepEqual(Split.make([]).from('md').getClasses(), ['nv-ta-split', 'md:nv-ta-split']);
     assert.match(html, /<span class="my-view">6<\/span>/);
     assert.match(html, /class="nv-grid lg:nv-grid-cols nv-ta-grid nv-gap-sm lg:nv-gap-lg"/);
     assert.match(html, /x-data="\{ isCollapsed: true \}"/);
