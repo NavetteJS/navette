@@ -187,6 +187,24 @@ With these bindings, the suffix reads "⌘+K" on a Mac and "META+K" on Windows a
 
 To display your own text instead, use `globalSearchFieldSuffix('Search')`.
 
+`globalSearchFieldSuffix()` also accepts a function, which receives the browser's user agent on every request. `Platform.detect()` tells the platform from it (`Platform.Windows`, `Platform.Mac`, `Platform.Linux` or `Platform.Other`), to write the shortcut the way the user's keyboard shows it:
+
+```ts
+import { Platform } from '@navette-js/support';
+
+panel.globalSearchFieldSuffix((userAgent) => {
+    switch (Platform.detect(userAgent)) {
+        case Platform.Windows:
+        case Platform.Linux:
+            return 'CTRL+K';
+        case Platform.Mac:
+            return '⌘K';
+        default:
+            return null;
+    }
+});
+```
+
 ## Authorization
 
 Only the resources whose list the user may see (`viewAny`) are searched, and a result is left out when the user may neither view nor update the record. In a [multi-tenant panel](/panels/tenancy), results come from the current tenant only, and the scope of each adapter applies.

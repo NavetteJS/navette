@@ -575,6 +575,21 @@ Action.make('updateAuthor')
 
 `modalCloseButton(false)` removes the close button of the header; the cancel button stays.
 
+### Changing the defaults of every modal
+
+To change these defaults for every modal of the application, call the static methods of `ModalComponent` once, when the application starts. They apply to action modals and to the [modal component](/components/modal), unless a modal sets its own value:
+
+```ts
+import { ModalComponent } from '@navette-js/support';
+
+ModalComponent.closeButton(false);
+ModalComponent.closedByClickingAway(false);
+ModalComponent.closedByEscaping(false);
+ModalComponent.autofocus(false);
+```
+
+An action can still ask for the close button with `modalCloseButton()`, and likewise with `closeModalByClickingAway()`, `closeModalByEscaping()` and `modalAutofocus()`.
+
 ### Disabling the unsaved changes alert
 
 When [unsaved changes alerts](/panels/configuration) are enabled for a panel (`unsavedChangesAlerts()`), users are warned before leaving the page while an action modal is open. If a modal cannot contain unsaved changes, disable the warning with `unsavedChangesAlert(false)`:

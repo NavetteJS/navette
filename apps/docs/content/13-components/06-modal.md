@@ -244,6 +244,19 @@ When it opens, a modal focuses its first focusable element. `:autofocus="false"`
 </x-modal>
 ```
 
+## Changing the defaults of every modal
+
+`ModalComponent`, from `@navette-js/support`, sets the defaults of every modal, including [action modals](/actions/modals#changing-the-defaults-of-every-modal). Call it once, when the application starts; a modal's own props still win:
+
+```ts
+import { ModalComponent } from '@navette-js/support';
+
+ModalComponent.closeButton(false);
+ModalComponent.closedByClickingAway(false);
+ModalComponent.closedByEscaping(false);
+ModalComponent.autofocus(false);
+```
+
 ## Using a modal as an alert dialog
 
 The `alert` prop gives the modal the `alertdialog` role instead of `dialog`, for a message that requires the user's attention:
@@ -283,11 +296,13 @@ In a [page rendered with a view](/resources/custom-pages#rendering-a-page-with-a
 | `sticky-header` | boolean | `false` | The header stays visible while scrolling |
 | `sticky-footer` | boolean | `false` | The footer stays visible while scrolling |
 | `alert` | boolean | `false` | `alertdialog` role |
-| `close-button` | boolean | `true` | Close button in the header |
-| `close-by-clicking-away` | boolean | `true` | A click outside closes the modal |
-| `close-by-escaping` | boolean | `true` | The Escape key closes the modal |
+| `close-button` | boolean | `true`* | Close button in the header |
+| `close-by-clicking-away` | boolean | `true`* | A click outside closes the modal |
+| `close-by-escaping` | boolean | `true`* | The Escape key closes the modal |
 | `livewire-id` | string | none | Id of the component that contains the modal |
 | `trigger` | HTML | none | Element opening the modal (named slot; `disabled` on the slot stops it) |
-| `autofocus` | boolean | `true` | Focuses the first focusable element on open |
+| `autofocus` | boolean | `true`* | Focuses the first focusable element on open |
+
+\* The default of every modal of the application, set with `ModalComponent` (see below).
 
 Other HTML attributes are not used by the modal.

@@ -150,3 +150,26 @@ A record can have several view pages: declare a subclass of `ViewRecord` with it
 ## Custom page content
 
 The page renders the schema returned by `contentSchema()`: the infolist, then the relation manager tabs. You may override it, or use the [render hooks](/advanced/render-hooks) of the page, to add content around them.
+
+The pieces of the default content are available on the page:
+
+- `hasInfolist()` tells whether the resource defines an infolist; without one, the page shows the resource's form, disabled;
+- `getContentComponents()` returns the content without the relation managers: an `EmbeddedSchema` of the `infolist` schema (or of the `form` schema without an infolist);
+- `withRelationManagers(schema)` adds the relation manager tabs below the given content (or combines them with it in tabs, when `hasCombinedRelationManagerTabsWithContent()` is `true`).
+
+For example, to show a callout above the infolist only:
+
+```ts
+import { ViewRecord } from '@navette-js/panels';
+import { Callout, EmbeddedSchema, type Schema } from '@navette-js/schemas';
+
+class ViewOrder extends ViewRecord {
+    contentSchema(schema: Schema): Schema {
+        const content = this.hasInfolist()
+            ? [Callout.make('Paid orders cannot be changed.').info(), EmbeddedSchema.make('infolist')]
+            : this.getContentComponents();
+
+        return this.withRelationManagers(schema.components(content));
+    }
+}
+```

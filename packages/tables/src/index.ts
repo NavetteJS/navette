@@ -2488,6 +2488,25 @@ export class Table<R = any> {
      */
     allowDuplicates(condition = true): this { this._allowsDuplicates = condition; return this; }
     allowsDuplicates(): boolean { return this._allowsDuplicates; }
+    private _recordTitle: string | ((record: R) => string) | null = null;
+    private _recordTitleAttribute: string | null = null;
+    /**
+     * Title of a record, in the headings of record action modals ("Edit Ada Lovelace") and in the options of the attach and
+     * associate selects of a relation manager: `recordTitle((record) => `${record.first_name} ${record.last_name}`)`.
+     */
+    recordTitle(title: string | ((record: R) => string) | null): this { this._recordTitle = title; return this; }
+    /** Attribute holding a record's title (a relation manager's `recordTitleAttribute` is used when this is not set). */
+    recordTitleAttribute(name: string | null): this { this._recordTitleAttribute = name; return this; }
+    getRecordTitleAttribute(): string | null { return this._recordTitleAttribute; }
+    /** Whether `recordTitle()` or `recordTitleAttribute()` is set. */
+    hasRecordTitle(): boolean { return this._recordTitle !== null || this._recordTitleAttribute !== null; }
+    /** The record's title from `recordTitle()`, else from `recordTitleAttribute()`; `null` when neither is set. */
+    getRecordTitle(record: R): string | null {
+        if (typeof this._recordTitle === 'function') return String(this._recordTitle(record) ?? '');
+        if (this._recordTitle !== null) return this._recordTitle;
+        if (this._recordTitleAttribute !== null) return String((record as any)?.[this._recordTitleAttribute] ?? '');
+        return null;
+    }
     private _queryModifiers: ((query: any) => unknown)[] = [];
     /**
      * Changes the table's query (an Objection query builder): only the records it keeps are shown, and, in a `TableSelect`,

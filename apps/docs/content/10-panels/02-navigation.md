@@ -127,7 +127,21 @@ export class OrderResource extends Resource {
 }
 ```
 
-On a resource, the badge color comes from the list page: set `navigationBadgeColor` on a [custom list page](/resources/overview#customizing-resource-pages).
+On a resource, `navigationBadge`, `navigationBadgeColor` and these methods are declared on the resource itself; they are passed to its list page, which owns the navigation item.
+
+To compute the color from the badge value, define a static `getNavigationBadgeColor(badge)` method on the page or the resource. It receives the value of the badge (from `navigationBadge` or `getNavigationBadge()`):
+
+```ts
+export class OrderResource extends Resource {
+    static async getNavigationBadge(): Promise<string> {
+        return String(await Order.query().where('status', 'new').resultSize());
+    }
+
+    static getNavigationBadgeColor(badge: string | number | null): string {
+        return Number(badge) > 10 ? 'danger' : 'primary';
+    }
+}
+```
 
 ### Badge tooltips
 

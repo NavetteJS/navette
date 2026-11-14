@@ -122,6 +122,17 @@ Panel.make()
     .darkMode(false)
 ```
 
+To know how a panel is set up, for instance in a plugin or a view, read `hasDarkMode()` (dark mode is available) and `hasDarkModeForced()` (the panel is always dark, Filament's `isDarkModeForced()`), on the panel or on `getCurrentPanel()` during a request:
+
+```ts
+import { getCurrentPanel } from '@navette-js/panels';
+
+const panel = getCurrentPanel();
+const alwaysDark = panel?.hasDarkModeForced() ?? false;
+```
+
+Neither tells which mode the user has picked: that choice stays in their browser.
+
 ## Adding a logo
 
 By default, the brand name is displayed as the logo. To use an image, see [setting the brand](/panels/configuration#setting-the-brand), which also covers the dark mode logo and the favicon.

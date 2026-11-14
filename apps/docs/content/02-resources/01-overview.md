@@ -326,7 +326,7 @@ static slug = 'shop/customers';
 
 ## Resource sub-navigation
 
-Sub-navigation lets the user move between the pages of one record: its View page, its Edit page, and its [related-records pages](/resources/managing-relationships#relation-pages). List the pages to show, in order, with `recordSubNavigation`:
+Sub-navigation lets the user move between the pages of one record: its View page, its Edit page, its [related-records pages](/resources/managing-relationships#relation-pages) and its [custom record pages](/resources/custom-pages#using-a-resource-record). List the pages to show, in order, with `recordSubNavigation`:
 
 ```ts
 export class PostResource extends Resource {

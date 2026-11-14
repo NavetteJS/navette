@@ -500,6 +500,8 @@ export type RecordSelectOptions = {
     limit: number;
     /** The table's `allowDuplicates()`: records already attached are offered (and accepted) again. */
     allowsDuplicates: boolean;
+    /** Label of an option: the manager's `getRecordTitle()` (or the table's `recordTitle()`); `null` or absent: the title attribute, else the key. */
+    recordTitle?: ((record: any) => string) | null;
 };
 
 type RelationKind = 'attach' | 'associate';
@@ -557,7 +559,10 @@ export class RecordSelectAction extends CustomizableAction {
 
     /** Options handed to the manager for a request of this component. */
     getRecordSelectOptions(livewire: any, limit = 50): RecordSelectOptions {
-        return { modifyQuery: this._modifyOptionsQuery, searchColumns: this._searchColumns, limit, allowsDuplicates: this._kind === 'attach' && livewire?.getTable?.().allowsDuplicates?.() === true };
+        return {
+            modifyQuery: this._modifyOptionsQuery, searchColumns: this._searchColumns, limit, allowsDuplicates: this._kind === 'attach' && livewire?.getTable?.().allowsDuplicates?.() === true,
+            recordTitle: typeof livewire?.getRelatableRecordTitleResolver === 'function' ? livewire.getRelatableRecordTitleResolver() : null,
+        };
     }
     private search(livewire: any, search: string, limit: number): Promise<[string, string][]> {
         const manager = managerOf(livewire);
@@ -809,7 +814,7 @@ export async function searchRelatedRecords(manager: RelatedRecordsManager, owner
         const taken = options.allowsDuplicates ? new Set<string>() : new Set(await related.keysInScope(keys));
         for (const record of result.records) {
             const key = adapter.getKey(record);
-            if (!taken.has(key)) found.push([key, relatedRecordTitle(manager, record, key)]);
+            if (!taken.has(key)) found.push([key, relatedRecordTitle(manager, record, key, options)]);
         }
         if (page >= result.lastPage) break;
     }
@@ -825,7 +830,7 @@ export async function relatedRecordLabel(manager: RelatedRecordsManager, ownerKe
     if (!record) return null;
     const key = adapter.getKey(record);
     if (!options.allowsDuplicates && (await manager.adapterFor(ownerKey).keysInScope([key])).length) return null;
-    return relatedRecordTitle(manager, record, key);
+    return relatedRecordTitle(manager, record, key, options);
 }
 
 function requireRelatedAdapter(manager: RelatedRecordsManager, ownerKey: string): DataAdapter {
@@ -833,7 +838,9 @@ function requireRelatedAdapter(manager: RelatedRecordsManager, ownerKey: string)
     if (!adapter) throw new Error(`${manager.name}: define relatedAdapter() (or searchAttachable() / attachableLabel(), searchAssociable() / associableLabel()).`);
     return adapter;
 }
-const relatedRecordTitle = (manager: RelatedRecordsManager, record: any, key: string): string => {
+const relatedRecordTitle = (manager: RelatedRecordsManager, record: any, key: string, options: RecordSelectOptions): string => {
+    const custom = options.recordTitle?.(record);
+    if (custom) return custom;
     const title = manager.recordTitleAttribute;
     if (title) return String(record?.[title] ?? key);
     const resource = manager.getRelatedResource?.();

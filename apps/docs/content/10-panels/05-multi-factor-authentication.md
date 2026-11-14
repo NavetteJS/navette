@@ -358,21 +358,23 @@ export class SmsAuthentication implements MultiFactorAuthenticationProvider {
         return Boolean(await phones.numberOf(user.id));
     }
 
-    async beforeChallenge(user: User): Promise<void> {
+    async beforeChallenge(user: User, panel: Panel): Promise<void> {
         const code = String(randomInt(1_000_000)).padStart(6, '0');
-        this.codes.set(String(user.id), { code, expires: Date.now() + 5 * 60_000 });
+        this.codes.set(panel.getUserScopedAuthIdentifier(user), { code, expires: Date.now() + 5 * 60_000 });
         await sms.send(await phones.numberOf(user.id), `Your code: ${code}`);
     }
 
-    getChallengeFormComponents(user: User) {
+    getChallengeFormComponents(user: User, panel: Panel) {
+        const key = panel.getUserScopedAuthIdentifier(user);
+
         return [
             OneTimeCodeInput.make('code').label('Code sent by SMS').required()
                 .rule({
                     name: 'sms_code',
                     passes: (value) => {
-                        const pending = this.codes.get(String(user.id));
+                        const pending = this.codes.get(key);
                         const valid = Boolean(pending && pending.expires > Date.now() && pending.code === value);
-                        if (valid) this.codes.delete(String(user.id));
+                        if (valid) this.codes.delete(key);
                         return valid;
                     },
                     message: () => 'The code is invalid or expired.',
@@ -402,6 +404,8 @@ export class SmsAuthentication implements MultiFactorAuthenticationProvider {
 | `beforeChallenge(user, panel)` | Optional: runs when the challenge appears (send the code). |
 | `getManagementSchemaComponents(user, panel)` | Components of the profile section. Give an `Actions` component a `key()`: its actions can then open modals. |
 | `checkConfiguration(panel)` | Optional: called when the panel starts; throw if something is missing. |
+
+The pending codes are keyed by `panel.getUserScopedAuthIdentifier(user)` rather than `user.id`: two panels may have auth providers whose users share ids, and a provider instance may be registered in both. The identifier is made of the panel id and a hash of the user id. With several instances of the application, keep the codes in a shared store instead of a `Map` (see [running several instances](#running-several-instances)).
 
 Register it like the built-in methods:
 
@@ -465,7 +469,7 @@ if (await challenge.hasEnabledProviders(user)) {
 
 `getFirstEnabledProvider()`, `getProviderPickerFormComponent()` and `getChallengeFormComponents()` return the parts separately.
 
-Rate-limit the attempts the same way as the sign-in, by user: check `isRateLimited(user)` before verifying a code, call `hitRateLimiter(user)` after a wrong one, and `clearRateLimiter(user)` after a right one. `getRateLimiterAvailableInSeconds(user)` tells when the user may try again, and `getMaxRateLimiterAttempts()` how many attempts are allowed.
+Rate-limit the attempts the same way as the sign-in, by user: check `isRateLimited(user)` before verifying a code, call `hitRateLimiter(user)` after a wrong one, and `clearRateLimiter(user)` after a right one. `getRateLimiterAvailableInSeconds(user)` tells when the user may try again, and `getMaxRateLimiterAttempts()` how many attempts are allowed. The attempts are counted under `getRateLimiterKey(user)`, which is `panel.getUserScopedAuthIdentifier(user)`: the sign-in and your own challenges of the same panel share them. Override `getRateLimiterKey()` in a subclass of `MultiFactorChallenge` to count them apart.
 
 ```ts
 if (challenge.isRateLimited(user)) throw new Error(`Too many attempts. Try again in ${challenge.getRateLimiterAvailableInSeconds(user)} seconds.`);

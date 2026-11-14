@@ -66,7 +66,15 @@ class EditOrder extends EditRecord {
 
 ## Customizing redirects
 
-By default, the user stays on the edit page after saving. To redirect them, override `getRedirectUrl()`, which returns a URL or `null`:
+By default, the user stays on the edit page after saving. If the saved record is one they may no longer edit (the `update` ability of the policy), they go to its View page if they may view it, otherwise to the list.
+
+To redirect them after saving on every resource of the panel, use `resourceEditPageRedirect()` with `'index'` (the list) or `'view'` (the record's View page, used only when the resource has one and the user may view the record):
+
+```ts
+panel.resourceEditPageRedirect('view');
+```
+
+To redirect them from one page, override `getRedirectUrl()`, which returns a URL or `null` (and may be async):
 
 ```ts
 class EditTask extends EditRecord {
@@ -86,6 +94,23 @@ When the record is successfully updated, a notification is sent to the user. To 
 class EditTask extends EditRecord {
     protected getSavedNotificationTitle(): string | null {
         return 'Task updated';
+    }
+}
+```
+
+To change the whole notification (its body, icon, actions or duration), override `getSavedNotification()`, which receives the saved record. Return `null` to send no notification:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { EditRecord, Notification } from '@navette-js/panels';
+
+class EditTask extends EditRecord {
+    protected getSavedNotification(record: any): Notification | null {
+        return Notification.make()
+            .success()
+            .title('Task updated')
+            .body(`"${record.title}" is up to date.`)
+            .actions([Action.make('view').button().url(this.resource.getUrl('view', record.id))]);
     }
 }
 ```
@@ -117,7 +142,7 @@ The hooks run in this order when the user saves the form:
 | Before the update | `beforeSave(data)` |
 | The record is updated | `handleRecordUpdate(record, data)` |
 | After the update | `afterSave(record)` |
-| The notification is sent | `getSavedNotificationTitle()` |
+| The notification is sent | `getSavedNotification(record)` (by default from `getSavedNotificationTitle()`) |
 | The user is redirected, if a URL is returned | `getRedirectUrl(record)` |
 
 When the page opens, `beforeFill()` and `afterFill()` run around filling the form with the record (after `mutateFormDataBeforeFill()`).
