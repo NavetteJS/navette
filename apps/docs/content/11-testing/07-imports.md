@@ -8,7 +8,7 @@ An [importer](/actions/import) is tested at two levels: its rows, with its `test
 
 ## Testing a row
 
-`test()` returns a tester running your importer on one row at a time, as the import action would: validation of each column, casting, `resolveRecord()`, `beforeSave()`, saving through the adapter, and `afterSave()`. Give it the data adapter that saves the records, usually the resource's:
+`test()` returns a tester running your importer on one row at a time, as the import action would: casting, `resolveRecord()`, validation of each column, filling, saving through the adapter (relationships included), and every hook. Give it the data adapter that saves the records, usually the resource's:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -46,7 +46,31 @@ const result = await ProductImporter.test({
 
 A map replaces the default one: columns it omits are not imported, as when the user leaves them unmapped in the modal. `requiredMapping()` is checked by the import action, not by this tester.
 
-`resolveRecord()` receives `{ livewire }` as its second argument; pass the component it needs with the `livewire` option.
+### Passing options and the import
+
+`options` are the [import options](/actions/import#using-import-options), as the action would merge them from its `options()` and its options form; `resolveRecord()`, the hooks and the column functions receive them in their context:
+
+```ts
+const result = await ProductImporter.test({
+    adapter: ProductResource.adapter,
+    options: { updateExisting: true },
+}).import({ sku: 'MUG-001', name: 'Large ceramic mug' });
+
+result.assertImported();
+```
+
+The tester does not validate the options form or apply its defaults: pass every option your importer reads. `import` sets the import run the hooks see (`ctx.import`: its `id`, `userId`, `fileName`…), and `livewire` the component.
+
+## Testing skipped rows
+
+`assertSkipped()` checks that `resolveRecord()` returned `null`: nothing was saved, and the row has neither validation errors nor a failure:
+
+```ts
+const result = await ProductImporter.test({ adapter: ProductResource.adapter }).import({ sku: 'MISSING-001' });
+
+result.assertSkipped();
+assert.equal(await db('products').where('sku', 'MISSING-001').first(), undefined);
+```
 
 ## Testing validation errors
 
@@ -64,11 +88,11 @@ result
     .assertHasNoErrors(['sku']);
 ```
 
-Columns are named as in the importer, not by the headers of the file. Rules are named without their parameter (`max`, not `max:255`); a function rule is named `closure`, or matched by its exact message. `errors()` returns the message of each failed column.
+Columns are named as in the importer, not by the headers of the file; a value of a [`multiple()`](/actions/import#handling-multiple-values-in-a-single-column) column is named after its position (`ratings.1`). Every rule a value fails is recorded: `{ price: ['numeric', 'min'] }` checks both. Rules are named without their parameter (`max`, not `max:255`); a function rule is named `closure`, an error thrown with an `ImportValidationError` is named `custom`, and any of them can be matched by its exact message. `errors()` returns the messages of each failed column, and `failedRules()` the names of its failed rules.
 
 ## Testing rejected rows
 
-A row rejected by a `RowImportFailedError`, thrown from `resolveRecord()`, `beforeSave()` or `afterSave()`, is checked with `assertHasRowFailure()`, optionally with its exact message. `assertHasNoRowFailure()` checks that the row was not rejected:
+A row rejected by a `RowImportFailedError`, thrown from `resolveRecord()` or a hook, is checked with `assertHasRowFailure()`, optionally with its exact message. `assertHasNoRowFailure()` checks that the row was not rejected:
 
 ```ts
 const result = await ProductImporter.test({ adapter: ProductResource.adapter }).import({ sku: 'MISSING-001' });
@@ -103,3 +127,36 @@ test('products are imported from a file', async () => {
 Upload the file before choosing the columns: once uploaded, the form reads its headers and preselects the columns that match them. Without the second `fillForm()`, the preselected columns are imported.
 
 The action is the one of the table header (`table()`); for an import action in the page header, use `mountAction('import')`. The rows are imported during the request unless the action is [queued](/actions/import#running-imports-in-the-background), with database notifications configured. Rows that fail are offered in a file: `getDownloads()` returns it after the chain has run.
+
+## Faking the import action
+
+`ImportAction.fake()` records the imports that import actions request, without processing their rows: the action still reads the file, validates the form (the column mapping, the options form) and records the run in the [history](/actions/import#keeping-a-history-of-imports), but no row is saved, no hook runs and no notification is sent. Check the requests with the returned fake:
+
+```ts
+import { ImportAction } from '@navette-js/panels';
+import { livewire, TestAction, UploadedFile } from '@navette-js/panels/testing';
+
+test('a product import is requested', async () => {
+    const imports = ImportAction.fake();
+    try {
+        await livewire(ProductResource.getPages().index)
+            .mountAction(TestAction.make('import').table())
+            .fillForm({ file: UploadedFile.fake().createWithContent('products.csv', 'Product code,Product name\nMUG-001,Ceramic mug\n') })
+            .fillForm({ columnMap: { sku: 'Product code', name: 'Product name' }, updateExisting: true })
+            .callMountedAction()
+            .assertHasNoFormErrors();
+
+        imports
+            .assertDispatched(ProductImporter, (run, columnMap, options) => run.userId === user.id && columnMap.sku === 'Product code' && options.updateExisting === true)
+            .assertDispatchedTimes(ProductImporter);
+    } finally {
+        imports.restore();
+    }
+});
+```
+
+The callback receives the import run (`userId`, `fileName`, `totalRows`…), the column map (column name → header, `null` for a column left unmapped) and the options, merged from the action and the form.
+
+`assertDispatched()` checks that at least one import of the importer was requested, matching the callback if given. `assertDispatchedTimes()` checks the exact count (1 by default), `assertNotDispatched()` that none was requested (or none matching the callback), and `assertNothingDispatched()` that no import was requested at all, for example after a form error. Importers may also be named by their class name.
+
+The fake replaces the import processing of every action of the process until `restore()` is called: restore it at the end of the test. Calling `ImportAction.fake()` again starts a new, empty fake. Test the rows with the importer's `test()` method.

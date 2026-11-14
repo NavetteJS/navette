@@ -52,7 +52,12 @@ class LabProductImporter extends Importer {
             ImportColumn.make('price').guess(['cost']).numeric().rules(['numeric']).example('19.90'),
         ];
     }
-    static async resolveRecord(data: Record<string, unknown>) { return (await LabProduct.query().findOne({ sku: String(data.sku) })) ?? null; }
+    // Import option (left out of the parity screenshots): only update existing products, skipping the rows of unknown SKUs.
+    static getOptionsFormComponents() { return process.env.NAVETTE_NO_THEMES ? [] : [Checkbox.make('updateOnly').label('Only update existing products')]; }
+    static async resolveRecord(data: Record<string, unknown>, ctx: { options: Record<string, unknown> }) {
+        const existing = await LabProduct.query().findOne({ sku: String(data.sku) });
+        return existing ?? (ctx.options.updateOnly ? null : {});
+    }
 }
 
 /** Shows or hides the selected products (bulk actions of the "Visibility" menu). */

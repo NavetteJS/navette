@@ -43,7 +43,7 @@ const phpNumber = (n: number | null): string | number | null => {
 
 import { isBlank as blank, stringRule, parseRegex, reportFailedRule, type Rule } from './rules.ts';
 export type { Rule } from './rules.ts';
-export { recordFailedRules } from './rules.ts';
+export { recordFailedRules, stringRule } from './rules.ts';
 const headline = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ (.)/g, (_, c) => ' ' + c.toLowerCase());
 
 export abstract class Field extends Component {
@@ -4005,7 +4005,8 @@ export class FileUpload extends Field {
             const ratios = aspectRatios.map(ratioOf).filter((ratio): ratio is number => ratio !== null);
             rules.push({ name: 'dimensions', passes: () => temporary().every((file) => { const size = file && readImageSize(file.path); return !!size && size.height > 0 && ratios.some((ratio) => Math.abs(size.width / size.height - ratio) < 0.01); }), message: (a) => `The ${a} field has invalid image dimensions.` });
         }
-        return rules;
+        // Rules added with rule() / rules() come after the file checks.
+        return [...rules, ...this._rules];
     }
     /** Validates the whole state, even when empty (a required field without files must fail). */
     async validate(): Promise<string[]> {

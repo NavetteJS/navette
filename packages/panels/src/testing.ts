@@ -337,7 +337,8 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         for (const notification of this.allNotifications) for (const action of notification.actions ?? []) {
             if (!action.url?.startsWith(prefix) || !this.user) continue;
             const file = this.panel.getDownloads().get(decodeURIComponent(action.url.slice(prefix.length)), this.user.id);
-            if (file) files.push({ name: file.name, type: file.type, content: file.content });
+            // Read synchronously: the built-in stores (memory, disk). An asynchronous store is read with its own get().
+            if (file && !(file instanceof Promise)) files.push({ name: file.name, type: file.type, content: file.content });
         }
         return files;
     }
