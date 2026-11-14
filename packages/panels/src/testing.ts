@@ -39,6 +39,8 @@ function runtimeFor(panel: Panel): WireRuntime {
     runtime = new WireRuntime({ key, uploads: new UploadStore(directory, key) });
     // The panel's router registers its pages, relation managers and widgets, as in the application.
     panelRouter(panel, runtime);
+    // Components served outside a panel (`@navette-js/panels/livewire`) keep their names.
+    for (const [name, cls] of ((panel as any).registeredComponents ?? new Map()) as Map<string, any>) runtime.register(name, cls);
     runtimes.set(panel, runtime);
     return runtime;
 }

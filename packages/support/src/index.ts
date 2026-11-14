@@ -556,6 +556,7 @@ export class ViewRegistry {
     private namespaces = new Map<string, string>();
     private overrides: string[] = [];
     private compiled = new Map<string, ejs.TemplateFunction>();
+    private compiledAsync = new Map<string, ejs.AsyncTemplateFunction>();
     private shared: Record<string, unknown> = {};
     private componentRenderers = new Map<string, ComponentRenderer>();
     private componentDirectories: string[] = [];
@@ -599,7 +600,7 @@ export class ViewRegistry {
     /** Registers a view namespace: `views.namespace('blog', new URL('../views', import.meta.url))` resolves `blog::posts.card`. */
     namespace(name: string, dir: string | URL): this { this.namespaces.set(name, dir instanceof URL ? fileURLToPath(dir) : dir); return this; }
     /** Application override directory: `<dir>/<namespace>/<path>.ejs` replaces the package view. */
-    overrideFrom(dir: string): this { this.overrides.unshift(dir); this.compiled.clear(); return this; }
+    overrideFrom(dir: string): this { this.overrides.unshift(dir); this.compiled.clear(); this.compiledAsync.clear(); return this; }
     share(data: Record<string, unknown>): this { Object.assign(this.shared, data); return this; }
 
     resolve(view: string): string {
@@ -618,7 +619,24 @@ export class ViewRegistry {
             fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file });
             this.compiled.set(cacheKey, fn);
         }
-        return fn({ e, js, cls, attrs, icon, loadingIndicator, view: (v: string, d?: Record<string, unknown>) => this.render(v, d), __component: (name: string, props: Record<string, unknown>, slot: string, slots: Record<string, string>) => this.renderComponent(name, props, slot, slots), ...this.shared, ...data });
+        return fn(this.templateData(data));
+    }
+    /**
+     * Renders a view as an async template: it may `await` in its tags (`<%- await schema('form') %>`). Page views and the
+     * views of components rendered outside a panel are rendered this way.
+     */
+    renderAsync(view: string, data: Record<string, unknown> = {}): Promise<string> { return this.renderFileAsync(this.resolve(view), data, view); }
+    /** Renders an EJS file as an async template (see `renderAsync()`). */
+    async renderFileAsync(file: string, data: Record<string, unknown> = {}, cacheKey = file): Promise<string> {
+        let fn = this.compiledAsync.get(cacheKey);
+        if (!fn) {
+            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, async: true });
+            this.compiledAsync.set(cacheKey, fn);
+        }
+        return fn(this.templateData(data));
+    }
+    private templateData(data: Record<string, unknown>): Record<string, unknown> {
+        return { e, js, cls, attrs, icon, loadingIndicator, view: (v: string, d?: Record<string, unknown>) => this.render(v, d), __component: (name: string, props: Record<string, unknown>, slot: string, slots: Record<string, string>) => this.renderComponent(name, props, slot, slots), ...this.shared, ...data };
     }
 }
 export const views = new ViewRegistry();
