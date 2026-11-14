@@ -935,8 +935,17 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
     assertTableColumnStateNotSet(name: string, value: unknown, record: unknown): this {
         return this.columnAssertion(name, async (column, component) => !sameValue(await column.getState(await this.loadRecord(component, record)), value), `Failed asserting that a table column with name [${name}] does not have the state ${show(value)} for the record [${this.recordKeyOf(record)}] on the [${this.className}] component.`);
     }
-    assertTableColumnHasDescription(name: string, description: string, record: unknown): this {
-        return this.columnAssertion(name, async (column, component) => column.getDescription?.(await this.loadRecord(component, record)) === description, `Failed asserting that a table column with name [${name}] has the description [${description}] on the [${this.className}] component.`);
+    /** Description of a text column for a record, below the value (default) or `'above'`. */
+    private async descriptionOf(column: any, component: any, record: unknown, position: 'above' | 'below'): Promise<string | null> {
+        const description = position === 'above' ? column._descriptionAbove : column._descriptionBelow;
+        const value = typeof description === 'function' ? description(await this.loadRecord(component, record)) : description;
+        return value ?? null;
+    }
+    assertTableColumnHasDescription(name: string, description: string, record: unknown, position: 'above' | 'below' = 'below'): this {
+        return this.columnAssertion(name, async (column, component) => (await this.descriptionOf(column, component, record, position)) === description, `Failed asserting that a table column with name [${name}] has the description [${description}] on the [${this.className}] component.`);
+    }
+    assertTableColumnDoesNotHaveDescription(name: string, description: string, record: unknown, position: 'above' | 'below' = 'below'): this {
+        return this.columnAssertion(name, async (column, component) => (await this.descriptionOf(column, component, record, position)) !== description, `Failed asserting that a table column with name [${name}] does not have the description [${description}] on the [${this.className}] component.`);
     }
     /** Summarizer of a column, by its kind (`sum`, `average`, `count`, `range`, `values`) or its label. */
     private summarizerOf(column: any, id: string): Summarizer | undefined {

@@ -56,8 +56,8 @@ class PostResource extends Resource {
     static table(table: Table<Post>): Table<Post> {
         return table
             .columns([
-                TextColumn.make<Post>('title').searchable().sortable(),
-                TextColumn.make<Post>('status'),
+                TextColumn.make<Post>('title').searchable({ isIndividual: true, isGlobal: true }).sortable().description((record) => `${record.views} views`),
+                TextColumn.make<Post>('status').toggleable(true, { isToggledHiddenByDefault: true }),
                 TextColumn.make<Post>('views').sortable().summarize([Sum.make(), Average.make()]),
             ])
             .filters([SelectFilter.make('status').options([['draft', 'Draft'], ['published', 'Published']]), TernaryFilter.make('is_featured')])
@@ -94,6 +94,8 @@ class Settings extends Page {
             Action.make('ping').action(({ livewire }) => { (livewire as any).dispatch('pinged', { at: 'now' }); }),
             Action.make('secret').hidden(),
             Action.make('locked').disabled(),
+            Action.make('help').label('Help').color('gray').icon('o-question-mark-circle').url('https://example.test/help').openUrlInNewTab(),
+            Action.make('wizard').schema([TextInput.make('step')]).extraModalFooterActions([Action.make('suggest').action(() => { Notification.make().title('Suggested').send(); })]).action(() => {}),
         ];
     }
     async save(): Promise<void> {
@@ -168,7 +170,7 @@ test('columns, filters and summaries', async () => {
         .assertTableColumnExists('title')
         .assertTableColumnExists('views', (column) => column.isSortable())
         .assertTableColumnDoesNotExist('body')
-        .assertTableColumnVisible('status')
+        .assertTableColumnHidden('status')
         .assertTableColumnStateSet('title', 'Alpha', (await ids())[0])
         .assertTableFilterExists('status')
         .assertTableColumnSummarySet('views', 'sum', 60)
@@ -393,4 +395,41 @@ test('relation managers and widgets are tested like pages', async () => {
         .assertForbidden();
     assert.deepEqual((await db('comments').where('post_id', alpha).orderBy('id')).map((row: any) => row.body), ['First!', 'Second']);
     await livewire(PostStats).assertOk().assertSeeText('Posts').assertSeeText('3');
+});
+
+test('more helpers: column searches, toggled columns, descriptions, links, dotted nested actions, fake images', async () => {
+    const [alpha, bravo] = await ids();
+    await livewire(pages.index)
+        .assertTableColumnHidden('status')
+        .toggleAllTableColumns()
+        .assertTableColumnVisible('status')
+        .toggleAllTableColumns(false)
+        .assertTableColumnHidden('status')
+        .searchTableColumns({ title: 'Alp' })
+        .assertCanSeeTableRecords([alpha])
+        .assertCanNotSeeTableRecords([bravo])
+        .assertTableColumnHasDescription('title', '10 views', alpha)
+        .assertTableColumnDoesNotHaveDescription('title', '20 views', alpha)
+        .filterTable('status', 'published')
+        .removeTableFilter('status')
+        .assertCountTableRecords(1);
+    const page = livewire(Settings);
+    await page
+        .assertActionHasLabel('help', 'Help')
+        .assertActionDoesNotHaveLabel('help', 'Aide')
+        .assertActionHasColor('help', 'gray')
+        .assertActionHasIcon('help', 'o-question-mark-circle')
+        .assertActionHasUrl('help', 'https://example.test/help')
+        .assertActionShouldOpenUrlInNewTab('help')
+        .assertActionShouldNotOpenUrlInNewTab('rename')
+        .callAction('wizard.suggest')
+        .assertNotified('Suggested')
+        .assertActionMounted('wizard')
+        .refresh()
+        .assertOk();
+    assert.deepEqual(page.getNotifications().map((notification) => notification.title), ['Suggested']);
+    assert.equal(page.get('plan'), 'free');
+    const image = UploadedFile.fake().image('cover.png', 4, 3);
+    assert.equal(image.content.subarray(1, 4).toString('latin1'), 'PNG');
+    assert.equal(UploadedFile.fake().create('big.pdf', 2).content.length, 2048);
 });
