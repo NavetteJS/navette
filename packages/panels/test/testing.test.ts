@@ -5,9 +5,26 @@ import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database
 import { fillSchema, getSchemaState, Select, TextInput, Toggle, validateSchema } from '@navette-js/forms';
 import { Actions, EmbeddedSchema, Form, Section, type Schema } from '@navette-js/schemas';
 import { Average, SelectFilter, Sum, TernaryFilter, TextColumn, type Table } from '@navette-js/tables';
-import { DeleteBulkAction, ExportAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Page, Panel, Resource, RowImportFailedError, type User } from '../src/index.ts';
+import { CreateAction, DeleteAction, DeleteBulkAction, ExportAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, Notification, Page, Panel, RelationManager, Resource, RowImportFailedError, Stat, StatsOverviewWidget, type User } from '../src/index.ts';
 import { actingAs, livewire, setCurrentPanel, TestAction, UploadedFile } from '../src/testing.ts';
 
+class Comment extends Model { static tableName = 'comments'; }
+/** Comments of one post: the foreign key comes from the owner, never from the form. */
+class PostComments extends ObjectionAdapter<Comment> {
+    private post: string;
+    constructor(post: string) { super(Comment, { modify: (query) => { query.where('comments.post_id', post); } }); this.post = post; }
+    create(data: Record<string, unknown>) { return super.create({ ...data, post_id: this.post }); }
+}
+class CommentsRelationManager extends RelationManager {
+    static relationship = 'comments';
+    static modelLabel = 'comment';
+    static adapterFor(ownerKey: string) { return new PostComments(ownerKey); }
+    static form(schema: Schema): Schema { return schema.components([TextInput.make('body').required()]); }
+    static table(table: Table): Table { return table.columns([TextColumn.make('body')]).headerActions([CreateAction.make()]).recordActions([DeleteAction.make()]); }
+}
+class PostStats extends StatsOverviewWidget {
+    async getStats(): Promise<Stat[]> { return [Stat.make('Posts', (await db('posts').count({ count: '*' }).first())!.count as number)]; }
+}
 class Post extends Model { static tableName = 'posts'; declare id: number; declare title: string; declare status: string; declare views: number; declare is_featured: number; }
 let db: Knex;
 
@@ -23,6 +40,7 @@ class PostResource extends Resource {
     static slug = 'posts';
     static modelLabel = 'post';
     static adapter = new ObjectionAdapter(Post);
+    static relations = [CommentsRelationManager];
     static form(schema: Schema): Schema {
         return schema.components([
             TextInput.make('title').required().maxLength(20),
@@ -92,7 +110,7 @@ class Forbidden extends Page { static slug = 'forbidden'; static canAccess(): bo
 
 const user: User = { id: 1, name: 'Ada', email: 'ada@example.test' };
 const auth = { find: async () => user } as any;
-const panel = Panel.make().id('testing-helpers').key('testing-key').auth(auth).resources([PostResource]).pages([Settings, Forbidden]);
+const panel = Panel.make().id('testing-helpers').key('testing-key').auth(auth).resources([PostResource]).pages([Settings, Forbidden]).widgets([PostStats]);
 const pages = PostResource.getPages() as Record<string, any>;
 const ids = async () => (await db('posts').orderBy('id')).map((row: any) => row.id);
 
@@ -100,12 +118,14 @@ before(async () => {
     db = sqlite(':memory:');
     Model.knex(db);
     await db.schema.createTable('posts', (table) => { table.increments('id'); table.string('title'); table.string('status'); table.integer('views').defaultTo(0); table.boolean('is_featured').defaultTo(false); table.string('headline').nullable(); table.string('slug').nullable(); });
+    await db.schema.createTable('comments', (table) => { table.increments('id'); table.integer('post_id'); table.string('body'); });
     setCurrentPanel(panel);
     actingAs(user);
 });
 after(() => db.destroy());
 beforeEach(async () => {
     await db('posts').delete();
+    await db('comments').delete();
     await db('posts').insert([
         { title: 'Alpha', status: 'draft', views: 10, is_featured: true },
         { title: 'Bravo', status: 'published', views: 20, is_featured: false },
@@ -353,4 +373,24 @@ test('imports: an uploaded CSV through the import action, and Importer.test()', 
     (await PostImporter.test({ adapter }).import({ title: 'Forbidden' })).assertHasRowFailure('This title is not allowed.');
     (await PostImporter.test({ adapter, columnMap: { title: 'Name' } }).import({ Name: 'Golf' })).assertImported();
     assert.throws(() => (PostImporter.test({ adapter }) as any).assertImported(), /Call import\(\) before asserting/);
+});
+
+test('relation managers and widgets are tested like pages', async () => {
+    const [alpha, bravo] = await ids();
+    const [mine] = await db('comments').insert({ post_id: alpha, body: 'First!' });
+    const [theirs] = await db('comments').insert({ post_id: bravo, body: 'Other post' });
+    await livewire(CommentsRelationManager, { ownerRecord: alpha })
+        .assertOk()
+        .assertCanSeeTableRecords([mine])
+        .assertCanNotSeeTableRecords([theirs])
+        .callAction(TestAction.make('create').table(), { body: 'Second' })
+        .assertHasNoFormErrors()
+        .assertNotified()
+        // A comment of another post is not found through this manager.
+        .call('mountAction', 'delete', {}, { table: true, recordKey: String(theirs) })
+        .assertNotFound()
+        .set('ownerRecord', String(bravo))
+        .assertForbidden();
+    assert.deepEqual((await db('comments').where('post_id', alpha).orderBy('id')).map((row: any) => row.body), ['First!', 'Second']);
+    await livewire(PostStats).assertOk().assertSeeText('Posts').assertSeeText('3');
 });

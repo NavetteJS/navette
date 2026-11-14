@@ -253,15 +253,20 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         const routeParams = Object.fromEntries(Object.entries(params).map(([key, value]) => [key, this.routeParam(value)]));
         const url = this.urlOf(routeParams);
         const name = componentNameOf(this.runtime, panel, this.componentClass);
+        // Relation managers and lazy widgets are loaded by the browser once visible: a placeholder first, then `__lazyLoad`.
+        const lazy = this.componentClass.relationship !== undefined || this.componentClass.isLazy === true;
         try {
-            const { result, pending, failedRules } = await this.inRequest(url, (ctx) => this.runtime.mountWithInstance(name, routeParams, { path: url.split('?')[0], method: 'GET', ctx }), query);
+            const { result, pending, failedRules } = await this.inRequest(url, (ctx) => this.runtime.mountWithInstance(name, routeParams, { path: url.split('?')[0], method: 'GET', ctx, lazy }), query);
             this.snapshot = result.snapshot;
             this.component = result.component as C;
             this.effects = result.effects;
             this.lastHtml = result.html;
             this.failedRules = failedRules;
             this.received(pending);
-        } catch (error) { this.recordFailure(error); }
+        } catch (error) { this.recordFailure(error); return; }
+        // The placeholder's `x-intersect` holds the signed mount params (the quote is escaped in the attribute).
+        const load = lazy ? /__lazyLoad\((?:'|&#0*39;)([A-Za-z0-9+/=]+)/.exec(this.lastHtml) : null;
+        if (load) await this.request({}, [{ method: '__lazyLoad', params: [load[1]] }]);
     }
     /** A record passed as a route parameter becomes its key, as in a URL. */
     private routeParam(value: unknown): unknown {
