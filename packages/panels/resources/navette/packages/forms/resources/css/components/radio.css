@@ -1,0 +1,41 @@
+.nv-fo-radio {
+    @apply gap-4;
+
+    &.nv-inline {
+        @apply flex flex-wrap;
+    }
+
+    &:not(.nv-inline).nv-grid-direction-col {
+        @apply -mt-4;
+
+        & > .nv-fo-radio-label {
+            @apply break-inside-avoid pt-4;
+        }
+    }
+
+    & > .nv-fo-radio-label {
+        @apply flex gap-x-3 self-start;
+
+        & > .nv-radio-input {
+            @apply mt-1 shrink-0;
+        }
+
+        & > .nv-fo-radio-label-text {
+            @apply grid text-sm leading-6 font-medium text-gray-950 dark:text-white;
+        }
+
+        & .nv-fo-radio-label-description {
+            @apply font-normal text-gray-500 dark:text-gray-400;
+        }
+
+        &:has(.nv-radio-input:disabled) {
+            & > .nv-fo-radio-label-text {
+                @apply text-gray-400 dark:text-gray-500;
+            }
+
+            & .nv-fo-radio-label-description {
+                @apply text-gray-300 dark:text-gray-600;
+            }
+        }
+    }
+}

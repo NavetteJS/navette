@@ -188,7 +188,7 @@ export abstract class Exporter {
     static getOptionsFormComponents(): any[] { return []; }
     /** Changes the query of the exported records (e.g. eager loading). */
     static modifyQuery(_query: any, _options: Record<string, unknown> = {}): void {}
-    static getCompletedNotificationTitle(_run: ExportRun): string { return t('filament-actions::export.notifications.completed.title'); }
+    static getCompletedNotificationTitle(_run: ExportRun): string { return t('navette-actions::export.notifications.completed.title'); }
     /** Body of the "Export completed" notification. */
     static getCompletedNotificationBody(count: number, _run?: ExportRun): string { return `Your export has completed and ${count.toLocaleString('en-US')} ${count === 1 ? 'row' : 'rows'} exported.`; }
     /** Changes the completion notification (icon, actions…), or returns another one. */
@@ -360,12 +360,12 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
     const action = Action.make(name).color('gray').icon(icons.resolve('actions::export-action.grouped') ?? 'm-arrow-down-tray')
         // Exporting reads the records: the resource's `viewAny` ability (or the host's own checks) applies.
         .authorize(async ({ livewire }) => (typeof livewire?.resource?.can === 'function' ? livewire.resource.can('viewAny', livewire._ctx?.user ?? null) : true))
-        .label(({ livewire }) => t('filament-actions::export.label', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
-        .modalHeading(({ livewire }) => t('filament-actions::export.modal.heading', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
-        .modalSubmitActionLabel(t('filament-actions::export.modal.actions.export.label'))
+        .label(({ livewire }) => t('navette-actions::export.label', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
+        .modalHeading(({ livewire }) => t('navette-actions::export.modal.heading', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
+        .modalSubmitActionLabel(t('navette-actions::export.modal.actions.export.label'))
         .modalWidth('md')
         .schema(() => [
-            ...(mapping ? [CheckboxList.make('columns').label(t('filament-actions::export.modal.form.columns.label')).options(columnsOf().map((column): [string, string] => [column.name, column.getLabel()])).columns(mappingColumns)] : []),
+            ...(mapping ? [CheckboxList.make('columns').label(t('navette-actions::export.modal.form.columns.label')).options(columnsOf().map((column): [string, string] => [column.name, column.getLabel()])).columns(mappingColumns)] : []),
             ...exporterOf().getOptionsFormComponents(),
         ])
         .fillForm(({ livewire }) => {
@@ -378,7 +378,7 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             // Only declared, visible columns are exported, whatever list the browser sends.
             const requested = mapping ? (Array.isArray(data.columns) ? data.columns.map(String) : []) : columnsOf().map((column) => column.name);
             const columns = columnsOf().filter((column) => requested.includes(column.name));
-            if (!columns.length) { Notification.make().danger().title(t('filament-actions::export.notifications.no_columns.title')).body(t('filament-actions::export.notifications.no_columns.body')).send(); return; }
+            if (!columns.length) { Notification.make().danger().title(t('navette-actions::export.notifications.no_columns.title')).body(t('navette-actions::export.notifications.no_columns.body')).send(); return; }
             // The options: the action's, then the values of the options form (declared components only).
             const options: Record<string, unknown> = { ...lazy(staticOptions, livewire), ...Object.fromEntries(Object.entries(data).filter(([key]) => key !== 'columns')) };
             const adapter = livewire.getDataAdapterForTable();
@@ -394,7 +394,7 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             const perPage = Math.max(1, Math.floor(lazy(chunkSize, livewire)));
             const first = await adapter.paginate({ ...selection, page: 1, perPage });
             const limit = Math.min(maxRows, HARD_MAX_EXPORT_ROWS);
-            if (first.total > limit) { Notification.make().danger().title(t('filament-actions::export.notifications.max_rows.title')).body(tc('filament-actions::export.notifications.max_rows.body', limit, { count: limit.toLocaleString('en-US') })).send(); return; }
+            if (first.total > limit) { Notification.make().danger().title(t('navette-actions::export.notifications.max_rows.title')).body(tc('navette-actions::export.notifications.max_rows.body', limit, { count: limit.toLocaleString('en-US') })).send(); return; }
             const user = livewire._ctx?.user;
             const panel = livewire._ctx?.panel;
             const background = queued && canQueue(panel);
@@ -438,7 +438,7 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
                         // Cells are protected against formula injection, except in the columns that opt out.
                         const protect = columns.map((column) => column.getFormulaInjectionPrevention(ctx) !== false);
                         const csv = `\uFEFF${[csvLine(labels, delimiter), ...values.map((row) => csvLine(row, delimiter, protect))].join('\r\n')}\r\n`;
-                        links.push({ label: t('filament-actions::export.notifications.completed.actions.download_csv.label'), url: await store('csv', 'text/csv; charset=utf-8', csv) });
+                        links.push({ label: t('navette-actions::export.notifications.completed.actions.download_csv.label'), url: await store('csv', 'text/csv; charset=utf-8', csv) });
                     } else if (format === 'xlsx') {
                         const cellStyle = currentExporter.getXlsxCellStyle();
                         const headerStyle = currentExporter.getXlsxHeaderCellStyle() ?? cellStyle;
@@ -449,12 +449,12 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
                         writer = currentExporter.configureXlsxWriterBeforeClose(writer, run) ?? writer;
                         // Without any style, the header row is bold.
                         const xlsx = writer.toBuffer({ headerStyle: headerStyle ?? undefined, cellStyle, writerOptions: currentExporter.getXlsxWriterOptions() });
-                        links.push({ label: t('filament-actions::export.notifications.completed.actions.download_xlsx.label'), url: await store('xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsx) });
+                        links.push({ label: t('navette-actions::export.notifications.completed.actions.download_xlsx.label'), url: await store('xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsx) });
                     } else {
                         // A custom format: its content, then its download link.
                         const content = await format.generate({ exporter: currentExporter, export: run, columns: names, labels, rows: values, options });
                         const url = await store(format, format.getMimeType(), content);
-                        links.push(format.getDownloadNotificationAction?.(url, run) ?? { label: t('filament-actions::export.notifications.completed.actions.download_format.label', { extension: format.getExtension() }), url });
+                        links.push(format.getDownloadNotificationAction?.(url, run) ?? { label: t('navette-actions::export.notifications.completed.actions.download_format.label', { extension: format.getExtension() }), url });
                     }
                 }
                 if (history && run.id !== null) await history.finishExport(run.id, { successfulRows: values.length });
@@ -462,7 +462,7 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
                 await deliver(currentExporter.modifyCompletedNotification(notification, run), background, panel, user);
             };
             if (!background) { await process(); return; }
-            Notification.make().success().title(t('filament-actions::export.notifications.started.title')).body(tc('filament-actions::export.notifications.started.body', first.total, { count: first.total.toLocaleString('en-US') })).send();
+            Notification.make().success().title(t('navette-actions::export.notifications.started.title')).body(tc('navette-actions::export.notifications.started.body', first.total, { count: first.total.toLocaleString('en-US') })).send();
             runInBackground(process, { type: 'export', exporter: currentExporter, importer: null, run, queue: currentExporter.getJobQueue(), connection: currentExporter.getJobConnection(), panel: panel?.getId?.() ?? null, userId: user?.id ?? null });
         }) as ExportActionInstance;
     action.exporter = (value) => { exporter = value; return action; };

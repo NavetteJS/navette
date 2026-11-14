@@ -160,7 +160,7 @@ import { RichEditor, ToolbarButtonGroup } from '@navette-js/forms';
 RichEditor.make('content')
     .toolbarButtons([
         ['bold', 'italic'],
-        [ToolbarButtonGroup.make('Heading', ['h1', 'h2', 'h3']).icon('fi-o-heading')],
+        [ToolbarButtonGroup.make('Heading', ['h1', 'h2', 'h3']).icon('nv-o-heading')],
         ['undo', 'redo'],
     ])
 ```
@@ -333,7 +333,7 @@ const html = await contentEditor().renderRichDocument(post.content);
 Otherwise, you may output the HTML in your own views as it is:
 
 ```html
-<div class="fi-prose"><%- post.content %></div>
+<div class="nv-prose"><%- post.content %></div>
 ```
 
 The HTML is only cleaned when it is saved through the form. If the column may also be written by something else (an import, an API, a seeder), clean it before output with the functions the editor uses:
@@ -639,7 +639,7 @@ RichEditor.make('content')
 | Method | Effect |
 |---|---|
 | `activeOptions({ level: 2 })` | Attributes the `activeKey()` node or mark must have (TipTap's `isActive(key, options)`): `h2` is `activeKey('heading').activeOptions({ level: 2 })` |
-| `activeStyling(false)` | No active style (`fi-active`) on the button, even when its expression is true |
+| `activeStyling(false)` | No active style (`nv-active`) on the button, even when its expression is true |
 | `disabledWhenNotActive()` | The button is disabled while its active expression is false (the grid tools use `activeJsExpression('$getEditor()?.can().addGridColumnBefore()')` with it) |
 | `iconAlias('…')` | An [icon alias](/styling/icons#replacing-the-default-icons): an icon registered for it replaces `icon()` |
 | `extraAttributes({ … })` | HTML attributes added to the button (`data-testid`…) |
@@ -956,7 +956,7 @@ A `TextColumn` or a `TextEntry` of that attribute renders it with the same confi
 To render it yourself, call `renderRichContent()` on the record:
 
 ```html
-<div class="fi-prose"><%- await post.renderRichContent('content') %></div>
+<div class="nv-prose"><%- await post.renderRichContent('content') %></div>
 ```
 
 `post.getRichContentAttribute('content')` returns the attribute, whose `getRenderer()`, `toHtml()` and `toText()` give the renderer, the HTML and the plain text. Records that are plain objects (a query builder adapter) cannot register attributes: share an editor factory between the form and the renderer instead, as in [rendering rich content](#rendering-rich-content). The editor only finds the attribute through the record, so on a create page, where there is no record yet, options needed before saving (custom blocks, merge tags, mentions) still have to be set on the editor, from the same shared function.

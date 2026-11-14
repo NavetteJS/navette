@@ -13,8 +13,8 @@ const sender = await context.newPage();
 const watcher = await context.newPage();
 for (const page of [sender, watcher]) page.on('pageerror', (error) => errors.push(error.message));
 const connected = (page) => page.waitForFunction(() => window.navetteBroadcasting?.isConnected() === true, null, { timeout: 10000 });
-const toast = (page, title) => page.locator('.fi-no-notification', { hasText: title });
-const unread = (page) => page.locator('.fi-sidebar-database-notifications-btn-badge-ctn .fi-badge-label').first().textContent({ timeout: 2000 }).then((text) => Number(text?.trim() || 0), () => 0);
+const toast = (page, title) => page.locator('.nv-no-notification', { hasText: title });
+const unread = (page) => page.locator('.nv-sidebar-database-notifications-btn-badge-ctn .nv-badge-label').first().textContent({ timeout: 2000 }).then((text) => Number(text?.trim() || 0), () => 0);
 try {
     await login(sender, base, user);
     await sender.goto(`${base}/live-notifications`);
@@ -38,18 +38,18 @@ try {
     });
 
     await step('after SPA navigation, the stream is still open and delivers', async () => {
-        await watcher.locator('.fi-sidebar a[href$="/shop/orders"]').first().click();
+        await watcher.locator('.nv-sidebar a[href$="/shop/orders"]').first().click();
         await watcher.waitForURL(/\/shop\/orders$/);
         await connected(watcher);
         await sender.getByRole('button', { name: 'Broadcast a notification' }).click();
-        await watcher.locator('.fi-no-notification', { hasText: 'Live notification' }).first().waitFor({ timeout: 5000 });
+        await watcher.locator('.nv-no-notification', { hasText: 'Live notification' }).first().waitFor({ timeout: 5000 });
     });
 
     await step('the bell does not poll with broadcasting, and refreshes when a database notification is sent', async () => {
-        check((await watcher.locator('.fi-no-database [wire\\:poll], .fi-no-database[wire\\:poll], [wire\\:poll\\.30s]').count()) === 0, 'no wire:poll on the database notifications');
+        check((await watcher.locator('.nv-no-database [wire\\:poll], .nv-no-database[wire\\:poll], [wire\\:poll\\.30s]').count()) === 0, 'no wire:poll on the database notifications');
         const before = await unread(watcher);
         await sender.getByRole('button', { name: 'Add to my notifications' }).click();
-        await watcher.waitForFunction((count) => Number(document.querySelector('.fi-sidebar-database-notifications-btn-badge-ctn .fi-badge-label')?.textContent?.trim() || 0) === count + 1, before, { timeout: 8000 });
+        await watcher.waitForFunction((count) => Number(document.querySelector('.nv-sidebar-database-notifications-btn-badge-ctn .nv-badge-label')?.textContent?.trim() || 0) === count + 1, before, { timeout: 8000 });
     });
 
     await step('a registered Alpine component is loaded on request (x-load) from its versioned URL', async () => {

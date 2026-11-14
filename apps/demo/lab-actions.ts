@@ -67,8 +67,8 @@ export class LabActionsPage extends Page {
                     Action.make('report').label('Report a problem').color('danger').requiresConfirmation().overlayParentActions()
                         .action(() => { Notification.make().warning().title('Problem reported').send(); }),
                 ])
-                .modalContent(async (ctx) => new HtmlString(`<p class="fi-modal-description" data-cy="advance-content">${e('The order moves to "Shipped".')}</p><div class="fi-ac" data-cy="advance-report">${await ctx.action!.renderModalAction('report', ctx)}</div>`))
-                .modalContentFooter(new HtmlString('<p class="fi-modal-description" data-cy="advance-footer">The customer is notified by email.</p>'))
+                .modalContent(async (ctx) => new HtmlString(`<p class="nv-modal-description" data-cy="advance-content">${e('The order moves to "Shipped".')}</p><div class="nv-ac" data-cy="advance-report">${await ctx.action!.renderModalAction('report', ctx)}</div>`))
+                .modalContentFooter(new HtmlString('<p class="nv-modal-description" data-cy="advance-footer">The customer is notified by email.</p>'))
                 .slideOver().slideOverPosition('start')
                 .extraModalWindowAttributes({ 'data-cy': 'advance-window' })
                 .modalSubmitAction((submit) => submit.label('Advance'))

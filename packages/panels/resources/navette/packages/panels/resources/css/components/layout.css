@@ -1,0 +1,182 @@
+html.fi {
+    @apply min-h-dvh;
+}
+
+.nv-body {
+    @apply min-h-dvh bg-gray-50 font-normal text-gray-950 antialiased dark:bg-gray-950 dark:text-white;
+
+    &.nv-body-has-sidebar-collapsible-on-desktop,
+    &.nv-body-has-sidebar-fully-collapsible-on-desktop {
+        & .nv-main-ctn {
+            @apply min-h-[calc(100dvh-var(--topbar-height))] opacity-0 transition-all;
+        }
+    }
+
+    & > .nv-layout-sidebar-toggle-btn-ctn {
+        @apply ps-5 pt-5;
+
+        &.lg\:nv-hidden {
+            @apply lg:hidden;
+        }
+    }
+
+    &.nv-body-has-navigation:not(
+            .nv-body-has-sidebar-collapsible-on-desktop
+        ):not(.nv-body-has-sidebar-fully-collapsible-on-desktop):not(
+            .nv-body-has-top-navigation
+        ) {
+        & .nv-main-ctn {
+            @apply opacity-0;
+        }
+    }
+
+    &.nv-body-has-top-navigation,
+    &:not(.nv-body-has-navigation) {
+        & .nv-main-ctn {
+            @apply flex min-h-[calc(100dvh-var(--topbar-height))];
+        }
+    }
+
+    &:not(.nv-body-has-topbar) {
+        & .nv-main-ctn {
+            @apply flex min-h-dvh;
+        }
+    }
+}
+
+.nv-layout {
+    @apply flex h-full w-full overflow-x-clip;
+}
+
+.nv-main-ctn {
+    @apply min-w-0 flex-1 flex-col;
+}
+
+.nv-main {
+    @apply mx-auto h-full w-full px-4 md:px-6 lg:px-8;
+}
+
+.nv-main,
+.nv-simple-main {
+    @apply outline-none;
+
+    &.nv-width-3xs {
+        @apply max-w-3xs;
+    }
+
+    &.nv-width-2xs {
+        @apply max-w-2xs;
+    }
+
+    &.nv-width-xs {
+        @apply max-w-xs;
+    }
+
+    &.nv-width-sm {
+        @apply max-w-sm;
+    }
+
+    &.nv-width-md {
+        @apply max-w-md;
+    }
+
+    &.nv-width-lg {
+        @apply max-w-lg;
+    }
+
+    &.nv-width-xl {
+        @apply max-w-xl;
+    }
+
+    &.nv-width-2xl {
+        @apply max-w-2xl;
+    }
+
+    &.nv-width-3xl {
+        @apply max-w-3xl;
+    }
+
+    &.nv-width-4xl {
+        @apply max-w-4xl;
+    }
+
+    &.nv-width-5xl {
+        @apply max-w-5xl;
+    }
+
+    &.nv-width-6xl {
+        @apply max-w-6xl;
+    }
+
+    &.nv-width-7xl {
+        @apply max-w-7xl;
+    }
+
+    &.nv-width-none {
+        @apply max-w-none;
+    }
+
+    &.nv-width-full {
+        @apply max-w-full;
+    }
+
+    &.nv-width-min {
+        @apply max-w-min;
+    }
+
+    &.nv-width-max {
+        @apply max-w-max;
+    }
+
+    &.nv-width-fit {
+        @apply max-w-fit;
+    }
+
+    &.nv-width-prose {
+        @apply max-w-prose;
+    }
+
+    &.nv-width-container {
+        @apply container;
+    }
+
+    &.nv-width-screen-sm {
+        @apply max-w-screen-sm;
+    }
+
+    &.nv-width-screen-md {
+        @apply max-w-screen-md;
+    }
+
+    &.nv-width-screen-lg {
+        @apply max-w-screen-lg;
+    }
+
+    &.nv-width-screen-xl {
+        @apply max-w-screen-xl;
+    }
+
+    &.nv-width-screen-2xl {
+        @apply max-w-screen-2xl;
+    }
+
+    &.nv-width-screen {
+        @apply fixed inset-0;
+    }
+}
+
+.nv-simple-layout {
+    @apply flex min-h-dvh flex-col items-center;
+}
+
+.nv-simple-layout-header {
+    @apply absolute end-0 top-0 flex h-16 items-center gap-x-4 pe-4 md:pe-6 lg:pe-8;
+}
+
+.nv-simple-main-ctn {
+    @apply flex w-full grow items-center justify-center;
+}
+
+.nv-simple-main {
+    @apply my-16 w-full bg-white px-6 py-12 shadow-xs ring-1 ring-gray-950/5 sm:rounded-xl sm:px-12 dark:bg-gray-900 dark:ring-white/10;
+}

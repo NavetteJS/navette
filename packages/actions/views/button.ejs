@@ -1,5 +1,5 @@
 <%# Action button; submit buttons show a processing message while the form is submitting. %>
-<button <%- keyBindings %><% if (isSubmit) { %>x-data="filamentFormButton" x-bind:class="{ 'fi-processing': isProcessing }" <% } %><%- attributes %>>
+<button <%- keyBindings %><% if (isSubmit) { %>x-data="navetteFormButton" x-bind:class="{ 'nv-processing': isProcessing }" <% } %><%- attributes %>>
     <% if (!iconAfter) { %><%- iconHtml %><% if (hasWireLoader) { %><%- wireLoader %><% } %><% if (isSubmit) { %><%- formLoader %><% } %><% } %>
     <% if (isSubmit) { %>
         <span x-show="! isProcessing">

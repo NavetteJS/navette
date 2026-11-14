@@ -18,7 +18,7 @@ template(`<x-button wire:click="openNewUserModal">
 </x-button>`)
 ```
 
-Its content is the [slot](/components/overview#passing-content-with-slots): the label, which may contain HTML. `wire:click` and the other HTML attributes are placed on the `<button>` element. The button gets `type="button"`; during a Livewire request it is disabled with `aria-disabled` and the `fi-disabled` class.
+Its content is the [slot](/components/overview#passing-content-with-slots): the label, which may contain HTML. `wire:click` and the other HTML attributes are placed on the `<button>` element. The button gets `type="button"`; during a Livewire request it is disabled with `aria-disabled` and the `nv-disabled` class.
 
 ## Using a button as an anchor link
 
@@ -112,7 +112,7 @@ template(`<x-button outlined>New user</x-button>`)
 
 ## Disabling a button
 
-The `disabled` prop disables the button, and adds `aria-disabled="true"` and the `fi-disabled` class:
+The `disabled` prop disables the button, and adds `aria-disabled="true"` and the `nv-disabled` class:
 
 ```html
 <x-button :disabled="! page.canInvite">Invite</x-button>

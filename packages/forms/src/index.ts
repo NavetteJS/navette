@@ -49,10 +49,10 @@ export { acceptsFileUploads, findFileUploadComponent, isFileUploadForSchemas } f
 import { applyDisableOptionsWhenSelectedInSiblingRepeaterItems, applyFixIndistinctState, applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
 export { generateItemKey, getParentRepeaterItem, ItemsProcessingLimitError, siblingDistinctRules, type ItemKeyGenerator } from './repeater-items.ts';
 
-views.namespace('filament-forms', fileURLToPath(new URL('../views', import.meta.url)));
+views.namespace('navette-forms', fileURLToPath(new URL('../views', import.meta.url)));
 let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
-const asset = (name: string) => views.render('filament-forms::asset', { path: name }).trim();
+const asset = (name: string) => views.render('navette-forms::asset', { path: name }).trim();
 
 /** Number for an HTML attribute: beyond exact integers, a float with 14 significant digits (`1.844674407371E+19`). */
 const phpNumber = (n: number | null): string | number | null => {
@@ -609,10 +609,10 @@ export class ModalTableSelect extends TableSelectField {
     getSelectAction(): Action {
         const blank = this.selectedValues().length === 0;
         const action = Action.make('select')
-            .label(t('filament-forms::components.modal_table_select.actions.select.label'))
+            .label(t('navette-forms::components.modal_table_select.actions.select.label'))
             .slideOver()
             .modalHeading(() => this.getLabel())
-            .modalSubmitActionLabel(t('filament-forms::components.modal_table_select.actions.select.actions.select.label'))
+            .modalSubmitActionLabel(t('navette-forms::components.modal_table_select.actions.select.actions.select.label'))
             .icon('m-pencil-square')
             .iconPosition('after')
             .hidden(() => this.isDisabled())
@@ -629,7 +629,7 @@ export class ModalTableSelect extends TableSelectField {
 
     private badgeHtml(label: string, color: string | null): string {
         const colors = colorManager?.getComponentClasses('badge', color ?? 'primary') ?? [];
-        return `<span class="${['fi-badge', 'fi-size-md', ...colors].join(' ')}"><span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(label)}</span></span></span>`;
+        return `<span class="${['nv-badge', 'nv-size-md', ...colors].join(' ')}"><span class="nv-badge-label-ctn"><span class="nv-badge-label">${e(label)}</span></span></span>`;
     }
     async toHtml(): Promise<string> {
         const id = this.getId();
@@ -641,15 +641,15 @@ export class ModalTableSelect extends TableSelectField {
         const optionLabels = isMultiple ? await this.getOptionLabels() : [];
         const describedBy = this.hasError() ? `${id}-error` : null;
         const attributes = new Attributes().merge({ 'aria-labelledby': `${id}-label`, id, role: 'group', 'aria-describedby': describedBy })
-            .class(['fi-fo-modal-table-select', { 'fi-fo-modal-table-select-disabled': isDisabled, 'fi-fo-modal-table-select-multiple': isMultiple }]);
+            .class(['nv-fo-modal-table-select', { 'nv-fo-modal-table-select-disabled': isDisabled, 'nv-fo-modal-table-select-multiple': isMultiple }]);
         let content = '';
         if ((!isMultiple && optionLabel !== null && optionLabel !== '') || (isMultiple && optionLabels.length)) {
-            if (isMultiple && hasBadges) content = `<div class="fi-fo-modal-table-select-badges-ctn">${optionLabels.map(([, label]) => this.badgeHtml(label, badgeColor)).join('')}</div>`;
+            if (isMultiple && hasBadges) content = `<div class="nv-fo-modal-table-select-badges-ctn">${optionLabels.map(([, label]) => this.badgeHtml(label, badgeColor)).join('')}</div>`;
             else if (hasBadges) content = `<div>${this.badgeHtml(optionLabel!, badgeColor)}</div>`;
             else if (isMultiple) content = `<div>${optionLabels.map(([, label]) => e(label)).join(', ')}</div>`;
             else content = `<div>${e(optionLabel!)}</div>`;
         } else if (this._placeholder !== null && this._placeholder !== '') {
-            content = `<div class="fi-fo-modal-table-select-placeholder">${e(this._placeholder)}</div>`;
+            content = `<div class="nv-fo-modal-table-select-placeholder">${e(this._placeholder)}</div>`;
         }
         if (!isDisabled) {
             const ctx = this.context();
@@ -799,9 +799,9 @@ export class TextInput extends Field {
         const key = this.getKey();
         const visibleActions = async (actions: Action[]) => { const html: string[] = []; for (const action of actions) if (await action.isVisible(ctx)) html.push(await action.iconButton().size('sm').toHtml(ctx, { schemaComponent: key })); return html; };
         const prefixActions = await visibleActions(this._prefixActions);
-        const copyLabel = t('filament-forms::components.text_input.actions.copy.label');
-        const copyMessage = this._copyable?.message ?? t('filament-forms::components.text_input.actions.copy.message');
-        const suffixActions = [...(await visibleActions(this._suffixActions)), ...(this._copyable ? [`<button title="${e(copyLabel)}" aria-label="${e(copyLabel)}" type="button" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-on:click="${e(`window.navigator.clipboard.writeText($el.closest('.fi-input-wrp').querySelector('input').value)\n$tooltip(${js(copyMessage)}, { theme: $store.theme, timeout: ${this._copyable.duration} })`)}">${icon('m-clipboard-document-list', { alias: 'forms::components.text-input.actions.copy' })}</button>`] : [])];
+        const copyLabel = t('navette-forms::components.text_input.actions.copy.label');
+        const copyMessage = this._copyable?.message ?? t('navette-forms::components.text_input.actions.copy.message');
+        const suffixActions = [...(await visibleActions(this._suffixActions)), ...(this._copyable ? [`<button title="${e(copyLabel)}" aria-label="${e(copyLabel)}" type="button" class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm" x-on:click="${e(`window.navigator.clipboard.writeText($el.closest('.nv-input-wrp').querySelector('input').value)\n$tooltip(${js(copyMessage)}, { theme: $store.theme, timeout: ${this._copyable.duration} })`)}">${icon('m-clipboard-document-list', { alias: 'forms::components.text-input.actions.copy' })}</button>`] : [])];
         const hasPrefix = this._prefix !== null || this._prefixIcon !== null || prefixActions.length > 0;
         const hasSuffix = this._suffix !== null || this._suffixIcon !== null || suffixActions.length > 0;
         const mask = await this.getMask();
@@ -825,23 +825,23 @@ export class TextInput extends Field {
                 'x-bind:type': revealable ? "isPasswordRevealed ? 'text' : 'password'" : null,
                 [mask instanceof RawJs ? 'x-mask:dynamic' : 'x-mask']: mask === null ? null : String(mask),
             })
-            .class(['fi-input', { 'fi-input-has-inline-prefix': this._prefixInline && hasPrefix, 'fi-input-has-inline-suffix': this._suffixInline && hasSuffix, 'fi-revealable': revealable }]);
+            .class(['nv-input', { 'nv-input-has-inline-prefix': this._prefixInline && hasPrefix, 'nv-input-has-inline-suffix': this._suffixInline && hasSuffix, 'nv-revealable': revealable }]);
         const wrapper = new Attributes()
             .merge({
                 'x-data': revealable ? 'passwordRevealFormComponent()' : mask !== null || Object.keys(alpineAttributes).length ? '{}' : null,
                 'x-load': revealable ? '' : null,
-                'x-load-src': revealable ? views.render('filament-forms::asset', { path: 'text-input/password-reveal' }).trim() : null,
+                'x-load-src': revealable ? views.render('navette-forms::asset', { path: 'text-input/password-reveal' }).trim() : null,
                 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()",
             })
-            .class(['fi-fo-text-input', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(views.render('filament-forms::components.text-input', {
+            .class(['nv-fo-text-input', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
+        return this.wrap(views.render('navette-forms::components.text-input', {
             input: input.toHtml(), wrapper: wrapper.toHtml(), revealable, prefix: this._prefix, suffix: this._suffix,
-            prefixIcon: this._prefixIcon ? icon(this._prefixIcon, { attributes: new Attributes().class(this._prefixIconColor && this._prefixIconColor !== 'gray' ? ['fi-color', `fi-color-${this._prefixIconColor}`] : []) }) : '',
-            suffixIcon: this._suffixIcon ? icon(this._suffixIcon, { attributes: new Attributes().class(this._suffixIconColor && this._suffixIconColor !== 'gray' ? ['fi-color', `fi-color-${this._suffixIconColor}`] : []) }) : '',
+            prefixIcon: this._prefixIcon ? icon(this._prefixIcon, { attributes: new Attributes().class(this._prefixIconColor && this._prefixIconColor !== 'gray' ? ['nv-color', `nv-color-${this._prefixIconColor}`] : []) }) : '',
+            suffixIcon: this._suffixIcon ? icon(this._suffixIcon, { attributes: new Attributes().class(this._suffixIconColor && this._suffixIconColor !== 'gray' ? ['nv-color', `nv-color-${this._suffixIconColor}`] : []) }) : '',
             prefixActions, suffixActions, hasPrefix, hasSuffix, prefixInline: this._prefixInline, suffixInline: this._suffixInline,
             datalist: this._datalist.length && !isDisabled && !this._readOnly ? { id: `${this.getId()}-list`, options: this._datalist } : null,
-            showLabel: t('filament-forms::components.text_input.actions.show_password.label'),
-            hideLabel: t('filament-forms::components.text_input.actions.hide_password.label'),
+            showLabel: t('navette-forms::components.text_input.actions.show_password.label'),
+            hideLabel: t('navette-forms::components.text_input.actions.hide_password.label'),
         }));
     }
 }
@@ -896,10 +896,10 @@ export function cloneComponentTree<T extends Component>(component: T): T {
 /** Prefix or suffix of an input wrapper: actions, icon and label (escaped). */
 function inputAffixHtml(side: 'prefix' | 'suffix', options: { label: string | null; icon: string; actions: string[]; inline: boolean }): string {
     if (options.label === null && !options.icon && !options.actions.length) return '';
-    const label = options.label !== null ? `<span class="fi-input-wrp-label">${e(options.label)}</span>` : '';
-    const actions = options.actions.length ? `<div class="fi-input-wrp-actions">${options.actions.join('')}</div>` : '';
-    const focus = options.label !== null || options.icon ? ` x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')"` : '';
-    const classes = cls([`fi-input-wrp-${side}`, side === 'prefix' ? 'fi-input-wrp-prefix-has-content' : null, { 'fi-inline': options.inline, [`fi-input-wrp-${side}-has-label`]: options.label !== null }]);
+    const label = options.label !== null ? `<span class="nv-input-wrp-label">${e(options.label)}</span>` : '';
+    const actions = options.actions.length ? `<div class="nv-input-wrp-actions">${options.actions.join('')}</div>` : '';
+    const focus = options.label !== null || options.icon ? ` x-on:click="if (! $event.target.closest('.nv-input-wrp-actions')) $dispatch('focus-input')"` : '';
+    const classes = cls([`nv-input-wrp-${side}`, side === 'prefix' ? 'nv-input-wrp-prefix-has-content' : null, { 'nv-inline': options.inline, [`nv-input-wrp-${side}-has-label`]: options.label !== null }]);
     return `<div${focus} class="${classes}">${side === 'prefix' ? actions + options.icon + label : label + options.icon + actions}</div>`;
 }
 /**
@@ -951,7 +951,7 @@ export class Select extends Field {
     options(options: GroupedOptions | Enum<string | number> | ((ctx: ComponentContext) => GroupedOptions | Enum<string | number> | Promise<GroupedOptions | Enum<string | number>>), config: { dynamic?: boolean; searchOnServer?: boolean } = {}): this { this._options = options; this._dynamic = config.dynamic ?? null; this._searchOnServer = config.searchOnServer ?? null; return this; }
     /** "Yes" / "No" options, saved as `1` / `0`. */
     boolean(trueLabel: string | null = null, falseLabel: string | null = null, placeholder: string | null = null): this {
-        this._options = [['1', trueLabel ?? t('filament-forms::components.select.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.select.boolean.false')]];
+        this._options = [['1', trueLabel ?? t('navette-forms::components.select.boolean.true')], ['0', falseLabel ?? t('navette-forms::components.select.boolean.false')]];
         if (placeholder !== null) this._placeholder = placeholder;
         return this;
     }
@@ -1204,7 +1204,7 @@ export class Select extends Field {
     private setState(value: unknown): void { writePath(this.livewire as any, this.getStatePath().split('.'), value); }
     private getCreateOptionAction(): Action | null {
         if (!this._createOptionForm) return null;
-        const tr = (key: string) => t(`filament-forms::components.select.actions.create_option.${key}`);
+        const tr = (key: string) => t(`navette-forms::components.select.actions.create_option.${key}`);
         const action = Action.make('createOption').label(tr('label')).icon(icons.resolve('forms::components.select.actions.create-option') ?? 'm-plus').iconButton().color('gray')
             .hidden(() => this.isDisabled())
             .modalHeading(this._createOptionModalHeading ?? tr('modal.heading'))
@@ -1226,7 +1226,7 @@ export class Select extends Field {
     }
     private getEditOptionAction(): Action | null {
         if (!this._editOptionForm || this._multiple) return null;
-        const tr = (key: string) => t(`filament-forms::components.select.actions.edit_option.${key}`);
+        const tr = (key: string) => t(`navette-forms::components.select.actions.edit_option.${key}`);
         const filled = () => { const state = this.context().state; return state !== null && state !== undefined && state !== ''; };
         const action = Action.make('editOption').label(tr('label')).icon(icons.resolve('forms::components.select.actions.edit-option') ?? 'm-pencil-square').iconButton().color('gray')
             .hidden(async () => (await this.isDisabled()) || !filled())
@@ -1248,7 +1248,7 @@ export class Select extends Field {
     }
     /** Actions mounted on the field: hint, create option and edit option. */
     getActions(): Action[] { return [...this.getHintActions(), ...this._affixes.prefixActions, ...this._affixes.suffixActions, ...[this.getCreateOptionAction(), this.getEditOptionAction()].filter((action): action is Action => action !== null)]; }
-    private affixIcon(name: string | null, color: string | null): string { return name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : ''; }
+    private affixIcon(name: string | null, color: string | null): string { return name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []) }) : ''; }
     private async affixActionsHtml(actions: Action[]): Promise<string[]> {
         const ctx = this.context();
         const html: string[] = [];
@@ -1279,16 +1279,16 @@ export class Select extends Field {
         const prefix = await this.prefixHtml();
         if (this._searchable || this._multiple || !this._native || this._allowHtml) {
             const isRequired = (await this.isRequired()) && !isDisabled;
-            const after = isRequired ? `<span id="${e(this.getId())}-required" class="fi-sr-only">${e(t('filament-forms::components.select.required_description'))}</span>` : '';
-            return this.wrap(await this.toJsHtml(grouped, isDisabled, suffix, prefix), { wrapperClass: 'fi-fo-select-wrp', after });
+            const after = isRequired ? `<span id="${e(this.getId())}-required" class="nv-sr-only">${e(t('navette-forms::components.select.required_description'))}</span>` : '';
+            return this.wrap(await this.toJsHtml(grouped, isDisabled, suffix, prefix), { wrapperClass: 'nv-fo-select-wrp', after });
         }
         const select = new Attributes(this.getExtraControlAttributes())
             .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this.wireModel()]: this.getStatePath() })
-            .class(['fi-select-input']);
-        const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('select')?.focus()" }).class(['fi-fo-select', 'fi-fo-select-native', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
+            .class(['nv-select-input']);
+        const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('select')?.focus()" }).class(['nv-fo-select', 'nv-fo-select-native', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
         const option = ([value, label]: [string, string]) => `<option value="${e(value)}"${this._disableOptionWhen?.(value, this.context()) ? ' disabled' : ''}>${e(label)}</option>`;
-        const options = [this._selectablePlaceholder ? `<option value="">${isDisabled ? '' : e(this._placeholder ?? t('filament-forms::components.select.placeholder'))}</option>` : '', ...grouped.map((item) => (Array.isArray(item) ? option(item) : `<optgroup label="${e(item.label)}">${item.options.map(option).join('')}</optgroup>`))].join('');
-        return this.wrap(`<div ${wrapper.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn"><select ${select.toHtml()}>${options}</select></div>${suffix}</div>`, { wrapperClass: 'fi-fo-select-wrp' });
+        const options = [this._selectablePlaceholder ? `<option value="">${isDisabled ? '' : e(this._placeholder ?? t('navette-forms::components.select.placeholder'))}</option>` : '', ...grouped.map((item) => (Array.isArray(item) ? option(item) : `<optgroup label="${e(item.label)}">${item.options.map(option).join('')}</optgroup>`))].join('');
+        return this.wrap(`<div ${wrapper.toHtml()}>${prefix}<div class="nv-input-wrp-content-ctn"><select ${select.toHtml()}>${options}</select></div>${suffix}</div>`, { wrapperClass: 'nv-fo-select-wrp' });
     }
 
     /** JavaScript select rendering. */
@@ -1303,7 +1303,7 @@ export class Select extends Field {
         const forJs = this.groupsForJs(grouped);
         // Dynamic options come from a function, so they may change between requests.
         const hasDynamicOptions = this._dynamic ?? typeof this._options === 'function';
-        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.select.${key}`, replace);
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`navette-forms::components.select.${key}`, replace);
         const config = `selectFormComponent({
  canOptionLabelsWrap: ${(await this.canOptionLabelsWrap()) ? 'true' : 'false'},
  canSelectPlaceholder: true,
@@ -1342,9 +1342,9 @@ export class Select extends Field {
  state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  })`;
-        const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('.fi-select-input-btn')?.focus()" }).class(['fi-fo-select', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
+        const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('.nv-select-input-btn')?.focus()" }).class(['nv-fo-select', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(forJs)).digest('hex')}`;
-        return `<div ${wrapper.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn"><div class="fi-hidden" data-select-accessibility="${e(accessibility)}" x-data="{
+        return `<div ${wrapper.toHtml()}>${prefix}<div class="nv-input-wrp-content-ctn"><div class="nv-hidden" data-select-accessibility="${e(accessibility)}" x-data="{
  isDisabled: ${isDisabled ? 'true' : 'false'},
  init() {
  const container = $el.nextElementSibling
@@ -1354,7 +1354,7 @@ export class Select extends Field {
  }),
  )
  },
- }"></div><div x-load x-load-src="${e(asset('select'))}"${this.extraControlHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()" class="fi-select-input"><div x-ref="select"></div></div></div>${suffix}</div>`;
+ }"></div><div x-load x-load-src="${e(asset('select'))}"${this.extraControlHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()" class="nv-select-input"><div x-ref="select"></div></div></div>${suffix}</div>`;
     }
 }
 
@@ -1735,7 +1735,7 @@ export class Repeater extends Field {
         return true;
     }
     private repeaterAction(name: RepeaterActionName): Action {
-        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.actions.${key}`, replace);
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`navette-forms::components.repeater.actions.${key}`, replace);
         const insertAfter = (items: Record<string, Record<string, unknown>>, after: string, key: string, item: Record<string, unknown>) => Object.fromEntries(Object.entries(items).flatMap(([k, v]) => (k === after ? [[k, v], [key, item]] : [[k, v]])));
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
             if (!this.canMove()) return;
@@ -1824,7 +1824,7 @@ export class Repeater extends Field {
         /** "Add" (and "Insert between") button: Filament's small gray button, with the action's icon and color if changed. */
         const addButton = (resolved: ResolvedAction, expr: string) => {
             const iconHtml = resolved.icon ? icon(resolved.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expr }) }) : '';
-            return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'button', resolved.color, 'gray', [])])}" wire:click="${e(expr)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expr }), 'sm')}${e(resolved.label)}</button>`;
+            return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-btn-action', 'nv-btn', 'nv-size-sm', ...colorClassesOf(colorManager, 'button', resolved.color, 'gray', [])])}" wire:click="${e(expr)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expr }), 'sm')}${e(resolved.label)}</button>`;
         };
         return { key, ctx, context, expression, actions, resolve, extraHtml, addButton, hasCustomReorderAction: Boolean(this._actionModifiers.reorder) };
     }
@@ -1837,7 +1837,7 @@ export class Repeater extends Field {
         const items = this.getItems();
         const keys = Object.keys(items);
         const schemas = this.getChildSchemas();
-        const tr = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.${name}`, replace);
+        const tr = (name: string, replace: Record<string, string> = {}) => t(`navette-forms::components.repeater.${name}`, replace);
         const kit = await this.renderKit();
         const { expression, resolve } = kit;
         const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
@@ -1845,7 +1845,7 @@ export class Repeater extends Field {
         const gray = colorManager.getComponentClasses('icon-button', 'gray');
         const button = (options: { label: string; icon: string; expression: string | null; colors?: string[]; disabled?: boolean; extra?: string }) => {
             const loading = options.expression ? `${icon(options.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': options.expression }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': options.expression }))}` : icon(options.icon);
-            return `<button title="${e(options.label)}"${options.disabled ? ' aria-disabled="true"' : ''} aria-label="${e(options.label)}"${options.disabled ? ' disabled="disabled"' : ''} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': options.disabled === true }, 'fi-size-sm', ...(options.colors ?? [])])}"${options.extra ?? ''}${options.expression ? ` wire:click="${e(options.expression)}"` : ''}>${loading}</button>`;
+            return `<button title="${e(options.label)}"${options.disabled ? ' aria-disabled="true"' : ''} aria-label="${e(options.label)}"${options.disabled ? ' disabled="disabled"' : ''} type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', { 'nv-disabled': options.disabled === true }, 'nv-size-sm', ...(options.colors ?? [])])}"${options.extra ?? ''}${options.expression ? ` wire:click="${e(options.expression)}"` : ''}>${loading}</button>`;
         };
         const colorsOf = (resolved: ResolvedAction, defaultColor: string, defaultClasses: string[]) => colorClassesOf(colorManager, 'icon-button', resolved.color, defaultColor, defaultClasses);
         const reorder = await resolve('reorder');
@@ -1860,7 +1860,7 @@ export class Repeater extends Field {
                 const resolved = await resolve(action, args);
                 if (!resolved.visible) return '';
                 const expr = expression(action, args);
-                return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="fi-sr-only"'}>${button({ label: resolved.label, icon: resolved.icon ?? fallbackIcon, expression: expr, disabled: disabled || resolved.disabled, colors: colorsOf(resolved, 'gray', []), extra: `${this._reorderableWithButtons ? '' : ' tabindex="-1"'} data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}"` })}</li>`;
+                return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="nv-sr-only"'}>${button({ label: resolved.label, icon: resolved.icon ?? fallbackIcon, expression: expr, disabled: disabled || resolved.disabled, colors: colorsOf(resolved, 'gray', []), extra: `${this._reorderableWithButtons ? '' : ' tabindex="-1"'} data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}"` })}</li>`;
             };
             const moves = this.canMove() && keys.length > 1 ? [await moveButton('moveUp', fieldActionIcon('repeater', 'move-up'), 'up', isFirst), await moveButton('moveDown', fieldActionIcon('repeater', 'move-down'), 'down', isLast)].filter(Boolean) : [];
             const clone = await resolve('clone', args), del = await resolve('delete', args);
@@ -1870,41 +1870,41 @@ export class Repeater extends Field {
             const content = await schemas[index].toHtml();
             if (this._simple) {
                 const actions = [...(showReorder ? [reorderHandle] : []), ...moves, ...extra, ...cloneButton, ...deleteButton];
-                rows.push(`<li wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}" class="fi-fo-simple-repeater-item"><div class="fi-fo-simple-repeater-item-content">${content}</div>${actions.length ? `<ul class="fi-fo-simple-repeater-item-actions">${actions.join('')}</ul>` : ''}</li>`);
+                rows.push(`<li wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}" class="nv-fo-simple-repeater-item"><div class="nv-fo-simple-repeater-item-content">${content}</div>${actions.length ? `<ul class="nv-fo-simple-repeater-item-actions">${actions.join('')}</ul>` : ''}</li>`);
             } else {
                 const label = await this.itemLabelOf(itemKey, index, items[itemKey]);
                 const start = [...(showReorder ? [reorderHandle] : []), ...moves];
                 const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && safeFileUrl(link.url) !== null)
-                    .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
+                    .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
                 const end = [
                     ...links,
                     ...extra,
                     ...cloneButton,
                     ...deleteButton,
-                    ...(this._collapsible ? [`<li class="fi-fo-repeater-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-repeater-item-header-collapse-action">${button({ label: collapse.label, icon: collapse.icon ?? fieldActionIcon('repeater', 'collapse'), expression: null, colors: colorsOf(collapse, 'gray', gray) })}</div><div class="fi-fo-repeater-item-header-expand-action">${button({ label: expand.label, icon: expand.icon ?? fieldActionIcon('repeater', 'expand'), expression: null, colors: colorsOf(expand, 'gray', gray) })}</div></li>`] : []),
+                    ...(this._collapsible ? [`<li class="nv-fo-repeater-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="nv-fo-repeater-item-header-collapse-action">${button({ label: collapse.label, icon: collapse.icon ?? fieldActionIcon('repeater', 'collapse'), expression: null, colors: colorsOf(collapse, 'gray', gray) })}</div><div class="nv-fo-repeater-item-header-expand-action">${button({ label: expand.label, icon: expand.icon ?? fieldActionIcon('repeater', 'expand'), expression: null, colors: colorsOf(expand, 'gray', gray) })}</div></li>`] : []),
                 ];
                 const hasHeader = this._itemHeaders && (start.length > 0 || label !== null || end.length > 0);
-                const header = hasHeader ? `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="fi-fo-repeater-item-header">${start.length ? `<ul class="fi-fo-repeater-item-header-start-actions">${start.join('')}</ul>` : ''}${label !== null ? `<${this._headingTag} class="${cls(['fi-fo-repeater-item-header-label', { 'fi-truncated': this._truncateItemLabel }])}">${e(label)}${this._itemNumbers ? ` ${index + 1}` : ''}</${this._headingTag}>` : ''}${end.length ? `<ul class="fi-fo-repeater-item-header-end-actions">${end.join('')}</ul>` : ''}</div>` : '';
-                const itemConfig = { isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `filament:repeater:collapsed:${key}-${itemKey}` : null };
-                rows.push(`<li wire:ignore.self wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-data="item(${e(js(itemConfig))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['fi-fo-repeater-item', { 'fi-fo-repeater-item-has-header': hasHeader }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="fi-fo-repeater-item-content">${content}</div></li>`);
+                const header = hasHeader ? `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="nv-fo-repeater-item-header">${start.length ? `<ul class="nv-fo-repeater-item-header-start-actions">${start.join('')}</ul>` : ''}${label !== null ? `<${this._headingTag} class="${cls(['nv-fo-repeater-item-header-label', { 'nv-truncated': this._truncateItemLabel }])}">${e(label)}${this._itemNumbers ? ` ${index + 1}` : ''}</${this._headingTag}>` : ''}${end.length ? `<ul class="nv-fo-repeater-item-header-end-actions">${end.join('')}</ul>` : ''}</div>` : '';
+                const itemConfig = { isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `navette:repeater:collapsed:${key}-${itemKey}` : null };
+                rows.push(`<li wire:ignore.self wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-data="item(${e(js(itemConfig))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['nv-fo-repeater-item', { 'nv-fo-repeater-item-has-header': hasHeader }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="nv-fo-repeater-item-content">${content}</div></li>`);
             }
-            if (!isLast) rows.push(await this.betweenItemsHtml(itemKey, kit, this._simple ? 'fi-fo-simple-repeater' : 'fi-fo-repeater'));
+            if (!isLast) rows.push(await this.betweenItemsHtml(itemKey, kit, this._simple ? 'nv-fo-simple-repeater' : 'nv-fo-repeater'));
         }
-        const prefix = this._simple ? 'fi-fo-simple-repeater' : 'fi-fo-repeater';
+        const prefix = this._simple ? 'nv-fo-simple-repeater' : 'nv-fo-repeater';
         const gridAttributes = this._grid !== null ? new Attributes().grid(this._grid as any).toHtml() : '';
         const gridClass = /class="([^"]*)"/.exec(gridAttributes)?.[1] ?? '';
         const gridStyle = /style="([^"]*)"/.exec(gridAttributes)?.[1] ?? null;
         const list = keys.length ? `<ul x-sortable${gridStyle ? ` style="${gridStyle}"` : ''} data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems" class="${cls([gridClass, `${prefix}-items`])}">${rows.join('')}</ul>` : '';
         const add = await resolve('add');
-        const addHtml = this._addable && add.visible && keys.length < this._maxItems ? `<div class="${cls([`${prefix}-add`, this._addActionAlignment ? `fi-align-${this._addActionAlignment}` : null])}">${kit.addButton(add, expression('add', null))}</div>` : '';
+        const addHtml = this._addable && add.visible && keys.length < this._maxItems ? `<div class="${cls([`${prefix}-add`, this._addActionAlignment ? `nv-align-${this._addActionAlignment}` : null])}">${kit.addButton(add, expression('add', null))}</div>` : '';
         const collapseAll = await resolve('collapseAll'), expandAll = await resolve('expandAll');
-        const link = (resolved: ResolvedAction, click: string) => (resolved.visible ? `<span x-on:click="${click}"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...colorManager!.getComponentClasses('link', resolved.color)])}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(resolved.label)}</span></button></span>` : '');
+        const link = (resolved: ResolvedAction, click: string) => (resolved.visible ? `<span x-on:click="${click}"><button type="button" class="${cls(['nv-ac-link-action', 'nv-link', 'nv-size-sm', ...colorManager!.getComponentClasses('link', resolved.color)])}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="nv-link-label">${e(resolved.label)}</span></button></span>` : '');
         const collapseLinks = this._collapsible && !this._simple ? link(collapseAll, 'collapseAll') + link(expandAll, 'expandAll') : '';
-        const collapseAllHtml = collapseLinks ? `<div class="${cls(['fi-fo-repeater-actions', { 'fi-hidden': keys.length < 2 }])}">${collapseLinks}</div>` : '';
+        const collapseAllHtml = collapseLinks ? `<div class="${cls(['nv-fo-repeater-actions', { 'nv-hidden': keys.length < 2 }])}">${collapseLinks}</div>` : '';
         const itemLabel = tr('reordering.item');
-        const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
+        const descriptions = keys.map((itemKey, index) => `<span class="nv-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: kit.hasCustomReorderAction };
-        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls([prefix, { 'fi-collapsible': this._collapsible && !this._simple }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAllHtml}${list}${addHtml}${descriptions}</div>`;
+        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls([prefix, { 'nv-collapsible': this._collapsible && !this._simple }])}"><span wire:ignore x-ref="reorderStatus" class="nv-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAllHtml}${list}${addHtml}${descriptions}</div>`;
         return this.wrap(html, { labelAsDiv: true });
     }
 
@@ -1912,8 +1912,8 @@ export class Repeater extends Field {
     private async betweenItemsHtml(afterItem: string, kit: Awaited<ReturnType<Repeater['renderKit']>>, prefix: string): Promise<string> {
         const args = { afterItem };
         const addBetween = await kit.resolve('addBetween', args);
-        if (this._addable && addBetween.visible && Object.keys(this.getItems()).length < this._maxItems) return `<li class="fi-fo-repeater-add-between-items-ctn"><div class="fi-fo-repeater-add-between-items">${kit.addButton(addBetween, kit.expression('addBetween', args))}</div></li>`;
-        if (this._labelBetweenItems && prefix === 'fi-fo-repeater') return `<li class="fi-fo-repeater-label-between-items-ctn"><div class="fi-fo-repeater-label-between-items-divider-before"></div><span class="fi-fo-repeater-label-between-items">${e(this._labelBetweenItems)}</span><div class="fi-fo-repeater-label-between-items-divider-after"></div></li>`;
+        if (this._addable && addBetween.visible && Object.keys(this.getItems()).length < this._maxItems) return `<li class="nv-fo-repeater-add-between-items-ctn"><div class="nv-fo-repeater-add-between-items">${kit.addButton(addBetween, kit.expression('addBetween', args))}</div></li>`;
+        if (this._labelBetweenItems && prefix === 'nv-fo-repeater') return `<li class="nv-fo-repeater-label-between-items-ctn"><div class="nv-fo-repeater-label-between-items-divider-before"></div><span class="nv-fo-repeater-label-between-items">${e(this._labelBetweenItems)}</span><div class="nv-fo-repeater-label-between-items-divider-after"></div></li>`;
         return '';
     }
 
@@ -1924,10 +1924,10 @@ export class Repeater extends Field {
         const items = this.getItems();
         const keys = Object.keys(items);
         const schemas = this.getChildSchemas();
-        const tr = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.${name}`, replace);
+        const tr = (name: string, replace: Record<string, string> = {}) => t(`navette-forms::components.repeater.${name}`, replace);
         const kit = await this.renderKit();
         const { expression, resolve } = kit;
-        const button = 'fi-ac-icon-btn-action fi-icon-btn';
+        const button = 'nv-ac-icon-btn-action nv-icon-btn';
         const loading = (target: string) => `${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': target }))}`;
         const actionIcon = (name: string, target: string) => icon(name, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': target }) });
         const itemLabel = tr('reordering.item');
@@ -1943,12 +1943,12 @@ export class Repeater extends Field {
                 if (!resolved.visible) return '';
                 disabled = disabled || resolved.disabled;
                 const expr = expression(action, args);
-                return `<div x-on:click.stop class="fi-sr-only"><button title="${e(resolved.label)}" ${disabled ? 'aria-disabled="true" ' : ''}aria-label="${e(resolved.label)}" ${disabled ? 'disabled="disabled" ' : ''}tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button}${disabled ? ' fi-disabled' : ''} fi-size-sm" data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}" wire:click="${e(expr)}">${actionIcon(resolved.icon ?? fallbackIcon, expr)}${loading(expr)}</button></div>`;
+                return `<div x-on:click.stop class="nv-sr-only"><button title="${e(resolved.label)}" ${disabled ? 'aria-disabled="true" ' : ''}aria-label="${e(resolved.label)}" ${disabled ? 'disabled="disabled" ' : ''}tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${button}${disabled ? ' nv-disabled' : ''} nv-size-sm" data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}" wire:click="${e(expr)}">${actionIcon(resolved.icon ?? fallbackIcon, expr)}${loading(expr)}</button></div>`;
             };
             const cells: string[] = [];
             for (const [column, field] of schemas[index].getComponents().entries()) {
                 const verticalAlignment = this._columns[column]?.getVerticalAlignment();
-                cells.push(`<td${verticalAlignment ? ` class="fi-vertical-align-${verticalAlignment}"` : ''}>${await field.toSchemaHtml(await field.isVisible())}</td>`);
+                cells.push(`<td${verticalAlignment ? ` class="nv-vertical-align-${verticalAlignment}"` : ''}>${await field.toSchemaHtml(await field.isVisible())}</td>`);
             }
             // Only local or http(s) URLs: a link built from item data cannot become a `javascript:` URL.
             const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && safeFileUrl(link.url) !== null)
@@ -1956,23 +1956,23 @@ export class Repeater extends Field {
  content: ${e(js(link.label))},
  theme: $store.theme,
  allowHTML: false,
- }" aria-label="${e(link.label)}" class="${button} fi-size-sm">${icon(link.icon)}</a></div>`);
+ }" aria-label="${e(link.label)}" class="${button} nv-size-sm">${icon(link.icon)}</a></div>`);
             const extra = await kit.extraHtml(itemKey, (html) => `<div x-on:click.stop>${html}</div>`);
             const del = await resolve('delete', args);
             const deleteExpr = expression('delete', args);
-            const reorderCell = hasReorderColumn ? `<td><div class="fi-fo-table-repeater-actions"><div x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button} fi-size-sm" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? fieldActionIcon('repeater', 'reorder'))}</button></div>${await moveButton('moveUp', fieldActionIcon('repeater', 'move-up'), 'up', index === 0)}${await moveButton('moveDown', fieldActionIcon('repeater', 'move-down'), 'down', index === keys.length - 1)}</div></td>` : '';
-            const deleteButton = this._deletable && del.visible ? `<div x-on:click.stop><button title="${e(del.label)}" aria-label="${e(del.label)}" ${del.disabled ? 'disabled="disabled" ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${[button, 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager!.getComponentClasses('icon-button', 'danger'))].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon(del.icon ?? fieldActionIcon('repeater', 'delete'), deleteExpr)}${loading(deleteExpr)}</button></div>` : '';
-            rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${reorderCell}${cells.join('')}<td><div class="fi-fo-table-repeater-actions">${links.join('')}${extra.join('')}${deleteButton}</div></td></tr>`);
+            const reorderCell = hasReorderColumn ? `<td><div class="nv-fo-table-repeater-actions"><div x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${button} nv-size-sm" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? fieldActionIcon('repeater', 'reorder'))}</button></div>${await moveButton('moveUp', fieldActionIcon('repeater', 'move-up'), 'up', index === 0)}${await moveButton('moveDown', fieldActionIcon('repeater', 'move-down'), 'down', index === keys.length - 1)}</div></td>` : '';
+            const deleteButton = this._deletable && del.visible ? `<div x-on:click.stop><button title="${e(del.label)}" aria-label="${e(del.label)}" ${del.disabled ? 'disabled="disabled" ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${[button, 'nv-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager!.getComponentClasses('icon-button', 'danger'))].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon(del.icon ?? fieldActionIcon('repeater', 'delete'), deleteExpr)}${loading(deleteExpr)}</button></div>` : '';
+            rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${reorderCell}${cells.join('')}<td><div class="nv-fo-table-repeater-actions">${links.join('')}${extra.join('')}${deleteButton}</div></td></tr>`);
         }
         const head = this._columns.map((column) => {
-            const classes = cls([{ 'fi-wrapped': column.canHeaderWrap() }, column.getAlignment() ? `fi-align-${column.getAlignment()}` : null]);
-            const label = column.isHeaderLabelHidden() ? `<span class="fi-sr-only">${e(column.getLabel())}</span>` : `${e(column.getLabel())}${column.isMarkedAsRequired() ? '<sup class="fi-fo-table-repeater-header-required-mark">*</sup>' : ''}`;
+            const classes = cls([{ 'nv-wrapped': column.canHeaderWrap() }, column.getAlignment() ? `nv-align-${column.getAlignment()}` : null]);
+            const label = column.isHeaderLabelHidden() ? `<span class="nv-sr-only">${e(column.getLabel())}</span>` : `${e(column.getLabel())}${column.isMarkedAsRequired() ? '<sup class="nv-fo-table-repeater-header-required-mark">*</sup>' : ''}`;
             return `<th scope="col"${classes ? ` class="${classes}"` : ''}${column.getWidth() ? ` style="width: ${e(column.getWidth()!)};"` : ''}>${label}</th>`;
         }).join('');
         const add = await resolve('add');
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: kit.hasCustomReorderAction };
-        const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
-        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls(['fi-fo-table-repeater', { 'fi-compact': await this.isCompact() }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && add.visible && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add">${kit.addButton(add, expression('add', null))}</div>` : ''}${descriptions}</div>`;
+        const descriptions = keys.map((itemKey, index) => `<span class="nv-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
+        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls(['nv-fo-table-repeater', { 'nv-compact': await this.isCompact() }])}"><span wire:ignore x-ref="reorderStatus" class="nv-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="nv-fo-table-repeater-empty-header-cell"><span class="nv-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="nv-fo-table-repeater-empty-header-cell"><span class="nv-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && add.visible && keys.length < this._maxItems ? `<div class="nv-fo-table-repeater-add">${kit.addButton(add, expression('add', null))}</div>` : ''}${descriptions}</div>`;
         return this.wrap(table, { labelAsDiv: true });
     }
 }
@@ -2101,7 +2101,7 @@ abstract class TemporalField extends Field {
         const ctx = this.context();
         const a = this._affixes;
         const actionsHtml = async (actions: Action[]) => { const html: string[] = []; for (const action of actions) if (await action.isVisible(ctx)) html.push(await action.iconButton().size('sm').toHtml(ctx, { schemaComponent: this.getKey() })); return html; };
-        const iconHtml = (name: string | null, color: string | null) => (name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : '');
+        const iconHtml = (name: string | null, color: string | null) => (name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []) }) : '');
         const prefixLabel = await evaluate(a.prefix, ctx), suffixLabel = await evaluate(a.suffix, ctx);
         const prefixIconName = await evaluate(a.prefixIcon, ctx), suffixIconName = await evaluate(a.suffixIcon, ctx);
         const prefix = inputAffixHtml('prefix', { label: prefixLabel ?? null, icon: iconHtml(prefixIconName ?? null, a.prefixIconColor), actions: await actionsHtml(a.prefixActions), inline: a.prefixInline });
@@ -2186,7 +2186,7 @@ abstract class TemporalField extends Field {
         const min = await this.limit(this._minDate), max = await this.limit(this._maxDate);
         const wrapper = new Attributes()
             .merge({ 'x-on:focus-input.stop': "$el.querySelector('input:not([type=hidden])')?.focus()" })
-            .class(['fi-fo-date-time-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
+            .class(['nv-fo-date-time-picker', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
         const model = this.wireModel();
         const isReadOnly = await this.isReadOnly();
         const affixes = await this.affixesHtml();
@@ -2200,9 +2200,9 @@ abstract class TemporalField extends Field {
                     max: limit(max), min: limit(min), placeholder: this._temporalPlaceholder, readonly: isReadOnly,
                     required: (await this.isRequired()) && !isDisabled && !isReadOnly, step: this.hasTime() && this._seconds ? 1 : null, type: this.nativeType(), [model]: this.getStatePath(),
                 })
-                .class(['fi-input', { 'fi-input-has-inline-prefix': affixes.inlinePrefix, 'fi-input-has-inline-suffix': affixes.inlineSuffix }]);
+                .class(['nv-input', { 'nv-input-has-inline-prefix': affixes.inlinePrefix, 'nv-input-has-inline-suffix': affixes.inlineSuffix }]);
             const datalistHtml = datalist.length ? `<datalist id="${e(this.getId())}-list">${datalist.map((option) => `<option value="${e(option)}" />`).join('')}</datalist>` : '';
-            return this.wrap(`<div ${wrapper.toHtml()}>${affixes.prefix}<div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} />${datalistHtml}</div>${affixes.suffix}</div>`);
+            return this.wrap(`<div ${wrapper.toHtml()}>${affixes.prefix}<div class="nv-input-wrp-content-ctn"><input ${input.toHtml()} />${datalistHtml}</div>${affixes.suffix}</div>`);
         }
         const id = this.getId();
         const hasDate = this.hasDate(), hasTime = this.hasTime(), hasSeconds = this.hasSeconds();
@@ -2210,9 +2210,9 @@ abstract class TemporalField extends Field {
         const jsLimit = (value: string | null) => (value === null ? '' : normalizeDateTime(value.length <= 8 ? `1970-01-01 ${value}` : value) ?? value);
         const livewireKey = this.getLivewireKey() ?? '';
         const label = await this.getLabel();
-        const tr = (key: string) => t(`filament-forms::components.date_time_picker.${key}`);
+        const tr = (key: string) => t(`navette-forms::components.date_time_picker.${key}`);
         const describedBy = [this.getHelperTextId(), this.hasError() ? `${id}-error` : null].filter(Boolean).join(' ') || null;
-        const trigger = new Attributes(this.getExtraInputAttributes()).merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['fi-fo-date-time-picker-trigger', 'fi-fo-date-time-picker-display-text-input']);
+        const trigger = new Attributes(this.getExtraInputAttributes()).merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['nv-fo-date-time-picker-trigger', 'nv-fo-date-time-picker-display-text-input']);
         const config = `dateTimePickerFormComponent({
  defaultFocusedDate: ${js(this._defaultFocusedDate)},
  displayFormat: ${js(phpDateFormatToDayjs(this._displayFormat ?? this.defaultDisplayFormat()))},
@@ -2233,11 +2233,11 @@ abstract class TemporalField extends Field {
             hasDate ? ' x-on:keydown="handleTriggerKeydown($event)" x-bind:aria-expanded="isPanelOpen.toString()"' : ' x-on:keydown.arrow-left.prevent.stop="focusPreviousDay()" x-on:keydown.arrow-right.prevent.stop="focusNextDay()" x-on:keydown.arrow-up.prevent.stop="focusPreviousWeek()" x-on:keydown.arrow-down.prevent.stop="focusNextWeek()"',
             ' x-on:keydown.backspace.prevent.stop="clearState()" x-on:keydown.clear.prevent.stop="clearState()" x-on:keydown.delete.prevent.stop="clearState()"',
         ].join('');
-        const calendar = hasDate ? `<div class="fi-fo-date-time-picker-panel-header"><select aria-label="${e(tr('month_select.label'))}" x-model="focusedMonth" class="fi-fo-date-time-picker-month-select"><template x-for="(month, index) in months"><option x-bind:value="index" x-text="month"></option></template></select><input type="number" inputmode="numeric" aria-label="${e(tr('year_input.label'))}" x-model.debounce="focusedYear" class="fi-fo-date-time-picker-year-input" /></div><div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="fi-fo-date-time-picker-calendar-description"></div><div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="fi-fo-date-time-picker-calendar"><div role="row" class="fi-fo-date-time-picker-calendar-header"><template x-for="(day, index) in dayLabels" x-bind:key="index"><div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="fi-fo-date-time-picker-calendar-header-day"></div></template></div><template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex"><div role="row" class="fi-fo-date-time-picker-calendar-week"><template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)"><div role="gridcell" x-text="day" x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null" x-bind:aria-label="day ? getDayLabel(day) : null" x-bind:aria-selected="day &amp;&amp; dayIsSelected(day) ? 'true' : 'false'" x-bind:aria-current="day &amp;&amp; dayIsToday(day) ? 'date' : null" x-bind:aria-disabled="day &amp;&amp; dayIsDisabled(day) ? 'true' : 'false'" x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null" x-on:focus="day &amp;&amp; setFocusedDay(day)" x-on:click="if (day) { $el.focus(); selectDate(day) }" x-bind:class="{ 'fi-fo-date-time-picker-calendar-day': day, 'fi-fo-date-time-picker-calendar-day-today': day &amp;&amp; dayIsToday(day), 'fi-focused': day &amp;&amp; focusedDate.date() === day, 'fi-selected': day &amp;&amp; dayIsSelected(day), 'fi-disabled': day &amp;&amp; dayIsDisabled(day) }"></div></template></div></template></div>` : '';
+        const calendar = hasDate ? `<div class="nv-fo-date-time-picker-panel-header"><select aria-label="${e(tr('month_select.label'))}" x-model="focusedMonth" class="nv-fo-date-time-picker-month-select"><template x-for="(month, index) in months"><option x-bind:value="index" x-text="month"></option></template></select><input type="number" inputmode="numeric" aria-label="${e(tr('year_input.label'))}" x-model.debounce="focusedYear" class="nv-fo-date-time-picker-year-input" /></div><div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="nv-fo-date-time-picker-calendar-description"></div><div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="nv-fo-date-time-picker-calendar"><div role="row" class="nv-fo-date-time-picker-calendar-header"><template x-for="(day, index) in dayLabels" x-bind:key="index"><div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="nv-fo-date-time-picker-calendar-header-day"></div></template></div><template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex"><div role="row" class="nv-fo-date-time-picker-calendar-week"><template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)"><div role="gridcell" x-text="day" x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null" x-bind:aria-label="day ? getDayLabel(day) : null" x-bind:aria-selected="day &amp;&amp; dayIsSelected(day) ? 'true' : 'false'" x-bind:aria-current="day &amp;&amp; dayIsToday(day) ? 'date' : null" x-bind:aria-disabled="day &amp;&amp; dayIsDisabled(day) ? 'true' : 'false'" x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null" x-on:focus="day &amp;&amp; setFocusedDay(day)" x-on:click="if (day) { $el.focus(); selectDate(day) }" x-bind:class="{ 'nv-fo-date-time-picker-calendar-day': day, 'nv-fo-date-time-picker-calendar-day-today': day &amp;&amp; dayIsToday(day), 'nv-focused': day &amp;&amp; focusedDate.date() === day, 'nv-selected': day &amp;&amp; dayIsSelected(day), 'nv-disabled': day &amp;&amp; dayIsDisabled(day) }"></div></template></div></template></div>` : '';
         const timeInput = (max: number, step: number, label: string, model: string) => `<input max="${max}" min="0" step="${step}" type="number" inputmode="numeric" aria-label="${e(label)}" x-on:blur="checkTimeInputValidity" x-on:invalid="timeInputInvalid" x-model.debounce="${model}" />`;
-        const time = hasTime ? `<div class="fi-fo-date-time-picker-time-inputs">${timeInput(23, this._hoursStep, tr('hour_input.label'), 'hour')}<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._minutesStep, tr('minute_input.label'), 'minute')}${hasSeconds ? `<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._secondsStep, tr('second_input.label'), 'second')}` : ''}</div>` : '';
-        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
-        return this.wrap(`<div ${wrapper.toHtml()}>${affixes.prefix}<div class="fi-input-wrp-content-ctn">${picker}</div>${affixes.suffix}</div>`);
+        const time = hasTime ? `<div class="nv-fo-date-time-picker-time-inputs">${timeInput(23, this._hoursStep, tr('hour_input.label'), 'hour')}<span class="nv-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._minutesStep, tr('minute_input.label'), 'minute')}${hasSeconds ? `<span class="nv-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._secondsStep, tr('second_input.label'), 'second')}` : ''}</div>` : '';
+        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="nv-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
+        return this.wrap(`<div ${wrapper.toHtml()}>${affixes.prefix}<div class="nv-input-wrp-content-ctn">${picker}</div>${affixes.suffix}</div>`);
     }
 }
 
@@ -2303,7 +2303,7 @@ export class Radio extends Field {
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
     /** "Yes" (`1`) and "No" (`0`) options. */
     boolean(trueLabel: string | null = null, falseLabel: string | null = null): this {
-        return this.options([['1', trueLabel ?? t('filament-forms::components.radio.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.radio.boolean.false')]]);
+        return this.options([['1', trueLabel ?? t('navette-forms::components.radio.boolean.true')], ['0', falseLabel ?? t('navette-forms::components.radio.boolean.false')]]);
     }
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'in', passes: (v) => this._options.some(([value, label]) => value === String(v) && !this.isOptionDisabled(value, label)), message: (a) => `The selected ${a} is invalid.` }];
@@ -2314,13 +2314,13 @@ export class Radio extends Field {
         const isRequired = (await this.isRequired()) && !isDisabled;
         const container = new Attributes()
             .merge({ 'aria-describedby': this.hasError() ? `${id}-error` : null, 'aria-labelledby': `${id}-label`, 'aria-required': isRequired ? 'true' : null, role: 'radiogroup' })
-            .class(['fi-fo-radio', this._inline ? 'fi-inline' : null]);
+            .class(['nv-fo-radio', this._inline ? 'nv-inline' : null]);
         const items = this._options.map(([value, label]) => {
             const input = new Attributes(this.getExtraInputAttributes())
                 .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this.wireModel()]: this.getStatePath() })
-                .class(['fi-radio-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
-            const description = this._descriptions[value] ? `<p class="fi-fo-radio-label-description">${e(this._descriptions[value])}</p>` : '';
-            return `<label class="fi-fo-radio-label"><input ${input.toHtml()} /><div class="fi-fo-radio-label-text"><p>${e(label)}</p>${description}</div></label>`;
+                .class(['nv-radio-input', this.hasError() ? 'nv-invalid' : 'nv-valid']);
+            const description = this._descriptions[value] ? `<p class="nv-fo-radio-label-description">${e(this._descriptions[value])}</p>` : '';
+            return `<label class="nv-fo-radio-label"><input ${input.toHtml()} /><div class="nv-fo-radio-label-text"><p>${e(label)}</p>${description}</div></label>`;
         });
         return this.wrap(`<div ${container.toHtml()}>${items.join('')}</div>`, { labelAsDiv: true });
     }
@@ -2370,12 +2370,12 @@ export class Textarea extends Field {
             cols: await this.getCols(), disabled: isDisabled, id: this.getId(), maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder, readonly: this._readOnly,
             required: (await this.isRequired()) && !isDisabled && !this._readOnly, rows: this._rows, [this.wireModel()]: this.getStatePath(),
         });
-        const wrapper = new Attributes().class(['fi-fo-textarea', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div wire:ignore.self${height !== null ? ` style="height: ${height}rem"` : ''}><textarea x-load x-load-src="${e(asset('textarea'))}" x-data="textareaFormComponent({
+        const wrapper = new Attributes().class(['nv-fo-textarea', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="nv-input-wrp-content-ctn"><div wire:ignore.self${height !== null ? ` style="height: ${height}rem"` : ''}><textarea x-load x-load-src="${e(asset('textarea'))}" x-data="textareaFormComponent({
  initialHeight: ${height ?? 'null'},
  shouldAutosize: ${this._autosize ? 'true' : 'false'},
  state: $wire.$entangle(${e(js(this.getStatePath()))}),
- })" x-model="state" ${textarea.toHtml()}></textarea></div></div></div>`, { wrapperClass: 'fi-fo-textarea-wrp' });
+ })" x-model="state" ${textarea.toHtml()}></textarea></div></div></div>`, { wrapperClass: 'nv-fo-textarea-wrp' });
     }
 }
 
@@ -2437,19 +2437,19 @@ export class TagsInput extends Field {
         const label = await this.getLabel();
         const wrapper = new Attributes()
             .merge({ 'aria-label': label, role: 'group', 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" })
-            .class(['fi-fo-tags-input', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
+            .class(['nv-fo-tags-input', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
         const input = new Attributes(this.getExtraInputAttributes())
-            .merge({ autocomplete: 'off', disabled: isDisabled, id, list: `${id}-suggestions`, placeholder: this._placeholder ?? t('filament-forms::components.tags_input.placeholder'), type: 'text', 'x-bind': 'input' })
-            .class(['fi-input']);
-        const badge = ['fi-badge', 'fi-size-md', ...colorManager.getComponentClasses('badge', this._tagColor ?? 'primary'), this._reorderable && !isDisabled ? 'fi-reorderable' : null].filter(Boolean).join(' ');
+            .merge({ autocomplete: 'off', disabled: isDisabled, id, list: `${id}-suggestions`, placeholder: this._placeholder ?? t('navette-forms::components.tags_input.placeholder'), type: 'text', 'x-bind': 'input' })
+            .class(['nv-input']);
+        const badge = ['nv-badge', 'nv-size-md', ...colorManager.getComponentClasses('badge', this._tagColor ?? 'primary'), this._reorderable && !isDisabled ? 'nv-reorderable' : null].filter(Boolean).join(' ');
         const reorderable = this._reorderable && !isDisabled;
-        const deleteButton = isDisabled ? '' : `<button type="button" x-on:click.stop="deleteTag(tag)" x-bind:aria-label="'${e(t('filament-forms::components.tags_input.actions.delete.label'))}: ' + tag" class="fi-badge-delete-btn"><span aria-hidden="true" class="fi-badge-delete-btn-icon"></span></button>`;
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}"${this.extraAlpineHtml()} x-data="tagsInputFormComponent({
+        const deleteButton = isDisabled ? '' : `<button type="button" x-on:click.stop="deleteTag(tag)" x-bind:aria-label="'${e(t('navette-forms::components.tags_input.actions.delete.label'))}: ' + tag" class="nv-badge-delete-btn"><span aria-hidden="true" class="nv-badge-delete-btn-icon"></span></button>`;
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="nv-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}"${this.extraAlpineHtml()} x-data="tagsInputFormComponent({
                     state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}),
                     splitKeys: ${this._splitKeys.length ? e(js(this._splitKeys)) : '[]'},
-                    tagAddedMessage: ${e(js(t('filament-forms::components.tags_input.tag_added')))},
-                    tagRemovedMessage: ${e(js(t('filament-forms::components.tags_input.tag_removed')))},
-                })"><input ${input.toHtml()} /><div x-ref="liveRegion" aria-live="polite" class="fi-sr-only"></div><datalist id="${e(id)}-suggestions">${this._suggestions.map((s) => `<template x-bind:key="${e(js(s))}" x-if="! (state?.includes(${e(js(s))}) ?? true)"><option value="${e(s)}" /></template>`).join('')}</datalist><div wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${createHash('md5').update(JSON.stringify(this.context().state ?? [])).digest('hex')}"><template x-cloak x-if="state?.length"><div${reorderable ? ' x-on:end.stop="reorderTags($event)" x-sortable data-sortable-animation-duration="300"' : ''} class="fi-fo-tags-input-tags-ctn"><template x-for="(tag, index) in state" x-bind:key="\`\${tag}-\${index}\`"><span${reorderable ? ' x-bind:x-sortable-item="index" x-sortable-handle' : ''} class="${badge}"><span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(this._tagPrefix ?? '')}<span x-text="tag"></span>${e(this._tagSuffix ?? '')}</span></span>${deleteButton}</span></template></div></template></div></div></div></div>`, { wrapperClass: 'fi-fo-tags-input-wrp' });
+                    tagAddedMessage: ${e(js(t('navette-forms::components.tags_input.tag_added')))},
+                    tagRemovedMessage: ${e(js(t('navette-forms::components.tags_input.tag_removed')))},
+                })"><input ${input.toHtml()} /><div x-ref="liveRegion" aria-live="polite" class="nv-sr-only"></div><datalist id="${e(id)}-suggestions">${this._suggestions.map((s) => `<template x-bind:key="${e(js(s))}" x-if="! (state?.includes(${e(js(s))}) ?? true)"><option value="${e(s)}" /></template>`).join('')}</datalist><div wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${createHash('md5').update(JSON.stringify(this.context().state ?? [])).digest('hex')}"><template x-cloak x-if="state?.length"><div${reorderable ? ' x-on:end.stop="reorderTags($event)" x-sortable data-sortable-animation-duration="300"' : ''} class="nv-fo-tags-input-tags-ctn"><template x-for="(tag, index) in state" x-bind:key="\`\${tag}-\${index}\`"><span${reorderable ? ' x-bind:x-sortable-item="index" x-sortable-handle' : ''} class="${badge}"><span class="nv-badge-label-ctn"><span class="nv-badge-label">${e(this._tagPrefix ?? '')}<span x-text="tag"></span>${e(this._tagSuffix ?? '')}</span></span>${deleteButton}</span></template></div></template></div></div></div></div>`, { wrapperClass: 'nv-fo-tags-input-wrp' });
     }
 }
 
@@ -2480,10 +2480,10 @@ export class Toggle extends Field {
         const offColors = this._offColor && this._offColor !== 'gray' ? ` ${colorManager.getComponentClasses('toggle', this._offColor).join(' ')}` : '';
         const onIconHtml = this._onIcon ? icon(this._onIcon, { size: 'xs' }) : '';
         const offIconHtml = this._offIcon ? icon(this._offIcon, { size: 'xs' }) : '';
-        const button = new Attributes(this.getExtraAlpineAttributes()).merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
+        const button = new Attributes(this.getExtraAlpineAttributes()).merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['nv-fo-toggle', 'nv-toggle']);
         const knob = `<div><div aria-hidden="true">${offIconHtml}</div><div aria-hidden="true">${onIconHtml}</div></div>`;
         const placeholderKnob = `<div><div aria-hidden="true"></div><div aria-hidden="true">${onIconHtml}</div></div>`;
-        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
+        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'nv-toggle-on ${colors}' : 'nv-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="nv-toggle nv-toggle-on nv-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
         return this._inline ? this.wrap('', { labelPrefix: control }) : this.wrap(control);
     }
 }
@@ -2545,7 +2545,7 @@ export class ToggleButtons extends Field {
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
     /** "Yes" (`1`) and "No" (`0`) buttons, green and red, with check and cross icons. */
     boolean(trueLabel: string | null = null, falseLabel: string | null = null): this {
-        this.options([['1', trueLabel ?? t('filament-forms::components.toggle_buttons.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.toggle_buttons.boolean.false')]]);
+        this.options([['1', trueLabel ?? t('navette-forms::components.toggle_buttons.boolean.true')], ['0', falseLabel ?? t('navette-forms::components.toggle_buttons.boolean.false')]]);
         this._colors = { 1: 'success', 0: 'danger', ...this._colors };
         this._icons = { 1: icons.resolve('forms::components.toggle-buttons.boolean.true') ?? 'o-check', 0: icons.resolve('forms::components.toggle-buttons.boolean.false') ?? 'o-x-mark', ...this._icons };
         return this;
@@ -2574,21 +2574,21 @@ export class ToggleButtons extends Field {
         const describedBy = [isRequired ? `${id}-required` : null, this.hasError() ? `${id}-error` : null].filter(Boolean).join(' ') || null;
         const container = new Attributes()
             .merge({ 'aria-describedby': describedBy, 'aria-labelledby': `${id}-label`, 'aria-required': isRequired ? 'true' : null, role: 'radiogroup', 'wire:key': `${this.getLivewireKey()}.inputs` })
-            .class(['fi-fo-toggle-buttons', this._grouped ? 'fi-btn-group' : null, !this._grouped && this._inline ? 'fi-inline' : null, { 'fi-width-full': this._fullWidth }]);
+            .class(['nv-fo-toggle-buttons', this._grouped ? 'nv-btn-group' : null, !this._grouped && this._inline ? 'nv-inline' : null, { 'nv-width-full': this._fullWidth }]);
         if (this._multiple) container.merge({ role: 'group', 'aria-required': null });
         const grid = !this._grouped && !this._inline && this._columns && this._columns > 1 ? ` ${optionsGridAttributes(this._columns, await evaluate(this._gridDirection, this.context()), null)}` : '';
         const manager = colorManager;
-        const button = (value: string, disabled: boolean) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, `fi-size-${this._size ?? 'md'}`, disabled ? 'fi-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
+        const button = (value: string, disabled: boolean) => ['nv-btn', this._grouped ? 'nv-btn-group-btn' : null, `nv-size-${this._size ?? 'md'}`, disabled ? 'nv-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
         const items = this._options.map(([value, label]) => {
             const optionDisabled = this.isOptionDisabled(value, label);
-            const input = new Attributes(this.getExtraInputAttributes()).merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this.wireModel()]: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
+            const input = new Attributes(this.getExtraInputAttributes()).merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this.wireModel()]: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['nv-fo-toggle-buttons-input']);
             const tooltip = this._tooltips[value] ? ` x-tooltip="${e(`{ content: ${js(this._tooltips[value])}, theme: $store.theme, allowHTML: false }`)}"` : '';
             const iconSize = this._size === 'xs' || this._size === 'sm' ? 'sm' : undefined;
             const html = `<input ${input.toHtml()} /><label for="${e(`${id}-${value}`)}"${tooltip}${this._labelsHidden ? ` aria-label="${e(label)}"` : ''} class="${button(value, optionDisabled)}">${this._icons[value] ? icon(this._icons[value], iconSize ? { size: iconSize } : {}) : ''}${this._labelsHidden ? '' : e(label)}</label>`;
-            return this._grouped ? html : `<div class="fi-fo-toggle-buttons-btn-ctn">${html}</div>`;
+            return this._grouped ? html : `<div class="nv-fo-toggle-buttons-btn-ctn">${html}</div>`;
         });
-        const after = isRequired ? `<span id="${e(id)}-required" class="fi-sr-only">${e(t('filament-forms::components.toggle_buttons.required_description'))}</span>` : '';
-        return this.wrap(`<div ${container.toHtml()}>${grid ? `<div${grid}>${items.join('')}</div>` : items.join('')}</div>`, { wrapperClass: 'fi-fo-toggle-buttons-wrp', labelAsDiv: true, focusable: true, after });
+        const after = isRequired ? `<span id="${e(id)}-required" class="nv-sr-only">${e(t('navette-forms::components.toggle_buttons.required_description'))}</span>` : '';
+        return this.wrap(`<div ${container.toHtml()}>${grid ? `<div${grid}>${items.join('')}</div>` : items.join('')}</div>`, { wrapperClass: 'nv-fo-toggle-buttons-wrp', labelAsDiv: true, focusable: true, after });
     }
 }
 
@@ -2813,7 +2813,7 @@ export class RichEditor extends Field {
     private schemaOptions(): RichSchemaOptions { this.applyContentAttribute(); return { linkProtocols: this._linkProtocols, extensions: this._plugins.flatMap((plugin) => plugin.getTipTapServerExtensions()) }; }
     /** Message shown while an image uploads. */
     uploadingFileMessage(message: string | null): this { this._uploadingFileMessage = message; return this; }
-    getUploadingFileMessage(): string { return this._uploadingFileMessage ?? t('filament-forms::components.rich_editor.uploading_file_message'); }
+    getUploadingFileMessage(): string { return this._uploadingFileMessage ?? t('navette-forms::components.rich_editor.uploading_file_message'); }
     /** Your own toolbar buttons (or replacements of built-in ones, by name); place them with `toolbarButtons()`. */
     tools(tools: RichEditorTool[]): this { this._customTools = [...this._customTools.filter((tool) => !tools.some((other) => other.getName() === tool.getName())), ...tools]; return this; }
     /** Actions mounted by your tools (`RichEditorTool.make('x').action()`), run with the editor selection in `arguments.editorSelection`. */
@@ -2920,7 +2920,7 @@ export class RichEditor extends Field {
                 for (const id of await attachmentIdsOf(value)) if (!this.getUploadedFileAttachment(id) && !(await this.isFileAttachmentPathAuthorized(id, original))) return false;
                 return true;
             },
-            message: (a) => t('filament-forms::validation.tampered_file_path', { attribute: a }),
+            message: (a) => t('navette-forms::validation.tampered_file_path', { attribute: a }),
         });
         return [...rules, ...this._rules];
     }
@@ -3125,7 +3125,7 @@ export class RichEditor extends Field {
     }
     /** Toolbar actions: link, text color, custom block, and the ones of `editorActions()`. */
     getActions(): Action[] {
-        const tr = (name: string) => t(`filament-forms::components.rich_editor.actions.link.${name}`);
+        const tr = (name: string) => t(`navette-forms::components.rich_editor.actions.link.${name}`);
         return [
             ...this.getHintActions(),
             Action.make('link').label(tr('label')).modalHeading(tr('modal.heading')).modalWidth('lg')
@@ -3152,7 +3152,7 @@ export class RichEditor extends Field {
         ];
     }
     private textColorAction(): Action {
-        const tr = (name: string) => t(`filament-forms::components.rich_editor.actions.text_color.${name}`);
+        const tr = (name: string) => t(`navette-forms::components.rich_editor.actions.text_color.${name}`);
         return Action.make('textColor').label(tr('label')).modalHeading(tr('modal.heading')).modalWidth('lg')
             .fillForm(({ arguments: args }) => {
                 const color = typeof args.color === 'string' ? args.color : null;
@@ -3161,7 +3161,7 @@ export class RichEditor extends Field {
                 return { color: known ? color : null, customColor: this._customTextColors && !known ? color : null };
             })
             .schema(() => {
-                const options = Object.fromEntries(Object.entries(this.getTextColors()).map(([name, color]) => [name, `<div class="fi-fo-rich-editor-text-color-select-option"><div class="fi-fo-rich-editor-text-color-select-option-preview" style="--color: ${e(sanitizeCssColor(color.getColor()) ?? '')}; --dark-color: ${e(sanitizeCssColor(color.getDarkColor()) ?? '')}"></div><div>${e(color.getLabel() ?? name)}</div></div>`]));
+                const options = Object.fromEntries(Object.entries(this.getTextColors()).map(([name, color]) => [name, `<div class="nv-fo-rich-editor-text-color-select-option"><div class="nv-fo-rich-editor-text-color-select-option-preview" style="--color: ${e(sanitizeCssColor(color.getColor()) ?? '')}; --dark-color: ${e(sanitizeCssColor(color.getDarkColor()) ?? '')}"></div><div>${e(color.getLabel() ?? name)}</div></div>`]));
                 return [
                     ...(Object.keys(options).length ? [Select.make('color').label(tr('modal.form.color.label')).options(options).allowHtml().native(false).live()] : []),
                     ...(this._customTextColors ? [ColorPicker.make('customColor').label(tr('modal.form.custom_color.label')).visible(({ get }) => !get('color'))] : []),
@@ -3183,7 +3183,7 @@ export class RichEditor extends Field {
         const argumentsOf = (livewire: any) => livewire?.mountedActions?.find?.((mounted: any) => mounted.name === 'customBlock')?.arguments ?? {};
         return Action.make('customBlock').modalWidth('lg')
             .modalHeading(({ arguments: args }) => blockOf(args)?.getLabel() ?? null)
-            .modalSubmitActionLabel(({ arguments: args }) => t(`filament-forms::components.rich_editor.actions.custom_block.modal.actions.${args.mode === 'edit' ? 'save' : 'insert'}.label`))
+            .modalSubmitActionLabel(({ arguments: args }) => t(`navette-forms::components.rich_editor.actions.custom_block.modal.actions.${args.mode === 'edit' ? 'save' : 'insert'}.label`))
             .modalHidden(async (ctx) => { const action = configured(ctx.arguments); return !action || (await action.isModalHidden(ctx)); })
             .fillForm(({ arguments: args }) => (args.config && typeof args.config === 'object' && !Array.isArray(args.config) ? args.config as Record<string, unknown> : {}))
             .schema((schema: any) => configured(argumentsOf(schema.livewire))?.applySchema(schema) ?? schema.components([]))
@@ -3205,29 +3205,29 @@ export class RichEditor extends Field {
         const groups = this.blockGroups();
         const allLabels = groups.flatMap(([label, blocks]) => [label, ...blocks.map((block) => block.getLabel())]).filter(Boolean);
         const parts: string[] = [];
-        if (searchable) parts.push(`<div class="fi-fo-rich-editor-custom-blocks-search">${icon('m-magnifying-glass')}<input type="search" x-model="customBlockSearch" x-on:keydown.enter.prevent aria-label="${e(t('filament-forms::components.rich_editor.custom_blocks.search_label'))}" placeholder="${e(t('filament-forms::components.rich_editor.custom_blocks.search_prompt'))}" class="fi-fo-rich-editor-custom-blocks-search-input" /></div>`);
+        if (searchable) parts.push(`<div class="nv-fo-rich-editor-custom-blocks-search">${icon('m-magnifying-glass')}<input type="search" x-model="customBlockSearch" x-on:keydown.enter.prevent aria-label="${e(t('navette-forms::components.rich_editor.custom_blocks.search_label'))}" placeholder="${e(t('navette-forms::components.rich_editor.custom_blocks.search_prompt'))}" class="nv-fo-rich-editor-custom-blocks-search-input" /></div>`);
         const list = groups.map(([groupLabel, blocks]) => {
             const groupLabels = [groupLabel, ...blocks.map((block) => block.getLabel())];
             const show = (labels: string[]) => (searchable ? ` x-show="${e(`matchesCustomBlockSearch(${js(labels)})`)}"` : '');
-            const header = groupLabel ? `<h4${show(groupLabels)} class="fi-fo-rich-editor-custom-blocks-group-header">${e(groupLabel)}</h4>` : '';
+            const header = groupLabel ? `<h4${show(groupLabels)} class="nv-fo-rich-editor-custom-blocks-group-header">${e(groupLabel)}</h4>` : '';
             const buttons = blocks.map((block) => {
                 const id = block.getId();
                 const blockIcon = block.getIcon();
-                return `<button draggable="true" type="button" data-block-id="${e(id)}" x-data="{ isLoading: false }"${show([groupLabel, block.getLabel()])} x-on:click="${e(`isLoading = true\n$wire.mountAction('customBlock', { editorSelection, id: ${js(id)}, mode: 'insert' }, { schemaComponent: ${js(key)} })`)}" x-on:dragstart="${e(`$event.dataTransfer.setData('customBlock', ${js(id)})`)}" x-on:open-modal.window="isLoading = false" x-on:run-rich-editor-commands.window="isLoading = false" class="fi-fo-rich-editor-custom-block-btn">${blockIcon ? `<span x-show="! isLoading" class="fi-fo-rich-editor-custom-block-icon">${icon(blockIcon)}</span>` : ''}${loadingIndicator(new Attributes({ 'x-show': 'isLoading', 'x-cloak': '' }))}<span>${e(block.getLabel())}</span></button>`;
+                return `<button draggable="true" type="button" data-block-id="${e(id)}" x-data="{ isLoading: false }"${show([groupLabel, block.getLabel()])} x-on:click="${e(`isLoading = true\n$wire.mountAction('customBlock', { editorSelection, id: ${js(id)}, mode: 'insert' }, { schemaComponent: ${js(key)} })`)}" x-on:dragstart="${e(`$event.dataTransfer.setData('customBlock', ${js(id)})`)}" x-on:open-modal.window="isLoading = false" x-on:run-rich-editor-commands.window="isLoading = false" class="nv-fo-rich-editor-custom-block-btn">${blockIcon ? `<span x-show="! isLoading" class="nv-fo-rich-editor-custom-block-icon">${icon(blockIcon)}</span>` : ''}${loadingIndicator(new Attributes({ 'x-show': 'isLoading', 'x-cloak': '' }))}<span>${e(block.getLabel())}</span></button>`;
             }).join('');
-            return `${header}<div${show(groupLabels)} class="${cls(['fi-fo-rich-editor-custom-blocks-list', { 'fi-fo-rich-editor-custom-blocks-grid': this._customBlocksGrid }])}">${buttons}</div>`;
+            return `${header}<div${show(groupLabels)} class="${cls(['nv-fo-rich-editor-custom-blocks-list', { 'nv-fo-rich-editor-custom-blocks-grid': this._customBlocksGrid }])}">${buttons}</div>`;
         }).join('');
-        const noResults = searchable ? `<p x-show="${e(`! matchesCustomBlockSearch(${js(allLabels)})`)}" x-cloak role="status" class="fi-fo-rich-editor-custom-blocks-no-results">${e(t('filament-forms::components.rich_editor.custom_blocks.no_search_results_message'))}</p>` : '';
-        return `${parts.join('')}<div class="fi-fo-rich-editor-custom-blocks-ctn">${list}${noResults}</div>`;
+        const noResults = searchable ? `<p x-show="${e(`! matchesCustomBlockSearch(${js(allLabels)})`)}" x-cloak role="status" class="nv-fo-rich-editor-custom-blocks-no-results">${e(t('navette-forms::components.rich_editor.custom_blocks.no_search_results_message'))}</p>` : '';
+        return `${parts.join('')}<div class="nv-fo-rich-editor-custom-blocks-ctn">${list}${noResults}</div>`;
     }
     private mergeTagsPanelHtml(): string {
-        return Object.entries(this._mergeTags).map(([id, label]) => `<button draggable="true" type="button" x-on:click="${e(`insertMergeTag(${js(id)})`)}" x-on:dragstart="${e(`$event.dataTransfer.setData('mergeTag', ${js(id)})`)}" class="fi-fo-rich-editor-merge-tag-btn"><span data-type="mergeTag" data-id="${e(id)}">${e(label)}</span></button>`).join('');
+        return Object.entries(this._mergeTags).map(([id, label]) => `<button draggable="true" type="button" x-on:click="${e(`insertMergeTag(${js(id)})`)}" x-on:dragstart="${e(`$event.dataTransfer.setData('mergeTag', ${js(id)})`)}" class="nv-fo-rich-editor-merge-tag-btn"><span data-type="mergeTag" data-id="${e(id)}">${e(label)}</span></button>`).join('');
     }
 
     async toHtml(): Promise<string> {
         const key = this.getKey()!;
         await this.loadFileAttachmentUrls();
-        let html = views.render('filament-forms::components.rich-editor', { livewireId: this.livewire.id, key, statePath: this.getStatePath(), label: await this.getLabel(), js });
+        let html = views.render('navette-forms::components.rich-editor', { livewireId: this.livewire.id, key, statePath: this.getStatePath(), label: await this.getLabel(), js });
         // Toolbar: the configured groups, each tool (or dropdown of tools) rendered from its definition.
         const toolbarStart = html.indexOf('data-rich-editor-toolbar="main"');
         if (toolbarStart >= 0) {
@@ -3237,23 +3237,23 @@ export class RichEditor extends Field {
             const close = message < 0 ? -1 : html.lastIndexOf('<div', message);
             if (close < 0) throw new Error('RichEditor: unexpected view markup (toolbar end not found).');
             const body = html.slice(open, close);
-            const groups = this.getToolbarButtons().map((group) => `<div class="fi-fo-rich-editor-toolbar-group">${group.map((item) => this.toolbarItemHtml(item)).join('')}</div>`).join('');
+            const groups = this.getToolbarButtons().map((group) => `<div class="nv-fo-rich-editor-toolbar-group">${group.map((item) => this.toolbarItemHtml(item)).join('')}</div>`).join('');
             const endOfToolbar = body.lastIndexOf('</div>');
             html = html.slice(0, open) + groups + body.slice(endOfToolbar) + html.slice(close);
-            if (this._stickyToolbar) html = html.replace('class="fi-fo-rich-editor-toolbar "', 'class="fi-fo-rich-editor-toolbar fi-fo-rich-editor-sticky-toolbar"');
+            if (this._stickyToolbar) html = html.replace('class="nv-fo-rich-editor-toolbar "', 'class="nv-fo-rich-editor-toolbar nv-fo-rich-editor-sticky-toolbar"');
         }
         // Floating toolbars: one per node name, inside the content (none when disabled).
         const floatingToolbars = (await this.isDisabled()) ? {} : this.getFloatingToolbars();
-        const contentStart = html.indexOf('<div x-ref="editor" class="fi-fo-rich-editor-content fi-prose">');
+        const contentStart = html.indexOf('<div x-ref="editor" class="nv-fo-rich-editor-content nv-prose">');
         const panelsStart = html.indexOf('x-show="isPanelActive()"');
         if (contentStart >= 0 && panelsStart >= 0) {
             const open = html.indexOf('>', contentStart) + 1;
             const close = html.lastIndexOf('</div>', html.lastIndexOf('<div', panelsStart));
-            const toolbarLabel = e(t('filament-forms::components.rich_editor.toolbar.label'));
-            const toolbars = Object.entries(floatingToolbars).map(([node, items]) => `<div x-ref="floatingToolbar::${e(node)}" class="fi-fo-rich-editor-floating-toolbar fi-not-prose" data-rich-editor-toolbar role="toolbar" aria-label="${toolbarLabel}">${items.map((item) => this.toolbarItemHtml(item)).join('')}</div>`).join('');
+            const toolbarLabel = e(t('navette-forms::components.rich_editor.toolbar.label'));
+            const toolbars = Object.entries(floatingToolbars).map(([node, items]) => `<div x-ref="floatingToolbar::${e(node)}" class="nv-fo-rich-editor-floating-toolbar nv-not-prose" data-rich-editor-toolbar role="toolbar" aria-label="${toolbarLabel}">${items.map((item) => this.toolbarItemHtml(item)).join('')}</div>`).join('');
             html = html.slice(0, open) + toolbars + html.slice(close);
         }
-        if (await this.hasStickyPanels()) html = html.replace('class="fi-fo-rich-editor-panels "', 'class="fi-fo-rich-editor-panels fi-fo-rich-editor-sticky-panels"');
+        if (await this.hasStickyPanels()) html = html.replace('class="nv-fo-rich-editor-panels "', 'class="nv-fo-rich-editor-panels nv-fo-rich-editor-sticky-panels"');
         // Height and sticky offset: CSS variables of the wrapper.
         const [minHeight, maxHeight, stickyOffset] = [await this.getMinHeight(), await this.getMaxHeight(), await this.getStickyOffset()];
         const style = [minHeight ? `--min-height: ${minHeight}` : null, maxHeight ? `--max-height: ${maxHeight}` : null, stickyOffset ? `--rich-editor-sticky-offset: ${stickyOffset}` : null].filter(Boolean).join('; ');
@@ -3264,12 +3264,12 @@ export class RichEditor extends Field {
             .replace(/floatingToolbars: JSON\.parse\('[^']*'\),/, () => `floatingToolbars: ${js(Object.keys(floatingToolbars).length ? Object.fromEntries(Object.entries(floatingToolbars).map(([node, items]) => [node, toolbarButtonNames(items)])) : [])},`)
             .replace(/linkProtocols: JSON\.parse\('[^']*'\),/, () => `linkProtocols: ${js(this.getLinkProtocols())},`);
         // Panels: custom blocks and merge tags.
-        const blocksStart = html.indexOf('<div class="fi-fo-rich-editor-custom-blocks-ctn">');
+        const blocksStart = html.indexOf('<div class="nv-fo-rich-editor-custom-blocks-ctn">');
         if (blocksStart >= 0) {
             const blocksEnd = html.indexOf('</div>', blocksStart) + '</div>'.length;
             html = html.slice(0, blocksStart) + this.customBlocksPanelHtml(key) + html.slice(blocksEnd);
         }
-        const tagsStart = html.indexOf('<div class="fi-fo-rich-editor-merge-tags-list">');
+        const tagsStart = html.indexOf('<div class="nv-fo-rich-editor-merge-tags-list">');
         if (tagsStart >= 0) {
             const open = html.indexOf('>', tagsStart) + 1;
             html = html.slice(0, open) + this.mergeTagsPanelHtml() + html.slice(html.indexOf('</div>', open));
@@ -3288,7 +3288,7 @@ export class RichEditor extends Field {
             .replace('hasStickyToolbar: false,', `hasStickyToolbar: ${this._stickyToolbar ? 'true' : 'false'},`)
             .replace('mentions: [],', () => `mentions: ${js(mentions)},`)
             .replace('mergeTags: [],', () => `mergeTags: ${js(Object.keys(this._mergeTags).length ? this._mergeTags : [])},`)
-            .replace(/noMergeTagSearchResultsMessage: '[^']*',/, () => `noMergeTagSearchResultsMessage: ${js(this._noMergeTagResults ?? t('filament-forms::components.rich_editor.no_merge_tag_search_results_message'))},`)
+            .replace(/noMergeTagSearchResultsMessage: '[^']*',/, () => `noMergeTagSearchResultsMessage: ${js(this._noMergeTagResults ?? t('navette-forms::components.rich_editor.no_merge_tag_search_results_message'))},`)
             .replace(/textColors: JSON\.parse\('[^']*'\),/, () => `textColors: ${js(textColorsForJs(this.getTextColors()))},`)
             .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
             .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},`)
@@ -3330,9 +3330,9 @@ export class ColorPicker extends Field {
         const input = new Attributes(this.getExtraInputAttributes()).merge({
             'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', 'aria-invalid': this.hasError() ? 'true' : null, autocomplete: 'off',
             disabled: isDisabled, id, required: (await this.isRequired()) && !isDisabled, role: 'combobox', type: 'text', 'x-model': 'state',
-        }).class(['fi-input']);
-        const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" }).class(['fi-fo-color-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('color-picker'))}"${this.extraAlpineHtml()} x-data="colorPickerFormComponent({
+        }).class(['nv-input']);
+        const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" }).class(['nv-fo-color-picker', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="nv-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('color-picker'))}"${this.extraAlpineHtml()} x-data="colorPickerFormComponent({
  isAutofocused: false,
  isDisabled: ${isDisabled ? 'true' : 'false'},
  isLive: false,
@@ -3340,9 +3340,9 @@ export class ColorPicker extends Field {
  isLiveOnBlur: false,
  liveDebounce: null,
  state: $wire.$entangle(${e(js(this.getStatePath()))}${this.entangleLive() ? ', true' : ''}),
- })" x-on:dropdown-escape="if (isOpen()) { closePanelAndRestoreFocus(); $event.preventDefault() }" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" wire:key="${e(key)}.${hash}" class="fi-input-wrp-content"><input x-on:focus="$refs.panel.open($refs.input)" x-on:keydown.enter.prevent.stop="togglePanelVisibility()" x-ref="input" ${input.toHtml()} /><div aria-hidden="true" class="fi-fo-color-picker-preview my-auto me-3 size-5 shrink-0 rounded-full select-none" x-on:click="togglePanelVisibility()" x-bind:class="{
- 'fi-empty': ! state,
- }" x-bind:style="{ 'background-color': state }"></div><div wire:ignore.self wire:key="${e(key)}.panel" x-cloak x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }" x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(t('filament-forms::components.color_picker.panel_label'))}" class="fi-fo-color-picker-panel"><${({ hex: 'hex', rgb: 'rgb-string', rgba: 'rgba-string', hsl: 'hsl-string' })[this._format]}-color-picker x-ref="picker" color="${e(typeof state === 'string' ? state : '')}" /></div></div></div></div>`);
+ })" x-on:dropdown-escape="if (isOpen()) { closePanelAndRestoreFocus(); $event.preventDefault() }" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" wire:key="${e(key)}.${hash}" class="nv-input-wrp-content"><input x-on:focus="$refs.panel.open($refs.input)" x-on:keydown.enter.prevent.stop="togglePanelVisibility()" x-ref="input" ${input.toHtml()} /><div aria-hidden="true" class="nv-fo-color-picker-preview my-auto me-3 size-5 shrink-0 rounded-full select-none" x-on:click="togglePanelVisibility()" x-bind:class="{
+ 'nv-empty': ! state,
+ }" x-bind:style="{ 'background-color': state }"></div><div wire:ignore.self wire:key="${e(key)}.panel" x-cloak x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }" x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(t('navette-forms::components.color_picker.panel_label'))}" class="nv-fo-color-picker-panel"><${({ hex: 'hex', rgb: 'rgb-string', rgba: 'rgba-string', hsl: 'hsl-string' })[this._format]}-color-picker x-ref="picker" color="${e(typeof state === 'string' ? state : '')}" /></div></div></div></div>`);
     }
 }
 
@@ -3357,7 +3357,7 @@ export class Checkbox extends Field {
     async toHtml(): Promise<string> {
         const input = new Attributes(this.getExtraInputAttributes())
             .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), [this.wireModel()]: this.getStatePath() })
-            .class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
+            .class(['nv-checkbox-input', this.hasError() ? 'nv-invalid' : 'nv-valid']);
         return this._inline ? this.wrap('', { labelPrefix: `<input ${input.toHtml()} />` }) : this.wrap(`<input ${input.toHtml()} />`);
     }
 }
@@ -3370,7 +3370,7 @@ function optionsGridAttributes(columns: number | null, direction: GridDirection 
     const count = columns && columns > 1 ? Math.floor(columns) : null;
     const isColumn = direction !== 'row';
     const value = (n: number) => (isColumn ? String(n) : `repeat(${n}, minmax(0, 1fr))`);
-    const classes = cls(['fi-grid', { 'fi-grid-direction-col': isColumn, 'lg:fi-grid-cols': count !== null }, extraClass]);
+    const classes = cls(['nv-grid', { 'nv-grid-direction-col': isColumn, 'lg:nv-grid-cols': count !== null }, extraClass]);
     return `class="${classes}" style="${count !== null ? `--cols-lg: ${value(count)}; ` : ''}--cols-default: ${value(1)};"`;
 }
 
@@ -3417,8 +3417,8 @@ export class CheckboxList extends Field {
     selectAllAction(modify: ActionModifier): this { this._modifySelectAll = modify; return this; }
     /** Customizes the "Deselect all" link. */
     deselectAllAction(modify: ActionModifier): this { this._modifyDeselectAll = modify; return this; }
-    getSelectAllAction(): Action { return modifyAction(Action.make('selectAll').label(t('filament-forms::components.checkbox_list.actions.select_all.label')).link().size('sm'), this._modifySelectAll); }
-    getDeselectAllAction(): Action { return modifyAction(Action.make('deselectAll').label(t('filament-forms::components.checkbox_list.actions.deselect_all.label')).link().size('sm'), this._modifyDeselectAll); }
+    getSelectAllAction(): Action { return modifyAction(Action.make('selectAll').label(t('navette-forms::components.checkbox_list.actions.select_all.label')).link().size('sm'), this._modifySelectAll); }
+    getDeselectAllAction(): Action { return modifyAction(Action.make('deselectAll').label(t('navette-forms::components.checkbox_list.actions.deselect_all.label')).link().size('sm'), this._modifyDeselectAll); }
     /** Option labels are HTML, cleaned with the HTML sanitizer (as rich content). Leave it off for labels that come from users. */
     allowHtml(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_allowHtml', condition); }
     /** Options that cannot be checked; they are refused on the server too. */
@@ -3514,22 +3514,22 @@ export class CheckboxList extends Field {
         const key = this.getLivewireKey() ?? '';
         const { options: resolvedOptions, descriptions } = await this.getResolvedOptions();
         const options = resolvedOptions.map(([value, label]) => {
-            const input = new Attributes(this.getExtraInputAttributes()).merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
-            const description = descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(descriptions[value])}</p>` : '';
-            return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${this._allowHtml ? sanitizeHtml(label) : e(label)}</span>${description}</div></label></div>`;
+            const input = new Attributes(this.getExtraInputAttributes()).merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['nv-checkbox-input', this.hasError() ? 'nv-invalid' : 'nv-valid']);
+            const description = descriptions[value] ? `<p class="nv-fo-checkbox-list-option-description">${e(descriptions[value])}</p>` : '';
+            return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="nv-fo-checkbox-list-option-ctn"><label class="nv-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="nv-fo-checkbox-list-option-text"><span class="nv-fo-checkbox-list-option-label">${this._allowHtml ? sanitizeHtml(label) : e(label)}</span>${description}</div></label></div>`;
         });
-        const grid = optionsGridAttributes(this._optionColumns, await evaluate(this._gridDirection, this.context()), 'fi-fo-checkbox-list-options');
+        const grid = optionsGridAttributes(this._optionColumns, await evaluate(this._gridDirection, this.context()), 'nv-fo-checkbox-list-options');
         const searchPrompt = this._searchPrompt;
-        const search = this._searchable ? `<div class="fi-input-wrp fi-fo-checkbox-list-search-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass', { alias: 'forms::components.checkbox-list.search-field' })}</div><div class="fi-input-wrp-content-ctn"><input aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" type="search" x-model.debounce.${this._searchDebounce}="search" class="fi-input fi-input-has-inline-prefix" /></div></div>` : '';
+        const search = this._searchable ? `<div class="nv-input-wrp nv-fo-checkbox-list-search-input-wrp"><div class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content nv-inline">${icon('m-magnifying-glass', { alias: 'forms::components.checkbox-list.search-field' })}</div><div class="nv-input-wrp-content-ctn"><input aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" type="search" x-model.debounce.${this._searchDebounce}="search" class="nv-input nv-input-has-inline-prefix" /></div></div>` : '';
         const ctx = this.context();
-        const link = (resolved: ResolvedAction) => `<button type="button" class="fi-ac-link-action fi-link fi-size-sm ${colorClassesOf(colorManager, 'link', resolved.color, 'primary', colorManager ? colorManager.getComponentClasses('link', 'primary') : []).join(' ')}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(resolved.label)}</span></button>`;
+        const link = (resolved: ResolvedAction) => `<button type="button" class="nv-ac-link-action nv-link nv-size-sm ${colorClassesOf(colorManager, 'link', resolved.color, 'primary', colorManager ? colorManager.getComponentClasses('link', 'primary') : []).join(' ')}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="nv-link-label">${e(resolved.label)}</span></button>`;
         const selectAll = await resolveAction(this.getSelectAllAction(), ctx), deselectAll = await resolveAction(this.getDeselectAllAction(), ctx);
         const bulkLinks = (selectAll.visible ? `<span x-show="! areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.select-all">${link(selectAll)}</span>` : '') + (deselectAll.visible ? `<span x-show="areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.deselect-all">${link(deselectAll)}</span>` : '');
-        const bulk = this._bulkToggleable && !isDisabled && resolvedOptions.length && bulkLinks ? `<div x-cloak class="fi-fo-checkbox-list-actions" wire:key="${e(key)}.actions">${bulkLinks}</div>` : '';
-        const noResults = this._searchable ? `<div x-cloak x-show="search && ! visibleCheckboxListOptions.length" role="status" aria-live="polite" class="fi-fo-checkbox-list-no-search-results-message">${e(this._noSearchResultsMessage)}</div>` : '';
+        const bulk = this._bulkToggleable && !isDisabled && resolvedOptions.length && bulkLinks ? `<div x-cloak class="nv-fo-checkbox-list-actions" wire:key="${e(key)}.actions">${bulkLinks}</div>` : '';
+        const noResults = this._searchable ? `<div x-cloak x-show="search && ! visibleCheckboxListOptions.length" role="status" aria-live="polite" class="nv-fo-checkbox-list-no-search-results-message">${e(this._noSearchResultsMessage)}</div>` : '';
         return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}"${this.extraAlpineHtml()} x-data="checkboxListFormComponent({
  livewireId: ${e(js(this.livewire.id))},
- })" aria-labelledby="${e(this.getId())}-label" class="fi-fo-checkbox-list">${search}${bulk}<div wire:key="${e(key)}.options"${this._searchable ? ' x-show="visibleCheckboxListOptions.length"' : ''} ${grid}>${options.join('')}</div>${noResults}</div>`, { labelAsDiv: true });
+ })" aria-labelledby="${e(this.getId())}-label" class="nv-fo-checkbox-list">${search}${bulk}<div wire:key="${e(key)}.options"${this._searchable ? ' x-show="visibleCheckboxListOptions.length"' : ''} ${grid}>${options.join('')}</div>${noResults}</div>`, { labelAsDiv: true });
     }
 }
 
@@ -3573,9 +3573,9 @@ export class KeyValue extends Field {
     deleteAction(modify: ActionModifier): this { this._modifyDelete = modify; return this; }
     /** Customizes each row's drag handle. */
     reorderAction(modify: ActionModifier): this { this._modifyReorder = modify; return this; }
-    getAddAction(): Action { return modifyAction(Action.make('add').label(this._addLabel ?? t('filament-forms::components.key_value.actions.add.label')).color('gray').link(), this._modifyAdd); }
-    getDeleteAction(): Action { return modifyAction(Action.make('delete').label(this._deleteLabel ?? t('filament-forms::components.key_value.actions.delete.label')).icon(fieldActionIcon('key-value', 'delete')).color('danger').iconButton().size('sm'), this._modifyDelete); }
-    getReorderAction(): Action { return modifyAction(Action.make('reorder').label(this._reorderLabel ?? t('filament-forms::components.key_value.actions.reorder.label')).icon(fieldActionIcon('key-value', 'reorder')).color('gray').iconButton().size('sm'), this._modifyReorder); }
+    getAddAction(): Action { return modifyAction(Action.make('add').label(this._addLabel ?? t('navette-forms::components.key_value.actions.add.label')).color('gray').link(), this._modifyAdd); }
+    getDeleteAction(): Action { return modifyAction(Action.make('delete').label(this._deleteLabel ?? t('navette-forms::components.key_value.actions.delete.label')).icon(fieldActionIcon('key-value', 'delete')).color('danger').iconButton().size('sm'), this._modifyDelete); }
+    getReorderAction(): Action { return modifyAction(Action.make('reorder').label(this._reorderLabel ?? t('navette-forms::components.key_value.actions.reorder.label')).icon(fieldActionIcon('key-value', 'reorder')).color('gray').iconButton().size('sm'), this._modifyReorder); }
     // In the form, the state is a list of `{ key, value }` pairs (what the browser component expects, and it keeps order);
     // it becomes an object again when saved.
     getDefaultState(): unknown { return KeyValue.toPairs(this.resolvedDefault()); }
@@ -3614,20 +3614,20 @@ export class KeyValue extends Field {
     }
     async toHtml(): Promise<string> {
         const id = this.getId();
-        const tr = (key: string) => t(`filament-forms::components.key_value.${key}`);
+        const tr = (key: string) => t(`navette-forms::components.key_value.${key}`);
         const keyLabel = this._keyLabel ?? tr('fields.key.label'), valueLabel = this._valueLabel ?? tr('fields.value.label');
         const reordering = { row: tr('reordering.row'), position: tr('reordering.position'), moved: tr('reordering.moved') };
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([keyLabel, valueLabel, this._reorderable])).digest('hex')}`;
-        const iconButton = 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"';
+        const iconButton = 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled"';
         const ctx = this.context();
         const add = await resolveAction(this.getAddAction(), ctx), del = await resolveAction(this.getDeleteAction(), ctx), reorder = await resolveAction(this.getReorderAction(), ctx);
         const deletable = this._deletable && del.visible, addable = this._addable && add.visible, reorderable = this._reorderable && reorder.visible;
-        const dangerClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager?.getComponentClasses('icon-button', 'danger') ?? [])].join(' ');
-        const reorderCell = reorderable ? `<td class="fi-has-action"><span class="fi-sr-only" data-reorder-description x-bind:id="$id('key-value-row') + '-' + row.id" x-text="rowDescription(row, index)"></span><div x-sortable-handle class="fi-fo-key-value-table-row-sortable-handle"><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" ${iconButton} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', reorder.color, 'gray', [])])}" x-bind:tabindex="rows.length &gt; 1 ? -1 : 0" x-bind:aria-hidden="rows.length &gt; 1 ? 'true' : null">${icon(reorder.icon ?? fieldActionIcon('key-value', 'reorder'))}</button></div><div class="fi-sr-only"><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="up" x-on:click.stop="moveRow(row.id, index - 1)" x-bind:disabled="index === 0" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_up.label'))}</button><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="down" x-on:click.stop="moveRow(row.id, index + 1)" x-bind:disabled="index === rows.length - 1" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_down.label'))}</button></div></td>` : '';
-        return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}"${this.extraAlpineHtml()} x-id="['key-value-row']" x-data="keyValueFormComponent({
+        const dangerClasses = ['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager?.getComponentClasses('icon-button', 'danger') ?? [])].join(' ');
+        const reorderCell = reorderable ? `<td class="nv-has-action"><span class="nv-sr-only" data-reorder-description x-bind:id="$id('key-value-row') + '-' + row.id" x-text="rowDescription(row, index)"></span><div x-sortable-handle class="nv-fo-key-value-table-row-sortable-handle"><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" ${iconButton} class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', ...colorClassesOf(colorManager, 'icon-button', reorder.color, 'gray', [])])}" x-bind:tabindex="rows.length &gt; 1 ? -1 : 0" x-bind:aria-hidden="rows.length &gt; 1 ? 'true' : null">${icon(reorder.icon ?? fieldActionIcon('key-value', 'reorder'))}</button></div><div class="nv-sr-only"><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="up" x-on:click.stop="moveRow(row.id, index - 1)" x-bind:disabled="index === 0" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_up.label'))}</button><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="down" x-on:click.stop="moveRow(row.id, index + 1)" x-bind:disabled="index === rows.length - 1" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_down.label'))}</button></div></td>` : '';
+        return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="nv-fo-key-value nv-input-wrp"><div class="nv-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}"${this.extraAlpineHtml()} x-id="['key-value-row']" x-data="keyValueFormComponent({
  state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}),
  reordering: ${e(js(reordering))},
- })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${deletable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td>${deletable ? `<td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(del.label)}" aria-label="${e(del.label)}" ${iconButton} class="${dangerClasses}">${icon(del.icon ?? fieldActionIcon('key-value', 'delete'))}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${addable ? `<div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...colorClassesOf(colorManager, 'link', add.color, 'gray', [])])}">${add.icon ? icon(add.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(add.label)}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
+ })" wire:ignore wire:key="${e(key)}" class="nv-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="nv-fo-key-value-table"><thead><tr>${reorderable ? `<th scope="col" x-show="rows.length" class="nv-has-action"><span class="nv-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${deletable ? `<th scope="col" x-show="rows.length" class="nv-has-action"><span class="nv-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="nv-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="nv-input" /></td>${deletable ? `<td class="nv-has-action"><div x-on:click="deleteRow(index)"><button title="${e(del.label)}" aria-label="${e(del.label)}" ${iconButton} class="${dangerClasses}">${icon(del.icon ?? fieldActionIcon('key-value', 'delete'))}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="nv-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${addable ? `<div x-on:click="addRow" class="nv-fo-key-value-add-action-ctn"><button ${iconButton} class="${cls(['nv-ac-link-action', 'nv-link', 'nv-size-md', ...colorClassesOf(colorManager, 'link', add.color, 'gray', [])])}">${add.icon ? icon(add.icon, { size: 'sm' }) : ''}<span class="nv-link-label">${e(add.label)}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'nv-fo-key-value-wrp' });
     }
 }
 
@@ -3713,13 +3713,13 @@ export class MarkdownEditor extends Field {
             const state = this.context().state;
             const attributes = new Attributes().merge({ 'aria-labelledby': `${id}-label`, 'aria-describedby': accessibility['aria-describedby'], id, role: 'group', tabindex: this._maxHeight ? '0' : null })
                 .style([this._minHeight ? `--min-height: ${this._minHeight}` : null, this._maxHeight ? `--max-height: ${this._maxHeight}` : null])
-                .class(['fi-fo-markdown-editor', 'fi-disabled', 'fi-prose']);
+                .class(['nv-fo-markdown-editor', 'nv-disabled', 'nv-prose']);
             const content = typeof state === 'string' && state.trim() !== ''
                 ? state.split(/\n{2,}/).map((paragraph) => `<p>${e(paragraph.trim()).replace(/\n/g, '<br />')}</p>`).join('')
-                : `<span class="fi-fo-markdown-editor-placeholder">${e(this._placeholder ?? '')}</span>`;
+                : `<span class="nv-fo-markdown-editor-placeholder">${e(this._placeholder ?? '')}</span>`;
             return this.wrap(`<div ${attributes.toHtml()}>${content}</div>`, { labelAsDiv: true });
         }
-        const tr = (key: string) => t(`filament-forms::components.markdown_editor.${key}`);
+        const tr = (key: string) => t(`navette-forms::components.markdown_editor.${key}`);
         const translations = {
             file_attachments_accepted_file_types_message: tr('file_attachments_accepted_file_types_message'),
             file_attachments_max_size_message: tr('file_attachments_max_size_message'),
@@ -3757,8 +3757,8 @@ export class MarkdownEditor extends Field {
  })
  },
  })`;
-        const wrapper = new Attributes().class(['fi-fo-markdown-editor', 'fi-input-wrp', { 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('markdown-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore><textarea x-ref="editor" x-cloak></textarea></div></div></div>`, { labelAsDiv: true });
+        const wrapper = new Attributes().class(['nv-fo-markdown-editor', 'nv-input-wrp', { 'nv-invalid': this.hasError() }]);
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="nv-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('markdown-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore><textarea x-ref="editor" x-cloak></textarea></div></div></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3806,8 +3806,8 @@ export class CodeEditor extends Field {
  })`;
         // Key hash over the serialized `[isDisabled, language]` options.
         const hash = createHash('md5').update(`a:2:{i:0;b:${isDisabled ? 1 : 0};i:1;${this._language === null ? 'N;' : `s:${this._language.length}:"${this._language}";`}}`).digest('hex');
-        const wrapper = new Attributes().class(['fi-fo-code-editor', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return super.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
+        const wrapper = new Attributes().class(['nv-fo-code-editor', 'nv-input-wrp', { 'nv-disabled': isDisabled, 'nv-invalid': this.hasError() }]);
+        return super.wrap(`<div ${wrapper.toHtml()}><div class="nv-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3930,7 +3930,7 @@ export class Slider extends Field {
  })`;
         const accessibility = accessibilityOf(this, { withInvalid: !this.isMultiple() });
         const attributes = new Attributes().merge({ 'aria-labelledby': `${id}-label`, id, role: 'group', ...this._extraAttributes })
-            .class(['fi-fo-slider', { 'fi-fo-slider-has-pips': this._pipsMode !== null, 'fi-fo-slider-has-tooltips': hasTooltips, 'fi-fo-slider-vertical': this._vertical }]);
+            .class(['nv-fo-slider', { 'nv-fo-slider-has-pips': this._pipsMode !== null, 'nv-fo-slider-has-tooltips': hasTooltips, 'nv-fo-slider-vertical': this._vertical }]);
         // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
         return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
@@ -3969,7 +3969,7 @@ export class JsField extends Field {
     }
     /** Ids of the helper text and validation error, for the control's `aria-describedby`. */
     getDescriptionIds(): string[] {
-        if (this.container.getFieldWrapperView?.() === 'filament-forms::plain-field-wrapper') return [];
+        if (this.container.getFieldWrapperView?.() === 'navette-forms::plain-field-wrapper') return [];
         return [this.getHelperTextId(), this.hasError() ? `${this.getId()}-error` : null].filter((id): id is string => id !== null);
     }
     async getFieldConfiguration(): Promise<JsFieldConfiguration> {
@@ -3985,7 +3985,7 @@ export class JsField extends Field {
             fieldConfiguration: await this.getFieldConfiguration(),
             bindingConfiguration: this.getBindingConfiguration(),
             extraAttributes: new Attributes().merge(this._extraAttributes).toHtml(),
-            failedToLoadMessage: t('filament-forms::components.js_field.failed_to_load'),
+            failedToLoadMessage: t('navette-forms::components.js_field.failed_to_load'),
         }));
     }
 }
@@ -3995,7 +3995,7 @@ export class Hidden extends Field {
     constructor(name: string) { super(name); this._columnSpan = { default: 'hidden' }; }
     static make(name: string): Hidden { return configured(new Hidden(name)); }
     async toHtml(): Promise<string> {
-        const attributes = new Attributes().merge({ id: this.getId(), type: 'hidden', [this.wireModel()]: this.getStatePath(), ...this._extraAttributes }).class(['fi-fo-hidden']);
+        const attributes = new Attributes().merge({ id: this.getId(), type: 'hidden', [this.wireModel()]: this.getStatePath(), ...this._extraAttributes }).class(['nv-fo-hidden']);
         return `<input ${attributes.toHtml()} />`;
     }
 }
@@ -4023,13 +4023,13 @@ export class OneTimeCodeInput extends Field {
         const isDisabled = await this.isDisabled();
         const accessibility = accessibilityOf(this);
         const label = await this.getLabel();
-        const container = new Attributes().merge({ ...this._extraAttributes, 'aria-describedby': accessibility['aria-describedby'], 'aria-label': label !== '' ? label : null }).class(['fi-one-time-code-input-ctn']);
-        const first = new Attributes(this.getExtraInputAttributes()).merge({ ...accessibility, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
+        const container = new Attributes().merge({ ...this._extraAttributes, 'aria-describedby': accessibility['aria-describedby'], 'aria-label': label !== '' ? label : null }).class(['nv-one-time-code-input-ctn']);
+        const first = new Attributes(this.getExtraInputAttributes()).merge({ ...accessibility, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['nv-one-time-code-input-digit']);
         const digit = new Attributes().merge(accessibility);
         const inputs = Array.from({ length: this._length }, (_, index) => (index === 0
             ? `<input autocomplete="one-time-code" inputmode="numeric" type="text" ${first.toHtml()} />`
-            : `<input aria-label="${e(t('filament::components/input/one-time-code.aria_label', { position: index + 1, count: this._length }))}" autocomplete="off" inputmode="numeric" type="text" ${digit.toHtml()}${isDisabled ? ' disabled' : ''}${this._readOnly ? ' readonly' : ''} class="fi-one-time-code-input-digit" />`));
-        return this.wrap(`<div x-data="${e(`{ code: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}), }`)}"><div x-data="filamentOneTimeCodeInput({ shouldSubmitOnCompletion: ${this._submitOnCompletion ? 'true' : 'false'} })" x-modelable="state" x-model="code" dir="ltr" role="group"${this.extraAlpineHtml()} ${container.toHtml()}>${inputs.join('')}</div></div>`);
+            : `<input aria-label="${e(t('navette::components/input/one-time-code.aria_label', { position: index + 1, count: this._length }))}" autocomplete="off" inputmode="numeric" type="text" ${digit.toHtml()}${isDisabled ? ' disabled' : ''}${this._readOnly ? ' readonly' : ''} class="nv-one-time-code-input-digit" />`));
+        return this.wrap(`<div x-data="${e(`{ code: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}), }`)}"><div x-data="navetteOneTimeCodeInput({ shouldSubmitOnCompletion: ${this._submitOnCompletion ? 'true' : 'false'} })" x-modelable="state" x-model="code" dir="ltr" role="group"${this.extraAlpineHtml()} ${container.toHtml()}>${inputs.join('')}</div></div>`);
     }
 }
 
@@ -4051,8 +4051,8 @@ export class Placeholder extends Component {
         const label = e((await evaluate(this._label, ctx)) ?? headline(this._name!));
         const content = await evaluate(this._content, ctx);
         const html = content instanceof HtmlString ? content.html : e(content);
-        const labelCol = this._hiddenLabel ? `<div class="fi-in-entry-label fi-sr-only" role="term">${label}</div>` : `<div class="fi-in-entry-label-col"><div class="fi-in-entry-label-ctn"><div class="fi-in-entry-label" role="term">${label}</div></div></div>`;
-        return `<div class="fi-in-entry">${labelCol}<div class="fi-in-entry-content-col"><div class="fi-in-entry-content-ctn" role="definition"><div class="fi-in-entry-content"><div class="fi-in-text-item fi-size-sm fi-in-text fi-wrapped">${html}</div></div></div></div></div>`;
+        const labelCol = this._hiddenLabel ? `<div class="nv-in-entry-label nv-sr-only" role="term">${label}</div>` : `<div class="nv-in-entry-label-col"><div class="nv-in-entry-label-ctn"><div class="nv-in-entry-label" role="term">${label}</div></div></div>`;
+        return `<div class="nv-in-entry">${labelCol}<div class="nv-in-entry-content-col"><div class="nv-in-entry-content-ctn" role="definition"><div class="nv-in-entry-content"><div class="nv-in-text-item nv-size-sm nv-in-text nv-wrapped">${html}</div></div></div></div></div>`;
     }
 }
 
@@ -4251,10 +4251,10 @@ export class Step extends Component {
             'aria-label': hasHeader ? null : this.label,
             id: key,
             role: 'group',
-            'x-data': `filamentSchemaComponent(${js(this.getAlpineScopeConfiguration())})`,
-        }).class(['fi-sc-wizard-step']);
+            'x-data': `navetteSchemaComponent(${js(this.getAlpineScopeConfiguration())})`,
+        }).class(['nv-sc-wizard-step']);
         return `<${tag} x-bind:tabindex="$el.querySelector('[autofocus]') ? '-1' : '0'" x-bind:class="{
-                'fi-active': step === ${e(js(key))},
+                'nv-active': step === ${e(js(key))},
             }" x-on:expand="
                 if (! isStepAccessible(${e(js(key))})) {
                     return
@@ -4342,7 +4342,7 @@ export class Wizard extends Component {
         const steps = this.getSteps();
         const key = this.getKey();
         const ctx = this.context();
-        const tr = (name: string) => t(`filament-schemas::components.wizard.${name}`);
+        const tr = (name: string) => t(`navette-schemas::components.wizard.${name}`);
         const previous = Action.make('previous').label(tr('actions.previous_step.label')).color('gray');
         const previousAction = this._modifyPrevious?.(previous) ?? previous;
         const next = Action.make('next').label(tr('actions.next_step.label')).iconPosition('after');
@@ -4358,24 +4358,24 @@ export class Wizard extends Component {
             const shown = new Attributes({ 'x-cloak': 'x-cloak', 'x-show': `getStepIndex(step) <= ${index}` });
             const stepIcon = step.getIcon()
                 ? icon(step.getIcon()!, { size: 'lg', attributes: shown })
-                : `<span x-show="getStepIndex(step) &lt;= ${index}" aria-hidden="true" class="fi-sc-wizard-header-step-number">${String(index + 1).padStart(2, '0')}</span>`;
-            header.push(`<li class="fi-sc-wizard-header-step" x-bind:class="{
-                                'fi-active': getStepIndex(step) === ${index},
-                                'fi-completed': getStepIndex(step) &gt; ${index},
-                            }"><button type="button" id="${e(stepKey)}-tab" aria-controls="${e(stepKey)}" x-bind:aria-current="getStepIndex(step) === ${index} ? 'step' : null" x-on:click="step = ${e(js(stepKey))}" x-bind:disabled="! isStepAccessible(${e(js(stepKey))}) || ${previousDisabled ? 'true' : 'false'}" class="fi-sc-wizard-header-step-btn"><div class="fi-sc-wizard-header-step-icon-ctn">${icon(step.getCompletedIcon() ?? icons.resolve('schemas::components.wizard.completed-step') ?? 'o-check', { size: 'lg', attributes: new Attributes({ 'x-cloak': 'x-cloak', 'x-show': `getStepIndex(step) > ${index}` }) })}${stepIcon}</div><div class="fi-sc-wizard-header-step-text"><span class="fi-sc-wizard-header-step-label">${e(step.getLabel())}</span>${step.getDescription() ? `<span class="fi-sc-wizard-header-step-description">${e(step.getDescription()!)}</span>` : ''}<span class="fi-sr-only" x-text="getStepIndex(step) &gt; ${index} ? ${e(js(tr('header.step.statuses.completed')))} : (getStepIndex(step) === ${index} ? '' : ${e(js(tr('header.step.statuses.upcoming')))})"></span></div></button>${index < steps.length - 1 ? '<svg fill="none" preserveAspectRatio="none" viewBox="0 0 22 80" aria-hidden="true" class="fi-sc-wizard-header-step-separator"><path d="M0 -2L20 40L0 82" stroke-linejoin="round" stroke="currentcolor" vector-effect="non-scaling-stroke"></path></svg>' : ''}</li>`);
+                : `<span x-show="getStepIndex(step) &lt;= ${index}" aria-hidden="true" class="nv-sc-wizard-header-step-number">${String(index + 1).padStart(2, '0')}</span>`;
+            header.push(`<li class="nv-sc-wizard-header-step" x-bind:class="{
+                                'nv-active': getStepIndex(step) === ${index},
+                                'nv-completed': getStepIndex(step) &gt; ${index},
+                            }"><button type="button" id="${e(stepKey)}-tab" aria-controls="${e(stepKey)}" x-bind:aria-current="getStepIndex(step) === ${index} ? 'step' : null" x-on:click="step = ${e(js(stepKey))}" x-bind:disabled="! isStepAccessible(${e(js(stepKey))}) || ${previousDisabled ? 'true' : 'false'}" class="nv-sc-wizard-header-step-btn"><div class="nv-sc-wizard-header-step-icon-ctn">${icon(step.getCompletedIcon() ?? icons.resolve('schemas::components.wizard.completed-step') ?? 'o-check', { size: 'lg', attributes: new Attributes({ 'x-cloak': 'x-cloak', 'x-show': `getStepIndex(step) > ${index}` }) })}${stepIcon}</div><div class="nv-sc-wizard-header-step-text"><span class="nv-sc-wizard-header-step-label">${e(step.getLabel())}</span>${step.getDescription() ? `<span class="nv-sc-wizard-header-step-description">${e(step.getDescription()!)}</span>` : ''}<span class="nv-sr-only" x-text="getStepIndex(step) &gt; ${index} ? ${e(js(tr('header.step.statuses.completed')))} : (getStepIndex(step) === ${index} ? '' : ${e(js(tr('header.step.statuses.upcoming')))})"></span></div></button>${index < steps.length - 1 ? '<svg fill="none" preserveAspectRatio="none" viewBox="0 0 22 80" aria-hidden="true" class="nv-sc-wizard-header-step-separator"><path d="M0 -2L20 40L0 82" stroke-linejoin="round" stroke="currentcolor" vector-effect="non-scaling-stroke"></path></svg>' : ''}</li>`);
         });
         const panels: string[] = [];
         for (const step of steps) panels.push(await step.toStepHtml(this._alpineSubmitHandler, !this._headerHidden));
 
-        const outer = new Attributes().merge({ id: key }).class(['fi-sc-wizard', { 'fi-contained': this._contained, 'fi-sc-wizard-header-hidden': this._headerHidden }]);
-        return `<div x-load x-load-src="${e(views.render('filament-schemas::asset', { path: 'wizard' }).trim())}" x-data="wizardSchemaComponent({
+        const outer = new Attributes().merge({ id: key }).class(['nv-sc-wizard', { 'nv-contained': this._contained, 'nv-sc-wizard-header-hidden': this._headerHidden }]);
+        return `<div x-load x-load-src="${e(views.render('navette-schemas::asset', { path: 'wizard' }).trim())}" x-data="wizardSchemaComponent({
                         isSkippable: ${this._skippable ? 'true' : 'false'},
                         isStepPersistedInQueryString: ${this._stepQueryStringKey ? 'true' : 'false'},
                         livewireId: ${e(js(this.livewire.id))},
                         schemaKey: ${e(js(this.container.getKey().split('.')[0]))},
                         startStep: ${this._startStep},
                         stepQueryStringKey: ${e(js(this._stepQueryStringKey))},
-                    })" x-on:next-wizard-step.window="${e(`if ($event.detail.key === ${js(key)}) goToNextStep($event.detail.step, $event.detail.currentStep)`)}" x-on:go-to-wizard-step.window="${e(`$event.detail.key === ${js(key)} && goToStep($event.detail.step)`)}" wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${e(JSON.stringify(visibleKeys))}" x-ref="stepsData" />${this._headerHidden ? '' : `<ol${this._label ? ` aria-label="${e(this._label)}"` : ''} role="list" x-cloak x-ref="header" class="fi-sc-wizard-header">${header.join('')}</ol>`}${panels.join('')}<div x-cloak class="fi-sc-wizard-footer"><div x-cloak${previousDisabled ? '' : ' x-on:click="goToPreviousStep"'} x-show="! isFirstStep()">${await previousAction.toHtml(ctx)}</div><div x-show="isFirstStep()">${this._cancelAction ? await this._cancelAction.toHtml(ctx) : ''}</div><div x-cloak${nextDisabled ? '' : ` x-on:click.capture="if ($el.hasAttribute('aria-disabled')) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-on:click="if (! $el.hasAttribute('aria-disabled')) requestNextStep()"`} x-bind:class="{ 'fi-hidden': isLastStep() }" wire:loading.attr="aria-disabled">${await nextAction.toHtml(ctx)}</div><div x-bind:class="{ 'fi-hidden': ! isLastStep() }">${this._submitAction ? await this._submitAction.toHtml(ctx) : ''}</div></div></div>`;
+                    })" x-on:next-wizard-step.window="${e(`if ($event.detail.key === ${js(key)}) goToNextStep($event.detail.step, $event.detail.currentStep)`)}" x-on:go-to-wizard-step.window="${e(`$event.detail.key === ${js(key)} && goToStep($event.detail.step)`)}" wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${e(JSON.stringify(visibleKeys))}" x-ref="stepsData" />${this._headerHidden ? '' : `<ol${this._label ? ` aria-label="${e(this._label)}"` : ''} role="list" x-cloak x-ref="header" class="nv-sc-wizard-header">${header.join('')}</ol>`}${panels.join('')}<div x-cloak class="nv-sc-wizard-footer"><div x-cloak${previousDisabled ? '' : ' x-on:click="goToPreviousStep"'} x-show="! isFirstStep()">${await previousAction.toHtml(ctx)}</div><div x-show="isFirstStep()">${this._cancelAction ? await this._cancelAction.toHtml(ctx) : ''}</div><div x-cloak${nextDisabled ? '' : ` x-on:click.capture="if ($el.hasAttribute('aria-disabled')) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-on:click="if (! $el.hasAttribute('aria-disabled')) requestNextStep()"`} x-bind:class="{ 'nv-hidden': isLastStep() }" wire:loading.attr="aria-disabled">${await nextAction.toHtml(ctx)}</div><div x-bind:class="{ 'nv-hidden': ! isLastStep() }">${this._submitAction ? await this._submitAction.toHtml(ctx) : ''}</div></div></div>`;
     }
 }
 
@@ -4841,7 +4841,7 @@ export class FileUpload extends Field {
         rules.push({
             name: 'tampered',
             passes: async () => { const original = this.originalKeys(); for (const [, value] of entries()) if (!this.isTemporary(value) && !(await this.isFilePathAuthorized(value, original))) return false; return true; },
-            message: (a) => t('filament-forms::validation.tampered_file_path', { attribute: a }),
+            message: (a) => t('navette-forms::validation.tampered_file_path', { attribute: a }),
         });
         if (!multiple) rules.push({ name: 'max_files', passes: () => entries().length <= 1, message: (a) => `The ${a} field must not have more than 1 items.` });
         if (maxFiles !== null && maxFiles !== undefined) rules.push({ name: 'max_files', passes: () => entries().length <= maxFiles, message: (a) => `The ${a} field must not have more than ${maxFiles} items.` });
@@ -4904,33 +4904,33 @@ export class FileUpload extends Field {
 
     /** Filament's image editor dialog (Cropper.js), rendered once per field. */
     private imageEditorHtml(options: { explicit: boolean; circleCropper: boolean; editorAspectRatios: (string | null)[]; cropAspectRatio: string | null }): string {
-        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.file_upload.editor.${key}`, replace);
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`navette-forms::components.file_upload.editor.${key}`, replace);
         const explicit = options.explicit;
         const fields = [
             ['x_position', 'xPositionInput', 'editor.setData({...editor.getData(true), x: +$el.value})'], ['y_position', 'yPositionInput', 'editor.setData({...editor.getData(true), y: +$el.value})'],
             ['width', 'widthInput', 'editor.setData({...editor.getData(true), width: +$el.value})'], ['height', 'heightInput', 'editor.setData({...editor.getData(true), height: +$el.value})'],
             ['rotation', 'rotationInput', 'editor.rotateTo(+$el.value)'],
-        ].map(([name, ref, save]) => `<label><div class="fi-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label"><span class="fi-input-wrp-label">${e(tr(`fields.${name}.label`))}</span></div><div class="fi-input-wrp-content-ctn"><input x-on:keyup.enter.prevent.stop="editor &amp;&amp; ${e(save)}" x-on:blur="editor &amp;&amp; ${e(save)}" x-ref="${ref}" x-on:keydown.enter.prevent type="text" class="fi-input" /></div><div class="fi-input-wrp-suffix fi-input-wrp-suffix-has-label"><span class="fi-input-wrp-label">${e(tr(`fields.${name}.unit`))}</span></div></div></label>`).join('');
+        ].map(([name, ref, save]) => `<label><div class="nv-input-wrp"><div class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content nv-input-wrp-prefix-has-label"><span class="nv-input-wrp-label">${e(tr(`fields.${name}.label`))}</span></div><div class="nv-input-wrp-content-ctn"><input x-on:keyup.enter.prevent.stop="editor &amp;&amp; ${e(save)}" x-on:blur="editor &amp;&amp; ${e(save)}" x-ref="${ref}" x-on:keydown.enter.prevent type="text" class="nv-input" /></div><div class="nv-input-wrp-suffix nv-input-wrp-suffix-has-label"><span class="nv-input-wrp-label">${e(tr(`fields.${name}.unit`))}</span></div></div></label>`).join('');
         const groups = [
-            [['drag_move', icons.resolve('forms::components.file-upload.editor.actions.drag-move') ?? 'fi-o-arrows-move', "editor.setDragMode('move')"], ['drag_crop', icons.resolve('forms::components.file-upload.editor.actions.drag-crop') ?? 'fi-o-crop', "editor.setDragMode('crop')"], ['zoom_in', icons.resolve('forms::components.file-upload.editor.actions.zoom-in') ?? 'o-magnifying-glass-plus', 'editor.zoom(0.1)'], ['zoom_out', icons.resolve('forms::components.file-upload.editor.actions.zoom-out') ?? 'o-magnifying-glass-minus', 'editor.zoom(-0.1)'], ['zoom_100', icons.resolve('forms::components.file-upload.editor.actions.zoom-100') ?? 'o-arrows-pointing-out', 'editor.zoomTo(1)']],
+            [['drag_move', icons.resolve('forms::components.file-upload.editor.actions.drag-move') ?? 'nv-o-arrows-move', "editor.setDragMode('move')"], ['drag_crop', icons.resolve('forms::components.file-upload.editor.actions.drag-crop') ?? 'nv-o-crop', "editor.setDragMode('crop')"], ['zoom_in', icons.resolve('forms::components.file-upload.editor.actions.zoom-in') ?? 'o-magnifying-glass-plus', 'editor.zoom(0.1)'], ['zoom_out', icons.resolve('forms::components.file-upload.editor.actions.zoom-out') ?? 'o-magnifying-glass-minus', 'editor.zoom(-0.1)'], ['zoom_100', icons.resolve('forms::components.file-upload.editor.actions.zoom-100') ?? 'o-arrows-pointing-out', 'editor.zoomTo(1)']],
             [['move_left', icons.resolve('forms::components.file-upload.editor.actions.move-left') ?? 'o-arrow-left-circle', 'editor.move(-10, 0)'], ['move_right', icons.resolve('forms::components.file-upload.editor.actions.move-right') ?? 'o-arrow-right-circle', 'editor.move(10, 0)'], ['move_up', icons.resolve('forms::components.file-upload.editor.actions.move-up') ?? 'o-arrow-up-circle', 'editor.move(0, -10)'], ['move_down', icons.resolve('forms::components.file-upload.editor.actions.move-down') ?? 'o-arrow-down-circle', 'editor.move(0, 10)']],
-            [['rotate_left', icons.resolve('forms::components.file-upload.editor.actions.rotate-left') ?? 'o-arrow-uturn-left', 'editor.rotate(-90)'], ['rotate_right', icons.resolve('forms::components.file-upload.editor.actions.rotate-right') ?? 'o-arrow-uturn-right', 'editor.rotate(90)'], ['flip_horizontal', icons.resolve('forms::components.file-upload.editor.actions.flip-horizontal') ?? 'fi-o-flip-horizontal', 'editor.scaleX(-editor.getData().scaleX || -1)'], ['flip_vertical', icons.resolve('forms::components.file-upload.editor.actions.flip-vertical') ?? 'fi-o-flip-vertical', 'editor.scaleY(-editor.getData().scaleY || -1)']],
-        ].map((group) => `<div class="fi-btn-group">${group.map(([name, iconName, click]) => { const label = tr(`actions.${name}.label`); return `<button aria-label="${e(label)}" type="button" x-on:click.prevent.stop="${e(click)}" x-tooltip="${e(`{ content: ${js(label)}, theme: $store.theme }`)}" class="fi-btn">${icon(iconName)}</button>`; }).join('')}</div>`).join('');
+            [['rotate_left', icons.resolve('forms::components.file-upload.editor.actions.rotate-left') ?? 'o-arrow-uturn-left', 'editor.rotate(-90)'], ['rotate_right', icons.resolve('forms::components.file-upload.editor.actions.rotate-right') ?? 'o-arrow-uturn-right', 'editor.rotate(90)'], ['flip_horizontal', icons.resolve('forms::components.file-upload.editor.actions.flip-horizontal') ?? 'nv-o-flip-horizontal', 'editor.scaleX(-editor.getData().scaleX || -1)'], ['flip_vertical', icons.resolve('forms::components.file-upload.editor.actions.flip-vertical') ?? 'nv-o-flip-vertical', 'editor.scaleY(-editor.getData().scaleY || -1)']],
+        ].map((group) => `<div class="nv-btn-group">${group.map(([name, iconName, click]) => { const label = tr(`actions.${name}.label`); return `<button aria-label="${e(label)}" type="button" x-on:click.prevent.stop="${e(click)}" x-tooltip="${e(`{ content: ${js(label)}, theme: $store.theme }`)}" class="nv-btn">${icon(iconName)}</button>`; }).join('')}</div>`).join('');
         const ratioOptions = [...options.editorAspectRatios, ...(options.cropAspectRatio !== null ? [options.cropAspectRatio] : [])].filter((ratio, index, all) => all.indexOf(ratio) === index)
             .map((ratio): [string, number | 'NaN'] => [ratio === null ? tr('aspect_ratios.no_fixed.label') : ratio.replace('/', ':'), ratio === null ? 'NaN' : (ratioOf(ratio) ?? 'NaN')]);
-        const ratios = ratioOptions.length >= 2 ? `<div class="fi-fo-file-upload-editor-control-panel-group"><div class="fi-fo-file-upload-editor-control-panel-group-title">${e(tr('aspect_ratios.label'))}</div>${Array.from({ length: Math.ceil(ratioOptions.length / 5) }, (_, chunk) => `<div class="fi-btn-group">${ratioOptions.slice(chunk * 5, chunk * 5 + 5).map(([label, ratio]) => `<button type="button" x-on:click.prevent.stop="${e(`currentRatio = ${js(label)}; editor.setAspectRatio(${ratio === 'NaN' ? 'NaN' : ratio})`)}" x-tooltip="${e(`{ content: ${js(tr('actions.set_aspect_ratio.label', { ratio: label }))}, theme: $store.theme }`)}" x-bind:class="${e(`{ 'fi-active': currentRatio === ${js(label)} }`)}" class="fi-btn">${e(label)}</button>`).join('')}</div>`).join('')}</div>` : '';
-        const success = cls(['fi-btn', ...(colorManager?.getComponentClasses('button', 'success') ?? [])]);
-        const cancel = `<button type="button" x-on:click.prevent="pond.imageEditEditor.oncancel" class="fi-btn">${e(tr('actions.cancel.label'))}</button>`;
+        const ratios = ratioOptions.length >= 2 ? `<div class="nv-fo-file-upload-editor-control-panel-group"><div class="nv-fo-file-upload-editor-control-panel-group-title">${e(tr('aspect_ratios.label'))}</div>${Array.from({ length: Math.ceil(ratioOptions.length / 5) }, (_, chunk) => `<div class="nv-btn-group">${ratioOptions.slice(chunk * 5, chunk * 5 + 5).map(([label, ratio]) => `<button type="button" x-on:click.prevent.stop="${e(`currentRatio = ${js(label)}; editor.setAspectRatio(${ratio === 'NaN' ? 'NaN' : ratio})`)}" x-tooltip="${e(`{ content: ${js(tr('actions.set_aspect_ratio.label', { ratio: label }))}, theme: $store.theme }`)}" x-bind:class="${e(`{ 'nv-active': currentRatio === ${js(label)} }`)}" class="nv-btn">${e(label)}</button>`).join('')}</div>`).join('')}</div>` : '';
+        const success = cls(['nv-btn', ...(colorManager?.getComponentClasses('button', 'success') ?? [])]);
+        const cancel = `<button type="button" x-on:click.prevent="pond.imageEditEditor.oncancel" class="nv-btn">${e(tr('actions.cancel.label'))}</button>`;
         const save = `<button type="button" x-on:click.prevent="saveEditor" class="${success}">${e(tr('actions.save.label'))}</button>`;
-        const main = explicit ? `<div class="fi-fo-file-upload-editor-control-panel-main"><div class="fi-fo-file-upload-editor-control-panel-group">${fields}</div><div class="fi-fo-file-upload-editor-control-panel-group">${groups}</div>${ratios}<div class="fi-fo-file-upload-editor-control-panel-reset-action-ctn"><button type="button" x-on:click.prevent.stop="editor.reset()" class="${cls(['fi-link', 'fi-size-sm', 'fi-fo-file-upload-editor-control-panel-reset-action', ...(colorManager?.getComponentClasses('link', 'danger') ?? [])])}"><span class="fi-link-label">${e(tr('actions.reset.label'))}</span></button></div></div>` : '';
-        return `<div aria-label="${e(tr('label'))}" aria-modal="true" role="dialog" x-show="isEditorOpen" x-cloak x-on:click.stop="" x-trap.noscroll="isEditorOpen" x-on:keydown.escape.prevent.stop="closeEditor" class="${cls(['fi-fo-file-upload-editor', { 'fi-fo-file-upload-editor-circle-cropper': options.circleCropper, 'fi-fo-file-upload-editor-crop-only': !explicit }])}"><div aria-hidden="true" class="fi-fo-file-upload-editor-overlay"></div><div class="fi-fo-file-upload-editor-window"><div class="fi-fo-file-upload-editor-image-ctn"><img alt="" x-ref="editor" class="fi-fo-file-upload-editor-image" /></div><div class="fi-fo-file-upload-editor-control-panel">${main}<div class="fi-fo-file-upload-editor-control-panel-footer">${explicit ? cancel + save : save + cancel}</div></div></div></div>`;
+        const main = explicit ? `<div class="nv-fo-file-upload-editor-control-panel-main"><div class="nv-fo-file-upload-editor-control-panel-group">${fields}</div><div class="nv-fo-file-upload-editor-control-panel-group">${groups}</div>${ratios}<div class="nv-fo-file-upload-editor-control-panel-reset-action-ctn"><button type="button" x-on:click.prevent.stop="editor.reset()" class="${cls(['nv-link', 'nv-size-sm', 'nv-fo-file-upload-editor-control-panel-reset-action', ...(colorManager?.getComponentClasses('link', 'danger') ?? [])])}"><span class="nv-link-label">${e(tr('actions.reset.label'))}</span></button></div></div>` : '';
+        return `<div aria-label="${e(tr('label'))}" aria-modal="true" role="dialog" x-show="isEditorOpen" x-cloak x-on:click.stop="" x-trap.noscroll="isEditorOpen" x-on:keydown.escape.prevent.stop="closeEditor" class="${cls(['nv-fo-file-upload-editor', { 'nv-fo-file-upload-editor-circle-cropper': options.circleCropper, 'nv-fo-file-upload-editor-crop-only': !explicit }])}"><div aria-hidden="true" class="nv-fo-file-upload-editor-overlay"></div><div class="nv-fo-file-upload-editor-window"><div class="nv-fo-file-upload-editor-image-ctn"><img alt="" x-ref="editor" class="nv-fo-file-upload-editor-image" /></div><div class="nv-fo-file-upload-editor-control-panel">${main}<div class="nv-fo-file-upload-editor-control-panel-footer">${explicit ? cancel + save : save + cancel}</div></div></div></div>`;
     }
 
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         const id = this.getId();
         const label = (await this.getLabel()).toLowerCase();
-        const tr = (key: string) => t(`filament-forms::components.file_upload.${key}`);
+        const tr = (key: string) => t(`navette-forms::components.file_upload.${key}`);
         const ui: Record<string, unknown> = {};
         for (const key of Object.keys(this._ui)) ui[key] = await this.value(this._ui[key]);
         const option = (key: string, fallback: unknown) => (ui[key] === undefined ? fallback : ui[key]);
@@ -4989,7 +4989,7 @@ export class FileUpload extends Field {
  state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  uploadButtonPosition: ${js(option('uploadButtonPosition', 'right'))},
- uploadingMessage: ${js(option('uploadingMessage', t('filament::components/button.messages.uploading_file')))},
+ uploadingMessage: ${js(option('uploadingMessage', t('navette::components/button.messages.uploading_file')))},
  downloadActionLabel: ${js(tr('actions.download.label'))},
  openActionLabel: ${js(tr('actions.open.label'))},
  uploadProgressIndicatorPosition: ${js(option('uploadProgressIndicatorPosition', 'right'))},
@@ -4997,7 +4997,7 @@ export class FileUpload extends Field {
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([acceptedFileTypes, maxFiles, multiple, isDisabled, ui, explicitEditor, cropAspectRatio])).digest('hex')}`;
         const input = new Attributes(this.getExtraInputAttributes()).merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: multiple ? 'multiple' : null, type: 'file' });
         const editor = hasEditor ? this.imageEditorHtml({ explicit: explicitEditor, circleCropper, editorAspectRatios: (await this.value(this._editorAspectRatios)) ?? [], cropAspectRatio }) : '';
-        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${alignment}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
+        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['nv-fo-file-upload', { 'nv-fo-file-upload-avatar': this._avatar }, `nv-align-${alignment}`])}"><div class="nv-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="nv-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
     }
 }
 

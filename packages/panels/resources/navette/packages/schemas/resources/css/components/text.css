@@ -1,0 +1,77 @@
+.nv-sc-text {
+    &.nv-copyable {
+        @apply cursor-pointer outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current;
+    }
+
+    &.nv-font-sans {
+        @apply font-sans;
+    }
+
+    &.nv-font-serif {
+        @apply font-serif;
+    }
+
+    &.nv-font-mono {
+        @apply font-mono;
+    }
+
+    &:not(.nv-badge) {
+        @apply inline-block text-sm break-words text-gray-600 dark:text-gray-400;
+
+        &.nv-font-thin {
+            @apply font-thin;
+        }
+
+        &.nv-font-extralight {
+            @apply font-extralight;
+        }
+
+        &.nv-font-light {
+            @apply font-light;
+        }
+
+        &.nv-font-normal {
+            @apply font-normal;
+        }
+
+        &.nv-font-medium {
+            @apply font-medium;
+        }
+
+        &.nv-font-semibold {
+            @apply font-semibold;
+        }
+
+        &.nv-font-bold {
+            @apply font-bold;
+        }
+
+        &.nv-font-extrabold {
+            @apply font-extrabold;
+        }
+
+        &.nv-font-black {
+            @apply font-black;
+        }
+
+        &.nv-size-lg {
+            @apply text-lg;
+        }
+
+        &.nv-color-neutral {
+            @apply text-gray-950 dark:text-white;
+        }
+
+        &.nv-color:not(.nv-color-neutral) {
+            @apply text-(--text) dark:text-(--dark-text);
+        }
+
+        &.nv-size-xs {
+            @apply text-xs;
+        }
+
+        &.nv-size-md {
+            @apply text-base;
+        }
+    }
+}

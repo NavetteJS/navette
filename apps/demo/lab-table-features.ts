@@ -93,7 +93,7 @@ export class LabTimesheets extends Resource {
 
     static table(table: Table<LabTimesheet>): Table<LabTimesheet> {
         return table
-            .header('<div class="fi-ta-header" data-cy="timesheets-header"><div><h2 class="fi-ta-header-heading">Timesheets</h2><p class="fi-ta-header-description">Thousands of rows: cursor pagination, lazy loading.</p></div></div>')
+            .header('<div class="nv-ta-header" data-cy="timesheets-header"><div><h2 class="nv-ta-header-heading">Timesheets</h2><p class="nv-ta-header-description">Thousands of rows: cursor pagination, lazy loading.</p></div></div>')
             .columns([
                 TextColumn.make('date').date().sortable(),
                 TextColumn.make('description').searchable().limit(50),

@@ -1,7 +1,7 @@
 <%# Full panel layout %>
 <% const collapsible = isSidebarCollapsibleOnDesktop || isSidebarFullyCollapsibleOnDesktop; %>
-<a x-data="{}" x-bind:inert="$store.sidebar.isOpenMobile" href="#fi-main-content" class="fi-skip-link fi-sr-only">
-    <%= t('filament-panels::layout.skip_to_content.label') %>
+<a x-data="{}" x-bind:inert="$store.sidebar.isOpenMobile" href="#nv-main-content" class="nv-skip-link nv-sr-only">
+    <%= t('navette-panels::layout.skip_to_content.label') %>
 </a>
 
 <% if (topbar) { %>
@@ -9,27 +9,27 @@
 <%- topbar %>
 <%- renderHook('panels::topbar.after', renderHookScopes) %>
 <% } else if (hasNavigation) { %>
-<div x-data="{}" x-bind:inert="$store.sidebar.isOpenMobile"<% if (isSidebarFullyCollapsibleOnDesktop) { %> x-bind:class="{ 'lg:fi-hidden': $store.sidebar.isOpen }"<% } %> class="<%- cls(['fi-layout-sidebar-toggle-btn-ctn', { 'lg:fi-hidden': !isSidebarFullyCollapsibleOnDesktop }]) %>">
-    <%- view('filament::components.icon-button', {
-        iconName: 'o-bars-3', iconAlias: 'panels::sidebar.expand-button', iconSize: 'lg', label: t('filament-panels::layout.actions.sidebar.expand.label'), className: 'fi-layout-sidebar-toggle-btn',
-        extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'fi-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.open($event.currentTarget)' }),
+<div x-data="{}" x-bind:inert="$store.sidebar.isOpenMobile"<% if (isSidebarFullyCollapsibleOnDesktop) { %> x-bind:class="{ 'lg:nv-hidden': $store.sidebar.isOpen }"<% } %> class="<%- cls(['nv-layout-sidebar-toggle-btn-ctn', { 'lg:nv-hidden': !isSidebarFullyCollapsibleOnDesktop }]) %>">
+    <%- view('navette::components.icon-button', {
+        iconName: 'o-bars-3', iconAlias: 'panels::sidebar.expand-button', iconSize: 'lg', label: t('navette-panels::layout.actions.sidebar.expand.label'), className: 'nv-layout-sidebar-toggle-btn',
+        extra: attrs({ 'x-cloak': 'x-cloak', 'x-data': '{}', 'aria-controls': 'nv-main-sidebar', 'x-bind:aria-expanded': '$store.sidebar.isOpen', 'x-on:click': '$store.sidebar.open($event.currentTarget)' }),
     }) %>
 </div>
 <% } %>
 
-<div class="fi-layout">
+<div class="nv-layout">
     <%- renderHook('panels::layout.start', renderHookScopes) %>
 <% if (hasNavigation) { %>
-    <div x-cloak x-data="{}" x-on:click="$store.sidebar.close()" x-show="$store.sidebar.isOpen" x-transition.opacity.300ms class="fi-sidebar-close-overlay"></div>
+    <div x-cloak x-data="{}" x-on:click="$store.sidebar.close()" x-show="$store.sidebar.isOpen" x-transition.opacity.300ms class="nv-sidebar-close-overlay"></div>
 
     <%- sidebar %>
 <% } %>
 
-    <div x-data="filamentSidebarBackground" x-bind:inert="$store.sidebar.isOpenMobile && ! hasOpenModal"<% if (collapsible) { %> x-bind:class="{
-                    'fi-main-ctn-sidebar-open': $store.sidebar.isOpen,
-                }" x-bind:style="'display: flex; opacity:1;'"<% } else if (!(hasTopNavigation || !hasNavigation)) { %> x-bind:style="'display: flex; opacity:1;'"<% } %> class="fi-main-ctn">
+    <div x-data="navetteSidebarBackground" x-bind:inert="$store.sidebar.isOpenMobile && ! hasOpenModal"<% if (collapsible) { %> x-bind:class="{
+                    'nv-main-ctn-sidebar-open': $store.sidebar.isOpen,
+                }" x-bind:style="'display: flex; opacity:1;'"<% } else if (!(hasTopNavigation || !hasNavigation)) { %> x-bind:style="'display: flex; opacity:1;'"<% } %> class="nv-main-ctn">
         <%- renderHook('panels::content.before', renderHookScopes) %>
-        <main id="fi-main-content" tabindex="-1" class="fi-main fi-width-<%- maxContentWidth %>">
+        <main id="nv-main-content" tabindex="-1" class="nv-main nv-width-<%- maxContentWidth %>">
             <%- renderHook('panels::content.start', renderHookScopes) %>
             <%- slot %>
             <%- renderHook('panels::content.end', renderHookScopes) %>

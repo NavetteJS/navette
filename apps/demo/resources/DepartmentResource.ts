@@ -101,20 +101,20 @@ export class DepartmentResource extends Resource {
                         .label(({ record }) => ((record as Department).is_active ? 'Deactivate' : 'Activate'))
                         .color(({ record }) => ((record as Department).is_active ? 'danger' : 'success'))
                         .action(async ({ record }) => { await DepartmentResource.adapter.update(record.id, { is_active: !record.is_active }); }),
-                    Action.make('replicate').label(t('filament-actions::replicate.single.label')).icon('m-square-2-stack').color('gray')
+                    Action.make('replicate').label(t('navette-actions::replicate.single.label')).icon('m-square-2-stack').color('gray')
                         .requiresConfirmation()
-                        .modalHeading(({ record }) => t('filament-actions::replicate.single.modal.heading', { label: record.name }))
-                        .modalSubmitActionLabel(t('filament-actions::replicate.single.modal.actions.replicate.label'))
+                        .modalHeading(({ record }) => t('navette-actions::replicate.single.modal.heading', { label: record.name }))
+                        .modalSubmitActionLabel(t('navette-actions::replicate.single.modal.actions.replicate.label'))
                         .action(async ({ record }) => {
                             // Copy without `id` or counters, with a unique slug.
                             const { id, employees_count, parent_name, created_at, updated_at, ...copy } = record as Department;
                             await DepartmentResource.adapter.create({ ...copy, slug: `${slugify(record.name)}-${randomBytes(4).toString('hex').slice(0, 5)}` });
-                            Notification.make().success().title(t('filament-actions::replicate.single.notifications.replicated.title')).send();
+                            Notification.make().success().title(t('navette-actions::replicate.single.notifications.replicated.title')).send();
                         }),
-                    Action.make('delete').label(t('filament-actions::delete.single.label')).icon('m-trash').color('danger').keyBindings(['mod+d'])
+                    Action.make('delete').label(t('navette-actions::delete.single.label')).icon('m-trash').color('danger').keyBindings(['mod+d'])
                         .requiresConfirmation().modalIcon('o-trash')
-                        .modalHeading(({ record }) => t('filament-actions::delete.single.modal.heading', { label: record.name }))
-                        .modalSubmitActionLabel(t('filament-actions::delete.single.modal.actions.delete.label'))
+                        .modalHeading(({ record }) => t('navette-actions::delete.single.modal.heading', { label: record.name }))
+                        .modalSubmitActionLabel(t('navette-actions::delete.single.modal.actions.delete.label'))
                         // Deleting only shows a notification, so the demo data stays intact.
                         .action(() => { Notification.make().warning().title("Now, now, don't be cheeky, leave some records for others to play with!").send(); }),
                 ]),

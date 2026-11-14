@@ -1,0 +1,21 @@
+.nv-account-widget {
+    & .nv-section-content {
+        @apply flex items-center gap-x-3;
+    }
+}
+
+.nv-account-widget-logout-form {
+    @apply my-auto;
+}
+
+.nv-account-widget-main {
+    @apply flex-1;
+}
+
+.nv-account-widget-heading {
+    @apply grid flex-1 text-base leading-6 font-semibold text-gray-950 dark:text-white;
+}
+
+.nv-account-widget-user-name {
+    @apply text-sm text-gray-500 dark:text-gray-400;
+}

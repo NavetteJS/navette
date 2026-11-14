@@ -3,35 +3,35 @@
 <% const subNavigation = locals.subNavigation ?? []; const activeSubItem = subNavigation.find((item) => item.active) ?? subNavigation[0]; const subNavigationPosition = locals.subNavigationPosition ?? 'top'; %>
 <%# Sub-navigation groups: items without a group first, then each group in order of appearance. %>
 <% const subNavigationGroups = []; for (const item of subNavigation) { const label = item.group || null; let group = subNavigationGroups.find((candidate) => candidate.label === label); if (!group) { group = { label, items: [] }; if (label === null) subNavigationGroups.unshift(group); else subNavigationGroups.push(group); } group.items.push(item); } %>
-<% const subNavigationBadge = (item, wrap) => { if (item.badge === null || item.badge === undefined || item.badge === '') return; %><% if (wrap) { %><span class="fi-sidebar-item-badge-ctn"><% } %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses ?? [] }) %><% if (wrap) { %></span><% } %><% } %>
+<% const subNavigationBadge = (item, wrap) => { if (item.badge === null || item.badge === undefined || item.badge === '') return; %><% if (wrap) { %><span class="nv-sidebar-item-badge-ctn"><% } %><%- view('navette::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses ?? [] }) %><% if (wrap) { %></span><% } %><% } %>
 <% const subNavigationSidebar = () => { %>
-                    <ul class="fi-page-sub-navigation-sidebar">
+                    <ul class="nv-page-sub-navigation-sidebar">
                         <% for (const group of subNavigationGroups) { %>
-                        <li x-data="{ label: <% if (group.label) { %><%- js('sub_navigation_' + group.label) %><% } else { %>'sub_navigation_'<% } %> }" data-group-label="sub_navigation_<%= group.label ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': group.items.some((item) => item.active) }, 'fi-collapsible']) %>">
+                        <li x-data="{ label: <% if (group.label) { %><%- js('sub_navigation_' + group.label) %><% } else { %>'sub_navigation_'<% } %> }" data-group-label="sub_navigation_<%= group.label ?? '' %>" x-bind:class="{ 'nv-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['nv-sidebar-group', { 'nv-active': group.items.some((item) => item.active) }, 'nv-collapsible']) %>">
                             <% if (group.label) { %>
-                                <div x-on:click="$store.sidebar.toggleCollapsedGroup(label)" class="fi-sidebar-group-btn">
-                                    <span class="fi-sidebar-group-label">
+                                <div x-on:click="$store.sidebar.toggleCollapsedGroup(label)" class="nv-sidebar-group-btn">
+                                    <span class="nv-sidebar-group-label">
                                         <%= group.label %>
                                     </span>
-                                    <%- view('filament::components.icon-button', {
-                                        iconName: 'm-chevron-up', iconAlias: 'panels::sidebar.group.collapse-button', label: group.label, className: 'fi-sidebar-group-collapse-btn',
+                                    <%- view('navette::components.icon-button', {
+                                        iconName: 'm-chevron-up', iconAlias: 'panels::sidebar.group.collapse-button', label: group.label, className: 'nv-sidebar-group-collapse-btn',
                                         extra: attrs({ 'x-bind:aria-expanded': '! $store.sidebar.groupIsCollapsed(label)', 'x-on:click.stop': '$store.sidebar.toggleCollapsedGroup(label)' }),
                                     }) %>
                                 </div>
                             <% } %>
-                            <ul<% if (group.label) { %> x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %> class="fi-sidebar-group-items">
+                            <ul<% if (group.label) { %> x-show="! $store.sidebar.groupIsCollapsed(label)" x-collapse.duration.200ms<% } %> class="nv-sidebar-group-items">
                                 <% group.items.forEach((item, index) => { %>
-                                    <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.active }, 'fi-sidebar-item-has-url']) %>">
-                                        <a href="<%= item.url %>" wire:navigate<% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="fi-sidebar-item-btn">
-                                            <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon' }) }) %><% } %>
+                                    <li class="<%- cls(['nv-sidebar-item', { 'nv-active': item.active }, 'nv-sidebar-item-has-url']) %>">
+                                        <a href="<%= item.url %>" wire:navigate<% if (item.active) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()" class="nv-sidebar-item-btn">
+                                            <% if (item.icon) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'nv-sidebar-item-icon' }) }) %><% } %>
                                             <% if (!item.icon && group.label) { %>
-                                                <div class="fi-sidebar-item-grouped-border">
-                                                    <% if (index > 0) { %><div class="fi-sidebar-item-grouped-border-part-not-first"></div><% } %>
-                                                    <% if (index < group.items.length - 1) { %><div class="fi-sidebar-item-grouped-border-part-not-last"></div><% } %>
-                                                    <div class="fi-sidebar-item-grouped-border-part"></div>
+                                                <div class="nv-sidebar-item-grouped-border">
+                                                    <% if (index > 0) { %><div class="nv-sidebar-item-grouped-border-part-not-first"></div><% } %>
+                                                    <% if (index < group.items.length - 1) { %><div class="nv-sidebar-item-grouped-border-part-not-last"></div><% } %>
+                                                    <div class="nv-sidebar-item-grouped-border-part"></div>
                                                 </div>
                                             <% } %>
-                                            <span class="fi-sidebar-item-label">
+                                            <span class="nv-sidebar-item-label">
                                                 <%= item.label %>
                                             </span>
                                             <% subNavigationBadge(item, true) %>
@@ -43,46 +43,46 @@
                         <% } %>
                     </ul>
 <% } %>
-<div class="<%- cls(['fi-page', subNavigation.length ? `fi-page-has-sub-navigation fi-page-has-sub-navigation-${subNavigationPosition}` : null, ...(locals.pageClasses ?? [])]) %>">
+<div class="<%- cls(['nv-page', subNavigation.length ? `nv-page-has-sub-navigation nv-page-has-sub-navigation-${subNavigationPosition}` : null, ...(locals.pageClasses ?? [])]) %>">
     <%- renderHook('panels::page.start', renderHookScopes) %>
-    <div class="fi-page-header-main-ctn">
+    <div class="nv-page-header-main-ctn">
         <% if (subNavigation.length) { %>
             <%# Sub-navigation: a dropdown on mobile; on desktop, tabs (top) or a column (start, end) %>
-            <div class="fi-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.before', renderHookScopes) %></div>
-            <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-page-sub-navigation-dropdown">
-                <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
-                    <button class="fi-btn fi-size-md" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"><%= activeSubItem.label %><%- icon('m-chevron-down', { alias: 'panels::sub-navigation.mobile-menu.button' }) %></button>
+            <div class="nv-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.before', renderHookScopes) %></div>
+            <div x-data="navetteDropdown({ isMenu: true })" class="nv-dropdown nv-page-sub-navigation-dropdown">
+                <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger">
+                    <button class="nv-btn nv-size-md" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled"><%= activeSubItem.label %><%- icon('m-chevron-down', { alias: 'panels::sub-navigation.mobile-menu.button' }) %></button>
                 </div>
-                <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel fi-width-xs" style="">
-                    <div class="fi-dropdown-list">
+                <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="nv-dropdown-panel nv-width-xs" style="">
+                    <div class="nv-dropdown-list">
                         <% for (const item of subNavigation) { %>
-                            <a href="<%= item.url %>" wire:navigate class="fi-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
+                            <a href="<%= item.url %>" wire:navigate class="nv-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
                         <% } %>
                     </div>
                 </div>
             </div>
-            <div class="fi-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.after', renderHookScopes) %></div>
+            <div class="nv-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.after', renderHookScopes) %></div>
         <% } %>
         <% if (locals.header) { %>
         <%- header %>
         <% } else { %>
-        <header class="<%- cls(['fi-header', { 'fi-header-has-breadcrumbs': breadcrumbs.length, 'fi-header-has-subheading': locals.subheading }]) %>">
+        <header class="<%- cls(['nv-header', { 'nv-header-has-breadcrumbs': breadcrumbs.length, 'nv-header-has-subheading': locals.subheading }]) %>">
             <div>
                 <% if (breadcrumbs.length) { %>
-                    <nav class="fi-breadcrumbs" aria-label="<%= t('filament::components/breadcrumbs.label') %>">
-                        <ol class="fi-breadcrumbs-list">
+                    <nav class="nv-breadcrumbs" aria-label="<%= t('navette::components/breadcrumbs.label') %>">
+                        <ol class="nv-breadcrumbs-list">
                             <% breadcrumbs.forEach((crumb, i) => { %>
-                                <li class="fi-breadcrumbs-item">
+                                <li class="nv-breadcrumbs-item">
                                     <% if (i > 0) { %>
-                                        <%- icon('m-chevron-right', { alias: 'breadcrumbs.separator', attributes: attrs({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) %>
-                                        <%- icon('m-chevron-left', { alias: 'breadcrumbs.separator.rtl', attributes: attrs({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) }) %>
+                                        <%- icon('m-chevron-right', { alias: 'breadcrumbs.separator', attributes: attrs({ 'aria-hidden': 'true', class: 'nv-breadcrumbs-item-separator nv-ltr' }) }) %>
+                                        <%- icon('m-chevron-left', { alias: 'breadcrumbs.separator.rtl', attributes: attrs({ 'aria-hidden': 'true', class: 'nv-breadcrumbs-item-separator nv-rtl' }) }) %>
                                     <% } %>
                                     <% if (crumb.url) { %>
-                                        <a href="<%= crumb.url %>" wire:navigate class="fi-breadcrumbs-item-label">
+                                        <a href="<%= crumb.url %>" wire:navigate class="nv-breadcrumbs-item-label">
                                             <%= crumb.label %>
                                         </a>
                                     <% } else { %>
-                                        <span<% if (i === breadcrumbs.length - 1) { %> aria-current="page"<% } %> class="fi-breadcrumbs-item-label">
+                                        <span<% if (i === breadcrumbs.length - 1) { %> aria-current="page"<% } %> class="nv-breadcrumbs-item-label">
                                             <%= crumb.label %>
                                         </span>
                                     <% } %>
@@ -93,12 +93,12 @@
                 <% } %>
 
                 <%- renderHook('panels::page.header.heading.before', renderHookScopes) %>
-                <h1 class="fi-header-heading">
+                <h1 class="nv-header-heading">
                     <%= heading %>
                 </h1>
                 <%- renderHook('panels::page.header.heading.after', renderHookScopes) %>
                 <% if (locals.subheading) { %>
-                <p class="fi-header-subheading">
+                <p class="nv-header-subheading">
                     <%- subheading %>
                 </p>
                 <% } %>
@@ -106,10 +106,10 @@
 
             <%# The container exists as soon as there is an action or either render hook outputs something. %>
             <% if (headerActions.length || (beforeHeaderActions + afterHeaderActions).trim() !== '') { %>
-                <div class="fi-header-actions-ctn">
+                <div class="nv-header-actions-ctn">
                     <%- beforeHeaderActions %>
                     <% if (headerActions.length) { %>
-                    <div class="fi-ac fi-align-<%= locals.headerActionsAlignment ?? 'start' %>" wire:key="<%= livewireId %>.header-actions.<%- headerActionsKey %>">
+                    <div class="nv-ac nv-align-<%= locals.headerActionsAlignment ?? 'start' %>" wire:key="<%= livewireId %>.header-actions.<%- headerActionsKey %>">
                         <%- headerActions.join('') %>
                     </div>
                     <% } %>
@@ -119,10 +119,10 @@
         </header>
         <% } %>
 
-        <div class="fi-page-main">
+        <div class="nv-page-main">
             <% if (subNavigation.length && subNavigationPosition === 'start') { %>
                 <%- renderHook('panels::page.sub-navigation.start.before', renderHookScopes) %>
-                <div class="fi-page-sub-navigation-sidebar-ctn">
+                <div class="nv-page-sub-navigation-sidebar-ctn">
                     <%- renderHook('panels::page.sub-navigation.sidebar.before', renderHookScopes) %>
 <% subNavigationSidebar() %>
                     <%- renderHook('panels::page.sub-navigation.sidebar.after', renderHookScopes) %>
@@ -131,20 +131,20 @@
             <% } %>
             <% if (subNavigation.length && subNavigationPosition === 'top') { %>
                 <%- renderHook('panels::page.sub-navigation.top.before', renderHookScopes) %>
-                <nav class="fi-tabs fi-page-sub-navigation-tabs" aria-label="<%= t('filament::components/tabs.label') %>">
+                <nav class="nv-tabs nv-page-sub-navigation-tabs" aria-label="<%= t('navette::components/tabs.label') %>">
                     <% for (const group of subNavigationGroups) { %>
                         <% if (group.label) { %>
-                            <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger"><button type="button" class="<%- cls(['fi-tabs-item', { 'fi-active': group.items.some((item) => item.active) }]) %>"><span class="fi-tabs-item-label"><%= group.label %></span></button></div><div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel" style=""><div class="fi-dropdown-list"><% for (const item of group.items) { %><a href="<%= item.url %>" wire:navigate class="fi-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a><% } %></div></div></div>
+                            <div x-data="navetteDropdown({ isMenu: true })" class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger"><button type="button" class="<%- cls(['nv-tabs-item', { 'nv-active': group.items.some((item) => item.active) }]) %>"><span class="nv-tabs-item-label"><%= group.label %></span></button></div><div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="nv-dropdown-panel" style=""><div class="nv-dropdown-list"><% for (const item of group.items) { %><a href="<%= item.url %>" wire:navigate class="nv-dropdown-list-item" role="menuitem" tabindex="-1"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-dropdown-list-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a><% } %></div></div></div>
                         <% } else { %>
                             <% for (const item of group.items) { %>
-                                <a href="<%= item.url %>" wire:navigate class="<%- cls(['fi-tabs-item', { 'fi-active': item.active }]) %>"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="fi-tabs-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
+                                <a href="<%= item.url %>" wire:navigate class="<%- cls(['nv-tabs-item', { 'nv-active': item.active }]) %>"<% if (item.active) { %> aria-current="page"<% } %>><% if (item.icon) { %><%- icon(item.icon) %><% } %><span class="nv-tabs-item-label"><%= item.label %></span><% subNavigationBadge(item, false) %></a>
                             <% } %>
                         <% } %>
                     <% } %>
                 </nav>
                 <%- renderHook('panels::page.sub-navigation.top.after', renderHookScopes) %>
             <% } %>
-            <div class="fi-page-content">
+            <div class="nv-page-content">
                 <%- renderHook('panels::page.header-widgets.before', renderHookScopes) %>
                 <%- headerWidgets %>
                 <%- renderHook('panels::page.header-widgets.after', renderHookScopes) %>
@@ -155,7 +155,7 @@
             </div>
             <% if (subNavigation.length && subNavigationPosition === 'end') { %>
                 <%- renderHook('panels::page.sub-navigation.end.before', renderHookScopes) %>
-                <div class="fi-page-sub-navigation-sidebar-ctn">
+                <div class="nv-page-sub-navigation-sidebar-ctn">
                     <%- renderHook('panels::page.sub-navigation.sidebar.before', renderHookScopes) %>
 <% subNavigationSidebar() %>
                     <%- renderHook('panels::page.sub-navigation.sidebar.after', renderHookScopes) %>

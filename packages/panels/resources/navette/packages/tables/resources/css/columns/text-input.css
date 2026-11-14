@@ -1,0 +1,36 @@
+.nv-ta-text-input {
+    @apply w-full min-w-48;
+
+    .nv-ta-content-loading > .nv-ta-content &,
+    .nv-ta-content-loading > .nv-ta-table > .nv-ta-records > .nv-ta-row & {
+        @apply relative w-fit max-w-full text-transparent;
+
+        &::after {
+            @apply absolute inset-x-3 inset-y-4;
+            animation: var(--loading-skeleton-animation);
+            background-color: var(--loading-skeleton-bg);
+            border-radius: var(--loading-skeleton-border-radius);
+            content: '';
+        }
+
+        &.nv-inline::after {
+            @apply inset-0;
+        }
+
+        .nv-ta-table-stacked-on-mobile &::after {
+            @apply inset-0 sm:inset-x-3 sm:inset-y-4;
+        }
+
+        & > * {
+            @apply opacity-0;
+        }
+    }
+
+    &:not(.nv-inline) {
+        @apply px-3 py-4;
+    }
+
+    .nv-ta-table-stacked-on-mobile & {
+        @apply p-0 sm:px-3 sm:py-4;
+    }
+}

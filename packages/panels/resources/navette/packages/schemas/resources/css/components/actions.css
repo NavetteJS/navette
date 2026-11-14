@@ -1,0 +1,29 @@
+.nv-sc-actions {
+    @apply flex h-full flex-col gap-2;
+
+    & .nv-sc-actions-label-ctn {
+        @apply flex items-center gap-x-3;
+
+        & .nv-sc-actions-label {
+            @apply text-sm leading-6 font-medium text-gray-950 dark:text-white;
+        }
+    }
+
+    &.nv-sticky {
+        & .nv-ac {
+            @apply fixed bottom-0 -mx-4 w-full transform bg-white p-4 shadow-lg ring-1 ring-gray-950/5 transition md:bottom-4 md:rounded-xl dark:bg-gray-900 dark:ring-white/10;
+        }
+    }
+
+    &.nv-vertical-align-start {
+        @apply justify-start;
+    }
+
+    &.nv-vertical-align-center {
+        @apply justify-center;
+    }
+
+    &.nv-vertical-align-end {
+        @apply justify-end;
+    }
+}

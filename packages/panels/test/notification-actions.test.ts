@@ -18,16 +18,16 @@ test('Notification actions are real Actions: small links by default, icons, size
     ]);
     const out = decoded(html(notification));
     // A link, small, with its icon before the label.
-    assert.match(out, /<a href="\/posts\/1" class="fi-ac-link-action fi-link fi-size-sm fi-color fi-color-primary [^"]*"><svg class="fi-icon fi-size-sm"[^>]*>[\s\S]*?<\/svg><span class="fi-link-label">View<\/span><\/a>/);
+    assert.match(out, /<a href="\/posts\/1" class="nv-ac-link-action nv-link nv-size-sm nv-color nv-color-primary [^"]*"><svg class="nv-icon nv-size-sm"[^>]*>[\s\S]*?<\/svg><span class="nv-link-label">View<\/span><\/a>/);
     // A button keeps its size, color and icon position; its tooltip is plain text.
-    assert.match(out, /<button type="button" x-on:click="Livewire\.dispatch\('undoEditingPost', [^"]+\); close\(\)" class="fi-ac-btn-action fi-btn fi-size-md" x-tooltip="\{ content: 'Undo the \\u003Cchange\\u003E', theme: \$store\.theme, allowHTML: false \}">Undo<svg class="fi-icon fi-size-md"/);
+    assert.match(out, /<button type="button" x-on:click="Livewire\.dispatch\('undoEditingPost', [^"]+\); close\(\)" class="nv-ac-btn-action nv-btn nv-size-md" x-tooltip="\{ content: 'Undo the \\u003Cchange\\u003E', theme: \$store\.theme, allowHTML: false \}">Undo<svg class="nv-icon nv-size-md"/);
     // An icon button: the label is its accessible name.
-    assert.match(out, /<button type="button" x-on:click="Livewire\.dispatchTo\('posts-table', 'archive', [^"]+\)" title="Archive" aria-label="Archive" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm[^"]*"><svg/);
+    assert.match(out, /<button type="button" x-on:click="Livewire\.dispatchTo\('posts-table', 'archive', [^"]+\)" title="Archive" aria-label="Archive" class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm[^"]*"><svg/);
     // Disabled: no link, no click handler.
-    assert.match(out, /<a class="fi-ac-link-action fi-link fi-disabled fi-size-sm[^"]*" x-tooltip="[^"]*Not allowed[^"]*" aria-disabled="true"><span class="fi-link-label">Locked<\/span><\/a>/);
+    assert.match(out, /<a class="nv-ac-link-action nv-link nv-disabled nv-size-sm[^"]*" x-tooltip="[^"]*Not allowed[^"]*" aria-disabled="true"><span class="nv-link-label">Locked<\/span><\/a>/);
     assert.doesNotMatch(out, /href="\/locked"/);
     // A badge marking the database notification as read.
-    assert.match(out, /<button type="button" x-on:click="markAsRead\(\)" class="fi-ac-badge-action fi-badge fi-size-sm[^"]*"><span class="fi-badge-label-ctn"><span class="fi-badge-label">Read<\/span><\/span><\/button>/);
+    assert.match(out, /<button type="button" x-on:click="markAsRead\(\)" class="nv-ac-badge-action nv-badge nv-size-sm[^"]*"><span class="nv-badge-label-ctn"><span class="nv-badge-label">Read<\/span><\/span><\/button>/);
 });
 
 test('Notification action groups: a dropdown behind a link, items closing the notification', () => {
@@ -40,14 +40,14 @@ test('Notification action groups: a dropdown behind a link, items closing the no
         ActionGroup.make([Action.make('a').url('/a'), Action.make('b').url('/b')]).dropdown(false),
     ])));
     // Filament's default trigger in notifications: a small "Actions" link.
-    assert.match(out, /<div x-data="\{ notificationElement: null, closeNotification\(\.\.\.args\) \{ return Alpine\.\$data\(this\.notificationElement\)\.close\(\.\.\.args\) \} \}" x-init="notificationElement = \$el\.closest\('\.fi-no-notification'\)" style="display: contents"><div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if \(\$event\.button === 0\) toggle\(\$event\)" class="fi-dropdown-trigger"><button x-tooltip="[^"]*More[^"]*" type="button" class="fi-ac-link-group fi-link fi-size-sm[^"]*"><svg[\s\S]*?<span class="fi-link-label">Actions<\/span><\/button>/);
-    assert.match(out, /<a href="\/posts\/1\/edit" role="menuitem" tabindex="-1" class="fi-dropdown-list-item fi-ac-grouped-action"><svg class="fi-icon fi-size-md"[\s\S]*?<span class="fi-dropdown-list-item-label">Edit<\/span><\/a>/);
+    assert.match(out, /<div x-data="\{ notificationElement: null, closeNotification\(\.\.\.args\) \{ return Alpine\.\$data\(this\.notificationElement\)\.close\(\.\.\.args\) \} \}" x-init="notificationElement = \$el\.closest\('\.nv-no-notification'\)" style="display: contents"><div x-data="navetteDropdown" class="nv-dropdown"><div x-on:mousedown="if \(\$event\.button === 0\) toggle\(\$event\)" class="nv-dropdown-trigger"><button x-tooltip="[^"]*More[^"]*" type="button" class="nv-ac-link-group nv-link nv-size-sm[^"]*"><svg[\s\S]*?<span class="nv-link-label">Actions<\/span><\/button>/);
+    assert.match(out, /<a href="\/posts\/1\/edit" role="menuitem" tabindex="-1" class="nv-dropdown-list-item nv-ac-grouped-action"><svg class="nv-icon nv-size-md"[\s\S]*?<span class="nv-dropdown-list-item-label">Edit<\/span><\/a>/);
     // The notification's close, not the dropdown's.
     assert.match(out, /<button type="button" x-on:click="closeNotification\(\)" role="menuitem"/);
     // A nested group without dropdown is a section of the menu.
-    assert.match(out, /<\/div><div class="fi-dropdown-list" role="group"><button type="button" x-on:click="Livewire\.dispatch\('deletePost', [^"]+\)" role="menuitem" tabindex="-1" class="fi-dropdown-list-item fi-ac-grouped-action fi-color fi-color-danger/);
+    assert.match(out, /<\/div><div class="nv-dropdown-list" role="group"><button type="button" x-on:click="Livewire\.dispatch\('deletePost', [^"]+\)" role="menuitem" tabindex="-1" class="nv-dropdown-list-item nv-ac-grouped-action nv-color nv-color-danger/);
     // `dropdown(false)` at the top: the actions side by side.
-    assert.match(out, /<a href="\/a" class="fi-ac-link-action fi-link fi-size-sm[^"]*"><span class="fi-link-label">A<\/span><\/a><a href="\/b"/);
+    assert.match(out, /<a href="\/a" class="nv-ac-link-action nv-link nv-size-sm[^"]*"><span class="nv-link-label">A<\/span><\/a><a href="\/b"/);
 });
 
 test('Filament array format: Action / ActionGroup toArray() and fromArray(), checked when it comes from outside', () => {
@@ -73,7 +73,7 @@ test('Filament array format: Action / ActionGroup toArray() and fromArray(), che
     // The notification array keeps groups and the new keys, and reads them back.
     const items = Notification.make().actions([group]).getData().actions!;
     const stored = items.map(notificationActionToArray);
-    assert.equal((stored[0] as any).triggerView, 'filament::components.button.index');
+    assert.equal((stored[0] as any).triggerView, 'navette::components.button.index');
     assert.deepEqual(stored.map((item) => notificationActionFromArray(item)), items);
 });
 
@@ -86,7 +86,7 @@ test('Extra attributes of notification actions: only harmless names, values esca
     })!;
     assert.deepEqual((action as any).extraAttributes, { 'data-id': '5" onmouseover="alert(1)', 'aria-label': 'Open', class: 'my-action', id: 'open' });
     const out = notificationActionsHtml([action]);
-    assert.match(out, /class="fi-ac-link-action fi-link fi-size-sm [^"]*my-action" data-id="5&quot; onmouseover=&quot;alert\(1\)" aria-label="Open" id="open"/);
+    assert.match(out, /class="nv-ac-link-action nv-link nv-size-sm [^"]*my-action" data-id="5&quot; onmouseover=&quot;alert\(1\)" aria-label="Open" id="open"/);
     assert.doesNotMatch(out, /onclick|x-on:click="alert|wire:click|javascript:|position:fixed|x-init/);
     // From an Action: the attributes of `extraAttributes()` (actions package) go through the same filter.
     const withAttributes = Object.assign(Action.make('y').url('/y'), { getExtraAttributes: () => ({ 'data-test': 'ok', onclick: 'alert(1)' }) });
@@ -98,8 +98,8 @@ test('Title and body: safe HTML and Markdown, sanitized like Filament', () => {
     const notification = Notification.make().title(raw('<strong>Order</strong> <em>#5</em> shipped<script>alert(1)</script>'))
         .body(markdownToHtml('**Tracking**: [follow](https://example.com/t/5) <img src=x onerror=alert(1)>')).getData();
     const out = renderNotification(notification);
-    assert.match(out, /<h3 class="fi-no-notification-title"><strong>Order<\/strong> <em>#5<\/em> shipped<\/h3>/);
-    assert.match(out, /<div class="fi-no-notification-body"><p><strong>Tracking<\/strong>: <a href="https:\/\/example\.com\/t\/5"[^>]*>follow<\/a>/);
+    assert.match(out, /<h3 class="nv-no-notification-title"><strong>Order<\/strong> <em>#5<\/em> shipped<\/h3>/);
+    assert.match(out, /<div class="nv-no-notification-body"><p><strong>Tracking<\/strong>: <a href="https:\/\/example\.com\/t\/5"[^>]*>follow<\/a>/);
     assert.doesNotMatch(out, /<script|<img[^>]*onerror/);
     // Plain text is shown as text.
     assert.match(renderNotification(Notification.make().title('Price < 5 & more').getData()), /Price &lt; 5 &amp; more/);
@@ -112,9 +112,9 @@ test('getBroadcastMessage(): actions travel in the array format and come back wh
         ActionGroup.make([Action.make('retry').dispatch('retryExport', { id: 1 })]),
     ]);
     const message = notification.getBroadcastMessage();
-    assert.equal(message.format, 'filament');
+    assert.equal(message.format, 'navette');
     assert.equal((message.actions![0] as any).shouldClose, true);
-    assert.equal((message.actions![0] as any).view, 'filament::components.button.index');
+    assert.equal((message.actions![0] as any).view, 'navette::components.button.index');
     assert.ok(Array.isArray((message.actions![1] as any).actions));
     // What the browser sends back is rebuilt into the same notification.
     const rebuilt = Notification.fromArray(JSON.parse(JSON.stringify(message))).getData();

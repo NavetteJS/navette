@@ -225,7 +225,7 @@ export class RevenueOverview extends JsWidget {
     // ...
 
     async render() {
-        return this.wrap(`<p class="revenue-note">${e('Updated hourly')}</p>${await this.renderJsWidgetContent()}`, ['fi-wi-js']);
+        return this.wrap(`<p class="revenue-note">${e('Updated hourly')}</p>${await this.renderJsWidgetContent()}`, ['nv-wi-js']);
     }
 }
 ```

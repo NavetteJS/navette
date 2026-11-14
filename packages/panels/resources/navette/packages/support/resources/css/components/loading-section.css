@@ -1,0 +1,3 @@
+.nv-loading-section {
+    @apply motion-safe:animate-pulse;
+}

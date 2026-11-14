@@ -1,0 +1,55 @@
+.nv-fo-checkbox-list {
+    & .nv-fo-checkbox-list-search-input-wrp {
+        @apply mb-4;
+    }
+
+    & .nv-fo-checkbox-list-actions {
+        @apply mb-2;
+    }
+
+    & .nv-fo-checkbox-list-options {
+        @apply gap-4;
+
+        &.nv-grid-direction-col {
+            @apply -mt-4;
+
+            & .nv-fo-checkbox-list-option-ctn {
+                @apply break-inside-avoid pt-4;
+            }
+        }
+    }
+
+    & .nv-fo-checkbox-list-option {
+        @apply flex gap-x-3;
+
+        & .nv-checkbox-input {
+            @apply mt-1 shrink-0;
+        }
+
+        & .nv-fo-checkbox-list-option-text {
+            @apply grid text-sm leading-6;
+        }
+
+        & .nv-fo-checkbox-list-option-label {
+            @apply overflow-hidden font-medium break-words text-gray-950 dark:text-white;
+        }
+
+        & .nv-fo-checkbox-list-option-description {
+            @apply text-gray-500 dark:text-gray-400;
+        }
+
+        &:has(.nv-checkbox-input:disabled) {
+            & .nv-fo-checkbox-list-option-label {
+                @apply text-gray-400 dark:text-gray-500;
+            }
+
+            & .nv-fo-checkbox-list-option-description {
+                @apply text-gray-300 dark:text-gray-600;
+            }
+        }
+    }
+
+    & .nv-fo-checkbox-list-no-search-results-message {
+        @apply text-sm text-gray-500 dark:text-gray-400;
+    }
+}

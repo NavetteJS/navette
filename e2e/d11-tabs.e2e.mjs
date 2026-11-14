@@ -13,8 +13,8 @@ page.on('pageerror', (error) => errors.push(String(error)));
 const { step, exitCode } = reporter({ errorLines: 5 });
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
 
-const tabsNamed = (label) => page.locator('.fi-sc-tabs').filter({ has: page.locator(`[aria-label="${label}"]`) });
-const tabButton = (label, name) => tabsNamed(label).locator('.fi-tabs-item').filter({ has: page.locator('.fi-tabs-item-label', { hasText: new RegExp(`^${name}$`) }) });
+const tabsNamed = (label) => page.locator('.nv-sc-tabs').filter({ has: page.locator(`[aria-label="${label}"]`) });
+const tabButton = (label, name) => tabsNamed(label).locator('.nv-tabs-item').filter({ has: page.locator('.nv-tabs-item-label', { hasText: new RegExp(`^${name}$`) }) });
 
 await login(page, BASE, user);
 try {
@@ -24,23 +24,23 @@ try {
         await page.goto(`${BASE}/lab/tabs`);
         await page.getByRole('heading', { name: 'Tabs lab' }).waitFor();
         const unread = tabButton('Inbox', 'Unread');
-        await until(async () => (await unread.locator('.fi-badge-label').count()) === 1, 'the lazy badge');
-        assert.equal((await unread.locator('.fi-badge-label').innerText()).trim(), '7');
-        assert.match(await unread.locator('.fi-badge').getAttribute('class'), /fi-badge fi-size-sm fi-color fi-color-danger/);
-        assert.equal(await unread.locator('.fi-badge svg').count(), 1, 'the badge icon');
-        assert.equal(await unread.locator('.fi-tabs-item-badge-placeholder').isVisible(), false);
+        await until(async () => (await unread.locator('.nv-badge-label').count()) === 1, 'the lazy badge');
+        assert.equal((await unread.locator('.nv-badge-label').innerText()).trim(), '7');
+        assert.match(await unread.locator('.nv-badge').getAttribute('class'), /nv-badge nv-size-sm nv-color nv-color-danger/);
+        assert.equal(await unread.locator('.nv-badge svg').count(), 1, 'the badge icon');
+        assert.equal(await unread.locator('.nv-tabs-item-badge-placeholder').isVisible(), false);
         assert.equal(badgeRequests.length, 1);
         // A lazy badge whose value is null shows nothing; the regular badge was in the page from the start.
-        assert.equal(await tabButton('Inbox', 'Spam').locator('.fi-badge').count(), 0);
-        assert.equal((await tabButton('Inbox', 'All').locator('.fi-badge-label').innerText()).trim(), '12');
+        assert.equal(await tabButton('Inbox', 'Spam').locator('.nv-badge').count(), 0);
+        assert.equal((await tabButton('Inbox', 'All').locator('.nv-badge-label').innerText()).trim(), '12');
     });
 
     await step('Livewire property tabs: a click sets the property and renders only the active tab', async () => {
         const status = tabsNamed('Status');
         assert.equal(await tabButton('Status', 'All').getAttribute('aria-selected'), 'true');
-        assert.match(await status.locator('[role="tabpanel"].fi-active').innerText(), /Showing: All posts\./);
+        assert.match(await status.locator('[role="tabpanel"].nv-active').innerText(), /Showing: All posts\./);
         await tabButton('Status', 'Published').click();
-        await until(async () => /Showing: Published posts\./.test(await status.locator('[role="tabpanel"].fi-active').innerText()), 'the published tab content');
+        await until(async () => /Showing: Published posts\./.test(await status.locator('[role="tabpanel"].nv-active').innerText()), 'the published tab content');
         assert.equal(await tabButton('Status', 'Published').getAttribute('aria-selected'), 'true');
         assert.equal(await tabButton('Status', 'All').getAttribute('aria-selected'), 'false');
         // Inactive tabs are not rendered on the server.

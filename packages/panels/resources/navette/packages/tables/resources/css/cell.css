@@ -1,0 +1,139 @@
+.nv-ta-cell {
+    @apply p-0 first:ps-1 last:pe-1 sm:first:ps-3 sm:last:pe-3;
+
+    &.nv-vertical-align-start {
+        @apply align-top;
+    }
+
+    &.nv-vertical-align-end {
+        @apply align-bottom;
+    }
+
+    &.sm\:nv-hidden {
+        @apply sm:hidden;
+    }
+
+    &.md\:nv-hidden {
+        @apply md:hidden;
+    }
+
+    &.lg\:nv-hidden {
+        @apply lg:hidden;
+    }
+
+    &.xl\:nv-hidden {
+        @apply xl:hidden;
+    }
+
+    &.\32xl\:nv-hidden {
+        @apply 2xl:hidden;
+    }
+
+    &.sm\:nv-visible {
+        @apply hidden sm:table-cell;
+    }
+
+    &.md\:nv-visible {
+        @apply hidden md:table-cell;
+    }
+
+    &.lg\:nv-visible {
+        @apply hidden lg:table-cell;
+    }
+
+    &.xl\:nv-visible {
+        @apply hidden xl:table-cell;
+    }
+
+    &.\32xl\:nv-visible {
+        @apply hidden 2xl:table-cell;
+    }
+
+    & .nv-ta-col {
+        @apply flex w-full justify-start text-start disabled:pointer-events-none;
+    }
+
+    &:has(.nv-ta-reorder-handle) {
+        @apply w-1 px-3 first-of-type:ps-4 last-of-type:pe-4 sm:first-of-type:ps-6 sm:last-of-type:pe-6;
+    }
+
+    &:has(.nv-ta-actions) {
+        @apply px-3 py-4 whitespace-nowrap first-of-type:ps-4 last-of-type:pe-4 sm:first-of-type:ps-6 sm:last-of-type:pe-6;
+    }
+
+    &:has(.nv-ta-record-checkbox) {
+        @apply w-1 px-3 py-4 first-of-type:ps-4 last-of-type:pe-4 sm:first-of-type:ps-6 sm:last-of-type:pe-6;
+    }
+
+    & .nv-ta-placeholder {
+        @apply text-sm leading-6 text-gray-400 dark:text-gray-500;
+    }
+
+    &.nv-ta-summary-row-heading-cell {
+        @apply px-3 py-4 text-sm font-medium text-gray-950 sm:first:ps-6 sm:last:pe-6 dark:text-white;
+    }
+
+    &.nv-align-start {
+        @apply text-start;
+    }
+
+    &.nv-align-center {
+        @apply text-center;
+    }
+
+    &.nv-align-end {
+        @apply text-end;
+    }
+
+    &.nv-align-left {
+        @apply text-left;
+    }
+
+    &.nv-align-right {
+        @apply text-right;
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply text-justify;
+    }
+
+    &.nv-ta-summary-header-cell {
+        @apply px-3 py-2 text-sm font-medium text-gray-950 sm:first:ps-6 dark:text-white;
+
+        &.nv-wrapped {
+            @apply whitespace-nowrap;
+        }
+
+        &:not(.nv-wrapped) {
+            @apply whitespace-nowrap;
+        }
+    }
+
+    &.nv-ta-individual-search-cell {
+        @apply min-w-48 px-3 py-2;
+    }
+
+    & .nv-ta-reorder-handle {
+        @apply cursor-move;
+    }
+
+    .nv-ta-content-loading & .nv-ta-record-checkbox {
+        @apply shadow-none ring-0 transition-none;
+        animation: var(--loading-skeleton-animation);
+        background-color: var(--loading-skeleton-bg) !important;
+        background-image: none !important;
+    }
+
+    &.nv-ta-selection-cell {
+        @apply w-1 px-3 py-4 first-of-type:ps-4 last-of-type:pe-4 sm:first-of-type:ps-6 sm:last-of-type:pe-6;
+    }
+
+    &.nv-ta-group-selection-cell {
+        @apply w-1 px-3 align-middle first-of-type:ps-4 last-of-type:pe-4 sm:first-of-type:ps-6 sm:last-of-type:pe-6;
+    }
+}
+
+.nv-ta-search-field > .nv-ta-cell-label {
+    @apply block pt-2 pb-1 text-sm leading-6 font-semibold text-gray-500 sm:hidden dark:text-gray-400;
+}

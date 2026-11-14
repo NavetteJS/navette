@@ -43,7 +43,7 @@ Document and layout:
 | `STYLES_BEFORE`, `STYLES_AFTER` | `panels::styles.before`, `panels::styles.after` | Before and after the stylesheets of the panel |
 | `BODY_START`, `BODY_END` | `panels::body.start`, `panels::body.end` | Start and end of `<body>` |
 | `SCRIPTS_BEFORE`, `SCRIPTS_AFTER` | `panels::scripts.before`, `panels::scripts.after` | Before and after the scripts of the panel |
-| `LAYOUT_START`, `LAYOUT_END` | `panels::layout.start`, `panels::layout.end` | Start and end of the layout (`.fi-layout`) |
+| `LAYOUT_START`, `LAYOUT_END` | `panels::layout.start`, `panels::layout.end` | Start and end of the layout (`.nv-layout`) |
 | `CONTENT_BEFORE`, `CONTENT_AFTER` | `panels::content.before`, `panels::content.after` | Before and after `<main>` |
 | `CONTENT_START`, `CONTENT_END` | `panels::content.start`, `panels::content.end` | Start and end of `<main>` |
 | `FOOTER` | `panels::footer` | After the content, in both the full and simple layouts |
@@ -71,7 +71,7 @@ Pages:
 
 | Constant | Name | Location |
 |---|---|---|
-| `PAGE_START`, `PAGE_END` | `panels::page.start`, `panels::page.end` | Start and end of a page (`.fi-page`) |
+| `PAGE_START`, `PAGE_END` | `panels::page.start`, `panels::page.end` | Start and end of a page (`.nv-page`) |
 | `PAGE_HEADER_HEADING_BEFORE`, `PAGE_HEADER_HEADING_AFTER` | `panels::page.header.heading.before`, `panels::page.header.heading.after` | Around the heading of the page |
 | `PAGE_HEADER_ACTIONS_BEFORE`, `PAGE_HEADER_ACTIONS_AFTER` | `panels::page.header.actions.before`, `panels::page.header.actions.after` | Around the header actions |
 | `PAGE_HEADER_WIDGETS_BEFORE`, `PAGE_HEADER_WIDGETS_AFTER` | `panels::page.header-widgets.before`, `panels::page.header-widgets.after` | Before and after the header widgets |
@@ -122,7 +122,7 @@ The two replacing hooks keep the default markup when the hook returns nothing, s
 import { TablesRenderHook } from '@navette-js/tables';
 
 panel.renderHook(TablesRenderHook.HEADER_CELL, ({ data }) =>
-    data.column.name === 'country' ? '<th scope="col" class="fi-ta-header-cell">Country of residence</th>' : null,
+    data.column.name === 'country' ? '<th scope="col" class="nv-ta-header-cell">Country of residence</th>' : null,
 CustomerResource);
 ```
 

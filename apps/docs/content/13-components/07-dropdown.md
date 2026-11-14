@@ -24,7 +24,7 @@ When it is open, the dropdown looks like this:
 
 ```preview
 // width: 16rem
-template(`<div class="fi-dropdown-panel" style="position: relative">
+template(`<div class="nv-dropdown-panel" style="position: relative">
     <x-dropdown-list>
         <x-dropdown-item icon="o-pencil-square">Edit</x-dropdown-item>
         <x-dropdown-item icon="o-document-duplicate">Duplicate</x-dropdown-item>
@@ -58,7 +58,7 @@ The panel is opened and closed in the browser by Alpine.js. It is placed below t
 
 ```preview
 // width: 16rem
-template(`<div class="fi-dropdown-panel" style="position: relative">
+template(`<div class="nv-dropdown-panel" style="position: relative">
     <x-dropdown-list>
         <x-dropdown-item icon="o-user" tag="a" href="/admin/profile">Profile</x-dropdown-item>
         <x-dropdown-item icon="o-cog-6-tooth" tag="a" href="/admin/settings">Settings</x-dropdown-item>
@@ -103,7 +103,7 @@ Items are gray. Pass another [color](/styling/colors) with the `color` prop:
 
 ```preview
 // width: 16rem
-template(`<div class="fi-dropdown-panel" style="position: relative">
+template(`<div class="nv-dropdown-panel" style="position: relative">
     <x-dropdown-list>
         <x-dropdown-item color="danger">Delete</x-dropdown-item>
         <x-dropdown-item color="success">Publish</x-dropdown-item>
@@ -129,7 +129,7 @@ Use `icon-color` to give the icon its own [color](/styling/colors):
 
 ```preview
 // width: 16rem
-template(`<div class="fi-dropdown-panel" style="position: relative">
+template(`<div class="nv-dropdown-panel" style="position: relative">
     <x-dropdown-list>
         <x-dropdown-item icon="o-check-circle" icon-color="success">Approve</x-dropdown-item>
     </x-dropdown-list>
@@ -146,7 +146,7 @@ The `image` prop displays a small round image before the label, for example an a
 
 ```preview
 // width: 16rem
-template(`<div class="fi-dropdown-panel" style="position: relative">
+template(`<div class="nv-dropdown-panel" style="position: relative">
     <x-dropdown-list>
         <x-dropdown-item image="https://ui-avatars.com/api/?name=Ada+Lovelace&background=random" label="Ada Lovelace" />
     </x-dropdown-list>
@@ -163,7 +163,7 @@ The `badge` prop displays a value at the end of the item. Its color is `primary`
 
 ```preview
 // width: 16rem
-template(`<div class="fi-dropdown-panel" style="position: relative">
+template(`<div class="nv-dropdown-panel" style="position: relative">
     <x-dropdown-list>
         <x-dropdown-item icon="o-bell" :badge="3" badge-color="danger">Notifications</x-dropdown-item>
     </x-dropdown-list>

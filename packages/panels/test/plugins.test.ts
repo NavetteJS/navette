@@ -83,10 +83,10 @@ test('translations: namespaces from objects or JSON files, nested keys, later ad
     assert.equal(t('clock-widget::clock-widget.title'), 'Clock');
     assert.equal(t('clock-widget::clock-widget.description', { timezone: 'UTC' }, 'fr'), 'Heure actuelle (UTC)');
     // Navette's own translations may be overridden too.
-    const original = t('filament-panels::pages/dashboard.title');
-    addTranslations('filament-panels', { en: { 'pages/dashboard': { title: 'Home' } } });
-    assert.equal(t('filament-panels::pages/dashboard.title'), 'Home');
-    addTranslations('filament-panels', { en: { 'pages/dashboard': { title: original } } });
+    const original = t('navette-panels::pages/dashboard.title');
+    addTranslations('navette-panels', { en: { 'pages/dashboard': { title: 'Home' } } });
+    assert.equal(t('navette-panels::pages/dashboard.title'), 'Home');
+    addTranslations('navette-panels', { en: { 'pages/dashboard': { title: original } } });
     assert.throws(() => addTranslations('bad namespace', {}), /Invalid translation namespace/);
     assert.throws(() => addTranslations('__proto__', {}), /Invalid translation namespace/);
     assert.throws(() => addTranslations('plugin-test', JSON.parse('{"__proto__": {"posts": {"x": "y"}}}')), /Invalid locale/);

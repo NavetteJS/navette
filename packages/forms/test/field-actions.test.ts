@@ -44,8 +44,8 @@ test('Repeater: customized item actions keep their behavior; a confirmation give
         .addAction((a) => a.label('New item').icon('m-plus'));
     const html = await render(livewire, [field]);
     assert.match(html, /<button title="Remove"[^>]*wire:click="mountAction\('delete', JSON\.parse\('\{\\u0022item\\u0022:\\u0022a\\u0022\}'\)/);
-    assert.match(html, /<button title="Clone"[^>]*class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm fi-color fi-color-primary/);
-    assert.match(html, /<div class="fi-fo-repeater-add"><button type="button"[^>]*>.*New item<\/button>/s);
+    assert.match(html, /<button title="Clone"[^>]*class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm nv-color nv-color-primary/);
+    assert.match(html, /<div class="nv-fo-repeater-add"><button type="button"[^>]*>.*New item<\/button>/s);
     assert.equal(action(field, 'delete').hasModal(), true);
     assert.equal(action(field, 'clone').hasModal(), false);
     await call(field, 'delete', { item: 'a' });
@@ -55,10 +55,10 @@ test('Repeater: customized item actions keep their behavior; a confirmation give
 test('Repeater: "Insert between" is hidden by default and inserts after the given item', async () => {
     const livewire = host({ items: { a: { name: 'A' }, b: { name: 'B' } } });
     const plain = Repeater.make('items').schema([TextInput.make('name')]);
-    assert.doesNotMatch(await form(livewire, [plain]).toHtml(), /fi-fo-repeater-add-between-items/);
+    assert.doesNotMatch(await form(livewire, [plain]).toHtml(), /nv-fo-repeater-add-between-items/);
     const field = Repeater.make('items').schema([TextInput.make('name')]).addBetweenAction((a) => a.visible()).addBetweenActionLabel('Insert here');
     const html = await render(livewire, [field]);
-    assert.equal(html.match(/fi-fo-repeater-add-between-items-ctn/g)?.length, 1, 'one button between two items');
+    assert.equal(html.match(/nv-fo-repeater-add-between-items-ctn/g)?.length, 1, 'one button between two items');
     assert.match(html, /mountAction\('addBetween', JSON\.parse\('\{\\u0022afterItem\\u0022:\\u0022a\\u0022\}'\)[^"]*"[^>]*>.*Insert here/s);
     assert.equal(field.authorizeActionArguments('addBetween', { afterItem: 'zzz' }), false);
     assert.equal(field.authorizeActionArguments('addBetween', { afterItem: 'a' }), true);
@@ -95,7 +95,7 @@ test('Repeater: table layout renders extra item actions; a custom reorder action
     const field = Repeater.make('rows').table([TableColumn.make('Name')]).schema([TextInput.make('name')])
         .extraItemActions([Action.make('flag').icon('m-flag').action(() => {})]).reorderAction((a) => a.requiresConfirmation());
     const html = await render(livewire, [field]);
-    assert.match(html, /fi-fo-table-repeater-actions"><div x-on:click\.stop><button title="Flag"/);
+    assert.match(html, /nv-fo-table-repeater-actions"><div x-on:click\.stop><button title="Flag"/);
     assert.match(html, /hasCustomReorderAction\\u0022:true|hasCustomReorderAction&quot;:true|"hasCustomReorderAction":true/);
 });
 
@@ -118,10 +118,10 @@ test('Builder: item labels from content, block previews with an edit modal, extr
     const field = Builder.make('content').blocks([heading, paragraph]).blockPreviews().searchable().searchPrompt(new HtmlString('Find <b>a</b> block &amp; more')).noSearchResultsMessage('Nothing.').searchDebounce(300)
         .extraItemActions([Action.make('copy').icon('m-clipboard').action(() => {})]);
     const html = await render(livewire, [field]);
-    assert.match(html, /fi-fo-builder-item-header-label fi-truncated">&lt;i&gt;Hello&lt;\/i&gt; 1</);
-    assert.match(html, /<span class="fi-dropdown-list-item-label">Heading<\/span>/);
-    assert.match(html, /class="fi-fo-builder-item-content fi-fo-builder-item-content-has-preview"><div class="fi-fo-builder-item-preview"><h1>&lt;i&gt;Hello&lt;\/i&gt;<\/h1><\/div><div class="fi-fo-builder-item-preview-edit-overlay" role="button" x-on:click\.stop="editItem\(/);
-    assert.match(html, /<div class="fi-fo-builder-item-preview">&lt;p&gt;Text&lt;\/p&gt;<\/div>/, 'a plain string preview is escaped');
+    assert.match(html, /nv-fo-builder-item-header-label nv-truncated">&lt;i&gt;Hello&lt;\/i&gt; 1</);
+    assert.match(html, /<span class="nv-dropdown-list-item-label">Heading<\/span>/);
+    assert.match(html, /class="nv-fo-builder-item-content nv-fo-builder-item-content-has-preview"><div class="nv-fo-builder-item-preview"><h1>&lt;i&gt;Hello&lt;\/i&gt;<\/h1><\/div><div class="nv-fo-builder-item-preview-edit-overlay" role="button" x-on:click\.stop="editItem\(/);
+    assert.match(html, /<div class="nv-fo-builder-item-preview">&lt;p&gt;Text&lt;\/p&gt;<\/div>/, 'a plain string preview is escaped');
     assert.doesNotMatch(html, /name="data\.content\.a\.data\.text"|wire:model="data\.content\.a\.data\.text"/, 'no form with previews');
     assert.match(html, /placeholder="Find a block &amp; more"/);
     assert.match(html, /x-model\.debounce\.300="search"/);
@@ -152,11 +152,11 @@ test('Builder: addBetweenAction(false) and custom item actions; interactive prev
     const between = Builder.make('content').blocks([note]).addBetweenAction((a) => a.label('Put a block here')).deleteAction((a) => a.requiresConfirmation()).blockPreviews(true, true);
     let html = await form(livewire, [between]).toHtml();
     assert.match(html, /Put a block here/);
-    assert.match(html, /fi-fo-builder-item-preview fi-interactive/);
-    assert.doesNotMatch(html, /fi-fo-builder-item-preview-edit-overlay/);
+    assert.match(html, /nv-fo-builder-item-preview nv-interactive/);
+    assert.doesNotMatch(html, /nv-fo-builder-item-preview-edit-overlay/);
     assert.equal(action(between, 'delete').hasModal(), true);
     html = await form(livewire, [Builder.make('content').blocks([note]).addBetweenAction(false)]).toHtml();
-    assert.doesNotMatch(html, /fi-fo-builder-add-between-items/);
+    assert.doesNotMatch(html, /nv-fo-builder-add-between-items/);
     assert.match(html, /wire:model[^ ]*="data\.content\.a\.data\.body"/, 'without previews, the form is rendered');
 });
 
@@ -164,7 +164,7 @@ test('KeyValue: add, delete and reorder actions are customizable', async () => {
     const livewire = host({ meta: [{ key: 'a', value: 'b' }] });
     const field = KeyValue.make('meta').reorderable().addAction((a) => a.label('New pair').icon('m-plus')).deleteAction((a) => a.label('Drop').icon('m-x-mark')).reorderAction((a) => a.label('Drag'));
     const html = await render(livewire, [field]);
-    assert.match(html, /<span class="fi-link-label">New pair<\/span>/);
+    assert.match(html, /<span class="nv-link-label">New pair<\/span>/);
     assert.match(html, /title="Drop" aria-label="Drop"/);
     assert.match(html, /title="Drag" aria-label="Drag"/);
     const hidden = await form(livewire, [KeyValue.make('meta').deleteAction((a) => a.hidden()).addAction((a) => a.visible(false))]).toHtml();
@@ -180,11 +180,11 @@ test('CheckboxList: many-to-many relationship options, loading and saving, limit
     await loadSchemaRelationships(schema, livewire.data, post);
     assert.deepEqual(livewire.data.tags, ['2']);
     const html = await schema.toHtml();
-    assert.match(html, /<span class="fi-fo-checkbox-list-option-label"><b>Node<\/b><\/span>/);
-    assert.match(html, /<span class="fi-fo-checkbox-list-option-label">PHP<\/span>/);
+    assert.match(html, /<span class="nv-fo-checkbox-list-option-label"><b>Node<\/b><\/span>/);
+    assert.match(html, /<span class="nv-fo-checkbox-list-option-label">PHP<\/span>/);
     assert.doesNotMatch(html, />Old</, 'the query excludes archived tags');
     assert.match(html, /Everything/);
-    assert.match(html, /fi-ac-link-action fi-link fi-size-sm fi-color fi-color-danger[^"]*"><span class="fi-link-label">Nothing/);
+    assert.match(html, /nv-ac-link-action nv-link nv-size-sm nv-color nv-color-danger[^"]*"><span class="nv-link-label">Nothing/);
     assert.match(html, /x-model\.debounce\.250="search"/);
     // Relationship fields are saved after the record, not in its data.
     assert.deepEqual(await getSchemaState(schema), {});

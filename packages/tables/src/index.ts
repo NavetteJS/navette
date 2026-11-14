@@ -16,7 +16,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { TableTriggerAction, columnOrderOf, columnToggleStateOf, defaultColumnManagerWidth, getRowLoop, hasReorderedColumns, makeRowLoop, sanitizePollingInterval, syncColumnManagerState, withRowLoop, type ColumnManagerLayoutValue, type ColumnManagerResetActionPositionValue, type ColumnState, type PaginationModeValue, type RowLoop } from './table-features.ts';
 
-views.namespace('filament-tables', fileURLToPath(new URL('../views', import.meta.url)));
+views.namespace('navette-tables', fileURLToPath(new URL('../views', import.meta.url)));
 export * from './query-builder.ts';
 export * from './table-features.ts';
 export { makeTableSelectTable } from './table-select.ts';
@@ -97,7 +97,7 @@ export abstract class Column<R = any> {
     /** Tooltip on the column's header label. */
     headerTooltip(tooltip: string | null): this { this._headerTooltip = tooltip; return this; }
     getHeaderTooltip(): string | null { return this._headerTooltip; }
-    /** Vertical alignment of the cells: `start`, `center` or `end` (Filament's `fi-vertical-align-*` classes). */
+    /** Vertical alignment of the cells: `start`, `center` or `end` (the `nv-vertical-align-*` classes). */
     verticalAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._verticalAlignment = alignment !== null && ['start', 'center', 'end'].includes(alignment) ? alignment : null; return this; }
     verticallyAlignStart(condition = true): this { return this.verticalAlignment(condition ? 'start' : null); }
     verticallyAlignCenter(condition = true): this { return this.verticalAlignment(condition ? 'center' : null); }
@@ -209,7 +209,7 @@ export abstract class Column<R = any> {
     /** Hides the column from this screen size up. */
     hiddenFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._hiddenFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
     /** Classes hiding the header and cells on some screen sizes. */
-    getResponsiveClasses(): string[] { return [this._hiddenFrom ? `${this._hiddenFrom}:fi-hidden` : null, this._visibleFrom ? `${this._visibleFrom}:fi-visible` : null].filter((c): c is string => c !== null); }
+    getResponsiveClasses(): string[] { return [this._hiddenFrom ? `${this._hiddenFrom}:nv-hidden` : null, this._visibleFrom ? `${this._visibleFrom}:nv-visible` : null].filter((c): c is string => c !== null); }
     /** Width of the column, as a CSS length (`200px`, `20%`...). */
     width(width: string | number | null): this { const text = typeof width === 'number' ? `${width}px` : width; this._columnWidth = text !== null && /^[0-9.]+(px|rem|em|%|ch|vw)$/.test(text.trim()) ? text.trim() : null; return this; }
     getWidth(): string | null { return this._columnWidth; }
@@ -282,7 +282,7 @@ export abstract class Column<R = any> {
     isToggleable(): boolean { return this._toggleable; }
     isToggledHiddenByDefault(): boolean { return this._toggledHiddenByDefault; }
     getAlignment(): string | null { return this._alignment; }
-    /** Suffix of the `fi-ta-header-cell-…` / `fi-ta-cell-…` classes: underscores become dashes, dots are kept. */
+    /** Suffix of the `nv-ta-header-cell-…` / `nv-ta-cell-…` classes: underscores become dashes, dots are kept. */
     getCssName(): string { return this.name.replace(/_/g, '-'); }
     async getState(record: R): Promise<unknown> {
         // `author.name` reads the loaded relationship (`record.author.name`); `tags.name` gives the list of the related names.
@@ -546,8 +546,8 @@ export class TextColumn<R = any> extends Column<R> {
         return !Array.isArray(state) && !(state instanceof RenderedRichContent) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && !this.enumCaseOf(record, state)?.getIcon() && this._tooltip === null
             && this._copyable === false && this._weight === null && this._fontFamily === null && this._lineClamp === null && this._size === null && !this.hasDescriptions() && !this._wrap && this._html === false && this._markdown === false;
     }
-    private alignClass(): string | null { return this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null; }
-    private containerClasses(): (string | null)[] { return ['fi-ta-text', this._inline ? 'fi-inline' : null, this._numeric || this._money ? 'fi-numeric' : null, this.alignClass()]; }
+    private alignClass(): string | null { return this._alignment && this._alignment !== 'start' ? `nv-align-${this._alignment}` : null; }
+    private containerClasses(): (string | null)[] { return ['nv-ta-text', this._inline ? 'nv-inline' : null, this._numeric || this._money ? 'nv-numeric' : null, this.alignClass()]; }
 
     /** Cell content, as Filament renders it: a short markup for a plain value, the full markup as soon as an item option is set. */
     async toHtml(record: R): Promise<string> {
@@ -556,17 +556,17 @@ export class TextColumn<R = any> extends Column<R> {
         const richContent = this._state ? null : getRegisteredRichContent(record, this.name);
         if (richContent) state = richContent.isEmpty() ? null : new RenderedRichContent(sanitizeHtml(await richContent.toHtml()));
         if (isBlankState(state)) {
-            return `<div class="${cls(this.containerClasses())}">${this._placeholder !== null ? `<p class="fi-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
+            return `<div class="${cls(this.containerClasses())}">${this._placeholder !== null ? `<p class="nv-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
         }
         if (this.canRenderOptimized(state, record)) {
             let html = e(this.formatItem(state, record));
             const color = resolveItem(this._color, record, state) ?? this.enumCaseOf(record, state)?.getColor() ?? null;
             if (this._badge) {
                 const badgeColor = color ?? 'primary';
-                html = `<span class="${cls(['fi-badge', 'fi-size-sm', ...(badgeColor !== 'gray' ? (colorManager?.getComponentClasses('badge', badgeColor) ?? []) : [])])}">${html}</span>`;
+                html = `<span class="${cls(['nv-badge', 'nv-size-sm', ...(badgeColor !== 'gray' ? (colorManager?.getComponentClasses('badge', badgeColor) ?? []) : [])])}">${html}</span>`;
             }
-            const classes = this._badge ? ['fi-ta-text', 'fi-ta-text-item', 'fi-ta-text-has-badges'] : ['fi-ta-text', 'fi-ta-text-item', 'fi-size-sm', ...(color ? (colorManager?.getComponentClasses('text', color) ?? []) : [])];
-            return `<div class="${cls([...classes, this._inline ? 'fi-inline' : null, this._numeric || this._money ? 'fi-numeric' : null, this.alignClass()])}">${html}</div>`;
+            const classes = this._badge ? ['nv-ta-text', 'nv-ta-text-item', 'nv-ta-text-has-badges'] : ['nv-ta-text', 'nv-ta-text-item', 'nv-size-sm', ...(color ? (colorManager?.getComponentClasses('text', color) ?? []) : [])];
+            return `<div class="${cls([...classes, this._inline ? 'nv-inline' : null, this._numeric || this._money ? 'nv-numeric' : null, this.alignClass()])}">${html}</div>`;
         }
 
         let items = this.stateItems(state);
@@ -594,20 +594,20 @@ export class TextColumn<R = any> extends Column<R> {
             const tooltip = resolveItem(this._tooltip, record, item);
             const fontFamily = resolveItem(this._fontFamily, record, item);
             const weight = resolveItem(this._weight, record, item);
-            const itemClasses = ['fi-ta-text-item', fontFamily ? `fi-font-${fontFamily}` : null];
-            if (!this._badge) itemClasses.push(TEXT_SIZES.has(size) ? `fi-size-${size}` : size, weight ? `fi-font-${weight}` : null, ...(color ? (colorManager?.getComponentClasses('text', color) ?? []) : []));
+            const itemClasses = ['nv-ta-text-item', fontFamily ? `nv-font-${fontFamily}` : null];
+            if (!this._badge) itemClasses.push(TEXT_SIZES.has(size) ? `nv-size-${size}` : size, weight ? `nv-font-${weight}` : null, ...(color ? (colorManager?.getComponentClasses('text', color) ?? []) : []));
             const itemStyle = !this._badge && this._lineClamp ? ` style="--line-clamp: ${Math.floor(this._lineClamp)}"` : '';
             let content: string | null = null;
             if (this._badge || copyable || (tooltip !== null && tooltip !== '')) {
                 const attributes: string[] = [];
                 if (copyable) {
                     const copied = resolveItem(this._copyableState, record, item) ?? formatted;
-                    const message = this._copyMessage ?? t('filament::components/copyable.messages.copied');
+                    const message = this._copyMessage ?? t('navette::components/copyable.messages.copied');
                     attributes.push(...copyableAttributes(copied, formatted, message, this._copyMessageDuration));
                 }
                 if (tooltip !== null && tooltip !== '') attributes.push(`x-tooltip="${e(tooltipAttribute(tooltip))}"`);
-                const contentClasses = [copyable ? 'fi-copyable' : null];
-                if (this._badge) contentClasses.push('fi-badge', TEXT_SIZES.has(size) ? `fi-size-${size}` : size, ...(color && color !== 'gray' ? (colorManager?.getComponentClasses('badge', color) ?? []) : []));
+                const contentClasses = [copyable ? 'nv-copyable' : null];
+                if (this._badge) contentClasses.push('nv-badge', TEXT_SIZES.has(size) ? `nv-size-${size}` : size, ...(color && color !== 'gray' ? (colorManager?.getComponentClasses('badge', color) ?? []) : []));
                 const classString = cls(contentClasses);
                 content = `<span ${[...attributes, classString ? `class="${classString}"` : ''].filter(Boolean).join(' ')}>`;
             }
@@ -616,7 +616,7 @@ export class TextColumn<R = any> extends Column<R> {
             return { itemClasses, itemStyle, inner };
         };
 
-        const containerExtra = [this._badge ? 'fi-ta-text-has-badges' : null, this._lineClamp && !this._badge ? 'fi-ta-text-has-line-clamp' : null, this._wrap ? 'fi-wrapped' : null];
+        const containerExtra = [this._badge ? 'nv-ta-text-has-badges' : null, this._lineClamp && !this._badge ? 'nv-ta-text-has-line-clamp' : null, this._wrap ? 'nv-wrapped' : null];
         const descriptionAbove = typeof this._descriptionAbove === 'function' ? this._descriptionAbove(record) : this._descriptionAbove;
         const descriptionBelow = typeof this._descriptionBelow === 'function' ? this._descriptionBelow(record) : this._descriptionBelow;
         const hasDescriptions = (descriptionAbove ?? '') !== '' || (descriptionBelow ?? '') !== '';
@@ -626,7 +626,7 @@ export class TextColumn<R = any> extends Column<R> {
             return `<div class="${cls([...itemClasses, ...this.containerClasses(), ...containerExtra])}"${itemStyle}>${inner}</div>`;
         }
 
-        const container = [...this.containerClasses(), ...containerExtra, this._bulleted ? 'fi-bulleted' : null, this._listWithLineBreaks ? 'fi-ta-text-has-line-breaks' : null];
+        const container = [...this.containerClasses(), ...containerExtra, this._bulleted ? 'nv-bulleted' : null, this._listWithLineBreaks ? 'nv-ta-text-has-line-breaks' : null];
         const listItems = (forList: unknown[]) => forList.map((item, index) => {
             const { itemClasses, itemStyle, inner } = itemData(item);
             const hidden = index + 1 > limit ? ' x-show="! isLimited" x-cloak x-transition' : '';
@@ -643,12 +643,12 @@ export class TextColumn<R = any> extends Column<R> {
             let more = '';
             if (overLimit) {
                 more = expandable
-                    ? `<div class="fi-ta-text-list-limited-message"><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = false" x-show="isLimited" class="fi-link fi-size-xs">${e(tc('filament-tables::table.columns.text.actions.expand_list', overLimit, { count: overLimit }))}</div><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = true" x-cloak x-show="! isLimited" class="fi-link fi-size-xs">${e(tc('filament-tables::table.columns.text.actions.collapse_list', overLimit, { count: overLimit }))}</div></div>`
-                    : `<div class="fi-ta-text-list-limited-message">${e(tc('filament-tables::table.columns.text.more_list_items', overLimit, { count: overLimit }))}</div>`;
+                    ? `<div class="nv-ta-text-list-limited-message"><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = false" x-show="isLimited" class="nv-link nv-size-xs">${e(tc('navette-tables::table.columns.text.actions.expand_list', overLimit, { count: overLimit }))}</div><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = true" x-cloak x-show="! isLimited" class="nv-link nv-size-xs">${e(tc('navette-tables::table.columns.text.actions.collapse_list', overLimit, { count: overLimit }))}</div></div>`
+                    : `<div class="nv-ta-text-list-limited-message">${e(tc('navette-tables::table.columns.text.more_list_items', overLimit, { count: overLimit }))}</div>`;
             }
-            return `<div${expandable ? ' x-data="{ isLimited: true }"' : ''} class="${cls([...container, hasDescriptions ? 'fi-ta-text-has-descriptions' : null, overLimit ? 'fi-ta-text-list-limited' : null])}">`
-                + `${(descriptionAbove ?? '') !== '' ? `<p class="fi-ta-text-description">${e(descriptionAbove)}</p>` : ''}${body}${more}`
-                + `${(descriptionBelow ?? '') !== '' ? `<p class="fi-ta-text-description">${e(descriptionBelow)}</p>` : ''}</div>`;
+            return `<div${expandable ? ' x-data="{ isLimited: true }"' : ''} class="${cls([...container, hasDescriptions ? 'nv-ta-text-has-descriptions' : null, overLimit ? 'nv-ta-text-list-limited' : null])}">`
+                + `${(descriptionAbove ?? '') !== '' ? `<p class="nv-ta-text-description">${e(descriptionAbove)}</p>` : ''}${body}${more}`
+                + `${(descriptionBelow ?? '') !== '' ? `<p class="nv-ta-text-description">${e(descriptionBelow)}</p>` : ''}</div>`;
         }
         return `<ul class="${cls(container)}">${listItems(items)}</ul>`;
     }
@@ -739,14 +739,14 @@ export class Summarizer {
 export class Sum extends Summarizer {
     readonly kind = 'sum';
     static make(): Sum { return configured(new Sum()); }
-    getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.sum.label'); }
+    getLabel(): string { return this._label ?? t('navette-tables::table.summary.summarizers.sum.label'); }
     summarize(column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.sum[column] ?? 0); }
 }
 /** Column average. */
 export class Average extends Summarizer {
     readonly kind = 'avg';
     static make(): Average { return configured(new Average()); }
-    getLabel(): string { return this._label ?? t('filament-tables::table.summary.summarizers.average.label'); }
+    getLabel(): string { return this._label ?? t('navette-tables::table.summary.summarizers.average.label'); }
     summarize(column: string, values: SummaryValues, customValue?: unknown): SummaryItem { return this.item(customValue ?? values.avg[column] ?? 0); }
 }
 /** Record count, or the occurrences of each icon of an icon column with `icons()`. */
@@ -757,7 +757,7 @@ export class Count extends Summarizer {
     /** Counts how many times each icon (and color) of an `IconColumn` appears, instead of the records. */
     icons(condition = true): this { this._icons = condition; return this; }
     hasIcons(): boolean { return this._icons; }
-    getLabel(): string | null { return this._label ?? (this._icons ? null : t('filament-tables::table.summary.summarizers.count.label')); }
+    getLabel(): string | null { return this._label ?? (this._icons ? null : t('navette-tables::table.summary.summarizers.count.label')); }
     summarize(_column: string, values: SummaryValues, customValue?: unknown): SummaryItem {
         if (this._icons) return { type: 'icon-count', label: this.getLabel(), value: '', labelHidden: this._labelHidden, icons: Array.isArray(customValue) ? (customValue as IconCount[]) : [] };
         return this.item(customValue ?? values.count);
@@ -924,7 +924,7 @@ export class Group<R = any> {
 }
 
 /**
- * Column layout: as soon as a table has one, records are rendered as cards (`fi-ta-content`) instead of table rows,
+ * Column layout: as soon as a table has one, records are rendered as cards (`nv-ta-content`) instead of table rows,
  * and sorting goes through a "Sort by" select.
  */
 export abstract class ColumnLayout<R = any> {
@@ -947,7 +947,7 @@ export abstract class ColumnLayout<R = any> {
     canGrow(): boolean { return this._grow ?? true; }
     visibleFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._visibleFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
     hiddenFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._hiddenFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
-    getResponsiveClasses(): string[] { return [this._hiddenFrom ? `${this._hiddenFrom}:fi-hidden` : null, this._visibleFrom ? `${this._visibleFrom}:fi-visible` : null].filter((c): c is string => c !== null); }
+    getResponsiveClasses(): string[] { return [this._hiddenFrom ? `${this._hiddenFrom}:nv-hidden` : null, this._visibleFrom ? `${this._visibleFrom}:nv-visible` : null].filter((c): c is string => c !== null); }
     /** Columns of a parent `Grid` taken by the component: a number, `'full'`, or one per breakpoint. */
     columnSpan(span: number | string | Record<string, number | string>): this { this._columnSpan = typeof span === 'object' ? { default: 1, ...span } : { default: span }; return this; }
     columnSpanFull(): this { return this.columnSpan('full'); }
@@ -971,7 +971,7 @@ export class Split<R = any> extends ColumnLayout<R> {
     private _from: string | null = null;
     static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Split<R> { return configured(new Split<R>(children)); }
     from(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._from = breakpoint; return this; }
-    getClasses(): string[] { return ['fi-ta-split', ...(this._from ? [`${this._from}:fi-ta-split`] : [])]; }
+    getClasses(): string[] { return ['nv-ta-split', ...(this._from ? [`${this._from}:nv-ta-split`] : [])]; }
 }
 /** Columns stacked vertically. */
 export class Stack<R = any> extends ColumnLayout<R> {
@@ -981,7 +981,7 @@ export class Stack<R = any> extends ColumnLayout<R> {
     /** Gap between columns: 1 (small), 2 (medium) or 3 (large). */
     space(space: 1 | 2 | 3 | null = 1): this { this._space = space; return this; }
     alignment(alignment: 'start' | 'center' | 'end'): this { this._alignment = alignment; return this; }
-    getClasses(): string[] { return ['fi-ta-stack', `fi-align-${this._alignment}`, ...(this._space ? [`fi-gap-${['sm', 'md', 'lg'][this._space - 1]}`] : [])]; }
+    getClasses(): string[] { return ['nv-ta-stack', `nv-align-${this._alignment}`, ...(this._space ? [`nv-gap-${['sm', 'md', 'lg'][this._space - 1]}`] : [])]; }
 }
 /** Responsive grid of columns: `Grid.make(2)` (2 columns from `lg`) or `Grid.make({ default: 1, md: 2, xl: 3 })`. */
 export class Grid<R = any> extends ColumnLayout<R> {
@@ -999,15 +999,15 @@ export class Grid<R = any> extends ColumnLayout<R> {
     getGridColumns(): Record<string, number> { return this._gridColumns; }
     getClasses(): string[] {
         const columns = this._gridColumns;
-        const gap = (count: number) => (count === 1 ? 'fi-gap-sm' : 'fi-gap-lg');
-        return ['fi-ta-grid', gap(columns.default ?? 1), ...['sm', 'md', 'lg', 'xl', '2xl'].filter((breakpoint) => columns[breakpoint]).map((breakpoint) => `${breakpoint}:${gap(columns[breakpoint])}`)];
+        const gap = (count: number) => (count === 1 ? 'nv-gap-sm' : 'nv-gap-lg');
+        return ['nv-ta-grid', gap(columns.default ?? 1), ...['sm', 'md', 'lg', 'xl', '2xl'].filter((breakpoint) => columns[breakpoint]).map((breakpoint) => `${breakpoint}:${gap(columns[breakpoint])}`)];
     }
     async renderContent(children: string[]): Promise<string> { return `<div ${new Attributes().grid(this._gridColumns).class(this.getClasses()).toHtml()}>${children.join('')}</div>`; }
 }
 /** Plain container, styled as a panel: often made collapsible. */
 export class Panel<R = any> extends ColumnLayout<R> {
     static make<R = any>(children: (Column<R> | ColumnLayout<R>)[]): Panel<R> { return configured(new Panel<R>(children)); }
-    getClasses(): string[] { return ['fi-ta-panel']; }
+    getClasses(): string[] { return ['nv-ta-panel']; }
 }
 /**
  * Your own markup inside the record: a function returning HTML, or the name of an EJS view rendered with `record` and
@@ -1034,14 +1034,14 @@ async function renderColumnLayout<R>(node: Column<R> | ColumnLayout<R>, record: 
         if (node.isHidden()) return '';
         const children = [];
         for (const child of node.getChildren()) children.push(await renderColumnLayout(child, record, key, visible));
-        const cell = new Attributes().gridColumn(node.getColumnSpan()).class([{ 'fi-growable': node.canGrow() }, ...node.getResponsiveClasses()]);
+        const cell = new Attributes().gridColumn(node.getColumnSpan()).class([{ 'nv-growable': node.canGrow() }, ...node.getResponsiveClasses()]);
         return `<div ${cell.toHtml()}>${await node.renderContent(children, record, key)}</div>`;
     }
     if (!visible.has(node)) return '';
     const alignment = node.getAlignment();
     // Inside a layout, text is inline and carries its own alignment.
-    const html = (await node.renderHtml(record, key)).replace(/class="([^"]*\bfi-ta-text\b[^"]*)"/, (_match, classes: string) => `class="${classes.replace(/ fi-align-\w+/g, '')} fi-inline${alignment ? ` fi-align-${alignment}` : ''}"`);
-    const cell = new Attributes().gridColumn({ default: 1 }).class([{ 'fi-growable': node.canGrow(true) }, 'fi-ta-col', ...(alignment ? [`fi-align-${alignment}`] : []), ...node.getResponsiveClasses()]);
+    const html = (await node.renderHtml(record, key)).replace(/class="([^"]*\bnv-ta-text\b[^"]*)"/, (_match, classes: string) => `class="${classes.replace(/ nv-align-\w+/g, '')} nv-inline${alignment ? ` nv-align-${alignment}` : ''}"`);
+    const cell = new Attributes().gridColumn({ default: 1 }).class([{ 'nv-growable': node.canGrow(true) }, 'nv-ta-col', ...(alignment ? [`nv-align-${alignment}`] : []), ...node.getResponsiveClasses()]);
     return `<div ${cell.toHtml()}>${html}</div>`;
 }
 
@@ -1080,7 +1080,7 @@ export class ColumnGroup<R = any> {
     getExtraHeaderAttributes(): ExtraAttributes { return mergeExtraAttributes(this._extraHeaderAttributes); }
     /** Classes of the group's `<th>`, as Filament renders it. */
     getHeaderClasses(): string[] {
-        return ['fi-ta-header-group-cell', ...(this._wrapHeader ? ['fi-wrapped'] : []), ...(this._alignment ? [`fi-align-${this._alignment}`] : []), ...(this._hiddenFrom ? [`${this._hiddenFrom}:fi-hidden`] : []), ...(this._visibleFrom ? [`${this._visibleFrom}:fi-visible`] : [])];
+        return ['nv-ta-header-group-cell', ...(this._wrapHeader ? ['nv-wrapped'] : []), ...(this._alignment ? [`nv-align-${this._alignment}`] : []), ...(this._hiddenFrom ? [`${this._hiddenFrom}:nv-hidden`] : []), ...(this._visibleFrom ? [`${this._visibleFrom}:nv-visible`] : [])];
     }
 }
 
@@ -1096,9 +1096,9 @@ const sanitizeCssColor = (value: unknown): string | null => (typeof value === 's
 const safeImageUrl = (value: unknown): string | null => (typeof value === 'string' && isLocalOrHttpUrl(value) ? value : null);
 /** Attributes of a copyable element (Filament's `filamentCopyable` Alpine component). */
 const copyableAttributes = (copied: string, label: string, message: string, duration: number): string[] => [
-    'x-data="filamentCopyable"', 'x-bind="bindings"',
-    `x-bind:aria-label="isStandalone ? ${e(js(t('filament::components/copyable.label', { label })))} : null"`,
-    `x-on:click.prevent.stop="${e(`if (isStandalone) {\n    copy(${js(copied)}, ${js(message)}, ${duration}, ${js(t('filament::components/copyable.messages.failed'))})\n} else {\n    window.navigator.clipboard.writeText(${js(copied)})\n    $tooltip(${js(message)}, {\n        theme: $store.theme,\n        timeout: ${duration},\n    })\n}`)}"`,
+    'x-data="navetteCopyable"', 'x-bind="bindings"',
+    `x-bind:aria-label="isStandalone ? ${e(js(t('navette::components/copyable.label', { label })))} : null"`,
+    `x-on:click.prevent.stop="${e(`if (isStandalone) {\n    copy(${js(copied)}, ${js(message)}, ${duration}, ${js(t('navette::components/copyable.messages.failed'))})\n} else {\n    window.navigator.clipboard.writeText(${js(copied)})\n    $tooltip(${js(message)}, {\n        theme: $store.theme,\n        timeout: ${duration},\n    })\n}`)}"`,
 ];
 
 /** Color swatch per state (a color, or a list of colors). */
@@ -1122,9 +1122,9 @@ export class ColorColumn<R = any> extends Column<R> {
     inline(condition = true): this { this._inline = condition; return this; }
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
-        const align = this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null;
-        const base = ['fi-ta-color', this._inline ? 'fi-inline' : null, align];
-        if (isBlankState(state)) return `<div class="${cls(base)}">${this._placeholder !== null ? `<p class="fi-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
+        const align = this._alignment && this._alignment !== 'start' ? `nv-align-${this._alignment}` : null;
+        const base = ['nv-ta-color', this._inline ? 'nv-inline' : null, align];
+        if (isBlankState(state)) return `<div class="${cls(base)}">${this._placeholder !== null ? `<p class="nv-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
         const items = (Array.isArray(state) ? state : [state]).map((item) => {
             const color = sanitizeCssColor(item);
             const copyable = resolveItem(this._copyable, record, item);
@@ -1132,13 +1132,13 @@ export class ColorColumn<R = any> extends Column<R> {
             const attributes: string[] = [];
             // The swatch shows its value only through its color: it is a named image for screen readers.
             if (!copyable && color) attributes.push(`aria-label="${e(color)}"`, 'role="img"');
-            if (copyable) attributes.push(...copyableAttributes(color ?? '', color ?? this.name, this._copyMessage ?? t('filament::components/copyable.messages.copied'), this._copyMessageDuration));
+            if (copyable) attributes.push(...copyableAttributes(color ?? '', color ?? this.name, this._copyMessage ?? t('navette::components/copyable.messages.copied'), this._copyMessageDuration));
             if (tooltip) attributes.push(`x-tooltip="${e(tooltipAttribute(tooltip))}"`);
-            attributes.push(`class="${cls(['fi-ta-color-item', copyable ? 'fi-copyable' : null])}"`);
+            attributes.push(`class="${cls(['nv-ta-color-item', copyable ? 'nv-copyable' : null])}"`);
             if (color) attributes.push(`style="background-color: ${color};"`);
             return `<div ${attributes.join(' ')}></div>`;
         });
-        return `<div class="${cls([...base, this._wrap ? 'fi-wrapped' : null])}">${items.join('')}</div>`;
+        return `<div class="${cls([...base, this._wrap ? 'nv-wrapped' : null])}">${items.join('')}</div>`;
     }
 }
 
@@ -1195,27 +1195,27 @@ export class ImageColumn<R = any> extends Column<R> {
     }
     async toHtml(record: R): Promise<string> {
         let state = await this.getState(record);
-        const align = this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null;
-        const base = ['fi-ta-image', this._inline ? 'fi-inline' : null, align];
+        const align = this._alignment && this._alignment !== 'start' ? `nv-align-${this._alignment}` : null;
+        const base = ['nv-ta-image', this._inline ? 'nv-inline' : null, align];
         const fallback = safeImageUrl(typeof this._defaultImageUrl === 'function' ? this._defaultImageUrl(record) : this._defaultImageUrl);
         let items = (Array.isArray(state) ? state : isBlankState(state) ? [] : [state]).filter((item) => safeImageUrl(item) !== null);
         if (!items.length && fallback) items = [fallback];
-        if (!items.length) return `<div class="${cls(base)}">${this._placeholder !== null ? `<p class="fi-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
+        if (!items.length) return `<div class="${cls(base)}">${this._placeholder !== null ? `<p class="nv-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
         const overLimit = this._limit !== null && items.length > this._limit ? items.length - this._limit : 0;
         if (overLimit) items = items.slice(0, this._limit!);
         const height = this._height ?? (this._stacked ? '2rem' : '2.5rem');
         const width = this._width ?? (this._circular || this._square ? height : null);
         const style = `height: ${height};${width ? ` width: ${width};` : ''}`;
-        const ring = this._stacked && this._ring !== null && Number.isInteger(this._ring) ? `fi-ta-image-ring fi-ta-image-ring-${this._ring}` : null;
+        const ring = this._stacked && this._ring !== null && Number.isInteger(this._ring) ? `nv-ta-image-ring nv-ta-image-ring-${this._ring}` : null;
         const overlap = this._stacked ? (this._overlap ?? 2) : null;
-        const classes = [...base, this._circular ? 'fi-circular' : null, this._wrap ? 'fi-wrapped' : null, this._stacked ? 'fi-stacked' : null, ring, overlap ? `fi-ta-image-overlap-${overlap}` : null];
+        const classes = [...base, this._circular ? 'nv-circular' : null, this._wrap ? 'nv-wrapped' : null, this._stacked ? 'nv-stacked' : null, ring, overlap ? `nv-ta-image-overlap-${overlap}` : null];
         const images = items.map((item) => {
             const alt = resolveItem(this._alt, record, item) ?? '';
             const tooltip = resolveItem(this._tooltip, record, item);
             const img = `<img alt="${e(alt)}" src="${e(String(item))}"${tooltip ? ` x-tooltip="${e(tooltipAttribute(tooltip))}"` : ''} style="${style}" />`;
             return this._extraImgAttributes.length ? mergeIntoFirstTag(img, this.getExtraImgAttributes(record, item)) : img;
         }).join('');
-        const remaining = overLimit && this._limitedRemainingText ? `<div class="${cls(['fi-ta-image-limited-remaining-text', this._limitedRemainingTextSize ? `fi-size-${this._limitedRemainingTextSize}` : null])}" style="${style}">+${overLimit}</div>` : '';
+        const remaining = overLimit && this._limitedRemainingText ? `<div class="${cls(['nv-ta-image-limited-remaining-text', this._limitedRemainingTextSize ? `nv-size-${this._limitedRemainingTextSize}` : null])}" style="${style}">+${overLimit}</div>` : '';
         return `<div class="${cls(classes)}">${images}${remaining}</div>`;
     }
 }
@@ -1277,9 +1277,9 @@ export class IconColumn<R = any> extends Column<R> {
     getIconAndColor(record: R, item: unknown): { icon: string | null; color: string | null } { return { icon: this.iconOf(record, item), color: this.colorOf(record, item) }; }
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
-        const align = this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null;
-        const base = ['fi-ta-icon', this._inline ? 'fi-inline' : null, align];
-        if (isBlankState(state)) return `<div class="${cls(base)}">${this._placeholder !== null ? `<p class="fi-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
+        const align = this._alignment && this._alignment !== 'start' ? `nv-align-${this._alignment}` : null;
+        const base = ['nv-ta-icon', this._inline ? 'nv-inline' : null, align];
+        if (isBlankState(state)) return `<div class="${cls(base)}">${this._placeholder !== null ? `<p class="nv-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
         const items = Array.isArray(state) ? state : [state];
         const html = items.map((item) => {
             const name = this.iconOf(record, item);
@@ -1289,10 +1289,10 @@ export class IconColumn<R = any> extends Column<R> {
             const tooltip = resolveItem(this._tooltip, record, item);
             const attributes = new Attributes(tooltip ? { 'x-tooltip': tooltipAttribute(tooltip) } : {}).class(color ? (colorManager?.getComponentClasses('icon-column', color) ?? []) : []);
             // The icon is hidden from assistive technology: a text alternative goes with it.
-            const alternative = tooltip ? tooltip : this.enumCaseOf(record, item)?.getLabel() ?? (this.isBooleanItem(item) ? t(`filament-tables::table.columns.icon.boolean.${item === true || item === 1 || item === '1' ? 'true' : 'false'}`) : (typeof item === 'string' || typeof item === 'number') ? String(item) : null);
-            return `${icon(name, { size: (size && size !== 'base' ? size : 'lg') as any, attributes })}${alternative ? `<span class="fi-sr-only">${e(alternative)}</span>` : ''}`;
+            const alternative = tooltip ? tooltip : this.enumCaseOf(record, item)?.getLabel() ?? (this.isBooleanItem(item) ? t(`navette-tables::table.columns.icon.boolean.${item === true || item === 1 || item === '1' ? 'true' : 'false'}`) : (typeof item === 'string' || typeof item === 'number') ? String(item) : null);
+            return `${icon(name, { size: (size && size !== 'base' ? size : 'lg') as any, attributes })}${alternative ? `<span class="nv-sr-only">${e(alternative)}</span>` : ''}`;
         }).join('');
-        return `<div class="${cls([...base, this._listWithLineBreaks ? 'fi-ta-icon-has-line-breaks' : null, this._wrap ? 'fi-wrapped' : null])}">${html}</div>`;
+        return `<div class="${cls([...base, this._listWithLineBreaks ? 'nv-ta-icon-has-line-breaks' : null, this._wrap ? 'nv-wrapped' : null])}">${html}</div>`;
     }
 }
 
@@ -1390,7 +1390,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
     /** Tooltip on the control, shown while no error is displayed. */
     tooltip(tooltip: ((record: R) => string | null) | string | null): this { this._tooltip = tooltip; return this; }
     getUpdateStateMessages(): Record<'saving' | 'saved' | 'failure', string> {
-        return { saving: t('filament-tables::table.columns.editable.saving'), saved: t('filament-tables::table.columns.editable.saved'), failure: t('filament-tables::table.columns.editable.failure') };
+        return { saving: t('navette-tables::table.columns.editable.saving'), saved: t('navette-tables::table.columns.editable.saved'), failure: t('navette-tables::table.columns.editable.failure') };
     }
     /** Value written from a validated value: blank values become `null`. */
     castState(input: unknown): unknown { return isBlank(input) ? null : input; }
@@ -1411,7 +1411,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
         else if (this.name.includes('.')) {
             const [attribute, ...path] = this.name.split('.');
             const current = (record as any)?.[attribute];
-            if (path.length !== 1 || !current || typeof current !== 'object' || Array.isArray(current)) return { error: t('filament-tables::table.columns.editable.unavailable') };
+            if (path.length !== 1 || !current || typeof current !== 'object' || Array.isArray(current)) return { error: t('navette-tables::table.columns.editable.unavailable') };
             await adapter.update(adapter.getKey(record), { [attribute]: { ...current, [path[0]]: state } });
         } else await adapter.update(adapter.getKey(record), { [this.name]: state });
         await this._afterStateUpdated?.({ state, record, relatedRecord });
@@ -1438,7 +1438,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
     protected editableAttributes(component: string, asset: string, recordKey: string | number, state: unknown): Attributes {
         return new Attributes().merge({
             'x-load': 'x-load',
-            'x-load-src': views.render('filament-tables::asset', { path: `columns/${asset}` }).trim(),
+            'x-load-src': views.render('navette-tables::asset', { path: `columns/${asset}` }).trim(),
             'x-data': `${component}({
                     messages: ${js(this.getUpdateStateMessages())},
                     name: ${js(this.name)},
@@ -1450,7 +1450,7 @@ export abstract class EditableColumn<R = any> extends Column<R> {
             'x-on:keydown.capture': 'preventEdit($event)',
         });
     }
-    protected static readonly STATUS_HTML = `<p x-cloak x-show="error" x-bind:id="$id('table-column-error')" x-ref="error" x-text="error" class="fi-sr-only"></p><p role="status" aria-live="polite" aria-atomic="true" x-text="status" class="fi-sr-only"></p>`;
+    protected static readonly STATUS_HTML = `<p x-cloak x-show="error" x-bind:id="$id('table-column-error')" x-ref="error" x-text="error" class="nv-sr-only"></p><p role="status" aria-live="polite" aria-atomic="true" x-text="status" class="nv-sr-only"></p>`;
 }
 
 /**
@@ -1551,11 +1551,11 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     noOptionsSearchResultsMessage(message: string | null): this { this._messages.noSearchResults = message; return this; }
     optionsSearchPrompt(message: string | null): this { this._messages.searchPrompt = message; return this; }
     optionsSearchingMessage(message: string | null): this { this._messages.searching = message; return this; }
-    getOptionsLoadingMessage(): string { return this._messages.loading ?? t('filament-forms::components.select.loading_message'); }
-    getNoOptionsMessage(): string { return this._messages.noOptions ?? t('filament-tables::table.columns.select.no_options_message'); }
-    getNoOptionsSearchResultsMessage(): string { return this._messages.noSearchResults ?? t('filament-tables::table.columns.select.no_search_results_message'); }
-    getOptionsSearchPrompt(): string { return this._messages.searchPrompt ?? t('filament-tables::table.columns.select.search_prompt'); }
-    getOptionsSearchingMessage(): string { return this._messages.searching ?? t('filament-tables::table.columns.select.searching_message'); }
+    getOptionsLoadingMessage(): string { return this._messages.loading ?? t('navette-forms::components.select.loading_message'); }
+    getNoOptionsMessage(): string { return this._messages.noOptions ?? t('navette-tables::table.columns.select.no_options_message'); }
+    getNoOptionsSearchResultsMessage(): string { return this._messages.noSearchResults ?? t('navette-tables::table.columns.select.no_search_results_message'); }
+    getOptionsSearchPrompt(): string { return this._messages.searchPrompt ?? t('navette-tables::table.columns.select.search_prompt'); }
+    getOptionsSearchingMessage(): string { return this._messages.searching ?? t('navette-tables::table.columns.select.searching_message'); }
     private _searchOptionLabels = true;
     private _searchOptionValues = false;
     /** Fields the JavaScript select searches in, among the options it already has: labels (by default) and values. */
@@ -1633,7 +1633,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         const optionLabel = found === null ? null : this.labelForDisplay(found);
         const isDisabled = await this.isDisabledFor(record);
         const isNative = this.isNative();
-        const placeholder = this._placeholder ?? t('filament-forms::components.select.placeholder');
+        const placeholder = this._placeholder ?? t('navette-forms::components.select.placeholder');
         const optionsForJs = isNative ? [] : this.optionsForJs(options, record);
         // As in Filament: options depending on the record are fetched again when the select opens.
         const hasDynamicOptions = !isNative && (typeof this._options === 'function' || (this._optionsRelationship !== null && !this.hasLazyRelationshipOptions()));
@@ -1643,8 +1643,8 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
                     ariaLabel: ${js(this.getLabel())},
                     canOptionLabelsWrap: ${js(this._canOptionLabelsWrap)},
                     canSelectPlaceholder: ${js(this._selectablePlaceholder)},
-                    clearButtonLabel: ${js(t('filament-forms::components.select.actions.clear.label'))},
-                    errorMessage: ${js(t('filament-forms::components.select.error_message'))},
+                    clearButtonLabel: ${js(t('navette-forms::components.select.actions.clear.label'))},
+                    errorMessage: ${js(t('navette-forms::components.select.error_message'))},
                     hasDynamicOptions: ${js(hasDynamicOptions)},
                     hasDynamicSearchResults: ${js(this.hasDynamicSearchResults())},
                     hasInitialNoOptionsMessage: ${js(hasInitialNoOptionsMessage)},
@@ -1666,7 +1666,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
                     searchableOptionFields: ${js(this.getSearchableOptionFields())},
                     searchDebounce: ${js(this._searchDebounce)},
                     searchingMessage: ${js(this.getOptionsSearchingMessage())},
-                    searchLabel: ${js(t('filament-forms::components.select.search_label'))},
+                    searchLabel: ${js(t('navette-forms::components.select.search_label'))},
                     searchPrompt: ${js(this.getOptionsSearchPrompt())},
                     state: ${js(state === null || state === undefined ? null : value)},
                 })`;
@@ -1676,21 +1676,21 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
             'x-bind:aria-invalid': "error ? 'true' : null", 'x-bind:aria-busy': "isLoading ? 'true' : null",
             'x-bind:aria-describedby': "getAccessibilityAttributes([])[ 'aria-describedby' ]", 'x-bind:disabled': isDisabled ? null : 'isLoading', 'x-on:change': 'clearError()',
             'x-tooltip': tooltip,
-        }).class(['fi-select-input']);
+        }).class(['nv-select-input']);
         const control = isNative
             ? `<select x-model="state" ${select.toHtml()}>${this._selectablePlaceholder ? `<option value="">${e(placeholder)}</option>` : ''}${options.map(([option, label]) => `<option${this.isOptionDisabled(option, label, record) ? ' disabled' : ''} value="${e(option)}">${e(this.labelForDisplay(label))}</option>`).join('')}</select>`
-            : '<div wire:ignore class="fi-select-input"><div x-ref="select"></div></div>';
-        return `<div wire:ignore.self x-load="x-load" x-load-src="${e(views.render('filament-tables::asset', { path: 'columns/select' }).trim())}" x-data="${e(config)}" x-id="['table-column-error']" x-on:click.capture="preventEdit($event)" x-on:keydown.capture="preventEdit($event)" class="${cls(['fi-ta-select', this._inline ? 'fi-inline' : null])}"><input type="hidden" value="${e(value)}" data-option-label="${e(optionLabel ?? '')}" data-disabled="${isDisabled ? 'true' : 'false'}" x-ref="serverState" /><div x-bind:class="{
-                    'fi-disabled': isLoading || ${js(isDisabled)},
-                    'fi-invalid': error !== undefined,
-                }" x-on:click.prevent.stop${isNative ? '' : ` x-tooltip="${e(tooltip)}"`} class="fi-input-wrp">${control}</div><p x-cloak x-show="error" x-bind:id="$id('table-column-error')" x-ref="error" x-text="error" class="fi-sr-only"></p><p role="status" aria-live="polite" aria-atomic="true" x-text="status" class="fi-sr-only"></p></div>`;
+            : '<div wire:ignore class="nv-select-input"><div x-ref="select"></div></div>';
+        return `<div wire:ignore.self x-load="x-load" x-load-src="${e(views.render('navette-tables::asset', { path: 'columns/select' }).trim())}" x-data="${e(config)}" x-id="['table-column-error']" x-on:click.capture="preventEdit($event)" x-on:keydown.capture="preventEdit($event)" class="${cls(['nv-ta-select', this._inline ? 'nv-inline' : null])}"><input type="hidden" value="${e(value)}" data-option-label="${e(optionLabel ?? '')}" data-disabled="${isDisabled ? 'true' : 'false'}" x-ref="serverState" /><div x-bind:class="{
+                    'nv-disabled': isLoading || ${js(isDisabled)},
+                    'nv-invalid': error !== undefined,
+                }" x-on:click.prevent.stop${isNative ? '' : ` x-tooltip="${e(tooltip)}"`} class="nv-input-wrp">${control}</div><p x-cloak x-show="error" x-bind:id="$id('table-column-error')" x-ref="error" x-text="error" class="nv-sr-only"></p><p role="status" aria-live="polite" aria-atomic="true" x-text="status" class="nv-sr-only"></p></div>`;
     }
 }
 
 /** Boolean value received from the browser (already checked by the `boolean` rule): `true`, `false` or `null`. */
 const toBoolean = (value: unknown): boolean | null => (isBlank(value) ? null : value === true || value === 1 || value === '1');
 const ALIGNMENTS = ['start', 'center', 'end', 'left', 'right', 'justify', 'between'];
-const alignmentClass = (alignment: string | null) => (alignment && ALIGNMENTS.includes(alignment) ? `fi-align-${alignment}` : null);
+const alignmentClass = (alignment: string | null) => (alignment && ALIGNMENTS.includes(alignment) ? `nv-align-${alignment}` : null);
 
 /** In-cell editable toggle. The received value must be a boolean (`boolean` rule by default). */
 export class ToggleColumn<R = any> extends EditableColumn<R> {
@@ -1713,17 +1713,17 @@ export class ToggleColumn<R = any> extends EditableColumn<R> {
         // Gray is the toggle's default color and adds no class.
         const colorClasses = (color: string) => (color === 'gray' ? [] : (colorManager?.getComponentClasses('toggle', color) ?? []));
         const onColorClasses = colorClasses(this._onColor ?? 'primary');
-        const onClasses = ['fi-toggle-on', ...onColorClasses].join(' ');
-        const offClasses = ['fi-toggle-off', ...colorClasses(this._offColor ?? 'gray')].join(' ');
+        const onClasses = ['nv-toggle-on', ...onColorClasses].join(' ');
+        const offClasses = ['nv-toggle-off', ...colorClasses(this._offColor ?? 'gray')].join(' ');
         const toggleIcon = (name: string | null) => (name ? icon(name, { size: 'xs' }) : '');
-        const outer = this.editableAttributes('toggleTableColumn', 'toggle', recordKey, state).class(['fi-ta-toggle', alignmentClass(this._alignment)]);
+        const outer = this.editableAttributes('toggleTableColumn', 'toggle', recordKey, state).class(['nv-ta-toggle', alignmentClass(this._alignment)]);
         const button = new Attributes().merge({
             'aria-disabled': 'true', 'aria-label': e(this.getLabel()),disabled: isDisabled, 'wire:loading.attr': 'disabled', 'wire:target': LOADING_TARGETS,
             'x-bind:aria-invalid': "error ? 'true' : null", 'x-bind:aria-busy': "isLoading ? 'true' : null", 'x-bind:aria-describedby': "getAccessibilityAttributes()['aria-describedby']",
             'x-tooltip': this.tooltipExpression(record),
-        }).class(['fi-toggle']);
+        }).class(['nv-toggle']);
         // The live toggle is hidden (x-cloak) until Alpine starts; a static copy is shown meanwhile.
-        return `<div wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${state ? 1 : 0}" x-ref="serverState" /><div aria-checked="${state ? 'true' : 'false'}" x-bind:aria-checked="state ? 'true' : 'false'" x-bind:tabindex="$el.hasAttribute('disabled') ? '-1' : '0'" x-bind:aria-disabled="isLoading || $el.hasAttribute('disabled') ? 'true' : null" x-on:click.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-on:keydown.enter.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-on:keydown.space.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-bind:class="state ? ${js(onClasses)} : ${js(offClasses)}"${state ? ' x-cloak' : ''} role="switch" ${button.toHtml()}><div><div aria-hidden="true">${toggleIcon(this._offIcon)}</div><div aria-hidden="true">${toggleIcon(this._onIcon)}</div></div></div>${state ? `<div x-cloak="inline-flex" wire:ignore class="${e(['fi-toggle fi-toggle-on fi-hidden', ...onColorClasses].join(' '))}"><div><div aria-hidden="true"></div><div aria-hidden="true">${toggleIcon(this._onIcon)}</div></div></div>` : ''}${EditableColumn.STATUS_HTML}</div>`;
+        return `<div wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${state ? 1 : 0}" x-ref="serverState" /><div aria-checked="${state ? 'true' : 'false'}" x-bind:aria-checked="state ? 'true' : 'false'" x-bind:tabindex="$el.hasAttribute('disabled') ? '-1' : '0'" x-bind:aria-disabled="isLoading || $el.hasAttribute('disabled') ? 'true' : null" x-on:click.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-on:keydown.enter.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-on:keydown.space.prevent.stop="if (! $el.hasAttribute('disabled')) { clearError(); state = ! state }" x-bind:class="state ? ${js(onClasses)} : ${js(offClasses)}"${state ? ' x-cloak' : ''} role="switch" ${button.toHtml()}><div><div aria-hidden="true">${toggleIcon(this._offIcon)}</div><div aria-hidden="true">${toggleIcon(this._onIcon)}</div></div></div>${state ? `<div x-cloak="inline-flex" wire:ignore class="${e(['nv-toggle nv-toggle-on nv-hidden', ...onColorClasses].join(' '))}"><div><div aria-hidden="true"></div><div aria-hidden="true">${toggleIcon(this._onIcon)}</div></div></div>` : ''}${EditableColumn.STATUS_HTML}</div>`;
     }
 }
 
@@ -1735,15 +1735,15 @@ export class CheckboxColumn<R = any> extends EditableColumn<R> {
     async toHtml(record: R, recordKey: string | number = ''): Promise<string> {
         const state = Boolean(await this.getState(record));
         const isDisabled = await this.isDisabledFor(record);
-        const outer = this.editableAttributes('checkboxTableColumn', 'checkbox', recordKey, state).class(['fi-ta-checkbox', alignmentClass(this._alignment)]);
+        const outer = this.editableAttributes('checkboxTableColumn', 'checkbox', recordKey, state).class(['nv-ta-checkbox', alignmentClass(this._alignment)]);
         const input = new Attributes().merge({
             'aria-label': e(this.getLabel()),disabled: true, 'wire:loading.attr': 'disabled', 'wire:target': LOADING_TARGETS,
             'x-bind:aria-invalid': "error ? 'true' : null", 'x-bind:aria-busy': "isLoading ? 'true' : null", 'x-bind:aria-describedby': "getAccessibilityAttributes([])[ 'aria-describedby' ]",
             'x-bind:disabled': isDisabled ? null : 'isLoading', 'x-on:change': 'clearError()', 'x-tooltip': this.tooltipExpression(record),
-        }).class(['fi-checkbox-input']);
+        }).class(['nv-checkbox-input']);
         return `<div x-on:click.stop wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${state ? 1 : 0}" x-ref="serverState" /><input type="checkbox" x-bind:class="{
-                    'fi-valid': ! error,
-                    'fi-invalid': error,
+                    'nv-valid': ! error,
+                    'nv-invalid': error,
                 }" x-model="state" ${input.toHtml()} />${EditableColumn.STATUS_HTML}</div>`;
     }
 }
@@ -1788,20 +1788,20 @@ export class TextInputColumn<R = any> extends EditableColumn<R> {
         const isDisabled = await this.isDisabledFor(record);
         const type = this._mask ? 'text' : this._type;
         // Affix icon: gray is the default color and adds no class.
-        const affixIcon = (name: string | null, color: string | null) => (name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color.replace(/[^a-zA-Z0-9_-]/g, '')}`] : []) }) : '');
-        const outer = this.editableAttributes('textInputTableColumn', 'text-input', recordKey, state).class(['fi-ta-text-input']);
+        const affixIcon = (name: string | null, color: string | null) => (name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['nv-color', `nv-color-${color.replace(/[^a-zA-Z0-9_-]/g, '')}`] : []) }) : '');
+        const outer = this.editableAttributes('textInputTableColumn', 'text-input', recordKey, state).class(['nv-ta-text-input']);
         const input = new Attributes().merge({
             'aria-label': e(this.getLabel()),disabled: true, 'wire:loading.attr': 'disabled', 'wire:target': LOADING_TARGETS,
             'x-bind:aria-invalid': "error ? 'true' : null", 'x-bind:aria-busy': "isLoading ? 'true' : null", 'x-bind:aria-describedby': "getAccessibilityAttributes([])[ 'aria-describedby' ]",
             'x-bind:disabled': isDisabled ? null : 'isLoading', 'x-on:input': 'clearError()', inputmode: this._inputMode, placeholder: this._placeholder ? e(this._placeholder) : null, step: this._step,
             type, 'x-mask': this._mask, 'x-tooltip': this.tooltipExpression(record),
-        }).class(['fi-input', alignmentClass(this._alignment ?? 'start')]);
-        const prefix = this._prefixIcon || this._prefix ? `<div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content ${this._prefixInline ? 'fi-inline' : ''} ${this._prefix ? 'fi-input-wrp-prefix-has-label' : ''}">${affixIcon(this._prefixIcon, this._prefixIconColor)}${this._prefix ? `<span class="fi-input-wrp-label">${e(this._prefix)}</span>` : ''}</div>` : '';
-        const suffix = this._suffixIcon || this._suffix ? `<div class="fi-input-wrp-suffix ${this._suffixInline ? 'fi-inline' : ''} ${this._suffix ? 'fi-input-wrp-suffix-has-label' : ''}">${this._suffix ? `<span class="fi-input-wrp-label">${e(this._suffix)}</span>` : ''}${affixIcon(this._suffixIcon, this._suffixIconColor)}</div>` : '';
+        }).class(['nv-input', alignmentClass(this._alignment ?? 'start')]);
+        const prefix = this._prefixIcon || this._prefix ? `<div class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content ${this._prefixInline ? 'nv-inline' : ''} ${this._prefix ? 'nv-input-wrp-prefix-has-label' : ''}">${affixIcon(this._prefixIcon, this._prefixIconColor)}${this._prefix ? `<span class="nv-input-wrp-label">${e(this._prefix)}</span>` : ''}</div>` : '';
+        const suffix = this._suffixIcon || this._suffix ? `<div class="nv-input-wrp-suffix ${this._suffixInline ? 'nv-inline' : ''} ${this._suffix ? 'nv-input-wrp-suffix-has-label' : ''}">${this._suffix ? `<span class="nv-input-wrp-label">${e(this._suffix)}</span>` : ''}${affixIcon(this._suffixIcon, this._suffixIconColor)}</div>` : '';
         return `<div wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${e(state)}" x-ref="serverState" /><div x-bind:class="{
-                    'fi-disabled': isLoading || ${js(isDisabled)},
-                    'fi-invalid': error !== undefined,
-                }" x-on:click.prevent.stop class="fi-input-wrp">${prefix}<div class="fi-input-wrp-content-ctn"><input${type === 'color' ? ` x-on:click="if (typeof $el.showPicker === 'function') { $el.showPicker() }"` : ''} x-model.lazy="state" ${input.toHtml()} /></div>${suffix}</div>${EditableColumn.STATUS_HTML}</div>`;
+                    'nv-disabled': isLoading || ${js(isDisabled)},
+                    'nv-invalid': error !== undefined,
+                }" x-on:click.prevent.stop class="nv-input-wrp">${prefix}<div class="nv-input-wrp-content-ctn"><input${type === 'color' ? ` x-on:click="if (typeof $el.showPicker === 'function') { $el.showPicker() }"` : ''} x-model.lazy="state" ${input.toHtml()} /></div>${suffix}</div>${EditableColumn.STATUS_HTML}</div>`;
     }
 }
 
@@ -1840,7 +1840,7 @@ export class BooleanColumn<R = any> extends IconColumn<R> {
  * must accept it, and the value must pass the column's rules.
  */
 export async function updateTableColumnState<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, columnName: unknown, recordKey: unknown, input: unknown, options: { authorize?: (record: R) => boolean | Promise<boolean> } = {}): Promise<unknown> {
-    const unavailable = { error: t('filament-tables::table.columns.editable.unavailable') };
+    const unavailable = { error: t('navette-tables::table.columns.editable.unavailable') };
     const column = getVisibleColumns(table, host).find((c) => c.name === columnName);
     if (!(column instanceof EditableColumn)) return unavailable;
     if (typeof recordKey !== 'string' && typeof recordKey !== 'number') return unavailable;
@@ -2060,8 +2060,8 @@ export class SelectFilter extends BaseFilter {
     getRelationshipName(): string | null { return this._relationship?.name ?? null; }
     /** Label of the "None" option of `relationship(..., hasEmptyOption: true)`. */
     emptyRelationshipOptionLabel(label: string | null): this { this._emptyOptionLabel = label; return this; }
-    getEmptyRelationshipOptionLabel(): string { return this._emptyOptionLabel ?? t('filament-tables::table.filters.select.relationship.empty_option_label'); }
-    getFormDefinition() { return { placeholder: this._placeholder ?? t('filament-tables::table.filters.select.placeholder'), options: Array.isArray(this._options) && !this._relationship ? this._options : [] }; }
+    getEmptyRelationshipOptionLabel(): string { return this._emptyOptionLabel ?? t('navette-tables::table.filters.select.relationship.empty_option_label'); }
+    getFormDefinition() { return { placeholder: this._placeholder ?? t('navette-tables::table.filters.select.placeholder'), options: Array.isArray(this._options) && !this._relationship ? this._options : [] }; }
     getFormOptions(host: unknown = this._host): Promise<[string, string][]> {
         if (this._relationship) return this.loadRelationshipOptions(host, null);
         return typeof this._options === 'function' ? this._options() : Promise.resolve(this._options);
@@ -2153,8 +2153,8 @@ export class TernaryFilter extends BaseFilter {
     trueLabel(label: string | null): this { this._trueLabel = label; return this; }
     falseLabel(label: string | null): this { this._falseLabel = label; return this; }
     placeholder(label: string | null): this { this._placeholder = label; return this; }
-    getTrueLabel(): string { return this._trueLabel ?? t('filament-forms::components.select.boolean.true'); }
-    getFalseLabel(): string { return this._falseLabel ?? t('filament-forms::components.select.boolean.false'); }
+    getTrueLabel(): string { return this._trueLabel ?? t('navette-forms::components.select.boolean.true'); }
+    getFalseLabel(): string { return this._falseLabel ?? t('navette-forms::components.select.boolean.false'); }
     /** "Yes" shows records where the column is filled, "No" those where it is empty. */
     nullable(condition = true): this { this._nullable = condition; return this; }
     /** Custom conditions for "yes", "no" and, optionally, the empty choice. */
@@ -2194,10 +2194,10 @@ export class TernaryFilter extends BaseFilter {
 export class TrashedFilter extends TernaryFilter {
     constructor(name = 'trashed') { super(name); }
     static make(name = 'trashed'): TrashedFilter { return configured(new TrashedFilter(name)); }
-    getLabel(): string { return this._label ?? t('filament-tables::table.filters.trashed.label'); }
-    getTrueLabel(): string { return this._trueLabel ?? t('filament-tables::table.filters.trashed.with_trashed'); }
-    getFalseLabel(): string { return this._falseLabel ?? t('filament-tables::table.filters.trashed.only_trashed'); }
-    getFormDefinition() { return { placeholder: this._placeholder ?? t('filament-tables::table.filters.trashed.without_trashed'), options: [['1', this.getTrueLabel()], ['0', this.getFalseLabel()]] as [string, string][] }; }
+    getLabel(): string { return this._label ?? t('navette-tables::table.filters.trashed.label'); }
+    getTrueLabel(): string { return this._trueLabel ?? t('navette-tables::table.filters.trashed.with_trashed'); }
+    getFalseLabel(): string { return this._falseLabel ?? t('navette-tables::table.filters.trashed.only_trashed'); }
+    getFormDefinition() { return { placeholder: this._placeholder ?? t('navette-tables::table.filters.trashed.without_trashed'), options: [['1', this.getTrueLabel()], ['0', this.getFalseLabel()]] as [string, string][] }; }
     apply(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void {
         const value = this.sanitizeState(state).value;
         query.trashed = value === '1' ? 'with' : value === '0' ? 'only' : 'without';
@@ -2306,7 +2306,7 @@ export class BulkActionGroup {
     tooltip(tooltip: string | null): this { this._tooltip = tooltip; return this; }
     /** Placement of the menu (`bottom-start` by default), e.g. `bottom-end`. */
     dropdownPlacement(placement: string | null): this { this._placement = placement !== null && /^(top|bottom|left|right)(-(start|end))?$/.test(placement) ? placement : null; return this; }
-    getLabel(): string { return this._label ?? t('filament-tables::table.actions.open_bulk_actions.label'); }
+    getLabel(): string { return this._label ?? t('navette-tables::table.actions.open_bulk_actions.label'); }
     getIcon(): string { return this._icon ?? icons.resolve('tables::actions.open-bulk-actions') ?? 'm-ellipsis-vertical'; }
     getColor(): string { return this._color ?? 'gray'; }
     getTooltip(): string | null { return this._tooltip; }
@@ -2570,10 +2570,10 @@ export class Table<R = any> {
     filtersResetAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.reset = configure; return this; }
     getFiltersActionView(kind: 'trigger' | 'apply' | 'reset' | 'removeAll'): FiltersActionView {
         const defaults = {
-            trigger: { label: t('filament-tables::table.actions.filter.label'), icon: icons.resolve('tables::actions.filter') ?? 'm-funnel', color: 'gray', view: 'icon-button' as const },
-            apply: { label: t('filament-tables::table.filters.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const },
-            reset: { label: t('filament-tables::table.filters.actions.reset.label'), icon: null, color: this._filtersResetPosition === 'footer' ? 'gray' : 'danger', view: this._filtersResetPosition === 'footer' ? 'button' as const : 'link' as const },
-            removeAll: { label: t('filament-tables::table.filters.actions.remove_all.label'), icon: icons.resolve('tables::filters.remove-all-button') ?? 'm-x-mark', color: 'gray', view: 'icon-button' as const },
+            trigger: { label: t('navette-tables::table.actions.filter.label'), icon: icons.resolve('tables::actions.filter') ?? 'm-funnel', color: 'gray', view: 'icon-button' as const },
+            apply: { label: t('navette-tables::table.filters.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const },
+            reset: { label: t('navette-tables::table.filters.actions.reset.label'), icon: null, color: this._filtersResetPosition === 'footer' ? 'gray' : 'danger', view: this._filtersResetPosition === 'footer' ? 'button' as const : 'link' as const },
+            removeAll: { label: t('navette-tables::table.filters.actions.remove_all.label'), icon: icons.resolve('tables::filters.remove-all-button') ?? 'm-x-mark', color: 'gray', view: 'icon-button' as const },
         }[kind];
         const configure = this._filterActions[kind];
         if (!configure) return { ...defaults, hidden: false, customized: false };
@@ -2584,7 +2584,7 @@ export class Table<R = any> {
     /** Customizes the button that opens the grouping settings: `groupRecordsTriggerAction((action) => action.button().label('Group records'))`. */
     groupRecordsTriggerAction(configure: ((action: FiltersAction) => FiltersAction | void) | null): this { this._groupRecordsTriggerAction = configure; return this; }
     getGroupRecordsTriggerActionView(): FiltersActionView {
-        const defaults = { label: t('filament-tables::table.actions.group.label'), icon: icons.resolve('tables::actions.group') ?? 'm-rectangle-stack', color: 'gray', view: 'icon-button' as const };
+        const defaults = { label: t('navette-tables::table.actions.group.label'), icon: icons.resolve('tables::actions.group') ?? 'm-rectangle-stack', color: 'gray', view: 'icon-button' as const };
         if (!this._groupRecordsTriggerAction) return { ...defaults, hidden: false, customized: false };
         const action = new FiltersAction();
         return { ...(this._groupRecordsTriggerAction(action) ?? action).resolve(defaults), customized: true };
@@ -2673,7 +2673,7 @@ export class Table<R = any> {
     getEmptyStateActions(): any[] { return this._emptyStateActions; }
     /** Replaces the whole empty state with your HTML (inserted as it is: escape your data with `e()`). */
     emptyState(html: string | (() => string | Promise<string>) | null): this { this._emptyState = html; return this; }
-    getEmptyStateHeading(): string { const heading = typeof this._emptyStateHeading === 'function' ? this._emptyStateHeading() : this._emptyStateHeading; return heading ?? t('filament-tables::table.empty.heading', { model: this.getPluralModelLabel() }); }
+    getEmptyStateHeading(): string { const heading = typeof this._emptyStateHeading === 'function' ? this._emptyStateHeading() : this._emptyStateHeading; return heading ?? t('navette-tables::table.empty.heading', { model: this.getPluralModelLabel() }); }
     getEmptyStateDescription(): string | null { return typeof this._emptyStateDescription === 'function' ? this._emptyStateDescription() : this._emptyStateDescription; }
     getEmptyStateIcon(): string { return this._emptyStateIcon ?? icons.resolve('tables::empty-state') ?? 'o-x-mark'; }
     async getCustomEmptyState(): Promise<string | null> { return typeof this._emptyState === 'function' ? this._emptyState() : this._emptyState; }
@@ -2735,7 +2735,7 @@ export class Table<R = any> {
     /** Customizes the button that toggles reordering: `reorderRecordsTriggerAction((action, isReordering) => action.button().label(isReordering ? 'Done' : 'Reorder'))`. */
     reorderRecordsTriggerAction(configure: ((action: TableTriggerAction, isReordering: boolean) => TableTriggerAction | void) | null): this { this._reorderTrigger = configure; return this; }
     getReorderRecordsTriggerActionView(isReordering: boolean) {
-        const defaults = { label: t(isReordering ? 'filament-tables::table.actions.disable_reordering.label' : 'filament-tables::table.actions.enable_reordering.label'), icon: icons.resolve(isReordering ? 'tables::actions.disable-reordering' : 'tables::actions.enable-reordering') ?? (isReordering ? 'm-check' : 'm-arrows-up-down'), color: 'gray', view: 'icon-button' as const };
+        const defaults = { label: t(isReordering ? 'navette-tables::table.actions.disable_reordering.label' : 'navette-tables::table.actions.enable_reordering.label'), icon: icons.resolve(isReordering ? 'tables::actions.disable-reordering' : 'tables::actions.enable-reordering') ?? (isReordering ? 'm-check' : 'm-arrows-up-down'), color: 'gray', view: 'icon-button' as const };
         if (!this._reorderTrigger) return { ...defaults, hidden: false, customized: false };
         const action = new TableTriggerAction();
         return { ...(this._reorderTrigger(action, isReordering) ?? action).resolve(defaults), customized: true };
@@ -2889,12 +2889,12 @@ export class Table<R = any> {
     columnManagerApplyAction(configure: ((action: TableTriggerAction) => TableTriggerAction | void) | null): this { this._columnManagerApply = configure; return this; }
     getColumnManagerTriggerAction(): TableTriggerAction { const action = new TableTriggerAction(); return this._columnManagerTrigger?.(action) ?? action; }
     getColumnManagerTriggerActionView() {
-        const defaults = { label: t('filament-tables::table.actions.column_manager.label'), icon: icons.resolve('tables::actions.column-manager') ?? 'm-view-columns', color: 'gray', view: 'icon-button' as const };
+        const defaults = { label: t('navette-tables::table.actions.column_manager.label'), icon: icons.resolve('tables::actions.column-manager') ?? 'm-view-columns', color: 'gray', view: 'icon-button' as const };
         if (!this._columnManagerTrigger) return { ...defaults, hidden: false, customized: false };
         return { ...this.getColumnManagerTriggerAction().resolve(defaults), customized: true };
     }
     getColumnManagerApplyActionView() {
-        const defaults = { label: t('filament-tables::table.column_manager.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const };
+        const defaults = { label: t('navette-tables::table.column_manager.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const };
         const action = new TableTriggerAction();
         const view = { ...(this._columnManagerApply?.(action) ?? action).resolve(defaults), customized: this._columnManagerApply !== null };
         // As in Filament, the "Apply" button only exists when the column manager is deferred.
@@ -3120,13 +3120,13 @@ export async function isTableFilterRemovable<R>(table: Table<R>, host: TableHost
 
 /** Markup of a customized filters action: an icon button, a button or a link, with an optional badge. */
 function filterActionHtml(view: FiltersActionView, attributes: string, badge: string | null, forceEnabled = false, size = 'md'): string {
-    const force = forceEnabled ? ['fi-force-enabled'] : [];
-    const sizeClass = `fi-size-${/^(xs|sm|md|lg|xl)$/.test(size) ? size : 'md'}`;
+    const force = forceEnabled ? ['nv-force-enabled'] : [];
+    const sizeClass = `nv-size-${/^(xs|sm|md|lg|xl)$/.test(size) ? size : 'md'}`;
     const colors = (component: 'button' | 'link' | 'icon-button') => (view.color && view.color !== 'gray' ? (colorManager?.getComponentClasses(component, view.color) ?? []) : []);
     const iconHtml = view.icon ? icon(view.icon) : '';
-    if (view.view === 'icon-button') return `<button title="${e(view.label)}" aria-label="${e(view.label)}" ${attributes} class="${cls(['fi-force-enabled', 'fi-ac-icon-btn-action', 'fi-icon-btn', sizeClass, ...colors('icon-button')])}">${iconHtml}${badge !== null ? `<div class="fi-icon-btn-badge-ctn">${badge}</div>` : ''}</button>`;
-    if (view.view === 'link') return `<button ${attributes} class="${cls([...force, 'fi-ac-link-action', 'fi-link', sizeClass, ...colors('link')])}">${iconHtml}<span class="fi-link-label">${e(view.label)}</span>${badge !== null ? `<div class="fi-link-badge-ctn">${badge}</div>` : ''}</button>`;
-    return `<button ${attributes} class="${cls([...force, 'fi-ac-btn-action', 'fi-btn', sizeClass, ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="fi-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+    if (view.view === 'icon-button') return `<button title="${e(view.label)}" aria-label="${e(view.label)}" ${attributes} class="${cls(['nv-force-enabled', 'nv-ac-icon-btn-action', 'nv-icon-btn', sizeClass, ...colors('icon-button')])}">${iconHtml}${badge !== null ? `<div class="nv-icon-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+    if (view.view === 'link') return `<button ${attributes} class="${cls([...force, 'nv-ac-link-action', 'nv-link', sizeClass, ...colors('link')])}">${iconHtml}<span class="nv-link-label">${e(view.label)}</span>${badge !== null ? `<div class="nv-link-badge-ctn">${badge}</div>` : ''}</button>`;
+    return `<button ${attributes} class="${cls([...force, 'nv-ac-btn-action', 'nv-btn', sizeClass, ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="nv-btn-badge-ctn">${badge}</div>` : ''}</button>`;
 }
 
 /** Keys whose record passes `checkIfRecordIsSelectableUsing()`, loaded in chunks. Without a check, the keys are returned as they are. */
@@ -3239,7 +3239,7 @@ export type RenderTableOptions<R> = {
     rowActions?: (record: R) => { label: string; url: string; icon: string; key: string }[] | Promise<{ label: string; url: string; icon: string; key: string }[]>;
     /** `false`: reordering is not offered (user not authorized). */
     canReorder?: boolean;
-    /** HTML placed in `.fi-ta`, after the table container (action modals). */
+    /** HTML placed in `.nv-ta`, after the table container (action modals). */
     after?: string;
     /** Already rendered HTML of the table header actions. */
     headerActions?: string[];
@@ -3272,18 +3272,18 @@ type SummaryPlaceholders = { selection: boolean; actions: boolean; actionsBefore
 /** Summary row; with `groupsOnly`, a leading label cell, then one cell per column. */
 function summaryRowHtml(row: SummaryRow, span: number, groupsOnly: boolean, placeholders: SummaryPlaceholders): string {
     const items = (cell: SummaryCell) => cell.items.map((item) => {
-        const label = item.label !== null && item.label !== '' ? `<span class="fi-ta-${item.type}-summary-label${item.labelHidden ? ' fi-sr-only' : ''}">${e(item.label)}</span>` : '';
+        const label = item.label !== null && item.label !== '' ? `<span class="nv-ta-${item.type}-summary-label${item.labelHidden ? ' nv-sr-only' : ''}">${e(item.label)}</span>` : '';
         if (item.type === 'icon-count') {
             const iconCounts = item.icons ?? [];
-            return `<div class="fi-ta-icon-count-summary">${label}${iconCounts.length ? `<ul>${iconCounts.map((entry) => `<li><span>${e(String(entry.count))}</span>${icon(entry.icon, { size: 'lg', attributes: new Attributes().class(entry.color && entry.color !== 'gray' ? (colorManager?.getComponentClasses('icon-count-summary', entry.color) ?? []) : []) })}</li>`).join('')}</ul>` : ''}</div>`;
+            return `<div class="nv-ta-icon-count-summary">${label}${iconCounts.length ? `<ul>${iconCounts.map((entry) => `<li><span>${e(String(entry.count))}</span>${icon(entry.icon, { size: 'lg', attributes: new Attributes().class(entry.color && entry.color !== 'gray' ? (colorManager?.getComponentClasses('icon-count-summary', entry.color) ?? []) : []) })}</li>`).join('')}</ul>` : ''}</div>`;
         }
-        if (item.type === 'values') return `<div class="fi-ta-values-summary">${label}${item.values?.length ? `<ul${item.bulleted ? ' class="fi-bulleted"' : ''}>${item.values.map((value) => `<li>${e(value)}</li>`).join('')}</ul>` : ''}</div>`;
-        return `<div class="fi-ta-${item.type}-summary">${label}<span>${e(item.value)}</span></div>`;
+        if (item.type === 'values') return `<div class="nv-ta-values-summary">${label}${item.values?.length ? `<ul${item.bulleted ? ' class="nv-bulleted"' : ''}>${item.values.map((value) => `<li>${e(value)}</li>`).join('')}</ul>` : ''}</div>`;
+        return `<div class="nv-ta-${item.type}-summary">${label}<span>${e(item.value)}</span></div>`;
     }).join('');
     const heading = groupsOnly
-        ? `<th scope="row" class="fi-ta-cell fi-ta-summary-row-heading-cell fi-align-start">${e(row.heading)}</th>`
-        : `<th scope="row"${span > 1 ? ` colspan="${span}"` : ''} class="fi-ta-cell fi-align-start fi-ta-summary-row-heading-cell ">${e(row.heading)}</th>`;
-    return `<tr class="fi-ta-row fi-ta-summary-row${row.striped ? ' fi-striped' : ''}">${placeholders.selection ? '<td></td>' : ''}${placeholders.actionsBefore ? '<td></td>' : ''}${heading}${row.cells.map((cell) => `<td class="fi-ta-cell fi-align-${e(cell.alignment)} ">${items(cell)}</td>`).join('')}${placeholders.actions ? '<td></td>' : ''}</tr>`;
+        ? `<th scope="row" class="nv-ta-cell nv-ta-summary-row-heading-cell nv-align-start">${e(row.heading)}</th>`
+        : `<th scope="row"${span > 1 ? ` colspan="${span}"` : ''} class="nv-ta-cell nv-align-start nv-ta-summary-row-heading-cell ">${e(row.heading)}</th>`;
+    return `<tr class="nv-ta-row nv-ta-summary-row${row.striped ? ' nv-striped' : ''}">${placeholders.selection ? '<td></td>' : ''}${placeholders.actionsBefore ? '<td></td>' : ''}${heading}${row.cells.map((cell) => `<td class="nv-ta-cell nv-align-${e(cell.alignment)} ">${items(cell)}</td>`).join('')}${placeholders.actions ? '<td></td>' : ''}</tr>`;
 }
 
 /**
@@ -3362,17 +3362,17 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     const hasPageSummary = isMultiPage && (showPage || showAll);
     const rowHtml = (row: SummaryRow) => summaryRowHtml(row, span, options.groupsOnly, options.placeholders);
     const header = hasPageSummary
-        ? `<tr class="fi-ta-row fi-ta-summary-header-row fi-striped">${options.placeholders.selection ? '<td></td>' : ''}${options.placeholders.actionsBefore ? '<td></td>' : ''}${columns.map((c, i) => {
-            const heading = i === 0 ? t('filament-tables::table.summary.heading', { label }) : lists[i].length ? c.getLabel() : null;
-            return heading === null ? '<td class="fi-ta-cell fi-ta-summary-header-cell"></td>' : `<th scope="col" class="fi-ta-cell fi-ta-summary-header-cell fi-align-${e(i === 0 ? 'start' : (c.getAlignment() ?? 'start'))}">${e(heading)}</th>`;
+        ? `<tr class="nv-ta-row nv-ta-summary-header-row nv-striped">${options.placeholders.selection ? '<td></td>' : ''}${options.placeholders.actionsBefore ? '<td></td>' : ''}${columns.map((c, i) => {
+            const heading = i === 0 ? t('navette-tables::table.summary.heading', { label }) : lists[i].length ? c.getLabel() : null;
+            return heading === null ? '<td class="nv-ta-cell nv-ta-summary-header-cell"></td>' : `<th scope="col" class="nv-ta-cell nv-ta-summary-header-cell nv-align-${e(i === 0 ? 'start' : (c.getAlignment() ?? 'start'))}">${e(heading)}</th>`;
         }).join('')}${options.placeholders.actions ? '<td></td>' : ''}</tr>`
         : '';
     const rows = hasPageSummary
         ? [
-            ...(showPage ? [{ heading: t('filament-tables::table.summary.subheadings.page', { label }), cells: await cells(onPage, page.records), striped: false }] : []),
-            ...(showAll ? [{ heading: t('filament-tables::table.summary.subheadings.all', { label }), cells: await cells(all, query), striped: false }] : []),
+            ...(showPage ? [{ heading: t('navette-tables::table.summary.subheadings.page', { label }), cells: await cells(onPage, page.records), striped: false }] : []),
+            ...(showAll ? [{ heading: t('navette-tables::table.summary.subheadings.all', { label }), cells: await cells(all, query), striped: false }] : []),
         ]
-        : isMultiPage || !(showPage || showAll) ? [] : [{ heading: t('filament-tables::table.summary.heading', { label }), cells: await cells(all, query), striped: true }];
+        : isMultiPage || !(showPage || showAll) ? [] : [{ heading: t('navette-tables::table.summary.heading', { label }), cells: await cells(all, query), striped: true }];
     const groupedValues = new Map<Group<R>, Promise<Map<string, SummaryValues>>>();
     return {
         html: header + rows.map(rowHtml).join(''),
@@ -3390,7 +3390,7 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
                 }));
             }
             const values = (key !== null ? (await groupedValues.get(group))?.get(key) : undefined) ?? await aggregate(groupQuery);
-            return rowHtml({ heading: options.groupsOnly ? (title ?? '') : t('filament-tables::table.summary.subheadings.group', { group: title ?? '', label }), cells: await cells(values, groupQuery), striped: false });
+            return rowHtml({ heading: options.groupsOnly ? (title ?? '') : t('navette-tables::table.summary.subheadings.group', { group: title ?? '', label }), cells: await cells(values, groupQuery), striped: false });
         },
     };
 }
@@ -3463,8 +3463,8 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             cells.push({
                 name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url, html: await column.renderHtml(record, key), plain: clickDisabled,
                 urlInNewTab: url !== null && column.shouldOpenUrlInNewTab(record),
-                // `fi-vertical-align-*` and `extraCellAttributes()` of the `<td>`.
-                classes: [...(column.getVerticalAlignment() ? [`fi-vertical-align-${column.getVerticalAlignment()}`] : []), ...cellAttributes.classes], attributes: cellAttributes.html, style: cellAttributes.style,
+                // `nv-vertical-align-*` and `extraCellAttributes()` of the `<td>`.
+                classes: [...(column.getVerticalAlignment() ? [`nv-vertical-align-${column.getVerticalAlignment()}`] : []), ...cellAttributes.classes], attributes: cellAttributes.html, style: cellAttributes.style,
                 mountExpression: !reordering && column.getActionName() !== null && !clickDisabled ? `mountAction(${js(column.getActionName())}, {}, ${js({ table: true, recordKey: key })})` : null,
             });
         }
@@ -3508,7 +3508,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         if (filter.loadIndicatorData && state && typeof state === 'object') await filter.loadIndicatorData(state, host);
     }
     const scopes = (host as any).getRenderHookScopes?.() ?? [];
-    return views.render('filament-tables::index', {
+    return views.render('navette-tables::index', {
         contentLayout: columnsLayout !== null, contentGrid: table.getContentGrid(),
         hook: (name: string, data: Record<string, unknown> = {}) => renderHook(name, scopes, data), hasHook: (name: string) => hasRenderHook(name, scopes),
         visibleColumns: visible, isReordering: reordering,
@@ -3520,7 +3520,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         recordLinkAttributes: (newTab: boolean) => (newTab ? ' target="_blank"' : ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"`),
         isLoaded: loaded, hasLoadingSkeleton: table.hasLoadingSkeleton(), pollingInterval: reordering || !loaded ? null : table.getPollingInterval(),
         description: table.getDescription(), header: await table.getHeader(), defaultSortOptionLabel: table.getDefaultSortOptionLabel(),
-        search: { placeholder: table.getSearchPlaceholder() ?? t('filament-tables::table.fields.search.placeholder'), model: table.isSearchOnBlur() ? 'wire:model.live.blur' : `wire:model.live.debounce.${table.getSearchDebounce()}` },
+        search: { placeholder: table.getSearchPlaceholder() ?? t('navette-tables::table.fields.search.placeholder'), model: table.isSearchOnBlur() ? 'wire:model.live.blur' : `wire:model.live.debounce.${table.getSearchDebounce()}` },
         columnManager: {
             layout: table.getColumnManagerLayout(), resetPosition: table.getColumnManagerResetActionPosition(), reorderable: table.hasReorderableColumns(), toggleable: table.hasToggleableColumns(),
             columns: table.getColumnManagerColumns(), width: table.getColumnManagerWidth(), maxHeight: table.getColumnManagerMaxHeight(),
@@ -3541,7 +3541,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
                 name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), responsive: c.getResponsiveClasses(), width: c.getWidth(), growable: c.getWidth() === null && c.canGrow(), wrapHeader: c.canHeaderWrap(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none',
                 // `headerTooltip()` and `extraHeaderAttributes()`.
                 tooltip: c.getHeaderTooltip(), headerClasses: header.classes, headerAttributes: header.html, headerStyle: header.style,
-                labelHtml: c.getHeaderTooltip() ? `<span x-tooltip="${e(`{\n                                                                    content: ${js(c.getHeaderTooltip())},\n                                                                    theme: $store.theme,\n                                                                }`)}" class="fi-ta-header-cell-tooltip">${e(c.getLabel())}</span>` : e(c.getLabel()),
+                labelHtml: c.getHeaderTooltip() ? `<span x-tooltip="${e(`{\n                                                                    content: ${js(c.getHeaderTooltip())},\n                                                                    theme: $store.theme,\n                                                                }`)}" class="nv-ta-header-cell-tooltip">${e(c.getLabel())}</span>` : e(c.getLabel()),
             };
         }),
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'), grayButtonClasses: classes('button', 'gray'), indicatorColorClasses: (color: string) => classes('badge', color),
@@ -3565,7 +3565,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         canTrackDeselectedRecords: !selectionOnly && table.shouldDeselectAllRecordsWhenFiltered(),
         isSearchable: !reordering && table.isSearchable(),
         emptyState: { custom: await table.getCustomEmptyState(), heading: table.getEmptyStateHeading(), description: table.getEmptyStateDescription(), icon: table.getEmptyStateIcon(), actions: options.emptyStateActions ?? [] },
-        pagination: (reordering && !table.isPaginatedWhileReordering()) || groupsOnly || !loaded || !table.isPaginated() ? '' : views.render('filament::components.pagination', {
+        pagination: (reordering && !table.isPaginatedWhileReordering()) || groupsOnly || !loaded || !table.isPaginated() ? '' : views.render('navette::components.pagination', {
             id: host.id, targets: LOADING_TARGETS + ',paginators', page, number, pageOptions: table.getPageOptions(), elements: paginationElements(page.page, page.lastPage), simple: table.getPaginationMode() !== 'default',
             extremeLinks: table.hasExtremePaginationLinks(), pageName: table.getPaginationPageName(), cursor: page.cursor ?? null,
             attrs: (o: Record<string, any>) => new Attributes(o),

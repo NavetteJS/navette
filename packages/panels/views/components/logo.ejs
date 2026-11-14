@@ -1,9 +1,9 @@
 <%# Brand logo or brand name %>
 <% if (brand.logo) { %>
-    <img alt="<%= t('filament-panels::layout.logo.alt', { name: brand.name }) %>" src="<%= brand.logo %>" style="height: <%- brand.height %>;" class="<%- brand.darkLogo ? 'fi-logo fi-logo-light' : 'fi-logo' %>" />
+    <img alt="<%= t('navette-panels::layout.logo.alt', { name: brand.name }) %>" src="<%= brand.logo %>" style="height: <%- brand.height %>;" class="<%- brand.darkLogo ? 'nv-logo nv-logo-light' : 'nv-logo' %>" />
     <% if (brand.darkLogo) { %>
-        <img alt="<%= t('filament-panels::layout.logo.alt', { name: brand.name }) %>" src="<%= brand.darkLogo %>" style="height: <%- brand.height %>;" class="fi-logo fi-logo-dark" />
+        <img alt="<%= t('navette-panels::layout.logo.alt', { name: brand.name }) %>" src="<%= brand.darkLogo %>" style="height: <%- brand.height %>;" class="nv-logo nv-logo-dark" />
     <% } %>
 <% } else { %>
-    <div class="fi-logo"><%= brand.name %></div>
+    <div class="nv-logo"><%= brand.name %></div>
 <% } %>

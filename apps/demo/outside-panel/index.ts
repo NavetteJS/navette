@@ -97,10 +97,10 @@ export function outsidePanel(key: string): Router {
 <title>${e('Shop — outside any panel')}</title>
 ${livewire.styles(req, res)}
 </head>
-<body class="fi-body" style="padding: 2rem;">
+<body class="nv-body" style="padding: 2rem;">
 <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-    <h1 class="fi-header-heading" data-test="shop-heading">Our shop</h1>
-    <a href="/outside/contact" class="fi-link">Contact us</a>
+    <h1 class="nv-header-heading" data-test="shop-heading">Our shop</h1>
+    <a href="/outside/contact" class="nv-link">Contact us</a>
 </header>
 ${catalog}
 ${await livewire.notifications(req, res)}

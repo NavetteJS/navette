@@ -17,38 +17,38 @@ page.on('response', async (res) => { if (!res.url().includes('/livewire')) retur
 try {
     await login(page, base, user);
     await page.goto(base + '/shop/products');
-    await page.waitForSelector('.fi-wi-stats-overview-stat-value');
+    await page.waitForSelector('.nv-wi-stats-overview-stat-value');
     const total = count('1 = 1');
-    const shown = async () => Number((await page.locator('.fi-ta-content-ctn > .fi-sr-only').first().innerText()).replace(/\D/g, ''));
-    const stat = async () => Number((await page.locator('.fi-wi-stats-overview-stat-value').first().innerText()).replace(/\D/g, ''));
-    const settle = async (expected) => { await page.waitForFunction((n) => Number(document.querySelector('.fi-ta-content-ctn > .fi-sr-only')?.textContent.replace(/\D/g, '')) === n, expected, { timeout: 15000 }).catch(() => {}); return shown(); };
-    const filters = page.locator('.fi-ta-filters');
+    const shown = async () => Number((await page.locator('.nv-ta-content-ctn > .nv-sr-only').first().innerText()).replace(/\D/g, ''));
+    const stat = async () => Number((await page.locator('.nv-wi-stats-overview-stat-value').first().innerText()).replace(/\D/g, ''));
+    const settle = async (expected) => { await page.waitForFunction((n) => Number(document.querySelector('.nv-ta-content-ctn > .nv-sr-only')?.textContent.replace(/\D/g, '')) === n, expected, { timeout: 15000 }).catch(() => {}); return shown(); };
+    const filters = page.locator('.nv-ta-filters');
     // The root block picker is the last one in the form (those of the OR groups come before it).
-    const add = async (label, picker = filters.locator('.fi-fo-builder-block-picker').last()) => {
-        const before = await filters.locator('.fi-fo-builder-item').count();
-        await picker.locator('.fi-dropdown-trigger button').click();
-        await picker.locator('.fi-dropdown-list-item', { hasText: label }).first().click();
-        await page.waitForFunction((n) => document.querySelectorAll('.fi-ta-filters .fi-fo-builder-item').length > n, before);
+    const add = async (label, picker = filters.locator('.nv-fo-builder-block-picker').last()) => {
+        const before = await filters.locator('.nv-fo-builder-item').count();
+        await picker.locator('.nv-dropdown-trigger button').click();
+        await picker.locator('.nv-dropdown-list-item', { hasText: label }).first().click();
+        await page.waitForFunction((n) => document.querySelectorAll('.nv-ta-filters .nv-fo-builder-item').length > n, before);
     };
     const apply = () => page.locator('[data-table-filter-action=apply]').click();
-    const indicators = async () => (await page.locator('.fi-ta-filter-indicators .fi-badge-label').allInnerTexts()).map((s) => s.trim());
-    const badge = async () => (await page.locator('.fi-ta-filters-trigger-action-ctn .fi-badge').innerText()).trim();
+    const indicators = async () => (await page.locator('.nv-ta-filter-indicators .nv-badge-label').allInnerTexts()).map((s) => s.trim());
+    const badge = async () => (await page.locator('.nv-ta-filters-trigger-action-ctn .nv-badge').innerText()).trim();
 
     step((await shown()) === total && (await stat()) === total, 'no filter: the table and the widget count every product', String(total));
     step(!(await filters.isVisible()), 'the filters start collapsed');
-    await page.locator('.fi-ta-filters-trigger-action-ctn button').click();
+    await page.locator('.nv-ta-filters-trigger-action-ctn button').click();
     await filters.waitFor({ state: 'visible' });
-    step((await filters.locator('.fi-fo-builder-block-picker .fi-dropdown-list-item').count()) === 16, 'the picker offers the 15 constraints and the OR block');
+    step((await filters.locator('.nv-fo-builder-block-picker .nv-dropdown-list-item').count()) === 16, 'the picker offers the 15 constraints and the OR block');
 
     // --- text
     await add('Name');
-    const firstRule = filters.locator('.fi-fo-builder-item').first();
+    const firstRule = filters.locator('.nv-fo-builder-item').first();
     step((await firstRule.locator('select').first().inputValue()) === 'contains', 'the "Name" rule comes with the "Contains" operator');
     await firstRule.locator('input[type=text]').fill('Alpine');
     await apply();
     const alpine = count("name like '%Alpine%'");
     step((await settle(alpine)) === alpine && alpine > 0 && alpine < total, '"Name contains Alpine" narrows the table', `${alpine} / ${total}`);
-    await page.waitForFunction((n) => Number(document.querySelector('.fi-wi-stats-overview-stat-value')?.textContent.replace(/\D/g, '')) === n, alpine, { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction((n) => Number(document.querySelector('.nv-wi-stats-overview-stat-value')?.textContent.replace(/\D/g, '')) === n, alpine, { timeout: 15000 }).catch(() => {});
     step((await stat()) === alpine, 'the stats widget follows the filter', String(await stat()));
     step(JSON.stringify(await indicators()) === JSON.stringify(['Name contains Alpine']) && (await badge()) === '1', '"Name contains Alpine" indicator and badge at 1', (await indicators()).join(' | '));
 
@@ -62,21 +62,21 @@ try {
 
     // --- number
     await add('Quantity');
-    const second = filters.locator('.fi-fo-builder-item').nth(1);
+    const second = filters.locator('.nv-fo-builder-item').nth(1);
     await second.locator('input').first().fill('50');
     await apply();
     const alpineQty = count("name like '%Alpine%' and qty >= 50");
     step((await settle(alpineQty)) === alpineQty, 'number rule "Quantity is minimum 50" (AND)', String(alpineQty));
     step((await indicators()).includes('Quantity is minimum 50'), 'indicator of the number rule', (await indicators()).join(' | '));
-    step((await filters.locator('.fi-fo-builder-label-between-items').first().innerText()).trim() === 'AND', '"AND" label between the rules');
+    step((await filters.locator('.nv-fo-builder-label-between-items').first().innerText()).trim() === 'AND', '"AND" label between the rules');
 
     // --- removing a rule from its indicator, then with its button
-    await page.locator('.fi-ta-filter-indicators .fi-badge', { hasText: 'Name contains Alpine' }).locator('.fi-badge-delete-btn').click();
+    await page.locator('.nv-ta-filter-indicators .nv-badge', { hasText: 'Name contains Alpine' }).locator('.nv-badge-delete-btn').click();
     const qty = count('qty >= 50');
     step((await settle(qty)) === qty, 'removing the "Name" indicator removes the rule', String(qty));
-    step((await filters.locator('.fi-fo-builder-item').count()) === 1, 'the rule is also gone from the form');
-    await filters.locator('.fi-fo-builder-item').first().locator('button[title=Delete]').click();
-    await page.waitForFunction(() => document.querySelectorAll('.fi-ta-filters .fi-fo-builder-item').length === 0);
+    step((await filters.locator('.nv-fo-builder-item').count()) === 1, 'the rule is also gone from the form');
+    await filters.locator('.nv-fo-builder-item').first().locator('button[title=Delete]').click();
+    await page.waitForFunction(() => document.querySelectorAll('.nv-ta-filters .nv-fo-builder-item').length === 0);
     await apply();
     step((await settle(total)) === total, 'deleting the last rule then applying shows the whole table');
 
@@ -86,7 +86,7 @@ try {
     const visible = count('is_visible = 1');
     step((await settle(visible)) === visible && (await indicators()).includes('Visibility is true'), 'boolean rule "Visibility is true"', String(visible));
     await add('Publishing date');
-    const dateRule = filters.locator('.fi-fo-builder-item').nth(1);
+    const dateRule = filters.locator('.nv-fo-builder-item').nth(1);
     await dateRule.locator('input[type=date]').fill('2026-06-01');
     await apply();
     const dated = count("is_visible = 1 and date(published_at) >= '2026-06-01'");
@@ -109,15 +109,15 @@ try {
 
     // --- Reset
     await page.locator('[data-table-filter-action=reset]').click();
-    step((await settle(total)) === total && (await filters.locator('.fi-fo-builder-item').count()) === 0 && (await badge()) === '0', 'Reset empties the form and the whole table comes back');
+    step((await settle(total)) === total && (await filters.locator('.nv-fo-builder-item').count()) === 0 && (await badge()) === '0', 'Reset empties the form and the whole table comes back');
 
     // --- OR block
     await add('OR condition');
-    const groups = filters.locator('.fi-fo-repeater-item');
+    const groups = filters.locator('.nv-fo-repeater-item');
     step((await groups.count()) === 2, 'the OR block comes with two groups');
-    await add('Name', groups.nth(0).locator('.fi-fo-builder-block-picker'));
+    await add('Name', groups.nth(0).locator('.nv-fo-builder-block-picker'));
     await groups.nth(0).locator('input[type=text]').fill('Alpine');
-    await add('Name', groups.nth(1).locator('.fi-fo-builder-block-picker'));
+    await add('Name', groups.nth(1).locator('.nv-fo-builder-block-picker'));
     await groups.nth(1).locator('input[type=text]').fill('Kit');
     await apply();
     const either = count("name like '%Alpine%' or name like '%Kit%'");
@@ -127,12 +127,12 @@ try {
     await apply();
     const eitherVisible = count("(name like '%Alpine%' or name like '%Kit%') and is_visible = 1");
     step((await settle(eitherVisible)) === eitherVisible, 'the OR block combines with another rule with AND', String(eitherVisible));
-    await page.locator('.fi-ta-filter-indicators button[aria-label="Remove all filters"]').click();
+    await page.locator('.nv-ta-filter-indicators button[aria-label="Remove all filters"]').click();
     step((await settle(total)) === total, '"Remove all filters" removes everything');
 
     // --- forged state: unknown types, operators and settings are ignored, without an error
     const forged = await page.evaluate(async () => {
-        const wire = window.Livewire.all().find((c) => c.el.querySelector('.fi-ta'))?.$wire;
+        const wire = window.Livewire.all().find((c) => c.el.querySelector('.nv-ta'))?.$wire;
         // Nested OR block without a rule (the runtime already refuses values nested too deep; OR block depth is covered by unit tests).
         let deep = { type: 'or', data: { groups: {} } };
         for (let level = 0; level < 1; level++) deep = { type: 'or', data: { groups: { g: { rules: { r: deep } } } } };
@@ -152,7 +152,7 @@ try {
     step(forged === 'ok' && (await settle(total)) === total && (await indicators()).length === 0, 'a forged state is ignored: no error, no filter', forged);
     step(count('1 = 1') === total, 'the products table is intact');
     const direct = await page.evaluate(async () => {
-        const wire = window.Livewire.all().find((c) => c.el.querySelector('.fi-ta'))?.$wire;
+        const wire = window.Livewire.all().find((c) => c.el.querySelector('.nv-ta'))?.$wire;
         try { await wire.$set('tableFilters.queryBuilder.rules', { z: { type: 'name', data: { operator: 'equals', settings: { text: "x' or '1'='1" } } } }); return 'ok'; } catch (error) { return 'error: ' + (error?.message ?? JSON.stringify(error)); }
     });
     step(direct === 'ok' && (await settle(0)) === 0, 'a booby-trapped value stays a bound value: no product has that name', direct);

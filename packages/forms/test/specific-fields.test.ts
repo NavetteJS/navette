@@ -161,22 +161,22 @@ test('Select: reorderable() and wrapOptionLabels() configure the JavaScript sele
 test('CheckboxList and ToggleButtons: gridDirection("row") fills the grid row by row', async () => {
     const livewire = host({ tags: [], kind: null });
     const column = await form(livewire, [CheckboxList.make('tags').options({ a: 'A', b: 'B', c: 'C' }).columns(2)]).toHtml();
-    assert.match(column, /class="fi-grid fi-grid-direction-col lg:fi-grid-cols fi-fo-checkbox-list-options" style="--cols-lg: 2; --cols-default: 1;"/);
+    assert.match(column, /class="nv-grid nv-grid-direction-col lg:nv-grid-cols nv-fo-checkbox-list-options" style="--cols-lg: 2; --cols-default: 1;"/);
     const row = await form(livewire, [CheckboxList.make('tags').options({ a: 'A', b: 'B', c: 'C' }).columns(2).gridDirection('row')]).toHtml();
-    assert.match(row, /class="fi-grid lg:fi-grid-cols fi-fo-checkbox-list-options" style="--cols-lg: repeat\(2, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
+    assert.match(row, /class="nv-grid lg:nv-grid-cols nv-fo-checkbox-list-options" style="--cols-lg: repeat\(2, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
     const single = await form(livewire, [CheckboxList.make('tags').options({ a: 'A' }).gridDirection(() => 'row')]).toHtml();
-    assert.match(single, /class="fi-grid fi-fo-checkbox-list-options" style="--cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
+    assert.match(single, /class="nv-grid nv-fo-checkbox-list-options" style="--cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
     const buttons = await form(livewire, [ToggleButtons.make('kind').options({ a: 'A', b: 'B', c: 'C' }).columns(3).gridDirection('row')]).toHtml();
-    assert.match(buttons, /class="fi-grid lg:fi-grid-cols" style="--cols-lg: repeat\(3, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
+    assert.match(buttons, /class="nv-grid lg:nv-grid-cols" style="--cols-lg: repeat\(3, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
     const columnButtons = await form(livewire, [ToggleButtons.make('kind').options({ a: 'A', b: 'B', c: 'C' }).columns(3)]).toHtml();
-    assert.match(columnButtons, /class="fi-grid fi-grid-direction-col lg:fi-grid-cols" style="--cols-lg: 3; --cols-default: 1;"/);
+    assert.match(columnButtons, /class="nv-grid nv-grid-direction-col lg:nv-grid-cols" style="--cols-lg: 3; --cols-default: 1;"/);
 });
 
 test('DateTimePicker: affixes, readOnly(), datalist() and date(false) / time(false)', async () => {
     const livewire = host({ starts_at: '2026-05-01 10:00:00', opens: '09:00', day: '2026-05-01' });
     const native = await form(livewire, [DateTimePicker.make('starts_at').prefix('Starts').suffixIcon('m-calendar', true).suffixIconColor('success')]).toHtml();
-    assert.match(native, /class="fi-fo-date-time-picker fi-input-wrp"><div x-on:click="[^"]*" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label"><span class="fi-input-wrp-label">Starts<\/span><\/div><div class="fi-input-wrp-content-ctn"><input[^>]*class="fi-input fi-input-has-inline-suffix"/);
-    assert.match(native, /<div x-on:click="[^"]*" class="fi-input-wrp-suffix fi-inline"><svg[^>]*fi-color fi-color-success/);
+    assert.match(native, /class="nv-fo-date-time-picker nv-input-wrp"><div x-on:click="[^"]*" class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content nv-input-wrp-prefix-has-label"><span class="nv-input-wrp-label">Starts<\/span><\/div><div class="nv-input-wrp-content-ctn"><input[^>]*class="nv-input nv-input-has-inline-suffix"/);
+    assert.match(native, /<div x-on:click="[^"]*" class="nv-input-wrp-suffix nv-inline"><svg[^>]*nv-color nv-color-success/);
     const time = await form(livewire, [DateTimePicker.make('opens').date(false).seconds(false).datalist(['09:00', '12:00']).readOnly(false)]).toHtml();
     assert.match(time, /<input[^>]*list="form\.opens-list"[^>]*type="time"/);
     assert.match(time, /<datalist id="form\.opens-list"><option value="09:00" \/><option value="12:00" \/><\/datalist>/);
@@ -186,7 +186,7 @@ test('DateTimePicker: affixes, readOnly(), datalist() and date(false) / time(fal
     assert.doesNotMatch(readOnly, /datalist|required="required"/);
     const js = await form(livewire, [DateTimePicker.make('starts_at').native(false).readOnly().prefixIcon('m-clock')]).toHtml();
     assert.doesNotMatch(js, /x-on:click="togglePanelVisibility\(\)"/);
-    assert.match(js, /fi-input-wrp-prefix[^>]*><svg/);
+    assert.match(js, /nv-input-wrp-prefix[^>]*><svg/);
     // time(false): a date picker, saved as a date.
     const dateOnly = DateTimePicker.make('day').time(false);
     const schema = form(livewire, [dateOnly]);

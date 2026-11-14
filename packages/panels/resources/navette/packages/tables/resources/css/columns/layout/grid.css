@@ -1,0 +1,49 @@
+.nv-ta-grid {
+    &.nv-gap-sm {
+        @apply gap-1;
+    }
+
+    &.sm\:nv-gap-sm {
+        @apply sm:gap-1;
+    }
+
+    &.md\:nv-gap-sm {
+        @apply md:gap-1;
+    }
+
+    &.lg\:nv-gap-sm {
+        @apply lg:gap-1;
+    }
+
+    &.xl\:nv-gap-sm {
+        @apply xl:gap-1;
+    }
+
+    &.\32xl\:nv-gap-sm {
+        @apply 2xl:gap-1;
+    }
+
+    &.nv-gap-lg {
+        @apply gap-3;
+    }
+
+    &.sm\:nv-gap-lg {
+        @apply sm:gap-3;
+    }
+
+    &.md\:nv-gap-lg {
+        @apply md:gap-3;
+    }
+
+    &.lg\:nv-gap-lg {
+        @apply lg:gap-3;
+    }
+
+    &.xl\:nv-gap-lg {
+        @apply xl:gap-3;
+    }
+
+    &.\32xl\:nv-gap-lg {
+        @apply 2xl:gap-3;
+    }
+}

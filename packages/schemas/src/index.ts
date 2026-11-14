@@ -11,7 +11,7 @@ export { AlignedContent, JsContent, makeStateGetter, readStatePath, resolveRelat
 export { getRelatedRecord, loadSingularRelationshipState, saveSingularRelationship, type SingularRelationshipConfig, type SingularRelationshipOptions } from './singular-relationship.ts';
 import { DEFERRED_BADGES_X_DATA, LIVEWIRE_PROPERTY, deferredBadgePlaceholderHtml, deferredDropdownBadgePlaceholderHtml, type LazyLoadedTabBadge } from './tabs-rendering.ts';
 
-views.namespace('filament-schemas', fileURLToPath(new URL('../views', import.meta.url)));
+views.namespace('navette-schemas', fileURLToPath(new URL('../views', import.meta.url)));
 
 /** What a schema expects from the stateful component hosting it. */
 export interface SchemaHost {
@@ -370,7 +370,7 @@ export abstract class Component {
     get livewire(): SchemaHost { return this.container.livewire; }
     protected _liberatedFromContainerGrid = false;
     /**
-     * Renders the component outside the grid of its schema: no grid column wrapper, only a `.fi-sc-liberated` element with
+     * Renders the component outside the grid of its schema: no grid column wrapper, only a `.nv-sc-liberated` element with
      * `display: contents` that holds its Alpine scope, so that its content takes part in the surrounding layout.
      */
     liberatedFromContainerGrid(condition = true): this { this._liberatedFromContainerGrid = condition; return this; }
@@ -440,7 +440,7 @@ export abstract class Component {
         for (const [breakpoint, value] of Object.entries(rawSpan)) span[breakpoint] = await evaluate(value as any, ctx);
         const start = await resolvePlacement(this._columnStart, ctx, false);
         const order = await resolvePlacement(this._columnOrder, ctx, true);
-        const placementClass = (name: string, values: Record<string, number>) => Object.keys(values).map((breakpoint) => (breakpoint === 'default' ? `fi-grid-col-${name}` : `${breakpoint}:fi-grid-col-${name}`));
+        const placementClass = (name: string, values: Record<string, number>) => Object.keys(values).map((breakpoint) => (breakpoint === 'default' ? `nv-grid-col-${name}` : `${breakpoint}:nv-grid-col-${name}`));
         const placementStyle = (name: string, values: Record<string, number>) => Object.entries(values).map(([breakpoint, value]) => `--col-${name}-${breakpointVariable(breakpoint)}: ${value}`);
         const attributes = new Attributes()
             .when(!this.container.isInline(), (a) => a.gridColumn(span, !isVisible)
@@ -454,9 +454,9 @@ export abstract class Component {
         const visibilityJs = hiddenJs && visibleJs ? `(! (${hiddenJs})) && (${visibleJs})` : hiddenJs ? `! (${hiddenJs})` : visibleJs;
         const afterStateUpdatedJs = isVisible ? await this.getAfterStateUpdatedJs() : [];
         const statePath = this.getAlpineScopeConfiguration().path;
-        return views.render('filament-schemas::component', {
-            key, isVisible, attributes: (visibilityJs ? attributes.class(['fi-sc-visibility-fieldset']) : attributes).toHtml(),
-            alpine: isVisible ? `filamentSchemaComponent(${js(this.getAlpineScopeConfiguration())})` : null,
+        return views.render('navette-schemas::component', {
+            key, isVisible, attributes: (visibilityJs ? attributes.class(['nv-sc-visibility-fieldset']) : attributes).toHtml(),
+            alpine: isVisible ? `navetteSchemaComponent(${js(this.getAlpineScopeConfiguration())})` : null,
             html: isVisible ? await this.toHtml() : '',
             gridContainer: isVisible && Boolean(await evaluate(this._gridContainer, ctx)),
             visibilityJs,
@@ -533,9 +533,9 @@ export class Schema {
     inline(isInline = true): this { this._inline = isInline; return this; }
     operation(operation: string | null): this { this._operation = operation; return this; }
     record(record: unknown): this { this._record = record; return this; }
-    /** Class placed before the grid classes (e.g. `fi-section-content`). */
+    /** Class placed before the grid classes (e.g. `nv-section-content`). */
     extraClass(name: string | null): this { this._extraClass = name; return this; }
-    /** Tighter spacing between components (`fi-sc-dense`). Without a value set, a child schema follows its parent component. */
+    /** Tighter spacing between components (`nv-sc-dense`). Without a value set, a child schema follows its parent component. */
     dense(condition: boolean | null = true): this { this._dense = condition; return this; }
     /** Layout component the schema belongs to: spacing and heading levels are inherited from it. */
     parentComponent(component: Component | null): this { this._parentComponent = component; return this; }
@@ -551,11 +551,11 @@ export class Schema {
     /** Root `wire:partial` name when it differs from the schema key (filters form: `table-filters-form`). */
     partialName(name: string | null): this { this._partialName = name; return this; }
     private _gap: boolean | null = null;
-    /** `false`: components touch, with no gap (no `fi-sc-has-gap`), as in a FusedGroup. */
+    /** `false`: components touch, with no gap (no `nv-sc-has-gap`), as in a FusedGroup. */
     gap(condition: boolean | null = true): this { this._gap = condition; return this; }
     private _fieldWrapperView: string | null = null;
     /**
-     * Field wrapper for this schema: `'filament-forms::plain-field-wrapper'` keeps only a screen-reader label
+     * Field wrapper for this schema: `'navette-forms::plain-field-wrapper'` keeps only a screen-reader label
      * (FusedGroup fields). `null`: the usual wrapper.
      */
     fieldWrapperView(view: string | null): this { this._fieldWrapperView = view; return this; }
@@ -672,23 +672,23 @@ export class Schema {
             .when(!this._inline, (a) => a.grid(this._columns))
             .merge({
                 'wire:partial': this._partialName ?? (this._partial ? `schema.${this._key}` : isLazy ? `schema.${this.getLazyKey()}` : null),
-                'x-data': this._root ? `filamentSchema({ livewireId: ${js(this.livewire.id)}, schemaKey: ${js(this._key)} })` : null,
+                'x-data': this._root ? `navetteSchema({ livewireId: ${js(this.livewire.id)}, schemaKey: ${js(this._key)} })` : null,
                 'x-on:form-validation-error.window': this._root ? 'handleFormValidationError' : null,
                 'x-on:reset-schema-component-state.window': this._root ? 'handleClientSideStateReset' : null,
             })
-            .class(['fi-sc', { 'fi-inline': this._inline }, { 'fi-sc-has-gap': this.hasGap() }, { 'fi-sc-dense': this.isDense() }]);
+            .class(['nv-sc', { 'nv-inline': this._inline }, { 'nv-sc-has-gap': this.hasGap() }, { 'nv-sc-dense': this.isDense() }]);
         const parts: string[] = [];
         for (const [component, isVisible] of withVisibility) {
             if (!component.isLiberatedFromContainerGrid()) parts.push(await component.toSchemaHtml(isVisible));
-            else if (isVisible) parts.push(`<div class="fi-sc-liberated" wire:key="${e(component.getLivewireKey() ?? '')}" x-data="filamentSchemaComponent(${js(component.getAlpineScopeConfiguration())})">${await component.toHtml()}</div>`);
+            else if (isVisible) parts.push(`<div class="nv-sc-liberated" wire:key="${e(component.getLivewireKey() ?? '')}" x-data="navetteSchemaComponent(${js(component.getAlpineScopeConfiguration())})">${await component.toHtml()}</div>`);
         }
         return `<div ${attributes.toHtml()}>${parts.join('')}</div>`;
     }
     /** Placeholder of a lazy schema: a loading indicator that asks for the schema when it enters the viewport. */
     toDeferredLoadingHtml(): string {
         const key = this.getLazyKey();
-        const attributes = new Attributes(this._extraClass ? { class: this._extraClass } : {}).merge({ 'wire:partial': `schema.${key}`, 'x-data': `filamentSchema({ livewireId: ${js(this.livewire.id)}, schemaKey: ${js(key)}, isLoadingDeferred: true })`, role: 'status', 'aria-busy': 'true' }).class(['fi-sc', 'fi-sc-loading']);
-        return `<div ${attributes.toHtml()}>${loadingIndicator(new Attributes(), 'lg')}<span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
+        const attributes = new Attributes(this._extraClass ? { class: this._extraClass } : {}).merge({ 'wire:partial': `schema.${key}`, 'x-data': `navetteSchema({ livewireId: ${js(this.livewire.id)}, schemaKey: ${js(key)}, isLoadingDeferred: true })`, role: 'status', 'aria-busy': 'true' }).class(['nv-sc', 'nv-sc-loading']);
+        return `<div ${attributes.toHtml()}>${loadingIndicator(new Attributes(), 'lg')}<span class="nv-sr-only">${e(t('navette::components/loading-section.label'))}</span></div>`;
     }
 }
 
@@ -760,9 +760,9 @@ export class Flex extends LayoutComponent {
         const parts: string[] = [];
         for (const component of this.getChildSchemas()[0].getComponents()) {
             if (!(await component.isVisible())) continue;
-            parts.push(`<div wire:key="${e(component.getLivewireKey() ?? '')}" x-data="filamentSchemaComponent(${js(component.getAlpineScopeConfiguration())})"${component.canGrow() ? ' class="fi-growable"' : ''}>${await component.toHtml()}</div>`);
+            parts.push(`<div wire:key="${e(component.getLivewireKey() ?? '')}" x-data="navetteSchemaComponent(${js(component.getAlpineScopeConfiguration())})"${component.canGrow() ? ' class="nv-growable"' : ''}>${await component.toHtml()}</div>`);
         }
-        return `<div class="fi-sc-flex fi-from-${this._from}">${parts.join('')}</div>`;
+        return `<div class="nv-sc-flex nv-from-${this._from}">${parts.join('')}</div>`;
     }
 }
 
@@ -860,7 +860,7 @@ export class Section extends LayoutComponent {
         return `${this.container.getKey()}.${slug(heading!)}::${statePath ? `${statePath}::` : ''}section`;
     }
     getHeadingsCount(): number { return typeof this._heading === 'function' || !isBlank(this._heading) ? 1 : 0; }
-    getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).extraClass('fi-section-content')]; }
+    getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).extraClass('nv-section-content')]; }
     async toHtml(): Promise<string> {
         const ctx = this.context();
         const [content] = this.getChildSchemas();
@@ -881,34 +881,34 @@ export class Section extends LayoutComponent {
         const contentId = id !== null && hasContent ? `${id}-content` : null;
         const headingId = id !== null && hasHeading ? `${id}-heading` : null;
         const descriptionId = id !== null && hasDescription ? `${id}-description` : null;
-        const outer = new Attributes().merge({ id, ...this._extraAttributes }).class(['fi-sc-section']);
+        const outer = new Attributes().merge({ id, ...this._extraAttributes }).class(['nv-sc-section']);
         // Collapsible section: listens to `collapse-section` / `expand-section`… window events, with a toggle button in the header.
         // A persisted state lives in local storage, under the section's key (or its element id).
         const idTest = `if ($event.detail.id == (${js(id)} ?? $el.id))`;
-        const collapse = isCollapsible ? ` x-on:collapse-section.window="${e(`${idTest} isCollapsed = true`)}" x-on:expand="isCollapsed = false" x-on:expand-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:open-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:toggle-section.window="${e(`${idTest} isCollapsed = ! isCollapsed`)}"${shouldPersistCollapsed ? '' : ` x-on:reset-schema-component-state.window="${e(`if (($event.detail.livewireId === ${js(this.livewire.id)}) && ($event.detail.schemaKey === ${js(this.container.getKey().split('.')[0])})) $nextTick(() => isCollapsed = ${isCollapsed ? 'true' : 'false'})`)}"`} x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : '';
-        const collapsedState = shouldPersistCollapsed ? e(`$persist(${isCollapsed ? 'true' : 'false'}).as(\`filament:section:collapsed:\${${js(id)} ?? $el.id}\`)`) : (isCollapsed ? 'true' : 'false');
-        const sectionClass = cls(['fi-section', {
-            'fi-section-not-contained': !(await evaluate(this._contained, ctx)),
-            'fi-section-has-content-before': Boolean(await evaluate(this._contentBefore, ctx)),
-            'fi-section-has-header': hasHeader,
-            'fi-aside': isAside,
-            'fi-compact': Boolean(await evaluate(this._compact, ctx)),
-            'fi-collapsible': isCollapsible,
-            'fi-collapsed': isCollapsible && isCollapsed,
-            'fi-divided': Boolean(await evaluate(this._divided, ctx)),
-            'fi-secondary': Boolean(await evaluate(this._secondary, ctx)),
+        const collapse = isCollapsible ? ` x-on:collapse-section.window="${e(`${idTest} isCollapsed = true`)}" x-on:expand="isCollapsed = false" x-on:expand-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:open-section.window="${e(`${idTest} isCollapsed = false`)}" x-on:toggle-section.window="${e(`${idTest} isCollapsed = ! isCollapsed`)}"${shouldPersistCollapsed ? '' : ` x-on:reset-schema-component-state.window="${e(`if (($event.detail.livewireId === ${js(this.livewire.id)}) && ($event.detail.schemaKey === ${js(this.container.getKey().split('.')[0])})) $nextTick(() => isCollapsed = ${isCollapsed ? 'true' : 'false'})`)}"`} x-bind:class="isCollapsed &amp;&amp; 'nv-collapsed'"` : '';
+        const collapsedState = shouldPersistCollapsed ? e(`$persist(${isCollapsed ? 'true' : 'false'}).as(\`navette:section:collapsed:\${${js(id)} ?? $el.id}\`)`) : (isCollapsed ? 'true' : 'false');
+        const sectionClass = cls(['nv-section', {
+            'nv-section-not-contained': !(await evaluate(this._contained, ctx)),
+            'nv-section-has-content-before': Boolean(await evaluate(this._contentBefore, ctx)),
+            'nv-section-has-header': hasHeader,
+            'nv-aside': isAside,
+            'nv-compact': Boolean(await evaluate(this._compact, ctx)),
+            'nv-collapsible': isCollapsible,
+            'nv-collapsed': isCollapsible && isCollapsed,
+            'nv-divided': Boolean(await evaluate(this._divided, ctx)),
+            'nv-secondary': Boolean(await evaluate(this._secondary, ctx)),
         }]);
         let header = '';
         if (hasHeader) {
             const iconColor = (await evaluate(this._iconColor, ctx)) ?? 'gray';
             const iconHtml = hasIcon ? icon(iconName!, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes().class(plainColorClasses(iconColor)) }) : '';
             const tag = this.getHeadingTag();
-            const text = hasHeading || hasDescription ? `<div class="fi-section-header-text-ctn">${hasHeading ? `<${tag}${headingId ? ` id="${e(headingId)}"` : ''} class="fi-section-header-heading">${e(heading)}</${tag}>` : ''}${hasDescription ? `<p${descriptionId ? ` id="${e(descriptionId)}"` : ''} class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : '';
-            const headerContent = hasHeading || hasDescription || afterHeader ? `<div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasHeading || hasDescription }])}">${text}${afterHeader ? `<div class="fi-section-header-after-ctn">${afterHeader}</div>` : ''}</div>` : '';
-            const collapseButton = isCollapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(isCollapsed ? 'filament::components/section.actions.expand.label' : 'filament::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-expanded="${isCollapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()"${contentId ? ` aria-controls="${e(contentId)}"` : ''} class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : '';
-            header = `<header${isCollapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header">${iconHtml}${headerContent}${collapseButton}</header>`;
+            const text = hasHeading || hasDescription ? `<div class="nv-section-header-text-ctn">${hasHeading ? `<${tag}${headingId ? ` id="${e(headingId)}"` : ''} class="nv-section-header-heading">${e(heading)}</${tag}>` : ''}${hasDescription ? `<p${descriptionId ? ` id="${e(descriptionId)}"` : ''} class="nv-section-header-description">${e(description)}</p>` : ''}</div>` : '';
+            const headerContent = hasHeading || hasDescription || afterHeader ? `<div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasHeading || hasDescription }])}">${text}${afterHeader ? `<div class="nv-section-header-after-ctn">${afterHeader}</div>` : ''}</div>` : '';
+            const collapseButton = isCollapsible ? `<button type="button" x-on:click.stop="isCollapsed = ! isCollapsed" aria-label="${e(t(isCollapsed ? 'navette::components/section.actions.expand.label' : 'navette::components/section.actions.collapse.label'))}" x-bind:aria-label="isCollapsed ? ${e(js(t('navette::components/section.actions.expand.label')))} : ${e(js(t('navette::components/section.actions.collapse.label')))}" aria-expanded="${isCollapsed ? 'false' : 'true'}" x-bind:aria-expanded="(! isCollapsed).toString()"${contentId ? ` aria-controls="${e(contentId)}"` : ''} class="nv-icon-btn nv-size-md nv-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : '';
+            header = `<header${isCollapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header">${iconHtml}${headerContent}${collapseButton}</header>`;
         }
-        const body = hasContent ? `<div${contentId ? ` id="${e(contentId)}"` : ''}${isCollapsible && (isCollapsed || shouldPersistCollapsed) ? ' x-cloak' : ''} class="fi-section-content-ctn">${contentHtml}${footer ? `<footer class="fi-section-footer">${footer}</footer>` : ''}</div>` : '';
+        const body = hasContent ? `<div${contentId ? ` id="${e(contentId)}"` : ''}${isCollapsible && (isCollapsed || shouldPersistCollapsed) ? ' x-cloak' : ''} class="nv-section-content-ctn">${contentHtml}${footer ? `<footer class="nv-section-footer">${footer}</footer>` : ''}</div>` : '';
         return `<div ${outer.toHtml()}><section x-data="{
                 isCollapsed: ${collapsedState},
             }"${collapse}${headingId ? ` aria-labelledby="${e(headingId)}"` : ''}${descriptionId ? ` aria-describedby="${e(descriptionId)}"` : ''} class="${sectionClass}">${header}${body}</section></div>`;
@@ -1147,7 +1147,7 @@ export class Tabs extends Component {
         const key = this.getKey()!;
         const id = this.livewire.id;
         const q = (k: string) => js(k);
-        const tabId = (tab: Tab) => `fi-sc-tab-${createHash('md5').update(tab.getKey()!).digest('hex')}`;
+        const tabId = (tab: Tab) => `nv-sc-tab-${createHash('md5').update(tab.getKey()!).digest('hex')}`;
         const visible: Tab[] = [];
         const visibleKeys: string[] = [];
         for (const [index, tab] of this.tabList.entries()) if (await tab.isVisible()) { visible.push(tab); visibleKeys.push(this.tabKeys[index]); }
@@ -1164,13 +1164,13 @@ export class Tabs extends Component {
         const badgeKey = (index: number) => (property === null && /^\d+$/.test(visibleKeys[index]) ? visibleKeys[index] : js(visibleKeys[index]));
         const badgeHtml = (badge: NonNullable<Awaited<ReturnType<Tab['getBadge']>>>, withIcon: boolean) => {
             const badgeIcon = withIcon && badge.icon ? icon(badge.icon, { size: 'sm' }) : '';
-            return `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', 'fi-size-sm', ...badgeColorClasses(this, badge.color)])}">${badge.iconPosition === 'before' ? badgeIcon : ''}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(badge.label)}</span></span>${badge.iconPosition === 'after' ? badgeIcon : ''}</span>`;
+            return `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['nv-badge', 'nv-size-sm', ...badgeColorClasses(this, badge.color)])}">${badge.iconPosition === 'before' ? badgeIcon : ''}<span class="nv-badge-label-ctn"><span class="nv-badge-label">${e(badge.label)}</span></span>${badge.iconPosition === 'after' ? badgeIcon : ''}</span>`;
         };
         const headerBadge = (index: number, withIcon: boolean) => (badges[index] ? badgeHtml(badges[index]!, withIcon) : lazy[index] ? deferredBadgePlaceholderHtml(badgeKey(index)) : '');
-        const outer = new Attributes().merge({ id: key, 'wire:key': `${id}.${key}.container`, ...this._extraAttributes }).class(['fi-sc-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }]);
+        const outer = new Attributes().merge({ id: key, 'wire:key': `${id}.${key}.container`, ...this._extraAttributes }).class(['nv-sc-tabs', { 'nv-contained': isContained, 'nv-vertical': isVertical }]);
         const tabIcon = (tab: Tab) => (tab.getIcon() ? icon(tab.getIcon()!) : '');
-        const label = (tab: Tab, index: number, withIcon = true) => `${tab.getIconPosition() === 'before' && withIcon ? tabIcon(tab) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${tab.getIconPosition() === 'after' && withIcon ? tabIcon(tab) : ''}${headerBadge(index, true)}`;
-        const assetSrc = e(views.render('filament-schemas::asset', { path: 'tabs' }).trim());
+        const label = (tab: Tab, index: number, withIcon = true) => `${tab.getIconPosition() === 'before' && withIcon ? tabIcon(tab) : ''}<span class="nv-tabs-item-label">${e(tab.getLabel())}</span>${tab.getIconPosition() === 'after' && withIcon ? tabIcon(tab) : ''}${headerBadge(index, true)}`;
+        const assetSrc = e(views.render('navette-schemas::asset', { path: 'tabs' }).trim());
         const tablistRole = hasPanels ? `role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'"` : 'role="group"';
         const orientation = hasPanels && isVertical ? ` x-bind:aria-orientation="hasVisibleTabHeaders ? 'vertical' : null"` : '';
 
@@ -1180,19 +1180,19 @@ export class Tabs extends Component {
             const activeKey = current === null || current === undefined ? '' : String(current);
             const activeIndex = visibleKeys.indexOf(activeKey);
             const activeTab = activeIndex >= 0 ? activeIndex + 1 : await this.getActiveTab(visible);
-            const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['fi-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }])
+            const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['nv-tabs', { 'nv-contained': isContained, 'nv-vertical': isVertical }])
                 .when(hasDeferredBadges, (a) => a.set('x-data', DEFERRED_BADGES_X_DATA));
             const buttons = visible.map((tab, index) => {
                 const k = tab.getTabKey();
                 const isActive = activeKey === k;
                 const set = k !== '' ? `$set(${q(property)}, ${q(k)})` : `$set(${q(property)}, null)`;
                 const aria = hasPanels ? `role="tab" aria-controls="${e(tab.getKey()!)}" aria-selected="${isActive}" x-bind:aria-selected="isTabSelected(${q(k)})" tabindex="${isActive ? 0 : -1}"` : `aria-pressed="${isActive}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0"`;
-                return `<button id="${tabId(tab)}" ${aria} x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="${e(`if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }`)}" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="${e(set)}" class="${cls(['fi-tabs-item', { 'fi-active': isActive }])}">${label(tab, index)}</button>`;
+                return `<button id="${tabId(tab)}" ${aria} x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="${e(`if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }`)}" x-bind:class="{ 'nv-active': isTabSelected(${q(k)}) }" type="button" wire:click="${e(set)}" class="${cls(['nv-tabs-item', { 'nv-active': isActive }])}">${label(tab, index)}</button>`;
             });
             const panels: string[] = [];
             if (hasPanels) for (const tab of visible) {
                 const k = tab.getTabKey();
-                panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="fi-sc-tabs-tab">${activeKey === k ? await tab.toHtml() : ''}</div>`);
+                panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'nv-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="navetteSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="nv-sc-tabs-tab">${activeKey === k ? await tab.toHtml() : ''}</div>`);
             }
             return `<div x-data="tabsSchemaComponent({
  activeTab: ${activeTab},
@@ -1202,57 +1202,57 @@ export class Tabs extends Component {
  livewireId: ${e(js(id))},
  livewireProperty: ${e(js(property))},
  tab: ${e(js(activeKey))},
- })" x-load x-load-src="${assetSrc}" wire:ignore.self ${outer.toHtml()}><input type="hidden" x-ref="tabsData" data-active-tab="${e(activeKey)}" /><div ${nav.toHtml()}><div x-ref="tablist" ${tablistRole} aria-label="${e(this.label)}"${orientation} x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="${e(property)}" class="fi-sc-tabs-tablist">${buttons.join('')}</div></div>${panels.join('')}</div>`;
+ })" x-load x-load-src="${assetSrc}" wire:ignore.self ${outer.toHtml()}><input type="hidden" x-ref="tabsData" data-active-tab="${e(activeKey)}" /><div ${nav.toHtml()}><div x-ref="tablist" ${tablistRole} aria-label="${e(this.label)}"${orientation} x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="${e(property)}" class="nv-sc-tabs-tablist">${buttons.join('')}</div></div>${panels.join('')}</div>`;
         }
 
         const activeTab = await this.getActiveTab(visible);
         const buttons = visible.map((tab, index) => {
             const k = tab.getTabKey();
             const overflowClasses = hasPanels ? `
- 'fi-sc-tabs-header-overflow': overflowTabs.includes(${q(k)}),
- 'fi-sc-tabs-header-overflow-open': isOverflowOpen &amp;&amp; overflowTabs.includes(${q(k)}),` : '';
+ 'nv-sc-tabs-header-overflow': overflowTabs.includes(${q(k)}),
+ 'nv-sc-tabs-header-overflow-open': isOverflowOpen &amp;&amp; overflowTabs.includes(${q(k)}),` : '';
             const aria = hasPanels ? `role="tab" aria-controls="${e(tab.getKey()!)}" tabindex="-1"` : 'tabindex="0"';
             const show = hasPanels ? 'true' : `(true) &amp;&amp; ! overflowTabs.includes(${q(k)})`;
             return `<button type="button" x-bind:class="{
- 'fi-active': isTabSelected(${q(k)}),${overflowClasses}
- }" id="${tabId(tab)}" ${aria} x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-bind:${hasPanels ? 'aria-selected' : 'aria-pressed'}="isTabSelected(${q(k)})" x-on:click="selectTab(${q(k)}, $event)" x-show="${show}" class="fi-tabs-item">${label(tab, index)}</button>`;
+ 'nv-active': isTabSelected(${q(k)}),${overflowClasses}
+ }" id="${tabId(tab)}" ${aria} x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-bind:${hasPanels ? 'aria-selected' : 'aria-pressed'}="isTabSelected(${q(k)})" x-on:click="selectTab(${q(k)}, $event)" x-show="${show}" class="nv-tabs-item">${label(tab, index)}</button>`;
         });
         // Not scrollable: tabs that do not fit move to an overflow dropdown, opened from a "more" trigger.
         let overflow = '';
         if (!isScrollable) {
-            const more = t('filament-schemas::components.tabs.actions.more.label');
+            const more = t('navette-schemas::components.tabs.actions.more.label');
             const triggers = visible.map((tab, index) => {
                 const k = tab.getTabKey();
                 const badge = badges[index];
                 const badgeContent = badge ? badgeHtml(badge, false) : lazy[index] ? deferredBadgePlaceholderHtml(badgeKey(index)) : '';
-                return `<button type="button" tabindex="${hasPanels ? '-1' : '0'}"${hasPanels ? ' aria-hidden="true"' : ''} data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="fi-tabs-item fi-active">${icon('m-chevron-down', { alias: 'schemas::components.tabs.dropdown-trigger-button' })}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${badgeContent}</button>`;
+                return `<button type="button" tabindex="${hasPanels ? '-1' : '0'}"${hasPanels ? ' aria-hidden="true"' : ''} data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="nv-tabs-item nv-active">${icon('m-chevron-down', { alias: 'schemas::components.tabs.dropdown-trigger-button' })}<span class="nv-tabs-item-label">${e(tab.getLabel())}</span>${badgeContent}</button>`;
             });
             const items = visible.map((tab, index) => {
                 const k = tab.getTabKey();
                 const badge = badges[index];
-                const listBadge = badge ? `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', ...badgeColorClasses(this, badge.color)])}">${e(badge.label)}</span>` : lazy[index] ? deferredDropdownBadgePlaceholderHtml(badgeKey(index)) : '';
-                const content = `${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="fi-dropdown-list-item-label">${e(tab.getLabel())}</span>${listBadge}`;
-                if (hasPanels) return `<div data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item fi-sc-tabs-overflow-placeholder">${content}</div>`;
-                return `<button role="menuitem" type="button" data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-on:click="${e(`if ($el.getAttribute('aria-disabled') !== 'true') selectTab(${q(k)}, $event, true)`)}" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item">${content}</button>`;
+                const listBadge = badge ? `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['nv-badge', ...badgeColorClasses(this, badge.color)])}">${e(badge.label)}</span>` : lazy[index] ? deferredDropdownBadgePlaceholderHtml(badgeKey(index)) : '';
+                const content = `${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="nv-dropdown-list-item-label">${e(tab.getLabel())}</span>${listBadge}`;
+                if (hasPanels) return `<div data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="nv-dropdown-list-item nv-sc-tabs-overflow-placeholder">${content}</div>`;
+                return `<button role="menuitem" type="button" data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-on:click="${e(`if ($el.getAttribute('aria-disabled') !== 'true') selectTab(${q(k)}, $event, true)`)}" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="nv-dropdown-list-item">${content}</button>`;
             });
-            const ellipsis = `<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis${hasPanels ? ' tabindex="-1" aria-hidden="true"' : ''} aria-label="${e(more)}" class="fi-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="fi-tabs-item-label">${icon('m-ellipsis-horizontal', { alias: 'schemas::components.tabs.more-tabs-button' })}</span></button>`;
+            const ellipsis = `<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis${hasPanels ? ' tabindex="-1" aria-hidden="true"' : ''} aria-label="${e(more)}" class="nv-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="nv-tabs-item-label">${icon('m-ellipsis-horizontal', { alias: 'schemas::components.tabs.more-tabs-button' })}</span></button>`;
             const panel = hasPanels
-                ? `<div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.fi-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="fi-dropdown-panel fi-sc-tabs-overflow-panel">`
-                : `<div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" x-on:keydown.home.prevent.stop="focusMenuItem('first')" x-on:keydown.end.prevent.stop="focusMenuItem('last')" class="fi-dropdown-panel">`;
+                ? `<div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.nv-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="nv-dropdown-panel nv-sc-tabs-overflow-panel">`
+                : `<div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" x-on:keydown.home.prevent.stop="focusMenuItem('first')" x-on:keydown.end.prevent.stop="focusMenuItem('last')" class="nv-dropdown-panel">`;
             const toggle = hasPanels ? '$event.preventDefault(); toggleOverflow()' : 'toggle($event)';
-            overflow = `<div ${hasPanels ? 'aria-hidden="true"' : 'x-data="filamentDropdown"'} class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { ${toggle} }" class="fi-dropdown-trigger">${triggers.join('')}${ellipsis}</div>${panel}<div class="fi-dropdown-list">${items.join('')}</div></div></div>`;
+            overflow = `<div ${hasPanels ? 'aria-hidden="true"' : 'x-data="navetteDropdown"'} class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) { ${toggle} }" class="nv-dropdown-trigger">${triggers.join('')}${ellipsis}</div>${panel}<div class="nv-dropdown-list">${items.join('')}</div></div></div>`;
         }
         const panels: string[] = [];
         if (hasPanels) for (const tab of visible) {
             const k = tab.getTabKey();
-            panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="fi-sc-tabs-tab">${await tab.toHtml()}</div>`);
+            panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'nv-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="navetteSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="nv-sc-tabs-tab">${await tab.toHtml()}</div>`);
         }
-        const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['fi-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }])
-            .when(!isScrollable, (a) => a.merge({ 'x-bind:class': "{ 'fi-invisible': ! overflowReady }" }))
+        const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['nv-tabs', { 'nv-contained': isContained, 'nv-vertical': isVertical }])
+            .when(!isScrollable, (a) => a.merge({ 'x-bind:class': "{ 'nv-invisible': ! overflowReady }" }))
             .merge({ 'x-cloak': true })
             .when(hasDeferredBadges, (a) => a.set('x-data', DEFERRED_BADGES_X_DATA));
         const tablistExtra = `${orientation} x-on:keydown="handleKeydown($event)"${!hasPanels || isScrollable ? '' : ` x-on:dropdown-escape="if (isOverflowOpen) { $event.preventDefault(); $event.stopPropagation(); dismissOverflow() }" x-on:wheel="scrollOverflow($event)" x-on:touchstart="scrollOverflow($event)" x-on:touchmove="scrollOverflow($event)"`}`;
-        const persistedTab = isTabPersisted ? e(`$persist(null).as(${js(`filament:tabs:active:${key}`)})`) : 'null';
+        const persistedTab = isTabPersisted ? e(`$persist(null).as(${js(`navette:tabs:active:${key}`)})`) : 'null';
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${activeTab},
  hasTabPanels: ${hasPanels ? 'true' : 'false'},
@@ -1264,7 +1264,7 @@ export class Tabs extends Component {
  schemaKey: ${e(js(key.split('.')[0]))},
  tab: ${persistedTab},
  tabQueryStringKey: ${e(js(this._tabQueryStringKey))},
- })" x-load x-load-src="${assetSrc}"${!hasPanels || isScrollable ? '' : ' x-on:resize.window="scheduleUpdate(true)"'} wire:ignore.self ${outer.toHtml()}><div ${nav.toHtml()}><div x-ref="tablist" ${tablistRole} aria-label="${e(this.label)}"${tablistExtra} class="fi-sc-tabs-tablist">${buttons.join('')}</div>${overflow}</div>${panels.join('')}</div>`;
+ })" x-load x-load-src="${assetSrc}"${!hasPanels || isScrollable ? '' : ' x-on:resize.window="scheduleUpdate(true)"'} wire:ignore.self ${outer.toHtml()}><div ${nav.toHtml()}><div x-ref="tablist" ${tablistRole} aria-label="${e(this.label)}"${tablistExtra} class="nv-sc-tabs-tablist">${buttons.join('')}</div>${overflow}</div>${panels.join('')}</div>`;
     }
 }
 
@@ -1298,7 +1298,7 @@ export class Form extends LayoutComponent {
     footer(components: Component[]): this { this._footer = components; return this; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children), childSchema(this, this._footer)]; }
     async toHtml(): Promise<string> {
-        const attributes = new Attributes().merge({ id: this._id, 'wire:submit': this._submit }).class(['fi-sc-form']);
+        const attributes = new Attributes().merge({ id: this._id, 'wire:submit': this._submit }).class(['nv-sc-form']);
         const [content, footer] = this.getChildSchemas();
         return `<form ${attributes.toHtml()}>${await content.toHtml()}${await footer.toHtml()}</form>`;
     }
@@ -1348,11 +1348,11 @@ export class Actions extends Component {
         for (const a of this.actions) if (await a.isVisible(ctx)) visible.push(await (a as any).toHtml(ctx, mountContext));
         const label = await evaluate(this._label, ctx);
         const slot = (content: ComponentSlot) => renderSlot(this, content, key);
-        const labelHtml = isBlank(label) ? '' : `<div class="fi-sc-actions-label-ctn">${await slot(this._beforeLabel)}<div class="fi-sc-actions-label">${e(label)}</div>${await slot(this._afterLabel)}</div>`;
+        const labelHtml = isBlank(label) ? '' : `<div class="nv-sc-actions-label-ctn">${await slot(this._beforeLabel)}<div class="nv-sc-actions-label">${e(label)}</div>${await slot(this._afterLabel)}</div>`;
         const above = await slot(this._aboveContent), below = await slot(this._belowContent);
         if (!visible.length && !labelHtml && !above && !below) return '';
-        const inner = cls(['fi-ac', { 'fi-width-full': this._fullWidth }, this._alignment ? `fi-align-${this._alignment}` : null]);
-        return `<div ${new Attributes().merge({ id: key, ...this._extraAttributes }).class(['fi-sc-actions', this._verticalAlignment ? (['start', 'center', 'end'].includes(this._verticalAlignment) ? `fi-vertical-align-${this._verticalAlignment}` : this._verticalAlignment) : null]).toHtml()}>${labelHtml}${above}${visible.length ? `<div class="${inner}">${visible.join('')}</div>` : ''}${below}</div>`;
+        const inner = cls(['nv-ac', { 'nv-width-full': this._fullWidth }, this._alignment ? `nv-align-${this._alignment}` : null]);
+        return `<div ${new Attributes().merge({ id: key, ...this._extraAttributes }).class(['nv-sc-actions', this._verticalAlignment ? (['start', 'center', 'end'].includes(this._verticalAlignment) ? `nv-vertical-align-${this._verticalAlignment}` : this._verticalAlignment) : null]).toHtml()}>${labelHtml}${above}${visible.length ? `<div class="${inner}">${visible.join('')}</div>` : ''}${below}</div>`;
     }
 }
 /** Renders a slot of a component as an inline row: strings become `Text` components. */
@@ -1371,7 +1371,7 @@ let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 const colorsFor = (component: Component): ColorManager | null => (component.livewire as any)?.panel?.colors ?? colorManager;
 /** Color classes without computed shades (icon, callout, empty state); none for gray, the default. */
-const plainColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' ? ['fi-color', `fi-color-${color.replace(/[^a-zA-Z0-9_-]/g, '')}`] : []);
+const plainColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' ? ['nv-color', `nv-color-${color.replace(/[^a-zA-Z0-9_-]/g, '')}`] : []);
 /** Size or weight class: only class-name characters are kept. */
 const safeClass = (value: string | null): string | null => (value ? value.replace(/[^a-zA-Z0-9_:-]/g, '') || null : null);
 const tooltipExpression = (text: string | null): string | null => (text ? `{ content: ${js(text)}, theme: $store.theme, allowHTML: false }` : null);
@@ -1399,10 +1399,10 @@ export async function renderInlineItems(parent: Component, items: InlineItem[], 
             const key = item.getKey();
             const attributes = new Attributes().merge({
                 'wire:partial': key !== null ? `schema-component::${key}` : null,
-                'x-data': `filamentSchemaComponent(${js({ ...item.getAlpineScopeConfiguration(), ...(options.scope ?? {}) })})`,
+                'x-data': `navetteSchemaComponent(${js({ ...item.getAlpineScopeConfiguration(), ...(options.scope ?? {}) })})`,
                 'wire:key': item.getLivewireKey(),
             });
-            parts.push(`<div ${attributes.toHtml()}><div class="fi-sc-component">${await item.toHtml()}</div></div>`);
+            parts.push(`<div ${attributes.toHtml()}><div class="nv-sc-component">${await item.toHtml()}</div></div>`);
             continue;
         }
         if (!(await item.isVisible(ctx))) continue;
@@ -1411,10 +1411,10 @@ export async function renderInlineItems(parent: Component, items: InlineItem[], 
         const asLink = typeof action.toLinkHtml === 'function' && (view === 'link' || (view === 'auto' && action._iconButton === true));
         // The link rendering is shared with table rows: its row key, empty here, is stripped.
         const html = asLink ? String(await action.toLinkHtml(ctx, mountContext, '')).replace(' wire:key=""', '') : await action.toHtml(ctx, mountContext);
-        parts.push(`<div class="fi-sc-action">${html}</div>`);
+        parts.push(`<div class="nv-sc-action">${html}</div>`);
     }
     if (!parts.length) return '';
-    return `<div class="${cls(['fi-sc', 'fi-inline', options.alignment ? `fi-align-${options.alignment}` : null, 'fi-sc-has-gap', 'fi-sc-dense'])}">${parts.join('')}</div>`;
+    return `<div class="${cls(['nv-sc', 'nv-inline', options.alignment ? `nv-align-${options.alignment}` : null, 'nv-sc-has-gap', 'nv-sc-dense'])}">${parts.join('')}</div>`;
 }
 /** Actions among inline items (expose them through `getActions()` so they can be mounted). */
 const actionsOf = (items: InlineItem[]): Renderable[] => items.filter((item) => !(item instanceof Component)) as Renderable[];
@@ -1426,7 +1426,7 @@ function columnGrid(columns: Record<string, number> | number | null): Attributes
     cols.default ??= 1;
     const name = (breakpoint: string) => breakpoint.replace(/@/g, 'c').replace(/!/g, 'n');
     return new Attributes()
-        .class(['fi-grid', 'fi-grid-direction-col', ...Object.keys(cols).map((breakpoint) => (breakpoint === 'default' ? (cols[breakpoint] > 1 ? 'fi-grid-cols' : '') : `${breakpoint}:fi-grid-cols`))])
+        .class(['nv-grid', 'nv-grid-direction-col', ...Object.keys(cols).map((breakpoint) => (breakpoint === 'default' ? (cols[breakpoint] > 1 ? 'nv-grid-cols' : '') : `${breakpoint}:nv-grid-cols`))])
         .style(Object.entries(cols).map(([breakpoint, count]) => `--cols-${name(breakpoint)}: ${count}`));
 }
 
@@ -1463,8 +1463,8 @@ export class Fieldset extends LayoutComponent {
     async toHtml(): Promise<string> {
         const label = await evaluate(this._label, this.context());
         const attributes = new Attributes().merge({ id: this.getKey(), ...this._extraAttributes })
-            .class(['fi-sc-fieldset', 'fi-fieldset', { 'fi-fieldset-label-hidden': this._hiddenLabel, 'fi-fieldset-not-contained': !this._contained }]);
-        const legend = isBlank(label) ? '' : `<legend>${e(label)}${this._markedAsRequired ? '<sup class="fi-fieldset-label-required-mark">*</sup>' : ''}</legend>`;
+            .class(['nv-sc-fieldset', 'nv-fieldset', { 'nv-fieldset-label-hidden': this._hiddenLabel, 'nv-fieldset-not-contained': !this._contained }]);
+        const legend = isBlank(label) ? '' : `<legend>${e(label)}${this._markedAsRequired ? '<sup class="nv-fieldset-label-required-mark">*</sup>' : ''}</legend>`;
         return `<fieldset ${attributes.toHtml()}>${legend}${await this.getChildSchemas()[0].toHtml()}</fieldset>`;
     }
 }
@@ -1529,20 +1529,20 @@ export class Text extends Component {
         const tooltip = tooltipExpression(await evaluate(this._tooltip, ctx));
         const isCopyable = Boolean(await evaluate(this._copyable, ctx));
         const copyableState = (await evaluate(this._copyableState, ctx)) ?? (content instanceof HtmlString ? content.html : content);
-        const copy = `window.navigator.clipboard.writeText(${js(copyableState)})\n$tooltip(${js(this._copyMessage ?? t('filament::components/copyable.messages.copied'))}, {\n theme: $store.theme,\n timeout: ${js(this._copyMessageDuration)},\n})`;
+        const copy = `window.navigator.clipboard.writeText(${js(copyableState)})\n$tooltip(${js(this._copyMessage ?? t('navette::components/copyable.messages.copied'))}, {\n theme: $store.theme,\n timeout: ${js(this._copyMessageDuration)},\n})`;
         if (await evaluate(this._badge, ctx)) {
             const tag = isCopyable ? 'button' : 'span';
             const attributes = new Attributes().merge({ 'x-on:click': isCopyable ? copy : null, 'x-tooltip': tooltip, ...this._extraAttributes, type: isCopyable ? 'button' : null })
-                .class(['fi-sc-text', 'fi-badge', `fi-size-${safeClass(this._size) ?? 'md'}`, ...(color !== 'gray' ? (colorsFor(this)?.getComponentClasses('badge', color) ?? plainColorClasses(color)) : [])]);
+                .class(['nv-sc-text', 'nv-badge', `nv-size-${safeClass(this._size) ?? 'md'}`, ...(color !== 'gray' ? (colorsFor(this)?.getComponentClasses('badge', color) ?? plainColorClasses(color)) : [])]);
             const iconHtml = this._icon ? icon(this._icon, { size: safeClass(this._iconSize) ?? 'sm' }) : '';
-            return `<${tag} ${attributes.toHtml()}>${this._iconPosition === 'before' ? iconHtml : ''}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${textOrHtml(content)}</span></span>${this._iconPosition === 'after' ? iconHtml : ''}</${tag}>`;
+            return `<${tag} ${attributes.toHtml()}>${this._iconPosition === 'before' ? iconHtml : ''}<span class="nv-badge-label-ctn"><span class="nv-badge-label">${textOrHtml(content)}</span></span>${this._iconPosition === 'after' ? iconHtml : ''}</${tag}>`;
         }
         // Text color: same contrast-aware classes as a link.
         const colorClasses = color !== 'gray' ? (colorsFor(this)?.getComponentClasses('link', color) ?? plainColorClasses(color)) : [];
         const attributes = new Attributes().merge({
             role: isCopyable ? 'button' : null, tabindex: isCopyable ? '0' : null, 'x-on:click': isCopyable ? copy : null,
             'x-on:keydown.enter.prevent': isCopyable ? '$el.click()' : null, 'x-on:keydown.space.prevent': isCopyable ? '$el.click()' : null, 'x-tooltip': tooltip,
-        }).class([...colorClasses, 'fi-sc-text', { 'fi-copyable': isCopyable }, this._size ? `fi-size-${safeClass(this._size)}` : null, this._weight ? `fi-font-${safeClass(this._weight)}` : null, this._fontFamily ? `fi-font-${safeClass(this._fontFamily)}` : null])
+        }).class([...colorClasses, 'nv-sc-text', { 'nv-copyable': isCopyable }, this._size ? `nv-size-${safeClass(this._size)}` : null, this._weight ? `nv-font-${safeClass(this._weight)}` : null, this._fontFamily ? `nv-font-${safeClass(this._fontFamily)}` : null])
             .merge(this._extraAttributes);
         return `<span ${attributes.toHtml()}>${textOrHtml(content)}</span>`;
     }
@@ -1569,11 +1569,11 @@ export class Icon extends Component {
         const tooltip = await evaluate(this._tooltip, ctx);
         const { 'aria-label': ariaLabel = null, 'aria-labelledby': ariaLabelledBy = null, 'aria-describedby': ariaDescribedBy = null, ...extra } = this._extraAttributes;
         const attributes = new Attributes({ 'x-tooltip': tooltipExpression(tooltip) }).merge({ ...extra, 'aria-hidden': 'true' })
-            .class([...plainColorClasses((await evaluate(this._color, ctx)) ?? 'primary'), 'fi-sc-icon']);
+            .class([...plainColorClasses((await evaluate(this._color, ctx)) ?? 'primary'), 'nv-sc-icon']);
         const html = icon(name, { size: safeClass(this._size) ?? 'md', attributes });
         const label = ariaLabel ?? (ariaLabelledBy ? null : tooltip);
         if (!label && !ariaLabelledBy) return html;
-        return `${html}<span ${new Attributes().merge({ 'aria-describedby': ariaDescribedBy ? e(ariaDescribedBy) : null, 'aria-label': label ? e(label) : null, 'aria-labelledby': ariaLabelledBy ? e(ariaLabelledBy) : null, role: 'img' }).class(['fi-sr-only']).toHtml()}></span>`;
+        return `${html}<span ${new Attributes().merge({ 'aria-describedby': ariaDescribedBy ? e(ariaDescribedBy) : null, 'aria-label': label ? e(label) : null, 'aria-labelledby': ariaLabelledBy ? e(ariaLabelledBy) : null, role: 'img' }).class(['nv-sr-only']).toHtml()}></span>`;
     }
 }
 
@@ -1611,7 +1611,7 @@ export class Image extends Component {
         if (!(isLocalOrHttpUrl(url) || /^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(url))) return '';
         const tooltip = tooltipExpression(await evaluate(this._tooltip, ctx));
         const attributes = new Attributes(this._extraAttributes)
-            .class(['fi-sc-image', this._alignment ? `fi-align-${safeClass(this._alignment)}` : null])
+            .class(['nv-sc-image', this._alignment ? `nv-align-${safeClass(this._alignment)}` : null])
             .style([`height: ${this._height ?? '8rem'}`, this._width ? `width: ${this._width}` : null]);
         return `<img alt="${e(await evaluate(this._alt, ctx))}" src="${e(url)}"${tooltip ? ` x-tooltip="${tooltip}"` : ''} ${attributes.toHtml()} />`;
     }
@@ -1631,10 +1631,10 @@ export class UnorderedList extends Component {
     size(size: string | null): this { this._size = size; return this; }
     getChildSchemas(): Schema[] { return [childSchema(this, this.children)]; }
     async toHtml(): Promise<string> {
-        const attributes = columnGrid(this._columns).merge(this._extraAttributes).class(['fi-sc-unordered-list', this._size ? `fi-size-${safeClass(this._size)}` : null]);
+        const attributes = columnGrid(this._columns).merge(this._extraAttributes).class(['nv-sc-unordered-list', this._size ? `nv-size-${safeClass(this._size)}` : null]);
         const items: string[] = [];
         for (const component of this.getChildSchemas()[0].getComponents()) {
-            items.push(`<li wire:key="${e(component.getLivewireKey() ?? '')}" x-data="filamentSchemaComponent(${js(component.getAlpineScopeConfiguration())})">${await component.toHtml()}</li>`);
+            items.push(`<li wire:key="${e(component.getLivewireKey() ?? '')}" x-data="navetteSchemaComponent(${js(component.getAlpineScopeConfiguration())})">${await component.toHtml()}</li>`);
         }
         return `<ul ${attributes.toHtml()}>${items.join('')}</ul>`;
     }
@@ -1676,8 +1676,8 @@ export class EmptyState extends Component {
         const footer = await renderInlineItems(this, this._footer);
         const iconColor = this._iconColor ?? 'primary';
         const headingTag = this._headingTag ?? this.getHeadingTag();
-        const iconHtml = this._icon ? `<div class="${cls(['fi-empty-state-icon-bg', ...plainColorClasses(iconColor)])}">${icon(this._icon, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes().class(plainColorClasses(iconColor)) })}</div>` : '';
-        return `<div ${new Attributes(this._extraAttributes).class(['fi-sc-empty-state']).toHtml()}><section class="${cls(['fi-empty-state', { 'fi-compact': this._compact, 'fi-empty-state-not-contained': !this._contained }])}"><div class="fi-empty-state-content">${iconHtml}<div class="fi-empty-state-text-ctn"><${headingTag} class="fi-empty-state-heading">${e(await evaluate(this._heading, ctx))}</${headingTag}>${isBlank(description) ? '' : `<p class="fi-empty-state-description">${e(description)}</p>`}${footer ? `<footer class="fi-empty-state-footer">${footer}</footer>` : ''}</div></div></section></div>`;
+        const iconHtml = this._icon ? `<div class="${cls(['nv-empty-state-icon-bg', ...plainColorClasses(iconColor)])}">${icon(this._icon, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes().class(plainColorClasses(iconColor)) })}</div>` : '';
+        return `<div ${new Attributes(this._extraAttributes).class(['nv-sc-empty-state']).toHtml()}><section class="${cls(['nv-empty-state', { 'nv-compact': this._compact, 'nv-empty-state-not-contained': !this._contained }])}"><div class="nv-empty-state-content">${iconHtml}<div class="nv-empty-state-text-ctn"><${headingTag} class="nv-empty-state-heading">${e(await evaluate(this._heading, ctx))}</${headingTag}>${isBlank(description) ? '' : `<p class="nv-empty-state-description">${e(description)}</p>`}${footer ? `<footer class="nv-empty-state-footer">${footer}</footer>` : ''}</div></div></section></div>`;
     }
 }
 
@@ -1740,15 +1740,15 @@ export class Callout extends Component {
         const iconColor = this._iconColor ?? this._status ?? color;
         const footer = this._footer ? await renderInlineItems(this, this._footer, { actionView: 'link' }) : await renderInlineItems(this, this._footerActions, { alignment: ['right', 'end'].includes(this._footerActionsAlignment) ? 'end' : this._footerActionsAlignment === 'justify' ? 'between' : this._footerActionsAlignment, actionView: 'link' });
         const controls = this._controls ? await renderInlineItems(this, this._controls, { actionView: 'auto' }) : await renderInlineItems(this, this._controlActions, { alignment: 'start', actionView: 'auto' });
-        const statusKey = this._status ? `filament-schemas::components.callout.statuses.${this._status}` : null;
+        const statusKey = this._status ? `navette-schemas::components.callout.statuses.${this._status}` : null;
         const statusLabel = statusKey && t(statusKey) !== statusKey ? t(statusKey) : null;
-        const statusHtml = statusLabel ? `<span class="fi-sr-only">${e(statusLabel)} </span>` : '';
+        const statusHtml = statusLabel ? `<span class="nv-sr-only">${e(statusLabel)} </span>` : '';
         const hasHeading = !isBlank(heading), hasDescription = !isBlank(description);
-        const text = hasHeading || hasDescription ? `<div class="fi-callout-text">${hasHeading ? `<h4 class="fi-callout-heading">${statusHtml}${e(heading)}</h4>` : ''}${hasDescription ? `<p class="fi-callout-description">${hasHeading ? '' : statusHtml}${e(description)}</p>` : ''}</div>` : '';
-        const main = text || footer ? `<div class="fi-callout-main">${text}${footer ? `<div class="fi-callout-footer">${footer}</div>` : ''}</div>` : '';
-        const iconHtml = iconName ? icon(iconName, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes({ 'aria-hidden': 'true' }).class([...plainColorClasses(iconColor), 'fi-callout-icon']) }) : '';
-        const attributes = new Attributes(this._extraAttributes).class([...plainColorClasses(color), 'fi-sc-callout', 'fi-callout']);
-        return `<div ${attributes.toHtml()}>${iconHtml}${main}${controls ? `<div class="fi-callout-controls">${controls}</div>` : ''}</div>`;
+        const text = hasHeading || hasDescription ? `<div class="nv-callout-text">${hasHeading ? `<h4 class="nv-callout-heading">${statusHtml}${e(heading)}</h4>` : ''}${hasDescription ? `<p class="nv-callout-description">${hasHeading ? '' : statusHtml}${e(description)}</p>` : ''}</div>` : '';
+        const main = text || footer ? `<div class="nv-callout-main">${text}${footer ? `<div class="nv-callout-footer">${footer}</div>` : ''}</div>` : '';
+        const iconHtml = iconName ? icon(iconName, { size: safeClass(this._iconSize) ?? 'lg', attributes: new Attributes({ 'aria-hidden': 'true' }).class([...plainColorClasses(iconColor), 'nv-callout-icon']) }) : '';
+        const attributes = new Attributes(this._extraAttributes).class([...plainColorClasses(color), 'nv-sc-callout', 'nv-callout']);
+        return `<div ${attributes.toHtml()}>${iconHtml}${main}${controls ? `<div class="nv-callout-controls">${controls}</div>` : ''}</div>`;
     }
 }
 
@@ -1770,7 +1770,7 @@ export class FusedGroup extends LayoutComponent {
     hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
     /** Asterisk after the label (validation stays per field). */
     markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
-    getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).gap(false).fieldWrapperView('filament-forms::plain-field-wrapper')]; }
+    getChildSchemas(): Schema[] { return [childSchema(this, this.children).columns(this._columns).gap(false).fieldWrapperView('navette-forms::plain-field-wrapper')]; }
     /** First error among the group's fields (including one on an item of a multi-valued field). */
     private firstError(): string | null {
         const errors = this.livewire._errors ?? {};
@@ -1788,13 +1788,13 @@ export class FusedGroup extends LayoutComponent {
         const label = await evaluate(this._label, this.context());
         const error = this.firstError();
         const hasLabel = !isBlank(label);
-        const inner = new Attributes().merge({ id, role: 'group', 'aria-labelledby': id && hasLabel ? `${id}-label` : null, ...this._extraAttributes, 'aria-describedby': id && error !== null ? `${id}-error` : null }).class(['fi-sc-fused-group']);
+        const inner = new Attributes().merge({ id, role: 'group', 'aria-labelledby': id && hasLabel ? `${id}-label` : null, ...this._extraAttributes, 'aria-describedby': id && error !== null ? `${id}-error` : null }).class(['nv-sc-fused-group']);
         const labelId = id ? `id="${e(id)}-label" ` : '';
         const labelHtml = !hasLabel ? '' : this._hiddenLabel
-            ? `<label ${labelId}class="fi-fo-field-label fi-sr-only">${e(label)}</label>`
-            : `<div class="fi-fo-field-label-col"><div class="fi-fo-field-label-ctn"><label ${labelId}class="fi-fo-field-label"><span class="fi-fo-field-label-content">${e(label)}${this._markedAsRequired ? '<sup class="fi-fo-field-label-required-mark">*</sup>' : ''}</span></label></div></div>`;
-        const errorHtml = error !== null ? `<p data-validation-error ${id ? `id="${e(id)}-error" ` : ''}class="fi-fo-field-wrp-error-message">${e(error)}</p>` : '';
-        return `<div data-field-wrapper class="fi-fo-field">${labelHtml}<div class="fi-fo-field-content-col"><div ${inner.toHtml()}>${await this.getChildSchemas()[0].toHtml()}</div>${errorHtml}</div></div>`;
+            ? `<label ${labelId}class="nv-fo-field-label nv-sr-only">${e(label)}</label>`
+            : `<div class="nv-fo-field-label-col"><div class="nv-fo-field-label-ctn"><label ${labelId}class="nv-fo-field-label"><span class="nv-fo-field-label-content">${e(label)}${this._markedAsRequired ? '<sup class="nv-fo-field-label-required-mark">*</sup>' : ''}</span></label></div></div>`;
+        const errorHtml = error !== null ? `<p data-validation-error ${id ? `id="${e(id)}-error" ` : ''}class="nv-fo-field-wrp-error-message">${e(error)}</p>` : '';
+        return `<div data-field-wrapper class="nv-fo-field">${labelHtml}<div class="nv-fo-field-content-col"><div ${inner.toHtml()}>${await this.getChildSchemas()[0].toHtml()}</div>${errorHtml}</div></div>`;
     }
 }
 
@@ -1822,12 +1822,12 @@ export class JsComponent extends Component {
     async toHtml(): Promise<string> {
         return jsComponentHtml({
             livewireKey: this.getLivewireKey(),
-            assetUrl: views.render('filament-schemas::asset', { path: 'js-component' }).trim(),
+            assetUrl: views.render('navette-schemas::asset', { path: 'js-component' }).trim(),
             renderer: await this.getRenderer(),
             rendererConfiguration: await this.getRendererConfiguration(),
             componentConfiguration: { id: await this.getId() },
             extraAttributes: new Attributes().merge(this._extraAttributes).toHtml(),
-            failedToLoadMessage: t('filament-schemas::components.js_component.failed_to_load'),
+            failedToLoadMessage: t('navette-schemas::components.js_component.failed_to_load'),
         });
     }
 }

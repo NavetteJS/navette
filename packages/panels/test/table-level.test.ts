@@ -78,9 +78,9 @@ test('column manager: reordered columns kept in the session, sanitized, and the 
     const again = await page(Tasks, 'browser-4');
     assert.deepEqual(again.tableColumns.map((column: any) => [column.name, column.isToggled]), [['priority', true], ['title', false]]);
     const html = await again.renderTable();
-    assert.doesNotMatch(html, /fi-ta-header-cell-title/);
+    assert.doesNotMatch(html, /nv-ta-header-cell-title/);
     again.applyTableColumnManager([{ type: 'column', name: 'priority', isToggled: true }, { type: 'column', name: 'title', isToggled: true }], true);
-    assert.ok((await again.renderTable()).indexOf('fi-ta-header-cell-priority') < (await again.renderTable()).indexOf('fi-ta-header-cell-title'));
+    assert.ok((await again.renderTable()).indexOf('nv-ta-header-cell-priority') < (await again.renderTable()).indexOf('nv-ta-header-cell-title'));
     again.resetTableColumnManager();
     assert.deepEqual(again.tableColumns.map((column: any) => column.name), ['title', 'priority']);
 });

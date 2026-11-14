@@ -112,7 +112,7 @@ icons.alias({
 });
 ```
 
-The value is the name of an icon (Heroicons, another set, or a registered icon), or HTML as an `HtmlString`, which is rendered inside a `<span class="fi-icon">` element with the size classes of the component. Passing `null` restores the default icon. An icon chosen explicitly, such as `ActionGroup.make([...]).icon('m-cog')` or `DeleteAction.make().icon('lucide:trash')`, takes precedence over the alias.
+The value is the name of an icon (Heroicons, another set, or a registered icon), or HTML as an `HtmlString`, which is rendered inside a `<span class="nv-icon">` element with the size classes of the component. Passing `null` restores the default icon. An icon chosen explicitly, such as `ActionGroup.make([...]).icon('m-cog')` or `DeleteAction.make().icon('lucide:trash')`, takes precedence over the alias.
 
 The icons of the interface are resolved when they are rendered, and the default icons of the prebuilt actions (`DeleteAction`, `EditAction`…) when the action is made: register your aliases before the panel is built, like your icon sets.
 
@@ -122,7 +122,7 @@ To build a plugin that replaces Heroicons with another set, register the set and
 
 ## Rendering an icon in your own HTML
 
-In a render hook, a custom view or an `Html` component, `icon()` returns the markup of an icon with its CSS hook classes (`fi-icon fi-size-md`). It accepts a size, extra attributes, and an alias that can replace the icon:
+In a render hook, a custom view or an `Html` component, `icon()` returns the markup of an icon with its CSS hook classes (`nv-icon nv-size-md`). It accepts a size, extra attributes, and an alias that can replace the icon:
 
 ```ts
 import { icon } from '@navette-js/support';
@@ -177,10 +177,10 @@ The rich editor toolbar aliases are also accepted with a single colon and unders
 | `forms::components.builder.actions.move-up` | `m-arrow-up` |
 | `forms::components.builder.actions.reorder` | `m-arrows-up-down` |
 | `forms::components.checkbox-list.search-field` | `m-magnifying-glass` |
-| `forms::components.file-upload.editor.actions.drag-crop` | `fi-o-crop` |
-| `forms::components.file-upload.editor.actions.drag-move` | `fi-o-arrows-move` |
-| `forms::components.file-upload.editor.actions.flip-horizontal` | `fi-o-flip-horizontal` |
-| `forms::components.file-upload.editor.actions.flip-vertical` | `fi-o-flip-vertical` |
+| `forms::components.file-upload.editor.actions.drag-crop` | `nv-o-crop` |
+| `forms::components.file-upload.editor.actions.drag-move` | `nv-o-arrows-move` |
+| `forms::components.file-upload.editor.actions.flip-horizontal` | `nv-o-flip-horizontal` |
+| `forms::components.file-upload.editor.actions.flip-vertical` | `nv-o-flip-vertical` |
 | `forms::components.file-upload.editor.actions.move-down` | `o-arrow-down-circle` |
 | `forms::components.file-upload.editor.actions.move-left` | `o-arrow-left-circle` |
 | `forms::components.file-upload.editor.actions.move-right` | `o-arrow-right-circle` |
@@ -202,34 +202,34 @@ The rich editor toolbar aliases are also accepted with a single colon and unders
 | `forms::components.rich-editor.toolbar.blockquote` | `m-chat-bubble-bottom-center-text` |
 | `forms::components.rich-editor.toolbar.bold` | `m-bold` |
 | `forms::components.rich-editor.toolbar.bullet-list` | `m-list-bullet` |
-| `forms::components.rich-editor.toolbar.clear-formatting` | `fi-o-clear-formatting` |
-| `forms::components.rich-editor.toolbar.code` | `fi-o-code` |
-| `forms::components.rich-editor.toolbar.code-block` | `fi-o-code-block` |
-| `forms::components.rich-editor.toolbar.details` | `fi-o-details` |
-| `forms::components.rich-editor.toolbar.highlight` | `fi-o-highlight` |
+| `forms::components.rich-editor.toolbar.clear-formatting` | `nv-o-clear-formatting` |
+| `forms::components.rich-editor.toolbar.code` | `nv-o-code` |
+| `forms::components.rich-editor.toolbar.code-block` | `nv-o-code-block` |
+| `forms::components.rich-editor.toolbar.details` | `nv-o-details` |
+| `forms::components.rich-editor.toolbar.highlight` | `nv-o-highlight` |
 | `forms::components.rich-editor.toolbar.horizontal-rule` | `m-minus` |
 | `forms::components.rich-editor.toolbar.italic` | `m-italic` |
-| `forms::components.rich-editor.toolbar.lead` | `fi-o-lead` |
+| `forms::components.rich-editor.toolbar.lead` | `nv-o-lead` |
 | `forms::components.rich-editor.toolbar.link` | `m-link` |
 | `forms::components.rich-editor.toolbar.ordered-list` | `m-numbered-list` |
-| `forms::components.rich-editor.toolbar.paragraph` | `fi-o-paragraph` |
+| `forms::components.rich-editor.toolbar.paragraph` | `nv-o-paragraph` |
 | `forms::components.rich-editor.toolbar.redo` | `m-arrow-uturn-right` |
-| `forms::components.rich-editor.toolbar.small` | `fi-o-small` |
+| `forms::components.rich-editor.toolbar.small` | `nv-o-small` |
 | `forms::components.rich-editor.toolbar.strike` | `m-strikethrough` |
-| `forms::components.rich-editor.toolbar.subscript` | `fi-o-subscript` |
-| `forms::components.rich-editor.toolbar.superscript` | `fi-o-superscript` |
-| `forms::components.rich-editor.toolbar.table` | `fi-o-table` |
-| `forms::components.rich-editor.toolbar.table-add-column-after` | `fi-o-table-add-column-after` |
-| `forms::components.rich-editor.toolbar.table-add-column-before` | `fi-o-table-add-column-before` |
-| `forms::components.rich-editor.toolbar.table-add-row-after` | `fi-o-table-add-row-after` |
-| `forms::components.rich-editor.toolbar.table-add-row-before` | `fi-o-table-add-row-before` |
-| `forms::components.rich-editor.toolbar.table-delete` | `fi-o-table-delete` |
-| `forms::components.rich-editor.toolbar.table-delete-column` | `fi-o-table-delete-column` |
-| `forms::components.rich-editor.toolbar.table-delete-row` | `fi-o-table-delete-row` |
-| `forms::components.rich-editor.toolbar.table-merge-cells` | `fi-o-table-merge-cells` |
-| `forms::components.rich-editor.toolbar.table-split-cell` | `fi-o-table-split-cell` |
-| `forms::components.rich-editor.toolbar.table-toggle-header-cell` | `fi-o-table-toggle-header-cell` |
-| `forms::components.rich-editor.toolbar.table-toggle-header-row` | `fi-o-table-toggle-header-row` |
+| `forms::components.rich-editor.toolbar.subscript` | `nv-o-subscript` |
+| `forms::components.rich-editor.toolbar.superscript` | `nv-o-superscript` |
+| `forms::components.rich-editor.toolbar.table` | `nv-o-table` |
+| `forms::components.rich-editor.toolbar.table-add-column-after` | `nv-o-table-add-column-after` |
+| `forms::components.rich-editor.toolbar.table-add-column-before` | `nv-o-table-add-column-before` |
+| `forms::components.rich-editor.toolbar.table-add-row-after` | `nv-o-table-add-row-after` |
+| `forms::components.rich-editor.toolbar.table-add-row-before` | `nv-o-table-add-row-before` |
+| `forms::components.rich-editor.toolbar.table-delete` | `nv-o-table-delete` |
+| `forms::components.rich-editor.toolbar.table-delete-column` | `nv-o-table-delete-column` |
+| `forms::components.rich-editor.toolbar.table-delete-row` | `nv-o-table-delete-row` |
+| `forms::components.rich-editor.toolbar.table-merge-cells` | `nv-o-table-merge-cells` |
+| `forms::components.rich-editor.toolbar.table-split-cell` | `nv-o-table-split-cell` |
+| `forms::components.rich-editor.toolbar.table-toggle-header-cell` | `nv-o-table-toggle-header-cell` |
+| `forms::components.rich-editor.toolbar.table-toggle-header-row` | `nv-o-table-toggle-header-row` |
 | `forms::components.rich-editor.toolbar.text-color` | `m-swatch` |
 | `forms::components.rich-editor.toolbar.underline` | `m-underline` |
 | `forms::components.rich-editor.toolbar.undo` | `m-arrow-uturn-left` |
@@ -315,8 +315,8 @@ The rich editor toolbar aliases are also accepted with a single colon and unders
 | `panels::user-menu.profile-item` | `m-user-circle` |
 | `panels::user-menu.theme-list.active-item` | `m-check` |
 | `panels::widgets.account.logout-button` | `m-arrow-left-end-on-rectangle` |
-| `panels::widgets.filament-info.open-documentation-button` | `m-book-open` |
-| `panels::widgets.filament-info.open-github-button` | GitHub logo |
+| `panels::widgets.navette-info.open-documentation-button` | `m-book-open` |
+| `panels::widgets.navette-info.open-github-button` | GitHub logo |
 
 ### Query builder icon aliases
 

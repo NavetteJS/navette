@@ -60,17 +60,17 @@ test('TextEntry: prefix and suffix actions, small icon buttons mounted with the 
     const copy = Action.make('copyCostToPrice').icon('o-clipboard').action(() => {});
     const entry = TextEntry.make('cost').prefix('€').suffixAction(copy).prefixAction(Action.make('info').icon('o-information-circle').url('/help'));
     const html = await render({ cost: 12 }, [entry]);
-    assert.match(html, /<div class="fi-in-text fi-wrapped fi-in-text-affixed"><div class="fi-in-text-affix"><a [^>]*href="\/help"[^>]*class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm/);
-    assert.match(html, /<div class="fi-in-text-affixed-content"><ul><li class="fi-in-text-item fi-size-sm">€12<\/li><\/ul><\/div><div class="fi-in-text-affix"><button [^>]*class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm/);
+    assert.match(html, /<div class="nv-in-text nv-wrapped nv-in-text-affixed"><div class="nv-in-text-affix"><a [^>]*href="\/help"[^>]*class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm/);
+    assert.match(html, /<div class="nv-in-text-affixed-content"><ul><li class="nv-in-text-item nv-size-sm">€12<\/li><\/ul><\/div><div class="nv-in-text-affix"><button [^>]*class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm/);
     assert.match(html, /mountAction\('copyCostToPrice', \{\}, \{ schemaComponent: 'infolist.cost' \}\)|mountAction\(&#039;copyCostToPrice|schemaComponent/);
     // The actions can be mounted from the entry.
     assert.deepEqual(entry.getActions().map((action: any) => action.getName()), ['info', 'copyCostToPrice']);
     // A chosen size or view is kept; hidden actions are left out.
     const html2 = await render({ cost: 1 }, [TextEntry.make('cost').suffixActions([Action.make('a').label('Open').button().size('lg').url('/a'), Action.make('b').icon('o-x-mark').hidden()])]);
-    assert.match(html2, /fi-btn fi-size-lg/);
+    assert.match(html2, /nv-btn nv-size-lg/);
     assert.doesNotMatch(html2, /o-x-mark|actions\.b/);
     // Without affix actions, the markup is unchanged.
-    assert.match(await render({ cost: 1 }, [TextEntry.make('cost')]), /<div class="fi-in-text-item fi-size-sm fi-in-text fi-wrapped">1<\/div>/);
+    assert.match(await render({ cost: 1 }, [TextEntry.make('cost')]), /<div class="nv-in-text-item nv-size-sm nv-in-text nv-wrapped">1<\/div>/);
 });
 
 test('TextEntry: getCharacterLimit() and limit() functions', async () => {
@@ -105,7 +105,7 @@ test('RepeatableEntry.maxItemsForProcessing(): a 413 error above the limit, befo
 });
 
 test('Documented helpers: alignLeft(), alignRight(), KeyValueEntry.emptyMessage()', async () => {
-    assert.match(await render({ a: 'x' }, [TextEntry.make('a').alignLeft()]), /fi-in-entry-content fi-align-left/);
-    assert.match(await render({ a: 'x' }, [TextEntry.make('a').alignRight()]), /fi-in-entry-content fi-align-right/);
+    assert.match(await render({ a: 'x' }, [TextEntry.make('a').alignLeft()]), /nv-in-entry-content nv-align-left/);
+    assert.match(await render({ a: 'x' }, [TextEntry.make('a').alignRight()]), /nv-in-entry-content nv-align-right/);
     assert.match(await render({ meta: {} }, [KeyValueEntry.make('meta').emptyMessage('No metadata')]), /No metadata/);
 });

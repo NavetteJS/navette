@@ -125,7 +125,7 @@ test('automaticallyOpenImageEditorForAspectRatio() needs a single imageAspectRat
     assert.match(html, /automaticallyOpenImageEditorForAspectRatio: 1\.7777/);
     assert.match(html, /hasImageEditor: true/);
     assert.match(html, /isImageEditorExplicitlyEnabled: false/);
-    assert.match(html, /fi-fo-file-upload-editor-crop-only/);
+    assert.match(html, /nv-fo-file-upload-editor-crop-only/);
     assert.match(await render(FileUpload.make('banner').image().imageAspectRatio('16:9')), /automaticallyOpenImageEditorForAspectRatio: null/);
     await assert.rejects(render(FileUpload.make('banner').image().automaticallyOpenImageEditorForAspectRatio()), /requires \[imageAspectRatio\(\)\]/);
     await assert.rejects(render(FileUpload.make('banner').image().imageAspectRatio(['16:9', '1:1']).automaticallyOpenImageEditorForAspectRatio()), /multiple allowed aspect ratios/);

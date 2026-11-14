@@ -37,7 +37,7 @@ export const hookProbe = (scoped: unknown): Plugin => ({
         // Scoped hook: rendered only on the given resource's pages.
         panel.renderHook(PanelsRenderHook.PAGE_START, ({ scopes }) => `<span hidden data-nv-scoped="${scopes.length}"></span>`, scoped);
         // Replaces the Country header cell of the given resource only.
-        panel.renderHook(TablesRenderHook.HEADER_CELL, ({ data }) => (data.column.name === 'country' ? '<th scope="col" class="fi-ta-header-cell" data-nv-replaced-header>Country (hook)</th>' : null), scoped);
+        panel.renderHook(TablesRenderHook.HEADER_CELL, ({ data }) => (data.column.name === 'country' ? '<th scope="col" class="nv-ta-header-cell" data-nv-replaced-header>Country (hook)</th>' : null), scoped);
         panel.pages([probePage('probe/sub-start', 'start'), probePage('probe/sub-end', 'end')]);
         panel.widgets([ProbeWidget]);
     },

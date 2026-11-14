@@ -14,7 +14,7 @@ const { step, exitCode } = reporter({ errorLines: 5 });
 const db = openDatabase(dbFile);
 const one = (sql, ...params) => db.prepare(sql).get(...params);
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
-const rows = page.locator('.fi-ta-records tr.fi-ta-row');
+const rows = page.locator('.nv-ta-records tr.nv-ta-row');
 const LABELS = { new: 'New', processing: 'Processing', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled' };
 const COLORS = { new: 'info', processing: 'warning', shipped: 'success', delivered: 'success', cancelled: 'danger' };
 const editWire = "window.Livewire.all().find((c) => c.el.querySelector('[wire\\\\:model=\"data.status\"]')).$wire";
@@ -27,20 +27,20 @@ try {
         const latest = one('select id, number, status from orders order by id desc limit 1');
         const row = rows.first();
         assert.match(await row.innerText(), new RegExp(latest.number));
-        const badge = row.locator('.fi-ta-cell-status .fi-badge').first();
+        const badge = row.locator('.nv-ta-cell-status .nv-badge').first();
         assert.equal((await badge.innerText()).trim(), LABELS[latest.status]);
-        assert.match(await badge.getAttribute('class'), new RegExp(`fi-color-${COLORS[latest.status]}`));
-        assert.equal(await badge.locator('svg.fi-icon').count(), 1);
+        assert.match(await badge.getAttribute('class'), new RegExp(`nv-color-${COLORS[latest.status]}`));
+        assert.equal(await badge.locator('svg.nv-icon').count(), 1);
         // The icon column: an icon per row, its label for screen readers.
-        assert.equal((await row.locator('.fi-ta-icon .fi-sr-only').innerText()).trim(), LABELS[latest.status]);
-        const raw = await page.locator('.fi-ta-cell-status .fi-badge').allInnerTexts();
+        assert.equal((await row.locator('.nv-ta-icon .nv-sr-only').innerText()).trim(), LABELS[latest.status]);
+        const raw = await page.locator('.nv-ta-cell-status .nv-badge').allInnerTexts();
         assert.ok(raw.length > 0 && raw.every((text) => Object.values(LABELS).includes(text.trim())), `labels only: ${raw.slice(0, 5).join(', ')}`);
     });
 
     await step('filter: the select filter lists the enum labels and filters by value', async () => {
-        const filters = page.locator('.fi-ta-filters');
+        const filters = page.locator('.nv-ta-filters');
         await page.waitForTimeout(500);
-        if (!(await filters.isVisible())) await page.locator('.fi-ta-filters-dropdown .fi-dropdown-trigger button').click();
+        if (!(await filters.isVisible())) await page.locator('.nv-ta-filters-dropdown .nv-dropdown-trigger button').click();
         await filters.waitFor({ state: 'visible', timeout: 3000 });
         const options = (await filters.locator('select option').allInnerTexts()).map((text) => text.trim());
         assert.deepEqual(options, ['All', ...Object.values(LABELS)]);
@@ -48,20 +48,20 @@ try {
         await page.waitForTimeout(200);
         await filters.locator('button', { hasText: 'Apply filters' }).click();
         const expected = one("select count(*) n from orders where status = 'cancelled'").n;
-        await until(async () => (await page.locator('.fi-pagination-overview').innerText()).includes(`of ${expected} results`), 'filtered results');
-        const statuses = (await page.locator('.fi-ta-cell-status .fi-badge').allInnerTexts()).map((text) => text.trim());
+        await until(async () => (await page.locator('.nv-pagination-overview').innerText()).includes(`of ${expected} results`), 'filtered results');
+        const statuses = (await page.locator('.nv-ta-cell-status .nv-badge').allInnerTexts()).map((text) => text.trim());
         assert.ok(statuses.length > 0 && statuses.every((text) => text === 'Cancelled'), statuses.join(', '));
     });
 
     const order = one("select id, number, status from orders where status = 'new' order by id limit 1");
     await step('edit: toggle buttons with the enum colors and icons, radio with its descriptions; saving keeps the value', async () => {
         await page.goto(`${BASE}/lab/orders/${order.id}/edit`);
-        const buttons = page.locator('.fi-fo-toggle-buttons');
+        const buttons = page.locator('.nv-fo-toggle-buttons');
         await buttons.waitFor({ timeout: 15000 });
         const shipped = buttons.locator('label', { hasText: 'Shipped' });
-        assert.match(await shipped.getAttribute('class'), /fi-color-success/);
-        assert.equal(await shipped.locator('svg.fi-icon').count(), 1);
-        assert.match(await page.locator('.fi-fo-radio').innerText(), /Handed over to the carrier\./);
+        assert.match(await shipped.getAttribute('class'), /nv-color-success/);
+        assert.equal(await shipped.locator('svg.nv-icon').count(), 1);
+        assert.match(await page.locator('.nv-fo-radio').innerText(), /Handed over to the carrier\./);
         await shipped.click();
         await page.getByRole('button', { name: 'Save changes' }).click();
         await until(() => one('select status from orders where id = ?', order.id).status === 'shipped', 'saved status');
@@ -69,28 +69,28 @@ try {
 
     await step('edit: a value outside the enum is refused by the server', async () => {
         await page.goto(`${BASE}/lab/orders/${order.id}/edit`);
-        await page.locator('.fi-fo-toggle-buttons').waitFor({ timeout: 15000 });
+        await page.locator('.nv-fo-toggle-buttons').waitFor({ timeout: 15000 });
         // The browser would refuse to submit the form (no button checked): the request is sent as a forged one would be.
         await page.evaluate(`(async () => { const wire = ${editWire}; await wire.set('data.status', 'lost', false); await wire.save(); })()`);
-        await page.locator('.fi-fo-field-wrp-error-message', { hasText: 'The selected status is invalid.' }).waitFor({ timeout: 15000 });
+        await page.locator('.nv-fo-field-wrp-error-message', { hasText: 'The selected status is invalid.' }).waitFor({ timeout: 15000 });
         assert.equal(one('select status from orders where id = ?', order.id).status, 'shipped');
     });
 
     await step('view: text and icon entries read the enum', async () => {
         await page.goto(`${BASE}/lab/orders/${order.id}`);
-        const badge = page.locator('.fi-in-text .fi-badge').first();
+        const badge = page.locator('.nv-in-text .nv-badge').first();
         await badge.waitFor({ timeout: 15000 });
         assert.equal((await badge.innerText()).trim(), 'Shipped');
-        assert.match(await badge.getAttribute('class'), /fi-color-success/);
-        assert.equal((await page.locator('.fi-in-icon .fi-sr-only').innerText()).trim(), 'Shipped');
+        assert.match(await badge.getAttribute('class'), /nv-color-success/);
+        assert.equal((await page.locator('.nv-in-icon .nv-sr-only').innerText()).trim(), 'Shipped');
     });
 
     await step('groups: grouping by status titles each group with its label', async () => {
         await page.goto(`${BASE}/lab/orders`);
         await rows.first().waitFor({ timeout: 15000 });
-        await page.evaluate("window.Livewire.all().find((c) => c.el.querySelector('.fi-ta')).$wire.set('tableGrouping', 'status:asc')");
-        await page.locator('.fi-ta-group-header').first().waitFor({ timeout: 15000 });
-        const titles = (await page.locator('.fi-ta-group-heading').allInnerTexts()).map((text) => text.trim());
+        await page.evaluate("window.Livewire.all().find((c) => c.el.querySelector('.nv-ta')).$wire.set('tableGrouping', 'status:asc')");
+        await page.locator('.nv-ta-group-header').first().waitFor({ timeout: 15000 });
+        const titles = (await page.locator('.nv-ta-group-heading').allInnerTexts()).map((text) => text.trim());
         assert.ok(titles.length > 0, 'group headers');
         assert.ok(titles.every((title) => Object.values(LABELS).some((label) => title.endsWith(label))), titles.join(', '));
     });

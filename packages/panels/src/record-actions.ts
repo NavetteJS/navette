@@ -134,7 +134,7 @@ class AnotherFooter {
 
 /** Create in a modal with the resource form. */
 export class CreateAction extends CustomizableAction {
-    private readonly _another = new AnotherFooter('createAnother', () => t('filament-actions::create.single.modal.actions.create_another.label'));
+    private readonly _another = new AnotherFooter('createAnother', () => t('navette-actions::create.single.modal.actions.create_another.label'));
     /**
      * Without a resource, the resource (or relation manager) is the host component's. A name (`CreateAction.make('createPost')`)
      * replaces the default one.
@@ -146,9 +146,9 @@ export class CreateAction extends CustomizableAction {
         const action = new CreateAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? this.getDefaultName());
         const of = (livewire: any) => resource ?? livewire.resource;
         action.authorize(({ livewire, record }) => can(livewire, 'create', record))
-            .label(({ livewire }) => t('filament-actions::create.single.label', { label: of(livewire).modelLabel }))
-            .modalHeading(({ livewire }) => t('filament-actions::create.single.modal.heading', { label: titleCase(of(livewire).modelLabel) }))
-            .modalSubmitActionLabel(t('filament-actions::create.single.modal.actions.create.label'))
+            .label(({ livewire }) => t('navette-actions::create.single.label', { label: of(livewire).modelLabel }))
+            .modalHeading(({ livewire }) => t('navette-actions::create.single.modal.heading', { label: titleCase(of(livewire).modelLabel) }))
+            .modalSubmitActionLabel(t('navette-actions::create.single.modal.actions.create.label'))
             .groupedIcon(icons.resolve('actions::create-action.grouped') ?? 'm-plus')
             // A relation manager with a related resource: its create page instead of the modal.
             .url(({ livewire }) => (resource ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('create') ?? null)))
@@ -156,7 +156,7 @@ export class CreateAction extends CustomizableAction {
             .action(async (ctx) => {
                 const record = await action.process((c) => of(c.livewire).adapter.create(c.data), ctx as Context);
                 if (ctx.schema && record) await saveSchemaRelationships(ctx.schema, record);
-                await sendActionSuccess(action, { ...ctx, record } as Context, t('filament-actions::create.single.notifications.created.title'));
+                await sendActionSuccess(action, { ...ctx, record } as Context, t('navette-actions::create.single.notifications.created.title'));
             });
         action.refreshFooter();
         // `configureUsing()` setups run after the default setup, as in Filament.
@@ -168,7 +168,7 @@ export class CreateAction extends CustomizableAction {
     /** Customizes the "Create & create another" button: `(action) => action.label('Save and add another')`. */
     createAnotherAction(callback: ((action: Action) => Action | void) | null): this { this._another.modify = callback; return this.refreshFooter(); }
     /** The "Create & create another" button (to place it in custom footer actions). */
-    getCreateAnotherAction(): Action { return this._another.build() ?? anotherAction('createAnother', t('filament-actions::create.single.modal.actions.create_another.label')); }
+    getCreateAnotherAction(): Action { return this._another.build() ?? anotherAction('createAnother', t('navette-actions::create.single.modal.actions.create_another.label')); }
     extraModalFooterActions(actions: FooterActions): this { if (this._another) this._another.custom = actions; return super.extraModalFooterActions(actions as any); }
     private refreshFooter(): this { return super.extraModalFooterActions(this._another.actions() as any); }
 }
@@ -187,9 +187,9 @@ export class EditAction extends CustomizableAction {
         const action = new EditAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? this.getDefaultName());
         const of = (livewire: any) => resource ?? livewire.resource;
         action.authorize(({ livewire, record }) => can(livewire, 'update', record))
-            .label(t('filament-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
-            .modalHeading(({ livewire, record }) => t('filament-actions::edit.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::edit.single.modal.actions.save.label'))
+            .label(t('navette-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
+            .modalHeading(({ livewire, record }) => t('navette-actions::edit.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
+            .modalSubmitActionLabel(t('navette-actions::edit.single.modal.actions.save.label'))
             // A relation manager with a related resource: its edit page instead of the modal.
             .url(({ livewire, record }) => (resource || !record ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('edit', (livewire as any).resource.adapter.getKey(record)) ?? null)))
             .schema((schema: Schema) => of(schema.livewire).form(schema))
@@ -207,7 +207,7 @@ export class EditAction extends CustomizableAction {
                     return Object.keys(data ?? {}).length ? adapter.update(adapter.getKey(c.record), data) : c.record;
                 }, ctx as Context);
                 if (ctx.schema) await saveSchemaRelationships(ctx.schema, saved ?? ctx.record);
-                await sendActionSuccess(action, ctx as Context, t('filament-actions::edit.single.notifications.saved.title'));
+                await sendActionSuccess(action, ctx as Context, t('navette-actions::edit.single.notifications.saved.title'));
             });
         // `configureUsing()` setups run after the default setup, as in Filament.
         return configured(action);
@@ -231,10 +231,10 @@ export class ViewAction extends Action {
         const action = new ViewAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? this.getDefaultName());
         const of = (livewire: any) => resource ?? livewire.resource;
         action.authorize(({ livewire, record }) => can(livewire, 'view', record))
-            .label(t('filament-actions::view.single.label')).color('gray').tableIcon(icons.resolve('actions::view-action') ?? 'c-eye').groupedIcon(icons.resolve('actions::view-action.grouped') ?? 'm-eye')
+            .label(t('navette-actions::view.single.label')).color('gray').tableIcon(icons.resolve('actions::view-action') ?? 'c-eye').groupedIcon(icons.resolve('actions::view-action.grouped') ?? 'm-eye')
             .url(({ livewire, record }) => (record && of(livewire).hasViewPage ? of(livewire).getUrl('view', of(livewire).adapter.getKey(record)) : null))
-            .modalHeading(({ livewire, record }) => t('filament-actions::view.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
-            .modalSubmitAction(false).modalCancelActionLabel(t('filament-actions::view.single.modal.actions.close.label'))
+            .modalHeading(({ livewire, record }) => t('navette-actions::view.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
+            .modalSubmitAction(false).modalCancelActionLabel(t('navette-actions::view.single.modal.actions.close.label'))
             .schema((schema: Schema) => {
                 const owner = of(schema.livewire);
                 if (owner.hasViewPage) return null;
@@ -267,9 +267,9 @@ export class ReplicateAction extends CustomizableAction {
     static make(name: string | null = null): ReplicateAction {
         const action = new ReplicateAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'replicate', record))
-            .label(t('filament-actions::replicate.single.label')).tableIcon(icons.resolve('actions::replicate-action') ?? 'c-square-2-stack').groupedIcon(icons.resolve('actions::replicate-action.grouped') ?? 'm-square-2-stack')
-            .modalHeading(({ livewire, record }) => t('filament-actions::replicate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::replicate.single.modal.actions.replicate.label'))
+            .label(t('navette-actions::replicate.single.label')).tableIcon(icons.resolve('actions::replicate-action') ?? 'c-square-2-stack').groupedIcon(icons.resolve('actions::replicate-action.grouped') ?? 'm-square-2-stack')
+            .modalHeading(({ livewire, record }) => t('navette-actions::replicate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
+            .modalSubmitActionLabel(t('navette-actions::replicate.single.modal.actions.replicate.label'))
             // With a modal form (`schema()`), it is filled with the record's attributes; its data overrides them in the copy.
             .fillForm(async (ctx) => action.mutateRecordData(action.sourceAttributes(ctx.record), ctx as Context))
             .action(async (ctx) => {
@@ -284,7 +284,7 @@ export class ReplicateAction extends CustomizableAction {
                     return livewire.getDataAdapter().create(replica);
                 }, ctx as Context);
                 await action._afterSaved?.({ replica: saved, data: ctx.data ?? {}, record });
-                await sendActionSuccess(action, { ...ctx, replica: saved } as Context, t('filament-actions::replicate.single.notifications.replicated.title'));
+                await sendActionSuccess(action, { ...ctx, replica: saved } as Context, t('navette-actions::replicate.single.notifications.replicated.title'));
             });
         // `configureUsing()` setups run after the default setup, as in Filament.
         return configured(action);
@@ -319,19 +319,19 @@ export class DeleteAction extends CustomizableAction {
     static make(name: string | null = null): DeleteAction {
         const action = new DeleteAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'delete', record))
-            .label(t('filament-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon(icons.resolve('actions::delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::delete-action.grouped') ?? 'm-trash')
+            .label(t('navette-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon(icons.resolve('actions::delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::delete-action.grouped') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
             // Hidden for an already soft-deleted record.
             .hidden(({ livewire, record }) => { const target = targetOf(livewire, record); return target ? (livewire as any).getDataAdapter().isTrashed(target) : false; })
-            .modalHeading(({ livewire, record }) => t('filament-actions::delete.single.modal.heading', { label: livewire.resource.getRecordTitle(targetOf(livewire, record)) }))
-            .modalSubmitActionLabel(t('filament-actions::delete.single.modal.actions.delete.label'))
+            .modalHeading(({ livewire, record }) => t('navette-actions::delete.single.modal.heading', { label: livewire.resource.getRecordTitle(targetOf(livewire, record)) }))
+            .modalSubmitActionLabel(t('navette-actions::delete.single.modal.actions.delete.label'))
             .action(async (ctx) => {
                 const { livewire, record } = ctx;
                 const adapter = livewire.getDataAdapter();
                 const table = inTable(livewire);
                 const result = await action.process((c) => adapter.delete(table ? adapter.getKey(c.record) : c.livewire.recordKey), { ...ctx, record: targetOf(livewire, record) } as Context);
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
-                await sendActionSuccess(action, ctx as Context, t('filament-actions::delete.single.notifications.deleted.title'), table ? null : livewire.resource.getUrl());
+                await sendActionSuccess(action, ctx as Context, t('navette-actions::delete.single.notifications.deleted.title'), table ? null : livewire.resource.getUrl());
             });
         // `configureUsing()` setups run after the default setup, as in Filament.
         return configured(action);
@@ -345,11 +345,11 @@ export class RestoreAction extends CustomizableAction {
     static make(name: string | null = null): RestoreAction {
         const action = new RestoreAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'restore', targetOf(livewire, record)))
-            .label(t('filament-actions::restore.single.label')).color('gray').tableIcon(icons.resolve('actions::restore-action') ?? 'c-arrow-uturn-left').groupedIcon(icons.resolve('actions::restore-action.grouped') ?? 'm-arrow-uturn-left')
+            .label(t('navette-actions::restore.single.label')).color('gray').tableIcon(icons.resolve('actions::restore-action') ?? 'c-arrow-uturn-left').groupedIcon(icons.resolve('actions::restore-action.grouped') ?? 'm-arrow-uturn-left')
             .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
             .hidden(({ livewire, record }) => { const target = targetOf(livewire, record); return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
-            .modalHeading(({ livewire, record }) => t('filament-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(targetOf(livewire, record)) }))
-            .modalSubmitActionLabel(t('filament-actions::restore.single.modal.actions.restore.label'))
+            .modalHeading(({ livewire, record }) => t('navette-actions::restore.single.modal.heading', { label: livewire.resource.getRecordTitle(targetOf(livewire, record)) }))
+            .modalSubmitActionLabel(t('navette-actions::restore.single.modal.actions.restore.label'))
             .action(async (ctx) => {
                 const { livewire, record } = ctx;
                 const adapter = livewire.getDataAdapter();
@@ -357,7 +357,7 @@ export class RestoreAction extends CustomizableAction {
                 const result = await action.process((c) => adapter.restore(table ? adapter.getKey(c.record) : c.livewire.recordKey), { ...ctx, record: targetOf(livewire, record) } as Context);
                 if (!table) await livewire.hydrate();
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
-                await sendActionSuccess(action, ctx as Context, t('filament-actions::restore.single.notifications.restored.title'));
+                await sendActionSuccess(action, ctx as Context, t('navette-actions::restore.single.notifications.restored.title'));
             });
         // `configureUsing()` setups run after the default setup, as in Filament.
         return configured(action);
@@ -371,18 +371,18 @@ export class ForceDeleteAction extends CustomizableAction {
     static make(name: string | null = null): ForceDeleteAction {
         const action = new ForceDeleteAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'forceDelete', targetOf(livewire, record)))
-            .label(t('filament-actions::force-delete.single.label')).color('danger').tableIcon(icons.resolve('actions::force-delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::force-delete-action.grouped') ?? 'm-trash')
+            .label(t('navette-actions::force-delete.single.label')).color('danger').tableIcon(icons.resolve('actions::force-delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::force-delete-action.grouped') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
             .hidden(({ livewire, record }) => { const target = targetOf(livewire, record); return !target || !(livewire as any).getDataAdapter().isTrashed(target); })
-            .modalHeading(({ livewire, record }) => t('filament-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(targetOf(livewire, record)) }))
-            .modalSubmitActionLabel(t('filament-actions::force-delete.single.modal.actions.delete.label'))
+            .modalHeading(({ livewire, record }) => t('navette-actions::force-delete.single.modal.heading', { label: livewire.resource.getRecordTitle(targetOf(livewire, record)) }))
+            .modalSubmitActionLabel(t('navette-actions::force-delete.single.modal.actions.delete.label'))
             .action(async (ctx) => {
                 const { livewire, record } = ctx;
                 const adapter = livewire.getDataAdapter();
                 const table = inTable(livewire);
                 const result = await action.process((c) => adapter.forceDelete(table ? adapter.getKey(c.record) : c.livewire.recordKey), { ...ctx, record: targetOf(livewire, record) } as Context);
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
-                await sendActionSuccess(action, ctx as Context, t('filament-actions::force-delete.single.notifications.deleted.title'), table ? null : livewire.resource.getUrl());
+                await sendActionSuccess(action, ctx as Context, t('navette-actions::force-delete.single.notifications.deleted.title'), table ? null : livewire.resource.getUrl());
             });
         // `configureUsing()` setups run after the default setup, as in Filament.
         return configured(action);
@@ -431,16 +431,16 @@ export class DeleteBulkAction extends CustomizableAction {
     static make(name: string | null = null): DeleteBulkAction {
         const action = new DeleteBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'deleteAny', record))
-            .label(t('filament-actions::delete.multiple.label')).color('danger').icon(icons.resolve('actions::delete-action') ?? 'm-trash')
+            .label(t('navette-actions::delete.multiple.label')).color('danger').icon(icons.resolve('actions::delete-action') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
             // Showing only deleted records: there is nothing left to delete.
             .hidden(({ livewire }) => trashedFilterValue(livewire) === '0')
-            .modalHeading(({ livewire }) => t('filament-actions::delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::delete.multiple.modal.actions.delete.label'))
-            .successNotificationTitle(t('filament-actions::delete.multiple.notifications.deleted.title'))
-            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('filament-actions::delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
-            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
-            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
+            .modalHeading(({ livewire }) => t('navette-actions::delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
+            .modalSubmitActionLabel(t('navette-actions::delete.multiple.modal.actions.delete.label'))
+            .successNotificationTitle(t('navette-actions::delete.multiple.notifications.deleted.title'))
+            .failureNotificationTitle((success, total) => (success ? tc('navette-actions::delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('navette-actions::delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
+            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`navette-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
+            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`navette-actions::delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const adapter = ctx.livewire.getDataAdapterForTable();
@@ -458,16 +458,16 @@ export class RestoreBulkAction extends CustomizableAction {
     static make(name: string | null = null): RestoreBulkAction {
         const action = new RestoreBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'restoreAny', record))
-            .label(t('filament-actions::restore.multiple.label')).color('gray').icon(icons.resolve('actions::restore-action') ?? 'm-arrow-uturn-left')
+            .label(t('navette-actions::restore.multiple.label')).color('gray').icon(icons.resolve('actions::restore-action') ?? 'm-arrow-uturn-left')
             .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
             .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
-            .modalHeading(({ livewire }) => t('filament-actions::restore.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::restore.multiple.modal.actions.restore.label'))
+            .modalHeading(({ livewire }) => t('navette-actions::restore.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
+            .modalSubmitActionLabel(t('navette-actions::restore.multiple.modal.actions.restore.label'))
             .authorizeIndividualRecords('restore')
-            .successNotificationTitle(t('filament-actions::restore.multiple.notifications.restored.title'))
-            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::restore.multiple.notifications.restored_partial.title', success, { count: success, total }) : tc('filament-actions::restore.multiple.notifications.restored_none.title', total, { count: total, total })))
-            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_authorization_failure_message`, count, { count }))
-            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_processing_failure_message`, count, { count }))
+            .successNotificationTitle(t('navette-actions::restore.multiple.notifications.restored.title'))
+            .failureNotificationTitle((success, total) => (success ? tc('navette-actions::restore.multiple.notifications.restored_partial.title', success, { count: success, total }) : tc('navette-actions::restore.multiple.notifications.restored_none.title', total, { count: total, total })))
+            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`navette-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_authorization_failure_message`, count, { count }))
+            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`navette-actions::restore.multiple.notifications.${count === total ? 'restored_none' : 'restored_partial'}.missing_processing_failure_message`, count, { count }))
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const adapter: DataAdapter = ctx.livewire.getDataAdapterForTable();
@@ -487,16 +487,16 @@ export class ForceDeleteBulkAction extends CustomizableAction {
     static make(name: string | null = null): ForceDeleteBulkAction {
         const action = new ForceDeleteBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'forceDeleteAny', record))
-            .label(t('filament-actions::force-delete.multiple.label')).color('danger').icon(icons.resolve('actions::force-delete-action') ?? 'm-trash')
+            .label(t('navette-actions::force-delete.multiple.label')).color('danger').icon(icons.resolve('actions::force-delete-action') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
             .hidden(({ livewire }) => trashedFilterValue(livewire) === null)
-            .modalHeading(({ livewire }) => t('filament-actions::force-delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::force-delete.multiple.modal.actions.delete.label'))
+            .modalHeading(({ livewire }) => t('navette-actions::force-delete.multiple.modal.heading', { label: livewire.resource.getTitleCasePluralModelLabel() }))
+            .modalSubmitActionLabel(t('navette-actions::force-delete.multiple.modal.actions.delete.label'))
             .authorizeIndividualRecords('forceDelete')
-            .successNotificationTitle(t('filament-actions::force-delete.multiple.notifications.deleted.title'))
-            .failureNotificationTitle((success, total) => (success ? tc('filament-actions::force-delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('filament-actions::force-delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
-            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`filament-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
-            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`filament-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
+            .successNotificationTitle(t('navette-actions::force-delete.multiple.notifications.deleted.title'))
+            .failureNotificationTitle((success, total) => (success ? tc('navette-actions::force-delete.multiple.notifications.deleted_partial.title', success, { count: success, total }) : tc('navette-actions::force-delete.multiple.notifications.deleted_none.title', total, { count: total, total })))
+            .missingBulkAuthorizationFailureNotificationMessage((count, total) => tc(`navette-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_authorization_failure_message`, count, { count }))
+            .missingBulkProcessingFailureNotificationMessage((count, total) => tc(`navette-actions::force-delete.multiple.notifications.${count === total ? 'deleted_none' : 'deleted_partial'}.missing_processing_failure_message`, count, { count }))
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const adapter: DataAdapter = ctx.livewire.getDataAdapterForTable();
@@ -543,11 +543,11 @@ export class RecordSelectAction extends CustomizableAction {
     /** @internal */
     protected setUpRecordSelect(kind: RelationKind): this {
         this._kind = kind;
-        this._another = new AnotherFooter(`${kind}Another`, () => t(`filament-actions::${kind}.single.modal.actions.${kind}_another.label`));
-        this.label(t(`filament-actions::${kind}.single.label`)).color('gray').modalWidth('lg')
-            .modalHeading(({ livewire }) => t(`filament-actions::${kind}.single.modal.heading`, { label: titleCase(livewire.resource.modelLabel) }))
-            .modalSubmitActionLabel(t(`filament-actions::${kind}.single.modal.actions.${kind}.label`))
-            .successNotificationTitle(t(`filament-actions::${kind}.single.notifications.${kind === 'attach' ? 'attached' : 'associated'}.title`));
+        this._another = new AnotherFooter(`${kind}Another`, () => t(`navette-actions::${kind}.single.modal.actions.${kind}_another.label`));
+        this.label(t(`navette-actions::${kind}.single.label`)).color('gray').modalWidth('lg')
+            .modalHeading(({ livewire }) => t(`navette-actions::${kind}.single.modal.heading`, { label: titleCase(livewire.resource.modelLabel) }))
+            .modalSubmitActionLabel(t(`navette-actions::${kind}.single.modal.actions.${kind}.label`))
+            .successNotificationTitle(t(`navette-actions::${kind}.single.notifications.${kind === 'attach' ? 'attached' : 'associated'}.title`));
         return this.refreshFooter();
     }
     /** Customizes the select of the modal: `(select) => select.placeholder('Select a post')`. */
@@ -610,7 +610,7 @@ export class RecordSelectAction extends CustomizableAction {
     /** The field picking the records (`recordId`): a searchable select, or a table with `tableSelect()`. */
     getRecordSelect(): Field {
         const kind = this._kind;
-        const label = t(`filament-actions::${kind}.single.modal.fields.record_id.label`);
+        const label = t(`navette-actions::${kind}.single.modal.fields.record_id.label`);
         if (this._tableConfiguration) {
             const configuration = this._tableConfiguration;
             return TableSelect.make('recordId').label(label).hiddenLabel().required().multiple(this._multiple)
@@ -731,11 +731,11 @@ export class DetachAction extends CustomizableAction {
     static make(name: string | null = null): DetachAction {
         const action = new DetachAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
-        action.label(t('filament-actions::detach.single.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
+        action.label(t('navette-actions::detach.single.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire, record }) => t('filament-actions::detach.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::detach.single.modal.actions.detach.label'))
-            .successNotificationTitle(t('filament-actions::detach.single.notifications.detached.title'))
+            .modalHeading(({ livewire, record }) => t('navette-actions::detach.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
+            .modalSubmitActionLabel(t('navette-actions::detach.single.modal.actions.detach.label'))
+            .successNotificationTitle(t('navette-actions::detach.single.notifications.detached.title'))
             .action(async (ctx) => {
                 const { livewire, record } = ctx;
                 const result = await action.process<unknown>(() => managerOf(livewire).detach(livewire.ownerRecord, [livewire.resource.adapter.getKey(record)]), ctx as Context);
@@ -753,11 +753,11 @@ export class DetachBulkAction extends CustomizableAction {
     static make(name: string | null = null): DetachBulkAction {
         const action = new DetachBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
-        action.label(t('filament-actions::detach.multiple.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
+        action.label(t('navette-actions::detach.multiple.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire }) => t('filament-actions::detach.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::detach.multiple.modal.actions.detach.label'))
-            .successNotificationTitle(t('filament-actions::detach.multiple.notifications.detached.title'))
+            .modalHeading(({ livewire }) => t('navette-actions::detach.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
+            .modalSubmitActionLabel(t('navette-actions::detach.multiple.modal.actions.detach.label'))
+            .successNotificationTitle(t('navette-actions::detach.multiple.notifications.detached.title'))
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const { livewire } = ctx;
@@ -778,11 +778,11 @@ export class DissociateAction extends CustomizableAction {
     static make(name: string | null = null): DissociateAction {
         const action = new DissociateAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
-        action.label(t('filament-actions::dissociate.single.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
+        action.label(t('navette-actions::dissociate.single.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire, record }) => t('filament-actions::dissociate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
-            .modalSubmitActionLabel(t('filament-actions::dissociate.single.modal.actions.dissociate.label'))
-            .successNotificationTitle(t('filament-actions::dissociate.single.notifications.dissociated.title'))
+            .modalHeading(({ livewire, record }) => t('navette-actions::dissociate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
+            .modalSubmitActionLabel(t('navette-actions::dissociate.single.modal.actions.dissociate.label'))
+            .successNotificationTitle(t('navette-actions::dissociate.single.notifications.dissociated.title'))
             .action(async (ctx) => {
                 const { livewire, record } = ctx;
                 const result = await action.process<unknown>(() => managerOf(livewire).dissociate(livewire.ownerRecord, [livewire.resource.adapter.getKey(record)]), ctx as Context);
@@ -800,11 +800,11 @@ export class DissociateBulkAction extends CustomizableAction {
     static make(name: string | null = null): DissociateBulkAction {
         const action = new DissociateBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
-        action.label(t('filament-actions::dissociate.multiple.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
+        action.label(t('navette-actions::dissociate.multiple.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
-            .modalHeading(({ livewire }) => t('filament-actions::dissociate.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
-            .modalSubmitActionLabel(t('filament-actions::dissociate.multiple.modal.actions.dissociate.label'))
-            .successNotificationTitle(t('filament-actions::dissociate.multiple.notifications.dissociated.title'))
+            .modalHeading(({ livewire }) => t('navette-actions::dissociate.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
+            .modalSubmitActionLabel(t('navette-actions::dissociate.multiple.modal.actions.dissociate.label'))
+            .successNotificationTitle(t('navette-actions::dissociate.multiple.notifications.dissociated.title'))
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const { livewire } = ctx;

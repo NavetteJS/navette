@@ -172,7 +172,7 @@ export class AssetManager {
     registerCssVariables(variables: Record<string, unknown>, packageName: string | null = null, options: { panel?: string | null } = {}): void {
         this.cssVariables.push({ packageName, panels: options.panel ? new Set([options.panel]) : null, variables: { ...variables } });
     }
-    /** Values exposed to scripts as `window.filamentData`: `registerScriptData({ user: { name: 'Dan' } })`. Never put secrets here. */
+    /** Values exposed to scripts as `window.navetteData`: `registerScriptData({ user: { name: 'Dan' } })`. Never put secrets here. */
     registerScriptData(data: Record<string, unknown>, packageName: string | null = null, options: { panel?: string | null } = {}): void {
         this.scriptData.push({ packageName, panels: options.panel ? new Set([options.panel]) : null, data: { ...data } });
     }
@@ -213,10 +213,10 @@ export class AssetManager {
         scripts.sort((a, b) => Number(a.isCore()) - Number(b.isCore()));
         return scripts.map((asset) => asset.getHtml(options.spa ?? true)).join('\n');
     }
-    /** `window.filamentData = …` for the registered script data (`[]` when there is none). */
+    /** `window.navetteData = …` for the registered script data (`[]` when there is none). */
     renderScriptData(packages: string[] | null = null, options: { panel?: string | null } = {}): string {
         const data = this.getScriptData(packages, options.panel ?? null);
-        return `window.filamentData = ${Object.keys(data).length ? scriptJson(data) : '[]'}`;
+        return `window.navetteData = ${Object.keys(data).length ? scriptJson(data) : '[]'}`;
     }
 
     /** The registered local file served at this path (`/css/app/custom.css`), if any. */

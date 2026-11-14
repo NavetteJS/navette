@@ -15,7 +15,7 @@ test('ModalComponent: app-wide defaults of action modals and of the standalone m
     t.after(() => { ModalComponent.closeButton(); ModalComponent.closedByClickingAway(); ModalComponent.closedByEscaping(); ModalComponent.autofocus(); });
     const actionModal = () => Action.make('a').action(() => {}).schema([]).toModalHtml(callCtx, 0);
     let html = await actionModal();
-    assert.match(html, /fi-modal-close-btn/);
+    assert.match(html, /nv-modal-close-btn/);
     assert.match(html, /x-on:click\.self=/);
     assert.match(html, /keydown\.window\.escape/);
     assert.doesNotMatch(html, /noautofocus/);
@@ -25,19 +25,19 @@ test('ModalComponent: app-wide defaults of action modals and of the standalone m
     ModalComponent.closedByEscaping(false);
     ModalComponent.autofocus(false);
     html = await actionModal();
-    assert.doesNotMatch(html, /fi-modal-close-btn/, 'no close button by default');
+    assert.doesNotMatch(html, /nv-modal-close-btn/, 'no close button by default');
     assert.doesNotMatch(html, /x-on:click\.self=/, 'clicking away no longer closes');
     assert.doesNotMatch(html, /keydown\.window\.escape/, 'Escape no longer closes');
     assert.match(html, /noautofocus/);
     // An action asking for them gets them back.
     html = await Action.make('b').action(() => {}).schema([]).modalCloseButton().closeModalByClickingAway().closeModalByEscaping().modalAutofocus().toModalHtml(callCtx, 0);
-    assert.match(html, /fi-modal-close-btn/);
+    assert.match(html, /nv-modal-close-btn/);
     assert.match(html, /x-on:click\.self=/);
     assert.match(html, /keydown\.window\.escape/);
     assert.doesNotMatch(html, /noautofocus/);
 
     // The standalone component follows the same defaults, and its own props win.
-    assert.doesNotMatch(modal({ id: 'm', heading: 'Hi' }), /fi-modal-close-btn/);
-    assert.match(modal({ id: 'm', heading: 'Hi', closeButton: true }), /fi-modal-close-btn/);
+    assert.doesNotMatch(modal({ id: 'm', heading: 'Hi' }), /nv-modal-close-btn/);
+    assert.match(modal({ id: 'm', heading: 'Hi', closeButton: true }), /nv-modal-close-btn/);
     assert.match(modal({ id: 'm', heading: 'Hi', closeByEscaping: true }), /keydown\.window\.escape/);
 });

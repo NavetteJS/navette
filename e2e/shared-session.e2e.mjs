@@ -23,7 +23,7 @@ try {
         await staffPage.waitForURL((url) => !url.pathname.endsWith('/login'), { timeout: 10000 });
         assert.equal((await staffPage.goto(`${base}/`)).status(), 200);
         assert.ok(!staffPage.url().endsWith('/login'), staffPage.url());
-        assert.ok(await staffPage.locator('.fi-sidebar-nav').count());
+        assert.ok(await staffPage.locator('.nv-sidebar-nav').count());
         assert.deepEqual(await sessionCookies(staff), ['navette_web_session']);
     });
     await step('signing out of /admin also signs out of /app', async () => {
@@ -53,8 +53,8 @@ try {
     const freshPage = await fresh.newPage();
     await step('the customer cannot sign in on /admin: same message as a wrong password, no session', async () => {
         await signIn(freshPage, '', email, 'customer-password-1');
-        await freshPage.locator('.fi-fo-field-wrp-error-message').first().waitFor({ timeout: 8000 });
-        assert.match(await freshPage.locator('.fi-fo-field-wrp-error-message').first().innerText(), /do not match/);
+        await freshPage.locator('.nv-fo-field-wrp-error-message').first().waitFor({ timeout: 8000 });
+        assert.match(await freshPage.locator('.nv-fo-field-wrp-error-message').first().innerText(), /do not match/);
         assert.deepEqual(await sessionCookies(fresh), []);
     });
 } finally {

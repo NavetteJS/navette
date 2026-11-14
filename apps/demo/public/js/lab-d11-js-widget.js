@@ -12,7 +12,7 @@ export default function mountOrdersOverview({ host, props: initialProps, utiliti
     refreshes.className = 'nv-lab-js-widget-refreshes'
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = 'fi-btn fi-size-sm nv-lab-js-widget-refresh'
+    button.className = 'nv-btn nv-size-sm nv-lab-js-widget-refresh'
     button.textContent = 'Refresh'
     button.onclick = () => utilities.$wire.$call('refreshOrders')
 

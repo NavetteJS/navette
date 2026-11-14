@@ -193,13 +193,13 @@ export class Livewire {
         return [
             `<meta name="csrf-token" content="${e(csrfToken(req, res))}" />`,
             `<style>[x-cloak=''],[x-cloak='x-cloak'],[x-cloak='1']{display:none !important;}[x-cloak='inline-flex']{display:inline-flex !important;}</style>`,
-            `<link href="${e(panel.assetUrl('fonts/filament/filament/inter/index.css'))}" rel="stylesheet" />`,
+            `<link href="${e(panel.assetUrl('fonts/navette/navette/inter/index.css'))}" rel="stylesheet" />`,
             panel.withTheme(req, () => panel.colors.renderCssVariables()),
             NavetteAsset.renderStyles(null, { panel: panel.getId() }),
-            `<link rel="stylesheet" href="${e(panel.getTheme() ?? panel.assetUrl('css/filament/filament/app.css'))}" />`,
+            `<link rel="stylesheet" href="${e(panel.getTheme() ?? panel.assetUrl('css/navette/navette/app.css'))}" />`,
             `<style>:root{--font-family:'${panel.getFont().family.replace(/['\\<>]/g, '')}';--font-family-mono:'ui-monospace';--font-family-serif:'ui-serif';}html.fi{--livewire-progress-bar-color:var(--primary-500);}</style>`,
             theme?.css ? `<style data-navette-theme>${theme.css}</style>` : '',
-            `<script>if (localStorage.getItem('filament:theme:mode') === 'dark' || ((localStorage.getItem('filament:theme:mode') ?? 'system') === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark')</script>`,
+            `<script>if (localStorage.getItem('navette:theme:mode') === 'dark' || ((localStorage.getItem('navette:theme:mode') ?? 'system') === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark')</script>`,
             wireStyles(),
         ].filter(Boolean).join('\n');
     }
@@ -207,9 +207,9 @@ export class Livewire {
     scripts(req: Request, res: Response): string {
         const panel = this.panel;
         return [
-            `<script>${NavetteAsset.renderScriptData(null, { panel: panel.getId() }) || 'window.filamentData = []'}</script>`,
+            `<script>${NavetteAsset.renderScriptData(null, { panel: panel.getId() }) || 'window.navetteData = []'}</script>`,
             NavetteAsset.renderScripts(null, { panel: panel.getId(), spa: false }),
-            ...['js/filament/actions/actions.js', 'js/filament/notifications/notifications.js', 'js/filament/schemas/schemas.js', 'js/filament/support/support.js', 'js/filament/tables/tables.js', 'js/filament/filament/app.js'].map((src) => `<script src="${e(panel.assetUrl(src))}"></script>`),
+            ...['js/navette/actions/actions.js', 'js/navette/notifications/notifications.js', 'js/navette/schemas/schemas.js', 'js/navette/support/support.js', 'js/navette/tables/tables.js', 'js/navette/navette/app.js'].map((src) => `<script src="${e(panel.assetUrl(src))}"></script>`),
             wireScripts(req, res, panel.getLivewirePrefix()),
         ].filter(Boolean).join('\n');
     }
@@ -230,7 +230,7 @@ export class Livewire {
                 const title = options.title ?? (mounted.component as any).getTitle?.() ?? name;
                 const parts = { title, component: mounted.html, styles: this.styles(req, res), scripts: this.scripts(req, res), notifications: await this.notifications(req, res) };
                 res.setHeader('Cache-Control', 'no-store');
-                res.send(options.layout ? options.layout(parts, req, res) : `<!DOCTYPE html>\n<html lang="en" dir="ltr" class="fi">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${e(title)}</title>\n${parts.styles}\n</head>\n<body class="fi-body fi-livewire-page">\n<main class="fi-livewire-page-main" style="max-width: 80rem; margin: 0 auto; padding: 2rem 1rem;">${parts.component}</main>\n${parts.notifications}\n${parts.scripts}\n</body>\n</html>`);
+                res.send(options.layout ? options.layout(parts, req, res) : `<!DOCTYPE html>\n<html lang="en" dir="ltr" class="fi">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width, initial-scale=1" />\n<title>${e(title)}</title>\n${parts.styles}\n</head>\n<body class="nv-body nv-livewire-page">\n<main class="nv-livewire-page-main" style="max-width: 80rem; margin: 0 auto; padding: 2rem 1rem;">${parts.component}</main>\n${parts.notifications}\n${parts.scripts}\n</body>\n</html>`);
             } catch (error) {
                 if (error instanceof WireError && [401, 403, 404].includes(error.status)) return void res.status(error.status).type('text/plain').send(error.status === 404 ? 'Not Found' : error.status === 401 ? 'Unauthorized' : 'Forbidden');
                 next(error);

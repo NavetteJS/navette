@@ -109,8 +109,8 @@ const same = (a: unknown, b: unknown) => a === b || (a !== null && b !== null &&
 export function siblingDistinctRules(condition: Lazy<boolean, ComponentContext> = true): Rule[] {
     const enabled = async (ctx: ComponentContext) => Boolean(await evaluate(condition, ctx));
     const message = (key: string, fallback: string) => (attribute: string) => {
-        const translated = t(`filament-forms::validation.${key}`, { attribute });
-        return translated === `filament-forms::validation.${key}` ? fallback.replace(':attribute', attribute) : translated;
+        const translated = t(`navette-forms::validation.${key}`, { attribute });
+        return translated === `navette-forms::validation.${key}` ? fallback.replace(':attribute', attribute) : translated;
     };
     return [
         {

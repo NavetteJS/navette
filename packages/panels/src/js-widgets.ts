@@ -40,7 +40,7 @@ export function jsWidgetContentHtml(options: { widgetId: string; assetUrl: strin
     // mounted renderer in place. Another renderer changes the outer key, which remounts it.
     return `<section x-data="{
         isCollapsed:  false ,
-    }" class="fi-section"><div class="fi-section-content-ctn"><div class="fi-section-content"><div
+    }" class="nv-section"><div class="nv-section-content-ctn"><div class="nv-section-content"><div
             wire:key="${e(`${options.widgetId}.renderer.${md5(jsRendererString(renderer))}`)}"
             x-load
             x-load-src="${e(options.assetUrl)}"
@@ -60,7 +60,7 @@ export function jsWidgetContentHtml(options: { widgetId: string; assetUrl: strin
             ></span>
             <div wire:ignore x-ref="host"></div>
             <p x-cloak x-show="hasError" role="alert">
-                ${e(t('filament-widgets::js-widget.failed_to_load'))}
+                ${e(t('navette-widgets::js-widget.failed_to_load'))}
             </p>
         </div></div></div></section>`;
 }

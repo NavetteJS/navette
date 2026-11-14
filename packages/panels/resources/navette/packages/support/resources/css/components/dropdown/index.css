@@ -1,0 +1,79 @@
+& .nv-dropdown-trigger {
+    @apply flex cursor-pointer;
+}
+
+& .nv-dropdown-panel {
+    @apply absolute z-20 w-screen max-w-[14rem]! rounded-lg bg-white shadow-lg ring-1 ring-gray-950/5 transition dark:bg-gray-900 dark:ring-white/10;
+
+    &:not(.nv-dropdown-list) {
+        @apply divide-y divide-gray-100 dark:divide-white/5;
+    }
+
+    &.nv-opacity-0 {
+        @apply opacity-0;
+    }
+
+    &.nv-width-3xs {
+        @apply max-w-3xs!;
+    }
+
+    &.nv-width-2xs {
+        @apply max-w-2xs!;
+    }
+
+    &.nv-width-xs {
+        @apply max-w-xs!;
+    }
+
+    &.nv-width-sm {
+        @apply max-w-sm!;
+    }
+
+    &.nv-width-md {
+        @apply max-w-md!;
+    }
+
+    &.nv-width-lg {
+        @apply max-w-lg!;
+    }
+
+    &.nv-width-xl {
+        @apply max-w-xl!;
+    }
+
+    &.nv-width-2xl {
+        @apply max-w-2xl!;
+    }
+
+    &.nv-width-3xl {
+        @apply max-w-3xl!;
+    }
+
+    &.nv-width-4xl {
+        @apply max-w-4xl!;
+    }
+
+    &.nv-width-5xl {
+        @apply max-w-5xl!;
+    }
+
+    &.nv-width-6xl {
+        @apply max-w-6xl!;
+    }
+
+    &.nv-width-7xl {
+        @apply max-w-7xl!;
+    }
+
+    &.nv-width-none {
+        @apply max-w-none!;
+    }
+
+    &.nv-width-container {
+        @apply container!;
+    }
+
+    &.nv-scrollable {
+        @apply overflow-y-auto;
+    }
+}

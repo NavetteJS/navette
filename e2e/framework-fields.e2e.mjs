@@ -18,7 +18,7 @@ const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await
 
 const field = () => page.locator('[data-field-wrapper]', { has: page.locator('[x-ref="host"] input[type="number"]') });
 const input = () => field().locator('[x-ref="host"] input[type="number"]');
-const gauge = () => page.locator('.fi-lab-stock-gauge');
+const gauge = () => page.locator('.nv-lab-stock-gauge');
 /** Clicks "Save changes" and waits for the answer (the "Saved" notification, or a validation error). */
 const save = async () => {
     const answered = page.waitForResponse((response) => response.url().includes('/livewire') && response.request().method() === 'POST' && (response.request().postData() ?? '').includes('"save"'));
@@ -59,7 +59,7 @@ try {
 
     await step('a value that bypasses the browser checks is rejected by the server: the error reaches the Vue component (isInvalid) and nothing is saved', async () => {
         // The stepper clamps to its bounds and the browser checks `step`: turn the browser checks off, as a tampered request would.
-        await page.locator('form.fi-sc-form').evaluate((form) => { form.noValidate = true; });
+        await page.locator('form.nv-sc-form').evaluate((form) => { form.noValidate = true; });
         await input().fill('2.5');
         await save();
         const error = field().locator('[data-validation-error]');

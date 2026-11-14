@@ -274,24 +274,24 @@ export abstract class FieldBase extends Component {
     protected async wrap(html: string, options: { labelPrefix?: string; wrapperClass?: string; after?: string; labelAsDiv?: boolean; focusable?: boolean } = {}): Promise<string> {
         const errors = this.getErrors();
         // FusedGroup field: the wrapper is reduced to a screen-reader label.
-        if (this.container.getFieldWrapperView?.() === 'filament-forms::plain-field-wrapper') {
+        if (this.container.getFieldWrapperView?.() === 'navette-forms::plain-field-wrapper') {
             const label = await this.getLabel();
-            const labelHtml = label === '' ? '' : options.labelAsDiv ? `<div id="${e(this.getId())}-label" class="fi-fo-field-label fi-sr-only">${e(label)}</div>` : `<label for="${e(this.getId())}" class="fi-fo-field-label fi-sr-only">${e(label)}</label>`;
-            return `<div data-field-wrapper class="fi-fo-field">${labelHtml}${options.labelPrefix ?? ''}${html}${options.after ?? ''}</div>`;
+            const labelHtml = label === '' ? '' : options.labelAsDiv ? `<div id="${e(this.getId())}-label" class="nv-fo-field-label nv-sr-only">${e(label)}</div>` : `<label for="${e(this.getId())}" class="nv-fo-field-label nv-sr-only">${e(label)}</label>`;
+            return `<div data-field-wrapper class="nv-fo-field">${labelHtml}${options.labelPrefix ?? ''}${html}${options.after ?? ''}</div>`;
         }
         // Helper text: a small inline schema under the control.
         let below = '';
         const helperText = await evaluate(this._helperText, this.context());
-        if (helperText !== null && helperText !== undefined && helperText !== '') below += `<div id="${e(this.getHelperTextId()!)}" class="fi-sc fi-inline fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="fi-sc-component"><span class="fi-sc-text">${helperText instanceof HtmlString ? helperText.html : e(helperText)}</span></div></div></div>`;
+        if (helperText !== null && helperText !== undefined && helperText !== '') below += `<div id="${e(this.getHelperTextId()!)}" class="nv-sc nv-inline nv-sc-has-gap nv-sc-dense"><div x-data="navetteSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="nv-sc-component"><span class="nv-sc-text">${helperText instanceof HtmlString ? helperText.html : e(helperText)}</span></div></div></div>`;
         below += await this.renderFieldSlot('belowContent');
         const hasError = errors.length > 0;
         const hasInlineLabel = await this.hasInlineLabel();
         const extraWrapper = this.getExtraFieldWrapperAttributes();
         const { class: extraClass = null, ...extraWrapperAttributes } = extraWrapper;
         const wrapperAttributes = Object.entries(extraWrapperAttributes).filter(([name, value]) => name !== 'data-field-wrapper' && value !== null && value !== undefined).map(([name, value]) => ` ${name}="${String(value).replace(/"/g, '&quot;')}"`).join('');
-        return views.render('filament-forms::components.field-wrapper', {
+        return views.render('navette-forms::components.field-wrapper', {
             id: this.getId(), label: await this.getLabelHtml(), required: (await this.isMarkedAsRequired()) && !(await this.isDisabled()),
-            labelPrefix: options.labelPrefix ?? '', hiddenLabel: await this.isLabelHidden(), after: options.after ?? '', afterLabel: await this.renderAfterLabel(), labelAsDiv: options.labelAsDiv === true, focusable: options.focusable === true, html, errorMessage: errors[0] ?? null, wrapperClass: cls([options.wrapperClass ?? null, 'fi-fo-field', { 'fi-fo-field-has-inline-label': hasInlineLabel }, extraClass]),
+            labelPrefix: options.labelPrefix ?? '', hiddenLabel: await this.isLabelHidden(), after: options.after ?? '', afterLabel: await this.renderAfterLabel(), labelAsDiv: options.labelAsDiv === true, focusable: options.focusable === true, html, errorMessage: errors[0] ?? null, wrapperClass: cls([options.wrapperClass ?? null, 'nv-fo-field', { 'nv-fo-field-has-inline-label': hasInlineLabel }, extraClass]),
             wrapperAttributes, hasInlineLabel, belowContent: below,
             aboveLabel: await this.renderFieldSlot('aboveLabel'), beforeLabel: await this.renderFieldSlot('beforeLabel'), belowLabel: await this.renderFieldSlot('belowLabel'),
             aboveContent: await this.renderFieldSlot('aboveContent'), beforeContent: await this.renderFieldSlot('beforeContent'), afterContent: await this.renderFieldSlot('afterContent'),

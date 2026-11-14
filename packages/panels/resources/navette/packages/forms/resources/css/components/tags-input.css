@@ -1,0 +1,33 @@
+.nv-fo-tags-input {
+    &.nv-disabled {
+        & .nv-badge-delete-btn {
+            @apply hidden;
+        }
+    }
+
+    & .nv-fo-tags-input-tags-ctn {
+        @apply flex w-full flex-wrap gap-1.5 border-t border-t-gray-200 p-2 dark:border-t-white/10;
+
+        & > template {
+            @apply hidden;
+        }
+
+        & > .nv-badge {
+            &.nv-reorderable {
+                @apply cursor-move;
+            }
+
+            & .nv-badge-label-ctn {
+                @apply text-start select-none;
+            }
+        }
+    }
+}
+
+.nv-fo-tags-input-wrp {
+    &.nv-fo-field-has-inline-label {
+        & .nv-fo-field-label-col {
+            @apply sm:pt-1.5;
+        }
+    }
+}

@@ -30,8 +30,8 @@ try {
 
     await step('the page renders again: the nested component keeps its state', async () => {
         // A request of the page itself: the repeater adds an item and the whole form is rendered again.
-        await page.locator('.fi-fo-repeater').getByRole('button', { name: 'Add to contacts' }).click();
-        await page.waitForFunction(() => document.querySelectorAll('.fi-fo-repeater-item').length === 2, null, { timeout: 8000 });
+        await page.locator('.nv-fo-repeater').getByRole('button', { name: 'Add to contacts' }).click();
+        await page.waitForFunction(() => document.querySelectorAll('.nv-fo-repeater-item').length === 2, null, { timeout: 8000 });
         assert.equal(await notes().locator('[data-likes]').innerText(), '2');
     });
 

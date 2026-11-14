@@ -34,10 +34,10 @@ test('Aliases replace interface icons; without one, the given icon renders as be
     // Filament's alternative spellings resolve to the same icon.
     icons.alias({ 'forms:components.rich-editor.toolbar.clear_formatting': 'm-x-mark' });
     assert.equal(icons.resolve('forms::components.rich-editor.toolbar.clear-formatting'), 'm-x-mark');
-    // HTML: rendered inside a `fi-icon` span with the size and extra classes.
+    // HTML: rendered inside a `nv-icon` span with the size and extra classes.
     icons.alias({ 'tables::empty-state': new HtmlString('<svg data-custom></svg>') });
-    assert.equal(icon('o-x-mark', { alias: 'tables::empty-state', size: 'lg', attributes: new Attributes({ class: 'extra' }) }), '<span class="extra fi-icon fi-size-lg"><svg data-custom></svg></span>');
-    assert.equal(icon(new HtmlString('<b>i</b>')), '<span class="fi-icon fi-size-md"><b>i</b></span>');
+    assert.equal(icon('o-x-mark', { alias: 'tables::empty-state', size: 'lg', attributes: new Attributes({ class: 'extra' }) }), '<span class="extra nv-icon nv-size-lg"><svg data-custom></svg></span>');
+    assert.equal(icon(new HtmlString('<b>i</b>')), '<span class="nv-icon nv-size-md"><b>i</b></span>');
     // `null` removes the replacement.
     icons.alias({ 'section.collapse-button': null });
     assert.equal(icon('m-chevron-up', { alias: 'section.collapse-button' }), chevron);
@@ -64,7 +64,7 @@ test('Icon sets: prefix:name, validated names, cache cleared when a set is regis
     assert.throws(() => icons.registerSet('Bad Prefix', () => null), /Invalid icon set prefix/);
     const asked: string[] = [];
     icons.registerSet('test-set', (name) => { asked.push(name); return name === 'star' ? '<svg viewBox="0 0 1 1"><path/></svg>' : name === 'text' ? 'not svg' : null; });
-    assert.equal(icon('test-set:star'), '<svg class="fi-icon fi-size-md" viewBox="0 0 1 1"><path/></svg>');
+    assert.equal(icon('test-set:star'), '<svg class="nv-icon nv-size-md" viewBox="0 0 1 1"><path/></svg>');
     icon('test-set:star');
     assert.deepEqual(asked, ['star']); // cached
     assert.throws(() => icon('test-set:missing'), /Icon not found: test-set:missing/);
@@ -75,12 +75,12 @@ test('Icon sets: prefix:name, validated names, cache cleared when a set is regis
     assert.equal(icons.has('test-set:star'), true);
     assert.equal(icons.has('test-set:nope'), false);
     icons.registerSet('test-set', () => '<svg id="v2"></svg>');
-    assert.equal(icon('test-set:star'), '<svg class="fi-icon fi-size-md" id="v2"></svg>');
+    assert.equal(icon('test-set:star'), '<svg class="nv-icon nv-size-md" id="v2"></svg>');
     // A single icon registered by name.
     registerIcon('brand', '<svg viewBox="0 0 2 2"></svg>');
     icons.register('brand-2', '<svg viewBox="0 0 3 3"></svg>');
-    assert.equal(icon('brand'), '<svg class="fi-icon fi-size-md" viewBox="0 0 2 2"></svg>');
-    assert.equal(icon('brand-2', { size: 'sm' }), '<svg class="fi-icon fi-size-sm" viewBox="0 0 3 3"></svg>');
+    assert.equal(icon('brand'), '<svg class="nv-icon nv-size-md" viewBox="0 0 2 2"></svg>');
+    assert.equal(icon('brand-2', { size: 'sm' }), '<svg class="nv-icon nv-size-sm" viewBox="0 0 3 3"></svg>');
 });
 
 test('Iconify JSON: viewBox, aliases, flips and rotations', () => {
@@ -94,7 +94,7 @@ test('Iconify JSON: viewBox, aliases, flips and rotations', () => {
     assert.equal(iconifyToSvg(SET, 'constructor'), null);
 
     icons.registerIconify(SET);
-    assert.equal(icon('demo:home', { size: 'lg' }), '<svg class="fi-icon fi-size-lg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" data-slot="icon"><path d="M1 1h22"/></svg>');
+    assert.equal(icon('demo:home', { size: 'lg' }), '<svg class="nv-icon nv-size-lg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" data-slot="icon"><path d="M1 1h22"/></svg>');
     icons.registerIconify(SET, { prefix: 'other-demo' });
     assert.ok(icon('other-demo:house').includes('M1 1h22'));
     assert.throws(() => icons.registerIconify({} as any), /expects an Iconify JSON set/);

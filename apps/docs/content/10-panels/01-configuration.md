@@ -37,7 +37,7 @@ app.listen(3000);
 
 | Method | Description |
 |---|---|
-| `id('admin')` | Identifier of the panel. It names the theme cookie (`navette_admin_theme`) and, with `authGuard(null)`, the session cookie (`navette_admin_session`), the components, and the `fi-panel-admin` class of the `<body>`. Defaults to `admin`. |
+| `id('admin')` | Identifier of the panel. It names the theme cookie (`navette_admin_theme`) and, with `authGuard(null)`, the session cookie (`navette_admin_session`), the components, and the `nv-panel-admin` class of the `<body>`. Defaults to `admin`. |
 | `key(secret)` | Secret used to sign the sessions, the password reset links and the email verification links. Required in production: see [deployment](/advanced/deployment#setting-the-application-key). |
 | `authGuard('web')` | Session shared with the panels that use the same guard (`web` by default); `null` gives the panel a session of its own. See [sharing the session between panels](/panels/users#sharing-the-session-between-panels). |
 | `canAccess(fn)` | Who may use the panel. See [authorizing access](/panels/users#authorizing-access-to-the-panel). |
@@ -358,7 +358,7 @@ app.use((req, res, next) => {
 
 The `description` option replaces the text of the status: `renderErrorPage(panel, req, res, 403, { description: 'Your trial has ended.' })`.
 
-The page is the `filament-panels::errors.page` view: [override it](/styling/css-hooks#overriding-views) to change its layout. Its elements have `fi-error-*` CSS hook classes, and its `<body>` has the `fi-error-<status>` class.
+The page is the `navette-panels::errors.page` view: [override it](/styling/css-hooks#overriding-views) to change its layout. Its elements have `nv-error-*` CSS hook classes, and its `<body>` has the `nv-error-<status>` class.
 
 ## Error notifications
 

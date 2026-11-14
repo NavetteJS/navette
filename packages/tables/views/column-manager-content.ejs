@@ -5,20 +5,20 @@
     const gridColumns = typeof cm.columns === 'number' ? { lg: cm.columns } : { ...cm.columns };
     for (const key of Object.keys(gridColumns)) if (!gridColumns[key]) delete gridColumns[key];
     gridColumns.default ??= 1;
-    const gridClasses = ['fi-grid', 'fi-grid-direction-col', ...Object.keys(gridColumns).map((bp) => (bp === 'default' ? (gridColumns[bp] > 1 ? 'fi-grid-cols' : '') : bp + ':fi-grid-cols'))].join(' ');
+    const gridClasses = ['nv-grid', 'nv-grid-direction-col', ...Object.keys(gridColumns).map((bp) => (bp === 'default' ? (gridColumns[bp] > 1 ? 'nv-grid-cols' : '') : bp + ':nv-grid-cols'))].join(' ');
     const gridStyle = Object.entries(gridColumns).map(([bp, n]) => '--cols-' + bp + ': ' + Number(n) + ';').join(' ');
 %>
 <% const item = (column, group) => { const name = group ? 'groupColumn' : 'column'; const groupArg = group ? ', column.name' : ''; %>
-                <div class="fi-ta-col-manager-item">
+                <div class="nv-ta-col-manager-item">
                     <label
-                        <% if (cm.toggleable) { %> x-bind:for="$id('fi-ta-col-manager-column-checkbox', <%- name %>.name)"<% } %>
-                        class="fi-ta-col-manager-label"
+                        <% if (cm.toggleable) { %> x-bind:for="$id('nv-ta-col-manager-column-checkbox', <%- name %>.name)"<% } %>
+                        class="nv-ta-col-manager-label"
                     >
                         <% if (cm.toggleable) { %>
                             <input
                                 type="checkbox"
-                                class="fi-checkbox-input fi-valid"
-                                x-bind:id="$id('fi-ta-col-manager-column-checkbox', <%- name %>.name)"
+                                class="nv-checkbox-input nv-valid"
+                                x-bind:id="$id('nv-ta-col-manager-column-checkbox', <%- name %>.name)"
                                 x-bind:checked="(getColumn(<%- name %>.name, <%- group ? 'column.name' : 'null' %>) || {}).isToggled || false"
                                 x-bind:disabled="(getColumn(<%- name %>.name, <%- group ? 'column.name' : 'null' %>) || {}).isToggleable === false"
                                 x-on:change="toggleColumn(<%- name %>.name<%- groupArg %>)"
@@ -30,32 +30,32 @@
                 </div>
 <% } %>
 <% const reorderControls = (name, group) => { %>
-                    <div x-data="{}" x-id="['column-manager-position']" class="fi-ta-col-manager-reorder-controls">
+                    <div x-data="{}" x-id="['column-manager-position']" class="nv-ta-col-manager-reorder-controls">
                         <span x-bind:id="$id('column-manager-position')" x-text="<%= group
-                            ? js(t('filament-tables::table.column_manager.position_in_group')) + `.replace(':position', getColumnPosition(${name}, column.name)).replace(':count', getVisibleColumns(column.name).length).replace(':group', getColumnLabel(column))`
-                            : js(t('filament-tables::table.column_manager.position')) + `.replace(':position', getColumnPosition(${name})).replace(':count', getVisibleColumns().length)` %>"></span>
+                            ? js(t('navette-tables::table.column_manager.position_in_group')) + `.replace(':position', getColumnPosition(${name}, column.name)).replace(':count', getVisibleColumns(column.name).length).replace(':group', getColumnLabel(column))`
+                            : js(t('navette-tables::table.column_manager.position')) + `.replace(':position', getColumnPosition(${name})).replace(':count', getVisibleColumns().length)` %>"></span>
                         <% for (const direction of ['up', 'down']) { %>
                             <button
                                 type="button"
                                 tabindex="-1"
-                                x-text="<%= js(t('filament-tables::table.column_manager.actions.move_' + direction + '.label')) + `.replace(':column', getColumnLabel(${name}))` %>"
+                                x-text="<%= js(t('navette-tables::table.column_manager.actions.move_' + direction + '.label')) + `.replace(':column', getColumnLabel(${name}))` %>"
                                 x-bind:aria-describedby="$id('column-manager-position')"
                                 x-bind:disabled="! canMoveColumn(<%- name %>, '<%- direction %>'<%- group ? ', column.name' : '' %>)"
                                 x-bind:aria-disabled="isLoading || ! canMoveColumn(<%- name %>, '<%- direction %>'<%- group ? ', column.name' : '' %>)"
                                 x-bind:data-testid="'column-manager-' + <%- name %>.name + '-move-<%- direction %>'"
-                                x-on:click.stop="moveColumn(<%- name %>, '<%- direction %>', <%- group ? 'column.name' : 'null' %>, $event.currentTarget, isLive ? <%= js(t(group ? 'filament-tables::table.column_manager.reordered_in_group' : 'filament-tables::table.column_manager.reordered')) %> : <%= js(t(group ? 'filament-tables::table.column_manager.reordered_in_group_deferred' : 'filament-tables::table.column_manager.reordered_deferred')) %>)"
+                                x-on:click.stop="moveColumn(<%- name %>, '<%- direction %>', <%- group ? 'column.name' : 'null' %>, $event.currentTarget, isLive ? <%= js(t(group ? 'navette-tables::table.column_manager.reordered_in_group' : 'navette-tables::table.column_manager.reordered')) %> : <%= js(t(group ? 'navette-tables::table.column_manager.reordered_in_group_deferred' : 'navette-tables::table.column_manager.reordered_deferred')) %>)"
                             ></button>
                         <% } %>
                     </div>
-                    <button x-sortable-handle aria-hidden="true" tabindex="-1" x-on:click.stop class="fi-ta-col-manager-reorder-handle fi-icon-btn" type="button">
+                    <button x-sortable-handle aria-hidden="true" tabindex="-1" x-on:click.stop class="nv-ta-col-manager-reorder-handle nv-icon-btn" type="button">
                         <%- icon('m-bars-2', { alias: 'tables::reorder.handle' }) %>
                     </button>
 <% } %>
 <% const content = () => { %>
     <div
-        <% if (cm.toggleable) { %>x-id="['fi-ta-col-manager-group-checkbox', 'fi-ta-col-manager-column-checkbox']"<% } %>
+        <% if (cm.toggleable) { %>x-id="['nv-ta-col-manager-group-checkbox', 'nv-ta-col-manager-column-checkbox']"<% } %>
         <% if (cm.reorderable) { %>x-sortable x-on:end.stop="reorderColumns($event.target.sortable.toArray())" x-on:focusin.window="focusRevision++" x-on:pointerdown.window="focusRevision++" data-sortable-animation-duration="300"<% } %>
-            class="<%- gridClasses %>  fi-ta-col-manager-items" style="<%- gridStyle %>"
+            class="<%- gridClasses %>  nv-ta-col-manager-items" style="<%- gridStyle %>"
 >
     <template
         x-for="column in getVisibleColumns()"
@@ -65,17 +65,17 @@
             <% if (cm.reorderable) { %>x-bind:x-sortable-item="column.type === 'group' ? 'group::' + column.name : 'column::' + column.name"<% } %>
                     >
             <template x-if="column.type === 'group'">
-                <div class="fi-ta-col-manager-group">
-                    <div class="fi-ta-col-manager-item">
+                <div class="nv-ta-col-manager-group">
+                    <div class="nv-ta-col-manager-item">
                         <label
-                            <% if (cm.toggleable) { %> x-bind:for="$id('fi-ta-col-manager-group-checkbox', column.name)"<% } %>
-                            class="fi-ta-col-manager-label"
+                            <% if (cm.toggleable) { %> x-bind:for="$id('nv-ta-col-manager-group-checkbox', column.name)"<% } %>
+                            class="nv-ta-col-manager-label"
                         >
                             <% if (cm.toggleable) { %>
                                 <input
                                     type="checkbox"
-                                    class="fi-checkbox-input fi-valid"
-                                    x-bind:id="$id('fi-ta-col-manager-group-checkbox', column.name)"
+                                    class="nv-checkbox-input nv-valid"
+                                    x-bind:id="$id('nv-ta-col-manager-group-checkbox', column.name)"
                                     x-bind:checked="(groupedColumns[column.name] || {}).checked || false"
                                     x-bind:disabled="(groupedColumns[column.name] || {}).disabled || false"
                                     x-effect="$el.indeterminate = (groupedColumns[column.name] || {}).indeterminate || false"
@@ -88,7 +88,7 @@
                     </div>
                     <div
                         <% if (cm.reorderable) { %>x-sortable x-on:end.stop="reorderGroupColumns($event.target.sortable.toArray(), column.name)" data-sortable-animation-duration="300"<% } %>
-                        class="fi-ta-col-manager-group-items"
+                        class="nv-ta-col-manager-group-items"
                     >
                         <template
                             x-for="groupColumn in getVisibleColumns(column.name)"

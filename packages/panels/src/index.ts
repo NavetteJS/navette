@@ -93,8 +93,8 @@ import { Component, type WireRuntime } from '@navette-js/wire';
 import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 
 const dir = (p: string) => fileURLToPath(new URL(p, import.meta.url));
-views.namespace('filament-panels', dir('../views'));
-views.namespace('filament', fileURLToPath(new URL('../views', import.meta.resolve('@navette-js/support'))));
+views.namespace('navette-panels', dir('../views'));
+views.namespace('navette', fileURLToPath(new URL('../views', import.meta.resolve('@navette-js/support'))));
 views.share({ t, tc });
 export const ASSET_VERSION = '5.11.2.0';
 
@@ -552,7 +552,7 @@ export class Panel {
     getErrorNotifications(): Record<string, { title: string | null; body: string | null; isHidden: boolean; isDisabled: boolean }> {
         const read = (text: string | (() => string) | null) => (typeof text === 'function' ? text() : text);
         const notifications = Object.fromEntries([...this._errorNotificationList].map(([status, entry]) => [status, { title: read(entry.title), body: read(entry.body), isHidden: entry.isHidden, isDisabled: entry.isDisabled }]));
-        notifications[''] ??= { title: t('filament-panels::error-notifications.title'), body: t('filament-panels::error-notifications.body'), isHidden: false, isDisabled: false };
+        notifications[''] ??= { title: t('navette-panels::error-notifications.title'), body: t('navette-panels::error-notifications.body'), isHidden: false, isDisabled: false };
         return notifications;
     }
 
@@ -1215,7 +1215,7 @@ export const WidgetsRenderHook = {
 export const UNPLACED_RENDER_HOOKS: Record<string, string> = {};
 
 /** Alpine scope of a schema component without a key (anonymous grid cell). */
-const ANONYMOUS_SCHEMA_COMPONENT = `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
+const ANONYMOUS_SCHEMA_COMPONENT = `x-data="navetteSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
 /** Common base: a stateful component hosting schemas (`<name>Schema(schema)`). */
 abstract class BasePage extends Component implements SchemaHost {
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
@@ -1591,8 +1591,8 @@ abstract class BasePage extends Component implements SchemaHost {
         const minutes = Math.ceil(seconds / 60);
         const info = { ...(callContext as any), seconds, minutes };
         let notification = Notification.make().danger()
-            .title(action.getRateLimitedNotificationTitle(info) ?? t('filament-actions::notifications.throttled.title', { seconds, minutes }))
-            .body(t('filament-actions::notifications.throttled.body', { seconds, minutes }));
+            .title(action.getRateLimitedNotificationTitle(info) ?? t('navette-actions::notifications.throttled.title', { seconds, minutes }))
+            .body(t('navette-actions::notifications.throttled.body', { seconds, minutes }));
         notification = (customizer ? await customizer(notification, info) : null) ?? notification;
         notification.send();
     }
@@ -1636,12 +1636,12 @@ abstract class BasePage extends Component implements SchemaHost {
     protected registersUnsavedActionChangesAlert(): boolean { return this.getDefaultActionUrlIdentifier() === 'page'; }
     async renderActionModals(): Promise<string> {
         this.readDefaultActionsFromUrl();
-        if (this.registersUnsavedActionChangesAlert() && (this._ctx as PanelContext | null)?.panel?.hasUnsavedChangesAlerts()) this.addScript('unsaved-action-changes-alert', `setUpFilamentUnsavedActionChangesAlert({ resolveLivewireComponentUsing: () => window.Livewire.find(${js(this.id)}), $wire })`);
+        if (this.registersUnsavedActionChangesAlert() && (this._ctx as PanelContext | null)?.panel?.hasUnsavedChangesAlerts()) this.addScript('unsaved-action-changes-alert', `setUpNavetteUnsavedActionChangesAlert({ resolveLivewireComponentUsing: () => window.Livewire.find(${js(this.id)}), $wire })`);
         const modals: string[] = [];
         for (const index of this.mountedActions.keys()) modals.push(await this.renderActionModal(index));
         // The default actions open once the component has loaded in the browser.
         const init = this.shouldMountDefaultActions() ? '<div wire:init="mountDefaultActions"></div>' : '';
-        return `<div wire:partial="action-modals" x-data="filamentActionModals({
+        return `<div wire:partial="action-modals" x-data="navetteActionModals({
                     livewireId: ${js(this.id)},
                 })" style="height: 0">${modals.join('')}</div>${init}`;
     }
@@ -1969,8 +1969,8 @@ export class Page extends BasePage {
     protected async renderFooterWidgets(): Promise<string> {
         const widgets = await this.filterVisibleWidgets(this.getFooterWidgets());
         if (!widgets.length) return '';
-        const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
-        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
+        const liberate = (hook: string) => `<div class="nv-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
+        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
     }
     /** Widgets shown above the page content, with the data passed to each (widget properties). */
     getHeaderWidgets(): WidgetEntry[] { return []; }
@@ -1981,8 +1981,8 @@ export class Page extends BasePage {
     protected async renderHeaderWidgets(): Promise<string> {
         const widgets = await this.filterVisibleWidgets(this.getHeaderWidgets());
         if (!widgets.length) return '';
-        const liberate = (hook: string) => `<div class="fi-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
-        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
+        const liberate = (hook: string) => `<div class="nv-sc-liberated" wire:key="" ${ANONYMOUS_SCHEMA_COMPONENT}>${renderHook(hook, this.getRenderHookScopes())}</div>`;
+        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
     }
     /** Widgets the current user is allowed to see. */
     protected async filterVisibleWidgets(candidates: WidgetEntry[]): Promise<WidgetEntry[]> {
@@ -2000,10 +2000,10 @@ export class Page extends BasePage {
             const key = `${schemaKey}.${componentName}-${index}`;
             // Properties of a configuration (`Widget.make({...})`) come after the page's widget data.
             const child = await this.mountChild(componentName, { ...this.getWidgetData(), ...widgetPropertiesOf(entry) }, `${this.id}.${key}`, { lazy: widget.isLazy });
-            items.push(`<div class="fi-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
+            items.push(`<div class="nv-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="navetteSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
         }
-        const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['fi-sc', 'fi-sc-has-gap']);
-        return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
+        const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['nv-sc', 'nv-sc-has-gap']);
+        return `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component"><div><div ${grid.toHtml()}>${items.join('')}</div></div></div></div>`;
     }
     /** Page content: its `content` schema by default. */
     /**
@@ -2029,7 +2029,7 @@ export class Page extends BasePage {
         for (const action of this.getHeaderActions()) if (await action.isVisible(ctx)) headerActions.push(await action.toHtml(ctx));
         const subheading = this.getSubheading();
         const html = (value: string | HtmlString | null) => (value === null || value === undefined ? null : String(value));
-        return views.render('filament-panels::pages.page', {
+        return views.render('navette-panels::pages.page', {
             header: html(await this.getHeader()), footer: html(await this.getFooter()), headerActionsAlignment: this.getHeaderActionsAlignment() ?? 'start',
             subheading: subheading === null || subheading === undefined || String(subheading) === '' ? null : subheading instanceof HtmlString ? subheading.toString() : e(subheading),
             heading: this.getHeading(), headerWidgets: await this.renderHeaderWidgets(), content: await this.renderContent(), footerWidgets: await this.renderFooterWidgets(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(),
@@ -2137,9 +2137,9 @@ export class Dashboard extends Page {
     }
     getWidgetData(): Record<string, unknown> { return this.hasFilters() ? { pageFilters: this.filters } : {}; }
     protected async renderContent(): Promise<string> {
-        const filters = this.hasFiltersForm() ? `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${await this.getSchema('filtersForm').toHtml()}</div></div>` : '';
+        const filters = this.hasFiltersForm() ? `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${await this.getSchema('filtersForm').toHtml()}</div></div>` : '';
         const widgets = await this.renderWidgetsGrid(await this.filterVisibleWidgets(this.getWidgets()), this.getColumns(), 'content');
-        return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${filters}${widgets}</div>`;
+        return `<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${filters}${widgets}</div>`;
     }
 }
 
@@ -2154,16 +2154,16 @@ export abstract class SimplePage extends BasePage {
     getSubheading(): string | null { return null; }
     hasLogo(): boolean { return true; }
     async render(): Promise<string> {
-        return views.render('filament-panels::pages.simple', { brand: this.panel.getBrand(), heading: this.getHeading(), subheading: this.getSubheading(), hasLogo: this.hasLogo(), content: await this.getSchema('content').toHtml(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(), actionModals: await this.renderActionModals() });
+        return views.render('navette-panels::pages.simple', { brand: this.panel.getBrand(), heading: this.getHeading(), subheading: this.getSubheading(), hasLogo: this.hasLogo(), content: await this.getSchema('content').toHtml(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(), actionModals: await this.renderActionModals() });
     }
 }
 
 /** Color manager read by the other packages and shared by all panels; each request sets its panel's colors on it (`Panel.withTheme`). */
 const sharedColors = new ColorManager();
-/** `fi-link` link of an authentication page. */
+/** `nv-link` link of an authentication page. */
 function authLink(url: string, label: string, options: { iconName?: string | null; size?: string } = {}): string {
-    const classes = ['fi-ac-link-action', 'fi-link', `fi-size-${options.size ?? 'md'}`, ...sharedColors.getComponentClasses('link', 'primary')];
-    return `<a href="${e(url)}" class="${classes.join(' ')}" >${options.iconName ? icon(options.iconName) : ''}<span class="fi-link-label"> ${e(label)} </span></a>`;
+    const classes = ['nv-ac-link-action', 'nv-link', `nv-size-${options.size ?? 'md'}`, ...sharedColors.getComponentClasses('link', 'primary')];
+    return `<a href="${e(url)}" class="${classes.join(' ')}" >${options.iconName ? icon(options.iconName) : ''}<span class="nv-link-label"> ${e(label)} </span></a>`;
 }
 /** Absolute URL for an email: based on `panel.appUrl()`, otherwise the request origin. */
 function absoluteUrl(panel: Panel, req: Request, path: string): string { return `${panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}`}${path}`; }
@@ -2200,11 +2200,11 @@ export class Register extends SimplePage {
         if ((this._ctx as PanelContext).user) { this.redirect(this.panel.getUrl()); return; }
         fillSchema(this.getSchema('form'), this.data);
     }
-    getTitle(): string { return t('filament-panels::auth/pages/register.title'); }
-    getHeading(): string { return t('filament-panels::auth/pages/register.heading'); }
+    getTitle(): string { return t('navette-panels::auth/pages/register.title'); }
+    getHeading(): string { return t('navette-panels::auth/pages/register.heading'); }
     getSubheading(): string | null {
         if (!this.panel.getLoginPage()) return null;
-        return `${e(t('filament-panels::auth/pages/register.actions.login.before'))} ${authLink(this.panel.getLoginUrl(), t('filament-panels::auth/pages/register.actions.login.label'))}`;
+        return `${e(t('navette-panels::auth/pages/register.actions.login.before'))} ${authLink(this.panel.getLoginUrl(), t('navette-panels::auth/pages/register.actions.login.label'))}`;
     }
     /**
      * The registration form. To add a field, override it and reuse the default components:
@@ -2214,22 +2214,22 @@ export class Register extends SimplePage {
         return schema.components([this.getNameFormComponent(), this.getEmailFormComponent(), this.getPasswordFormComponent(), this.getPasswordConfirmationFormComponent()]);
     }
     /** Name field (override it to change one field without redefining the form). */
-    protected getNameFormComponent(): SchemaComponent { return TextInput.make('name').label(t('filament-panels::auth/pages/register.form.name.label')).required().maxLength(255).autofocus(); }
+    protected getNameFormComponent(): SchemaComponent { return TextInput.make('name').label(t('navette-panels::auth/pages/register.form.name.label')).required().maxLength(255).autofocus(); }
     /** Email field: unique among the users. */
     protected getEmailFormComponent(): SchemaComponent {
         const auth = this.panel.getAuth();
-        return TextInput.make('email').label(t('filament-panels::auth/pages/register.form.email.label')).email().required().maxLength(255)
+        return TextInput.make('email').label(t('navette-panels::auth/pages/register.form.email.label')).email().required().maxLength(255)
             .rule({ name: 'unique', passes: async (value) => !(await auth.findByEmail!(String(value))), message: (attribute) => `The ${attribute} has already been taken.` });
     }
     /** Password field: at least 8 characters, confirmed by the confirmation field. */
     protected getPasswordFormComponent(): SchemaComponent {
-        return passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/register.form.password.label')).password().revealable(this.panel.arePasswordsRevealable()).required());
+        return passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('navette-panels::auth/pages/register.form.password.label')).password().revealable(this.panel.arePasswordsRevealable()).required());
     }
     protected getPasswordConfirmationFormComponent(): SchemaComponent {
-        return TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/register.form.password_confirmation.label')).password().revealable(this.panel.arePasswordsRevealable()).required().dehydrated(false);
+        return TextInput.make('passwordConfirmation').label(t('navette-panels::auth/pages/register.form.password_confirmation.label')).password().revealable(this.panel.arePasswordsRevealable()).required().dehydrated(false);
     }
     contentSchema(schema: Schema): Schema {
-        return schema.components(formContent('register', [Action.make('register').label(t('filament-panels::auth/pages/register.form.actions.register.label')).submit('register')], { before: PanelsRenderHook.AUTH_REGISTER_FORM_BEFORE, after: PanelsRenderHook.AUTH_REGISTER_FORM_AFTER }));
+        return schema.components(formContent('register', [Action.make('register').label(t('navette-panels::auth/pages/register.form.actions.register.label')).submit('register')], { before: PanelsRenderHook.AUTH_REGISTER_FORM_BEFORE, after: PanelsRenderHook.AUTH_REGISTER_FORM_AFTER }));
     }
     /** Validated data, just before creation (add a value, normalize the email…). */
     protected mutateFormDataBeforeRegister(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
@@ -2240,7 +2240,7 @@ export class Register extends SimplePage {
     async register(): Promise<void> {
         const { req, res, panel } = this._ctx as PanelContext;
         const wait = registerThrottle.hit(`${panel.getId()}:${req.ip ?? ''}`);
-        if (wait > 0) { throttled('filament-panels::auth/pages/register', wait); return; }
+        if (wait > 0) { throttled('navette-panels::auth/pages/register', wait); return; }
         const form = this.getSchema('form');
         this._errors = await validateSchema(form);
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
@@ -2259,21 +2259,21 @@ export class RequestPasswordReset extends SimplePage {
         if ((this._ctx as PanelContext).user) { this.redirect(this.panel.getUrl()); return; }
         fillSchema(this.getSchema('form'), this.data);
     }
-    getTitle(): string { return t('filament-panels::auth/pages/password-reset/request-password-reset.title'); }
-    getHeading(): string { return t('filament-panels::auth/pages/password-reset/request-password-reset.heading'); }
+    getTitle(): string { return t('navette-panels::auth/pages/password-reset/request-password-reset.title'); }
+    getHeading(): string { return t('navette-panels::auth/pages/password-reset/request-password-reset.heading'); }
     getSubheading(): string | null {
-        return this.panel.getLoginPage() ? authLink(this.panel.getLoginUrl(), t('filament-panels::auth/pages/password-reset/request-password-reset.actions.login.label'), { iconName: icons.resolve('panels::pages.password-reset.request-password-reset.actions.login') ?? 'm-arrow-left' }) : null;
+        return this.panel.getLoginPage() ? authLink(this.panel.getLoginUrl(), t('navette-panels::auth/pages/password-reset/request-password-reset.actions.login.label'), { iconName: icons.resolve('panels::pages.password-reset.request-password-reset.actions.login') ?? 'm-arrow-left' }) : null;
     }
     formSchema(schema: Schema): Schema {
-        return schema.components([TextInput.make('email').label(t('filament-panels::auth/pages/password-reset/request-password-reset.form.email.label')).email().required().autocomplete().autofocus()]);
+        return schema.components([TextInput.make('email').label(t('navette-panels::auth/pages/password-reset/request-password-reset.form.email.label')).email().required().autocomplete().autofocus()]);
     }
     contentSchema(schema: Schema): Schema {
-        return schema.components(formContent('request', [Action.make('request').label(t('filament-panels::auth/pages/password-reset/request-password-reset.form.actions.request.label')).submit('request')], { before: PanelsRenderHook.AUTH_PASSWORD_RESET_REQUEST_FORM_BEFORE, after: PanelsRenderHook.AUTH_PASSWORD_RESET_REQUEST_FORM_AFTER }));
+        return schema.components(formContent('request', [Action.make('request').label(t('navette-panels::auth/pages/password-reset/request-password-reset.form.actions.request.label')).submit('request')], { before: PanelsRenderHook.AUTH_PASSWORD_RESET_REQUEST_FORM_BEFORE, after: PanelsRenderHook.AUTH_PASSWORD_RESET_REQUEST_FORM_AFTER }));
     }
     async request(): Promise<void> {
         const { req, panel } = this._ctx as PanelContext;
         const wait = passwordResetThrottle.hit(`${panel.getId()}:request:${req.ip ?? ''}`);
-        if (wait > 0) { throttled('filament-panels::auth/pages/password-reset/request-password-reset', wait); return; }
+        if (wait > 0) { throttled('navette-panels::auth/pages/password-reset/request-password-reset', wait); return; }
         const form = this.getSchema('form');
         this._errors = await validateSchema(form);
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
@@ -2289,7 +2289,7 @@ export class RequestPasswordReset extends SimplePage {
         }
         // Security: always answer the same way, whether or not an account exists, so the response
         // does not reveal which email addresses are registered.
-        Notification.make().success().title('We have emailed your password reset link.').body(t('filament-panels::auth/pages/password-reset/request-password-reset.notifications.sent.body')).send();
+        Notification.make().success().title('We have emailed your password reset link.').body(t('navette-panels::auth/pages/password-reset/request-password-reset.notifications.sent.body')).send();
         this.data = {};
         fillSchema(form, this.data);
     }
@@ -2310,22 +2310,22 @@ export class ResetPassword extends SimplePage {
     }
     /** The form has no state path: its fields are page properties. */
     getSchema(name: string): Schema { return name === 'form' ? this.formSchema(Schema.make(this).key('form')) : super.getSchema(name); }
-    getTitle(): string { return t('filament-panels::auth/pages/password-reset/reset-password.title'); }
-    getHeading(): string { return t('filament-panels::auth/pages/password-reset/reset-password.heading'); }
+    getTitle(): string { return t('navette-panels::auth/pages/password-reset/reset-password.title'); }
+    getHeading(): string { return t('navette-panels::auth/pages/password-reset/reset-password.heading'); }
     formSchema(schema: Schema): Schema {
         return schema.components([
-            TextInput.make('email').label(t('filament-panels::auth/pages/password-reset/reset-password.form.email.label')).disabled().autofocus(),
-            passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/password-reset/reset-password.form.password.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required()),
-            TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/password-reset/reset-password.form.password_confirmation.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required().dehydrated(false),
+            TextInput.make('email').label(t('navette-panels::auth/pages/password-reset/reset-password.form.email.label')).disabled().autofocus(),
+            passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('navette-panels::auth/pages/password-reset/reset-password.form.password.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required()),
+            TextInput.make('passwordConfirmation').label(t('navette-panels::auth/pages/password-reset/reset-password.form.password_confirmation.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required().dehydrated(false),
         ]);
     }
     contentSchema(schema: Schema): Schema {
-        return schema.components(formContent('resetPassword', [Action.make('resetPassword').label(t('filament-panels::auth/pages/password-reset/reset-password.form.actions.reset.label')).submit('resetPassword')], { before: PanelsRenderHook.AUTH_PASSWORD_RESET_RESET_FORM_BEFORE, after: PanelsRenderHook.AUTH_PASSWORD_RESET_RESET_FORM_AFTER }));
+        return schema.components(formContent('resetPassword', [Action.make('resetPassword').label(t('navette-panels::auth/pages/password-reset/reset-password.form.actions.reset.label')).submit('resetPassword')], { before: PanelsRenderHook.AUTH_PASSWORD_RESET_RESET_FORM_BEFORE, after: PanelsRenderHook.AUTH_PASSWORD_RESET_RESET_FORM_AFTER }));
     }
     async resetPassword(): Promise<void> {
         const { req, panel } = this._ctx as PanelContext;
         const wait = passwordResetThrottle.hit(`${panel.getId()}:reset:${req.ip ?? ''}`);
-        if (wait > 0) { throttled('filament-panels::auth/pages/password-reset/reset-password', wait); return; }
+        if (wait > 0) { throttled('navette-panels::auth/pages/password-reset/reset-password', wait); return; }
         this._errors = await validateSchema(this.getSchema('form'));
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         const auth = panel.getAuth();
@@ -2349,16 +2349,16 @@ export class EmailVerificationPrompt extends SimplePage {
         const { panel, user } = this._ctx as PanelContext;
         if (!user || !(await panel.mustVerifyEmail(user))) this.redirect(panel.getUrl());
     }
-    getTitle(): string { return t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'); }
-    getHeading(): string { return t('filament-panels::auth/pages/email-verification/email-verification-prompt.heading'); }
+    getTitle(): string { return t('navette-panels::auth/pages/email-verification/email-verification-prompt.title'); }
+    getHeading(): string { return t('navette-panels::auth/pages/email-verification/email-verification-prompt.heading'); }
     contentSchema(schema: Schema): Schema {
         const { user } = this._ctx as PanelContext;
         const expression = `mountAction('resendNotification')`;
-        const link = `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...sharedColors.getComponentClasses('link', 'primary')].join(' ')}" wire:click="${e(expression)}" >${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression }), 'sm')}<span class="fi-link-label"> ${e(t('filament-panels::auth/pages/email-verification/email-verification-prompt.actions.resend_notification.label'))}. </span></button>`;
-        const text = (html: string) => Html.make(`<span class="fi-sc-text" > ${html} </span>`);
+        const link = `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${['nv-ac-link-action', 'nv-link', 'nv-size-sm', ...sharedColors.getComponentClasses('link', 'primary')].join(' ')}" wire:click="${e(expression)}" >${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression }), 'sm')}<span class="nv-link-label"> ${e(t('navette-panels::auth/pages/email-verification/email-verification-prompt.actions.resend_notification.label'))}. </span></button>`;
+        const text = (html: string) => Html.make(`<span class="nv-sc-text" > ${html} </span>`);
         return schema.components([
-            text(e(t('filament-panels::auth/pages/email-verification/email-verification-prompt.messages.notification_sent', { email: user?.email ?? '' }))),
-            text(`${e(t('filament-panels::auth/pages/email-verification/email-verification-prompt.messages.notification_not_received'))} ${link}`),
+            text(e(t('navette-panels::auth/pages/email-verification/email-verification-prompt.messages.notification_sent', { email: user?.email ?? '' }))),
+            text(`${e(t('navette-panels::auth/pages/email-verification/email-verification-prompt.messages.notification_not_received'))} ${link}`),
         ]);
     }
     /** The page's only action: resend the email (at most twice per minute). */
@@ -2368,11 +2368,11 @@ export class EmailVerificationPrompt extends SimplePage {
         this.skipRender();
         const wait = verificationThrottle.hit(`${panel.getId()}:verify:${user.id}`);
         if (wait > 0) {
-            Notification.make().danger().title(t('filament-panels::auth/pages/email-verification/email-verification-prompt.notifications.notification_resend_throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('filament-panels::auth/pages/email-verification/email-verification-prompt.notifications.notification_resend_throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
+            Notification.make().danger().title(t('navette-panels::auth/pages/email-verification/email-verification-prompt.notifications.notification_resend_throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('navette-panels::auth/pages/email-verification/email-verification-prompt.notifications.notification_resend_throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
             return;
         }
         if (await panel.mustVerifyEmail(user)) await sendVerificationEmail(panel, req, user);
-        Notification.make().success().title(t('filament-panels::auth/pages/email-verification/email-verification-prompt.notifications.notification_resent.title')).send();
+        Notification.make().success().title(t('navette-panels::auth/pages/email-verification/email-verification-prompt.notifications.notification_resent.title')).send();
     }
 }
 
@@ -2381,7 +2381,7 @@ export class EditProfile extends SimplePage {
     static callable = ['save', 'mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
     static slug = 'profile';
     data: Record<string, unknown> = {};
-    static getLabel(): string { return t('filament-panels::auth/pages/edit-profile.label'); }
+    static getLabel(): string { return t('navette-panels::auth/pages/edit-profile.label'); }
     async mount(): Promise<void> {
         const { user } = this._ctx as PanelContext;
         if (!user) throw new WireError(401, 'Unauthenticated.');
@@ -2394,16 +2394,16 @@ export class EditProfile extends SimplePage {
     usesFullLayout(): boolean { return !this.panel.isProfileSimple(); }
     async render(): Promise<string> {
         if (!this.usesFullLayout()) return super.render();
-        return views.render('filament-panels::pages.page', {
+        return views.render('navette-panels::pages.page', {
             heading: this.getTitle(), headerWidgets: '', content: await this.getSchema('content').toHtml(), footerWidgets: '', livewireId: this.id, renderHookScopes: this.getRenderHookScopes(),
-            subNavigation: [], subNavigationPosition: 'top', breadcrumbs: [], headerActions: [], pageClasses: ['fi-auth-edit-profile-page'], actionModals: await this.renderActionModals(), headerActionsKey: '',
+            subNavigation: [], subNavigationPosition: 'top', breadcrumbs: [], headerActions: [], pageClasses: ['nv-auth-edit-profile-page'], actionModals: await this.renderActionModals(), headerActionsKey: '',
         });
     }
     formSchema(schema: Schema): Schema {
         const fields = this.getFormComponents();
         if (!this.usesFullLayout()) return schema.operation('edit').components(fields);
         const [name, email, ...password] = fields;
-        const group = 'filament-panels::auth/pages/edit-profile.sections';
+        const group = 'navette-panels::auth/pages/edit-profile.sections';
         return schema.operation('edit').components([
             Section.make(t(`${group}.information.heading`)).description(t(`${group}.information.description`)).schema([name, email]),
             Section.make(t(`${group}.password.heading`)).description(t(`${group}.password.description`)).schema(password),
@@ -2416,28 +2416,28 @@ export class EditProfile extends SimplePage {
     protected getFormComponents(): SchemaComponent[] {
         return [this.getNameFormComponent(), this.getEmailFormComponent(), this.getPasswordFormComponent(), this.getPasswordConfirmationFormComponent(), this.getCurrentPasswordFormComponent()];
     }
-    protected getNameFormComponent(): SchemaComponent { return TextInput.make('name').label(t('filament-panels::auth/pages/edit-profile.form.name.label')).required().maxLength(255).autofocus(); }
+    protected getNameFormComponent(): SchemaComponent { return TextInput.make('name').label(t('navette-panels::auth/pages/edit-profile.form.name.label')).required().maxLength(255).autofocus(); }
     /** Email field: unique among the users (the user's own address excepted). */
     protected getEmailFormComponent(): SchemaComponent {
         const { panel, user } = this._ctx as PanelContext;
         const auth = panel.getAuth();
-        return TextInput.make('email').label(t('filament-panels::auth/pages/edit-profile.form.email.label')).email().required().maxLength(255).live()
+        return TextInput.make('email').label(t('navette-panels::auth/pages/edit-profile.form.email.label')).email().required().maxLength(255).live()
             .rule({ name: 'unique', passes: async (value) => { const other = await auth.findByEmail?.(String(value)); return !other || String(other.id) === String(user?.id); }, message: (attribute) => `The ${attribute} has already been taken.` });
     }
     /** New password (optional): at least 8 characters, confirmed. */
     protected getPasswordFormComponent(): SchemaComponent {
-        return passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/edit-profile.form.password.label')).password().revealable(this.panel.arePasswordsRevealable()).autocomplete('new-password').live());
+        return passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('navette-panels::auth/pages/edit-profile.form.password.label')).password().revealable(this.panel.arePasswordsRevealable()).autocomplete('new-password').live());
     }
     /** Confirmation of the new password, shown once one is typed. */
     protected getPasswordConfirmationFormComponent(): SchemaComponent {
-        return TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/edit-profile.form.password_confirmation.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required()
+        return TextInput.make('passwordConfirmation').label(t('navette-panels::auth/pages/edit-profile.form.password_confirmation.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required()
             .visible(({ get }) => !blankValue(get('password'))).dehydrated(false);
     }
     /** Current password, required to change the password or the email address. Keep it when you redefine the form. */
     protected getCurrentPasswordFormComponent(): SchemaComponent {
         const { panel, user } = this._ctx as PanelContext;
         const auth = panel.getAuth();
-        return TextInput.make('currentPassword').label(t('filament-panels::auth/pages/edit-profile.form.current_password.label')).helperText(t('filament-panels::auth/pages/edit-profile.form.current_password.below_content'))
+        return TextInput.make('currentPassword').label(t('navette-panels::auth/pages/edit-profile.form.current_password.label')).helperText(t('navette-panels::auth/pages/edit-profile.form.current_password.below_content'))
             .password().autocomplete('current-password').revealable(this.panel.arePasswordsRevealable()).required()
             .rule({ name: 'current_password', passes: async (value) => Boolean(user && (await auth.attempt(user.email, String(value)))), message: () => 'The password is incorrect.' })
             .visible(({ get }) => !blankValue(get('password')) || get('email') !== user?.email).dehydrated(false);
@@ -2446,8 +2446,8 @@ export class EditProfile extends SimplePage {
         const { panel, user } = this._ctx as PanelContext;
         return schema.components([
             ...formContent('save', [
-                Action.make('save').label(t('filament-panels::auth/pages/edit-profile.form.actions.save.label')).submit('save').keyBindings(['mod+s']),
-                Action.make('back').label(t('filament-panels::auth/pages/edit-profile.actions.cancel.label')).color('gray').alpineClickHandler(`document.referrer ? window.history.back() : (window.location.href = ${JSON.stringify(this.panel.getUrl())})`),
+                Action.make('save').label(t('navette-panels::auth/pages/edit-profile.form.actions.save.label')).submit('save').keyBindings(['mod+s']),
+                Action.make('back').label(t('navette-panels::auth/pages/edit-profile.actions.cancel.label')).color('gray').alpineClickHandler(`document.referrer ? window.history.back() : (window.location.href = ${JSON.stringify(this.panel.getUrl())})`),
             ], { fullWidth: false, alignment: 'start' }),
             ...(panel.hasMultiFactorAuthentication() && user ? [this.multiFactorAuthenticationSection(panel, user)] : []),
         ]);
@@ -2462,19 +2462,19 @@ export class EditProfile extends SimplePage {
             action: { label: 'Verify Email Address', url: absoluteUrl(panel, req, urls.verify) },
             outro: ['This link will expire in 60 minutes.', 'If you did not request this change, no further action is required.'],
         });
-        const notice = 'filament-panels::auth/notifications/notice-of-email-change-request';
+        const notice = 'navette-panels::auth/notifications/notice-of-email-change-request';
         await panel.sendMail({
             to: user.email, subject: t(`${notice}.subject`),
             lines: [0, 1, 2].map((index) => t(`${notice}.lines.${index}`, { email: newEmail })),
             action: { label: t(`${notice}.action`), url: absoluteUrl(panel, req, urls.block) },
             outro: [t(`${notice}.lines.3`, { email: newEmail })],
         });
-        Notification.make().success().title(t('filament-panels::auth/pages/edit-profile.notifications.email_change_verification_sent.title')).body(t('filament-panels::auth/pages/edit-profile.notifications.email_change_verification_sent.body', { email: newEmail })).send();
+        Notification.make().success().title(t('navette-panels::auth/pages/edit-profile.notifications.email_change_verification_sent.title')).body(t('navette-panels::auth/pages/edit-profile.notifications.email_change_verification_sent.body', { email: newEmail })).send();
     }
     /** Multi-factor authentication settings: each provider's status and actions (set up, turn off…). */
     protected multiFactorAuthenticationSection(panel: Panel, user: User): SchemaComponent {
         if (!this.usesFullLayout()) return multiFactorManagementSection(panel, user);
-        const group = 'filament-panels::auth/pages/edit-profile.multi_factor_authentication';
+        const group = 'navette-panels::auth/pages/edit-profile.multi_factor_authentication';
         return Section.make(t(`${group}.label`)).description(t(`${group}.description`)).divided()
             .schema(panel.getMultiFactorAuthenticationProviders().map((provider) => Group.make(provider.getManagementSchemaComponents(user, panel)).statePath(provider.getId())));
     }
@@ -2493,7 +2493,7 @@ export class EditProfile extends SimplePage {
             this.data = { ...this.data, email: user.email };
         }
         this.data = { ...this.data, password: null, passwordConfirmation: null, currentPassword: null };
-        Notification.make().success().title(t('filament-panels::auth/pages/edit-profile.notifications.saved.title')).send();
+        Notification.make().success().title(t('navette-panels::auth/pages/edit-profile.notifications.saved.title')).send();
     }
 }
 const blankValue = (value: unknown) => value === null || value === undefined || value === '';
@@ -2548,14 +2548,14 @@ export abstract class EditTenantProfile extends Page {
     }
     formSchema(schema: Schema): Schema { return schema; }
     contentSchema(schema: Schema): Schema {
-        return schema.components(formContent('save', [Action.make('save').label(t('filament-panels::pages/tenancy/edit-tenant-profile.form.actions.save.label')).submit('save').keyBindings(['mod+s'])], { fullWidth: false, alignment: 'start' }));
+        return schema.components(formContent('save', [Action.make('save').label(t('navette-panels::pages/tenancy/edit-tenant-profile.form.actions.save.label')).submit('save').keyBindings(['mod+s'])], { fullWidth: false, alignment: 'start' }));
     }
     async save(): Promise<void> {
         const form = this.getSchema('form');
         this._errors = await validateSchema(form);
         if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         await this.panel.getTenantProvider().update!(this.panel.getTenant(), await getSchemaState(form));
-        Notification.make().success().title(t('filament-panels::pages/tenancy/edit-tenant-profile.notifications.saved.title')).send();
+        Notification.make().success().title(t('navette-panels::pages/tenancy/edit-tenant-profile.notifications.saved.title')).send();
     }
 }
 
@@ -2583,12 +2583,12 @@ export class Login extends SimplePage {
     }
     /** Whether the multi-factor challenge is shown. */
     isUndertakingMultiFactorAuthentication(): boolean { return this._multiFactorUser !== null && this._multiFactorProviders.length > 0; }
-    getTitle(): string { return t('filament-panels::auth/pages/login.title'); }
-    getHeading(): string { return this.isUndertakingMultiFactorAuthentication() ? t('filament-panels::auth/pages/login.multi_factor.heading') : t('filament-panels::auth/pages/login.heading'); }
+    getTitle(): string { return t('navette-panels::auth/pages/login.title'); }
+    getHeading(): string { return this.isUndertakingMultiFactorAuthentication() ? t('navette-panels::auth/pages/login.multi_factor.heading') : t('navette-panels::auth/pages/login.heading'); }
     getSubheading(): string | null {
-        if (this.isUndertakingMultiFactorAuthentication()) return e(t('filament-panels::auth/pages/login.multi_factor.subheading'));
+        if (this.isUndertakingMultiFactorAuthentication()) return e(t('navette-panels::auth/pages/login.multi_factor.subheading'));
         if (!this.panel.hasRegistration()) return null;
-        return `${e(t('filament-panels::auth/pages/login.actions.register.before'))} ${authLink(this.panel.getRegistrationUrl(), t('filament-panels::auth/pages/login.actions.register.label'))}`;
+        return `${e(t('navette-panels::auth/pages/login.actions.register.before'))} ${authLink(this.panel.getRegistrationUrl(), t('navette-panels::auth/pages/login.actions.register.label'))}`;
     }
     getSchema(name: string): Schema {
         if (name === 'multiFactorChallengeForm') return this.multiFactorChallengeFormSchema(Schema.make(this).key(name).statePath('data.multiFactor'));
@@ -2597,11 +2597,11 @@ export class Login extends SimplePage {
 
     formSchema(schema: Schema): Schema {
         return schema.components([
-            TextInput.make('email').label(t('filament-panels::auth/pages/login.form.email.label')).email().required().autocomplete().autofocus(),
-            TextInput.make('password').label(t('filament-panels::auth/pages/login.form.password.label'))
-                .hint(this.panel.hasPasswordReset() ? new HtmlString(`<a href="${e(this.panel.getRequestPasswordResetUrl())}" class="${[...sharedColors.getComponentClasses('link', 'primary'), 'fi-link', 'fi-size-md'].join(' ')}" tabindex="-1" ><span class="fi-link-label"> ${e(t('filament-panels::auth/pages/login.actions.request_password_reset.label'))} </span></a>`) : null)
+            TextInput.make('email').label(t('navette-panels::auth/pages/login.form.email.label')).email().required().autocomplete().autofocus(),
+            TextInput.make('password').label(t('navette-panels::auth/pages/login.form.password.label'))
+                .hint(this.panel.hasPasswordReset() ? new HtmlString(`<a href="${e(this.panel.getRequestPasswordResetUrl())}" class="${[...sharedColors.getComponentClasses('link', 'primary'), 'nv-link', 'nv-size-md'].join(' ')}" tabindex="-1" ><span class="nv-link-label"> ${e(t('navette-panels::auth/pages/login.actions.request_password_reset.label'))} </span></a>`) : null)
                 .password().revealable(this.panel.arePasswordsRevealable()).autocomplete('current-password').required(),
-            Checkbox.make('remember').label(t('filament-panels::auth/pages/login.form.remember.label')),
+            Checkbox.make('remember').label(t('navette-panels::auth/pages/login.form.remember.label')),
         ]);
     }
     /** Challenge fields of the user's enabled providers (with a picker when there are several). */
@@ -2614,10 +2614,10 @@ export class Login extends SimplePage {
         return schema.components([
             RenderHook.make(PanelsRenderHook.AUTH_LOGIN_FORM_BEFORE),
             Form.make([EmbeddedSchema.make('form')]).id('form').livewireSubmitHandler('authenticate')
-                .footer([Actions.make([Action.make('authenticate').label(t('filament-panels::auth/pages/login.form.actions.authenticate.label')).submit('authenticate')]).fullWidth().key('form-actions')])
+                .footer([Actions.make([Action.make('authenticate').label(t('navette-panels::auth/pages/login.form.actions.authenticate.label')).submit('authenticate')]).fullWidth().key('form-actions')])
                 .hidden(challenging),
             Form.make(challenging ? [EmbeddedSchema.make('multiFactorChallengeForm')] : []).id('multiFactorChallengeForm').livewireSubmitHandler('authenticate')
-                .footer(challenging ? [Actions.make([Action.make('authenticate').label(t('filament-panels::auth/pages/login.multi_factor.form.actions.authenticate.label')).submit('authenticate')]).fullWidth()] : [])
+                .footer(challenging ? [Actions.make([Action.make('authenticate').label(t('navette-panels::auth/pages/login.multi_factor.form.actions.authenticate.label')).submit('authenticate')]).fullWidth()] : [])
                 .hidden(!challenging),
             RenderHook.make(PanelsRenderHook.AUTH_LOGIN_FORM_AFTER),
         ]);
@@ -2647,18 +2647,18 @@ export class Login extends SimplePage {
         // Five attempts per minute per IP address, then wait.
         const wait = loginThrottle.hit(`${panel.getId()}:${req.ip ?? ''}`);
         if (wait > 0) {
-            Notification.make().danger().title(t('filament-actions::notifications.throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('filament-actions::notifications.throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
+            Notification.make().danger().title(t('navette-actions::notifications.throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('navette-actions::notifications.throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
             return;
         }
         // The password is checked on every submission, the challenge's included: a password changed meanwhile ends it.
         const user = await panel.getAuth().attempt(String(this.data.email), String(this.data.password));
         // As in Filament: a valid account that may not use this panel gets the same message as wrong credentials.
-        if (!user || !(await panel.userCanAccess(user))) { this.cancelMultiFactorChallenge(); this.addError('data.email', t('filament-panels::auth/pages/login.messages.failed')); return; }
+        if (!user || !(await panel.userCanAccess(user))) { this.cancelMultiFactorChallenge(); this.addError('data.email', t('navette-panels::auth/pages/login.messages.failed')); return; }
         if (this.isUndertakingMultiFactorAuthentication() && String(this._multiFactorUser!.id) === String(user.id)) {
             const challenge = panel.getMultiFactorChallenge();
             const challengeWait = challenge.hitRateLimiter(user);
             if (challengeWait > 0) {
-                Notification.make().danger().title(t('filament-actions::notifications.throttled.title', { seconds: challengeWait, minutes: Math.ceil(challengeWait / 60) })).body(t('filament-actions::notifications.throttled.body', { seconds: challengeWait, minutes: Math.ceil(challengeWait / 60) })).send();
+                Notification.make().danger().title(t('navette-actions::notifications.throttled.title', { seconds: challengeWait, minutes: Math.ceil(challengeWait / 60) })).body(t('navette-actions::notifications.throttled.body', { seconds: challengeWait, minutes: Math.ceil(challengeWait / 60) })).send();
                 return;
             }
             const challengeForm = this.getSchema('multiFactorChallengeForm');
@@ -2669,7 +2669,7 @@ export class Login extends SimplePage {
             const picked = this._multiFactorProviders.length > 1 ? String(state.provider ?? '') : this._multiFactorProviders[0].getId();
             const answered = this._multiFactorProviders.some((provider) => provider.getId() === picked)
                 && (await challengeForm.getVisibleFlatComponents()).some((component) => component instanceof Field && component.getStatePath().startsWith(`data.multiFactor.${picked}.`));
-            if (!answered) { this.addError('data.multiFactor.provider', t('filament-panels::auth/pages/login.messages.failed')); return; }
+            if (!answered) { this.addError('data.multiFactor.provider', t('navette-panels::auth/pages/login.messages.failed')); return; }
             challenge.clearRateLimiter(user);
         } else if (await this.startMultiFactorChallenge(user)) {
             return;
@@ -2701,15 +2701,15 @@ export class SetUpRequiredMultiFactorAuthentication extends SimplePage {
         const { panel, user } = this._ctx as PanelContext;
         if (!panel.hasMultiFactorAuthentication() || (await panel.getMultiFactorChallenge().hasEnabledProviders(user!))) this.redirect(panel.getUrl());
     }
-    getTitle(): string { return t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'); }
-    getHeading(): string { return t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.heading'); }
-    getSubheading(): string | null { return e(t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.subheading')); }
+    getTitle(): string { return t('navette-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'); }
+    getHeading(): string { return t('navette-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.heading'); }
+    getSubheading(): string | null { return e(t('navette-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.subheading')); }
     contentSchema(schema: Schema): Schema {
         const { panel, user } = this._ctx as PanelContext;
         return schema.components([
             multiFactorManagementSection(panel, user!),
             Actions.make([
-                Action.make('continue').label(t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.actions.continue.label')).url(panel.getUrl())
+                Action.make('continue').label(t('navette-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.actions.continue.label')).url(panel.getUrl())
                     .visible(() => panel.getMultiFactorChallenge().hasEnabledProviders(user!)),
             ]).fullWidth().key('footer-actions'),
         ]);
@@ -2898,7 +2898,7 @@ export abstract class Resource {
         return this.recordSubNavigation.filter((name) => name in pages).map((name) => {
             const related = this.relatedPages[name];
             return {
-                label: related ? navigationLabelText(related.getNavigationLabel()) : name === 'view' ? t('filament-panels::resources/pages/view-record.navigation_label') : t('filament-panels::resources/pages/edit-record.navigation_label'),
+                label: related ? navigationLabelText(related.getNavigationLabel()) : name === 'view' ? t('navette-panels::resources/pages/view-record.navigation_label') : t('navette-panels::resources/pages/edit-record.navigation_label'),
                 icon: related ? (related.navigationIcon ?? icons.resolve('panels::resources.pages.manage-related-records.navigation-item') ?? 'o-rectangle-stack') : name === 'view' ? icons.resolve('panels::resources.pages.view-record.navigation-item') ?? 'o-eye' : icons.resolve('panels::resources.pages.edit-record.navigation-item') ?? 'o-pencil-square',
                 url: this.getUrl(name, key),
                 active: page instanceof (this.getRegisteredPage(name) as any),
@@ -3076,21 +3076,21 @@ export abstract class Widget extends BasePage {
         if (typeof span === 'object') {
             const entries = Object.entries(span).filter(([breakpoint, value]) => /^(default|sm|md|lg|xl|2xl)$/.test(breakpoint) && (value === 'full' || (Number.isInteger(value) && value > 0)));
             return {
-                classes: ['fi-grid-col', ...entries.map(([breakpoint]) => (breakpoint === 'default' ? 'fi-grid-col-span' : `${breakpoint}:fi-grid-col-span`))],
+                classes: ['nv-grid-col', ...entries.map(([breakpoint]) => (breakpoint === 'default' ? 'nv-grid-col-span' : `${breakpoint}:nv-grid-col-span`))],
                 style: entries.map(([breakpoint, value]) => `--col-span-${breakpoint}: ${value === 'full' ? '1 / -1' : `span ${value} / span ${value}`};`).join(' '),
             };
         }
         // The span is always written, even for a single column.
-        return { classes: ['fi-grid-col', 'lg:fi-grid-col-span'], style: `--col-span-lg: ${span === 'full' ? '1 / -1' : `span ${Math.floor(span)} / span ${Math.floor(span)}`};` };
+        return { classes: ['nv-grid-col', 'lg:nv-grid-col-span'], style: `--col-span-lg: ${span === 'full' ? '1 / -1' : `span ${Math.floor(span)} / span ${Math.floor(span)}`};` };
     }
     placeholder(): string {
         const column = this.gridColumn();
-        return `<div role="status" aria-busy="true" style="height: 8rem; ${column.style}" class="${cls(['fi-section', 'fi-loading-section', ...column.classes])}"><span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
+        return `<div role="status" aria-busy="true" style="height: 8rem; ${column.style}" class="${cls(['nv-section', 'nv-loading-section', ...column.classes])}"><span class="nv-sr-only">${e(t('navette::components/loading-section.label'))}</span></div>`;
     }
     /** Common widget wrapper. */
     protected wrap(content: string, classes: string[] = []): string {
         const column = this.gridColumn();
-        return `<div${column.style ? ` style="${column.style}"` : ''} class="${cls(['fi-wi-widget', ...column.classes, ...classes])}">${content}</div>`;
+        return `<div${column.style ? ` style="${column.style}"` : ''} class="${cls(['nv-wi-widget', ...column.classes, ...classes])}">${content}</div>`;
     }
 }
 
@@ -3107,9 +3107,9 @@ export abstract class JsWidget extends Widget {
     getRendererConfiguration(): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
     /** The section with the renderer, without the widget wrapper: for a custom `render()` that keeps the renderer. */
     protected async renderJsWidgetContent(): Promise<string> {
-        return jsWidgetContentHtml({ widgetId: this.id, assetUrl: this.panel.assetUrl('js/filament/widgets/components/js-widget.js'), renderer: await this.getRenderer(), rendererConfiguration: await this.getRendererConfiguration() });
+        return jsWidgetContentHtml({ widgetId: this.id, assetUrl: this.panel.assetUrl('js/navette/widgets/components/js-widget.js'), renderer: await this.getRenderer(), rendererConfiguration: await this.getRendererConfiguration() });
     }
-    async render(): Promise<string> { return this.wrap(await this.renderJsWidgetContent(), ['fi-wi-js']); }
+    async render(): Promise<string> { return this.wrap(await this.renderJsWidgetContent(), ['nv-wi-js']); }
 }
 
 /**
@@ -3325,16 +3325,16 @@ export abstract class CalendarPage extends Page {
 /** Header-less section used by the built-in widgets. */
 const widgetSection = (content: string) => `<section x-data="{
         isCollapsed:  false ,
-    }" class="fi-section"><div class="fi-section-content-ctn"><div class="fi-section-content">${content}</div></div></section>`;
+    }" class="nv-section"><div class="nv-section-content-ctn"><div class="nv-section-content">${content}</div></div></section>`;
 
 /** Signed-in user's account: avatar, name, logout. */
 export class AccountWidget extends Widget {
     static isLazy = false;
     render(): string {
         const { req, res, panel, user } = this._ctx as PanelContext;
-        const logout = t('filament-panels::widgets/account-widget.actions.logout.label');
-        const loading = 'wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"';
-        return this.wrap(widgetSection(`<img alt="${e(t('filament-panels::layout.avatar.alt', { name: user!.name }))}" class="fi-avatar fi-circular fi-size-lg fi-user-avatar" src="${e(panel.getUserAvatarUrl(user!))}" loading="lazy" /><div class="fi-account-widget-main"><h2 class="fi-account-widget-heading">${e(t('filament-panels::widgets/account-widget.welcome'))}</h2><p class="fi-account-widget-user-name">${e(user!.name)}</p></div><form action="${e(panel.getLogoutUrl())}" method="post" class="fi-account-widget-logout-form"><input type="hidden" name="_token" value="${e(csrfToken(req, res))}" autocomplete="off"><button class="fi-icon-btn fi-size-md" title="${e(logout)}" aria-label="${e(logout)}" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle', { alias: 'panels::widgets.account.logout-button' })}</button><button class="fi-btn fi-size-md fi-labeled-from-sm" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle', { alias: 'panels::widgets.account.logout-button' })}${e(logout)}</button></form>`), ['fi-account-widget']);
+        const logout = t('navette-panels::widgets/account-widget.actions.logout.label');
+        const loading = 'wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled"';
+        return this.wrap(widgetSection(`<img alt="${e(t('navette-panels::layout.avatar.alt', { name: user!.name }))}" class="nv-avatar nv-circular nv-size-lg nv-user-avatar" src="${e(panel.getUserAvatarUrl(user!))}" loading="lazy" /><div class="nv-account-widget-main"><h2 class="nv-account-widget-heading">${e(t('navette-panels::widgets/account-widget.welcome'))}</h2><p class="nv-account-widget-user-name">${e(user!.name)}</p></div><form action="${e(panel.getLogoutUrl())}" method="post" class="nv-account-widget-logout-form"><input type="hidden" name="_token" value="${e(csrfToken(req, res))}" autocomplete="off"><button class="nv-icon-btn nv-size-md" title="${e(logout)}" aria-label="${e(logout)}" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle', { alias: 'panels::widgets.account.logout-button' })}</button><button class="nv-btn nv-size-md nv-labeled-from-sm" type="submit" ${loading}>${icon('m-arrow-left-end-on-rectangle', { alias: 'panels::widgets.account.logout-button' })}${e(logout)}</button></form>`), ['nv-account-widget']);
     }
 }
 
@@ -3347,10 +3347,10 @@ export class NavetteInfoWidget extends Widget {
     static version: string = JSON.parse(readFileSync(dir('../package.json'), 'utf8')).version;
     render(): string {
         const WidgetClass = this.constructor as typeof NavetteInfoWidget;
-        const link = (url: string, iconHtml: string, label: string) => `<a href="${e(url)}" target="_blank" class="fi-link fi-size-md" rel="noopener noreferrer">${iconHtml}<span class="fi-link-label">${e(label)}</span></a>`;
-        const githubIcon = icons.resolve('panels::widgets.filament-info.open-github-button');
-        const github = githubIcon ? icon(githubIcon) : '<span class="fi-icon fi-size-md"><svg viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" fill="currentColor" fill-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"></path></svg></span>';
-        return this.wrap(widgetSection(`<div class="fi-filament-info-widget-main"><a href="${e(WidgetClass.homeUrl)}" rel="noopener noreferrer" target="_blank"><svg aria-label="Navette" fill="currentColor" role="img" viewBox="0 0 96 24" xmlns="http://www.w3.org/2000/svg" class="fi-filament-info-widget-logo"><text x="0" y="19" font-size="22" font-weight="700" letter-spacing="-0.5">Navette</text></svg></a><p class="fi-filament-info-widget-version">v${e(WidgetClass.version)}</p></div><div class="fi-filament-info-widget-links">${link(WidgetClass.documentationUrl, icon('m-book-open', { alias: 'panels::widgets.filament-info.open-documentation-button' }), t('filament-panels::widgets/filament-info-widget.actions.open_documentation.label'))}${link(WidgetClass.githubUrl, github, t('filament-panels::widgets/filament-info-widget.actions.open_github.label'))}</div>`), ['fi-filament-info-widget']);
+        const link = (url: string, iconHtml: string, label: string) => `<a href="${e(url)}" target="_blank" class="nv-link nv-size-md" rel="noopener noreferrer">${iconHtml}<span class="nv-link-label">${e(label)}</span></a>`;
+        const githubIcon = icons.resolve('panels::widgets.navette-info.open-github-button');
+        const github = githubIcon ? icon(githubIcon) : '<span class="nv-icon nv-size-md"><svg viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" fill="currentColor" fill-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"></path></svg></span>';
+        return this.wrap(widgetSection(`<div class="nv-navette-info-widget-main"><a href="${e(WidgetClass.homeUrl)}" rel="noopener noreferrer" target="_blank"><svg aria-label="Navette" fill="currentColor" role="img" viewBox="0 0 96 24" xmlns="http://www.w3.org/2000/svg" class="nv-navette-info-widget-logo"><text x="0" y="19" font-size="22" font-weight="700" letter-spacing="-0.5">Navette</text></svg></a><p class="nv-navette-info-widget-version">v${e(WidgetClass.version)}</p></div><div class="nv-navette-info-widget-links">${link(WidgetClass.documentationUrl, icon('m-book-open', { alias: 'panels::widgets.navette-info.open-documentation-button' }), t('navette-panels::widgets/navette-info-widget.actions.open_documentation.label'))}${link(WidgetClass.githubUrl, github, t('navette-panels::widgets/navette-info-widget.actions.open_github.label'))}</div>`), ['nv-navette-info-widget']);
     }
 }
 
@@ -3401,19 +3401,19 @@ export class Stat {
         const extra = Object.fromEntries(Object.entries(this._extraAttributes)
             .filter(([name, value]) => STAT_ATTRIBUTE_NAME.test(name) && !(this._url && name === 'href') && value !== null && value !== undefined && value !== false)
             .map(([name, value]) => [name, value === true ? true : e(String(value))]));
-        const attributes = new Attributes(extra).merge({ class: 'fi-wi-stats-overview-stat' }).toHtml();
+        const attributes = new Attributes(extra).merge({ class: 'nv-wi-stats-overview-stat' }).toHtml();
         const descriptionIcon = this._descriptionIcon ? icon(this._descriptionIcon) : '';
         const description = this._description
-            ? `<div class="${cls([...(color !== 'gray' ? panel.colors.getComponentClasses('stat-description', color) : []), 'fi-wi-stats-overview-stat-description'])}">${this._descriptionIconPosition === 'before' ? descriptionIcon : ''}<span>${e(this._description)}</span>${this._descriptionIconPosition === 'after' ? descriptionIcon : ''}</div>`
+            ? `<div class="${cls([...(color !== 'gray' ? panel.colors.getComponentClasses('stat-description', color) : []), 'nv-wi-stats-overview-stat-description'])}">${this._descriptionIconPosition === 'before' ? descriptionIcon : ''}<span>${e(this._description)}</span>${this._descriptionIconPosition === 'after' ? descriptionIcon : ''}</div>`
             : '';
         const chart = this._chart
-            ? `<div x-data="{ statsOverviewStatChart() {} }"><div x-load x-load-src="${e(panel.assetUrl('js/filament/widgets/components/stats-overview/stat/chart.js'))}" wire:ignore x-data="statsOverviewStatChart({
+            ? `<div x-data="{ statsOverviewStatChart() {} }"><div x-load x-load-src="${e(panel.assetUrl('js/navette/widgets/components/stats-overview/stat/chart.js'))}" wire:ignore x-data="statsOverviewStatChart({
                             key: ${e(js(key))},
                             labels: ${e(js(Array.isArray(this._chart) ? this._chart.map((_, i) => i) : Object.keys(this._chart)))},
                             values: ${e(js(Object.values(this._chart)))},
-                        })" class="${cls([...(color !== 'gray' ? panel.colors.getComponentClasses('stat-chart', color) : []), 'fi-wi-stats-overview-stat-chart'])}"><canvas x-ref="canvas" aria-hidden="true"></canvas><span aria-hidden="true" x-ref="backgroundColorElement" class="fi-wi-stats-overview-stat-chart-bg-color"></span><span aria-hidden="true" x-ref="borderColorElement" class="fi-wi-stats-overview-stat-chart-border-color"></span></div></div>`
+                        })" class="${cls([...(color !== 'gray' ? panel.colors.getComponentClasses('stat-chart', color) : []), 'nv-wi-stats-overview-stat-chart'])}"><canvas x-ref="canvas" aria-hidden="true"></canvas><span aria-hidden="true" x-ref="backgroundColorElement" class="nv-wi-stats-overview-stat-chart-bg-color"></span><span aria-hidden="true" x-ref="borderColorElement" class="nv-wi-stats-overview-stat-chart-border-color"></span></div></div>`
             : '';
-        return `<${tag}${this._url ? ` href="${e(this._url)}"` : ''} ${attributes}><div class="fi-wi-stats-overview-stat-content"><div class="fi-wi-stats-overview-stat-label-ctn">${this._icon ? icon(this._icon) : ''}<span class="fi-wi-stats-overview-stat-label">${e(this.label)}</span></div>${filled ? `<div class="fi-wi-stats-overview-stat-value">${e(String(this.value))}</div>` : `<div class="fi-wi-stats-overview-stat-placeholder">${e(this._placeholder ?? '')}</div>`}${description}</div>${chart}</${tag}>`;
+        return `<${tag}${this._url ? ` href="${e(this._url)}"` : ''} ${attributes}><div class="nv-wi-stats-overview-stat-content"><div class="nv-wi-stats-overview-stat-label-ctn">${this._icon ? icon(this._icon) : ''}<span class="nv-wi-stats-overview-stat-label">${e(this.label)}</span></div>${filled ? `<div class="nv-wi-stats-overview-stat-value">${e(String(this.value))}</div>` : `<div class="nv-wi-stats-overview-stat-placeholder">${e(this._placeholder ?? '')}</div>`}${description}</div>${chart}</${tag}>`;
     }
 }
 
@@ -3432,20 +3432,20 @@ export abstract class StatsOverviewWidget extends Widget {
     async render(): Promise<string> {
         const stats = await this.getStats();
         const columns = this.getColumns(stats.length);
-        const anonymous = `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
+        const anonymous = `x-data="navetteSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
         // A stat with a chart gets an id (`stats-overview-stat-<n>`), hence a component key; the others stay anonymous.
         const cells = stats.map((stat, index) => {
-            if (!stat.hasChart()) return `<div ${anonymous} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(this.panel, `${this.id}.stats.${index}`)}</div></div>`;
+            if (!stat.hasChart()) return `<div ${anonymous} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${stat.toHtml(this.panel, `${this.id}.stats.${index}`)}</div></div>`;
             const id = `stats-overview-stat-${index}`, key = `content.${id}`;
-            return `<div wire:partial="schema-component::${key}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${this.id}.${key}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(this.panel, id)}</div></div>`;
+            return `<div wire:partial="schema-component::${key}" x-data="navetteSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${this.id}.${key}`)}" class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${stat.toHtml(this.panel, id)}</div></div>`;
         }).join('');
         const heading = this.getHeading(), description = this.getDescription();
-        const header = heading !== null || description !== null ? `<header class="fi-section-header"><div class="fi-section-header-content fi-section-header-content-has-heading"><div class="fi-section-header-text-ctn">${heading !== null ? `<h3 class="fi-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
+        const header = heading !== null || description !== null ? `<header class="nv-section-header"><div class="nv-section-header-content nv-section-header-content-has-heading"><div class="nv-section-header-text-ctn">${heading !== null ? `<h3 class="nv-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
         const interval = (this.constructor as typeof StatsOverviewWidget).pollingInterval;
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}` : '';
-        return this.wrap(`<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymous} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component fi-grid-ctn"><div${poll} class="fi-sc-section"><section x-data="{
+        return this.wrap(`<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymous} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component nv-grid-ctn"><div${poll} class="nv-sc-section"><section x-data="{
         isCollapsed: false,
-    }" class="fi-section fi-section-not-contained${header ? ' fi-section-has-header' : ''}">${header}<div class="fi-section-content-ctn"><div class="fi-section-content fi-grid @xl:fi-grid-cols !@lg:fi-grid-cols fi-sc fi-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div>`, ['fi-wi-stats-overview']);
+    }" class="nv-section nv-section-not-contained${header ? ' nv-section-has-header' : ''}">${header}<div class="nv-section-content-ctn"><div class="nv-section-content nv-grid @xl:nv-grid-cols !@lg:nv-grid-cols nv-sc nv-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div>`, ['nv-wi-stats-overview']);
     }
 }
 
@@ -3459,7 +3459,7 @@ export type ChartData = { datasets?: Record<string, unknown>[]; labels?: unknown
  */
 export abstract class ChartWidget extends Widget {
     /** Empty state shown when `getData()` returns nothing (see `isEmpty()`). */
-    protected getEmptyStateHeading(): string { return t('filament-widgets::chart.empty.heading'); }
+    protected getEmptyStateHeading(): string { return t('navette-widgets::chart.empty.heading'); }
     protected getEmptyStateDescription(): string | null { return null; }
     protected getEmptyStateIcon(): string | null { return icons.resolve('widgets::chart-widget.empty-state') ?? 'o-x-mark'; }
     /** Actions in the footer of the empty state. They are mounted on the widget, so they may open a modal. */
@@ -3513,16 +3513,16 @@ export abstract class ChartWidget extends Widget {
     }
     /** Header button opening the filters dropdown (it calls nothing on the server). */
     getFiltersTriggerAction(): Action {
-        return Action.make('filter').label(t('filament-widgets::chart.actions.filter.label')).iconButton().icon(icons.resolve('widgets::chart-widget.filter') ?? 'm-funnel').color('gray');
+        return Action.make('filter').label(t('navette-widgets::chart.actions.filter.label')).iconButton().icon(icons.resolve('widgets::chart-widget.filter') ?? 'm-funnel').color('gray');
     }
     /** "Apply" button of deferred filters; customize it with `filtersApplyAction(action)`. */
     getFiltersApplyAction(): Action {
-        const action = Action.make('applyFilters').label(t('filament-widgets::chart.filters.actions.apply.label')).action('applyFilters').button();
+        const action = Action.make('applyFilters').label(t('navette-widgets::chart.filters.actions.apply.label')).action('applyFilters').button();
         return typeof (this as any).filtersApplyAction === 'function' ? (this as any).filtersApplyAction(action) : action;
     }
     /** "Reset" button of deferred filters; customize it with `filtersResetAction(action)`. */
     getFiltersResetAction(): Action {
-        const action = Action.make('resetFilters').label(t('filament-widgets::chart.filters.actions.reset.label')).action('resetFilters').color('danger').button();
+        const action = Action.make('resetFilters').label(t('navette-widgets::chart.filters.actions.reset.label')).action('resetFilters').color('danger').button();
         return typeof (this as any).filtersResetAction === 'function' ? (this as any).filtersResetAction(action) : action;
     }
     /** Actions the browser may mount: those of the empty state (and of the filter fields). */
@@ -3583,21 +3583,21 @@ export abstract class ChartWidget extends Widget {
         const interval = WidgetClass.pollingInterval;
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}="updateChartData"` : '';
         const filter = filters
-            ? `<div class="fi-input-wrp fi-wi-chart-filter"><div wire:loading.delay.default.flex wire:target="filter" wire:key="${e(createHash('md5').update(`${this.id}.filter.loading`).digest('hex').slice(0, 16))}" class="fi-input-wrp-prefix fi-inline">${loadingIndicator(new Attributes({ class: 'fi-color fi-color-gray' }))}</div><div wire:loading.delay.default.class.remove="fi-input-wrp-content-ctn-ps" wire:target="filter" class="fi-input-wrp-content-ctn fi-input-wrp-content-ctn-ps"><select aria-label="${e(t('filament-widgets::chart.filter.label'))}" wire:model.live="filter" class="fi-select-input fi-select-input-has-inline-prefix">${Object.entries(filters).map(([value, text]) => `<option value="${e(value)}">${e(text)}</option>`).join('')}</select></div></div>`
+            ? `<div class="nv-input-wrp nv-wi-chart-filter"><div wire:loading.delay.default.flex wire:target="filter" wire:key="${e(createHash('md5').update(`${this.id}.filter.loading`).digest('hex').slice(0, 16))}" class="nv-input-wrp-prefix nv-inline">${loadingIndicator(new Attributes({ class: 'nv-color nv-color-gray' }))}</div><div wire:loading.delay.default.class.remove="nv-input-wrp-content-ctn-ps" wire:target="filter" class="nv-input-wrp-content-ctn nv-input-wrp-content-ctn-ps"><select aria-label="${e(t('navette-widgets::chart.filter.label'))}" wire:model.live="filter" class="nv-select-input nv-select-input-has-inline-prefix">${Object.entries(filters).map(([value, text]) => `<option value="${e(value)}">${e(text)}</option>`).join('')}</select></div></div>`
             : '';
         const hasText = (heading !== null && heading !== '') || (description !== null && description !== '');
         const hasHeader = hasText || filter !== '' || filtersDropdown !== '';
         const header = hasHeader
-            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header"><div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="fi-section-header-text-ctn">${heading ? `<h2 class="fi-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="fi-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('fi-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-label="${e(t('filament::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
+            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header"><div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="nv-section-header-text-ctn">${heading ? `<h2 class="nv-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="nv-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('nv-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('navette::components/section.actions.expand.label')))} : ${e(js(t('navette::components/section.actions.collapse.label')))}" aria-label="${e(t('navette::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="nv-icon-btn nv-size-md nv-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
             : '';
         const options = this.getOptions();
         const colors = ['bg', 'border', 'grid', 'text', 'tooltip-bg', 'tooltip-text', 'tooltip-border'];
         const refs = ['background', 'border', 'grid', 'text', 'tooltipBackground', 'tooltipText', 'tooltipBorder'];
-        const frame = `<div x-load x-load-src="${e(this.panel.assetUrl('js/filament/widgets/components/chart.js'))}" wire:ignore data-chart-type="${e(type)}" x-data="chart({
+        const frame = `<div x-load x-load-src="${e(this.panel.assetUrl('js/navette/widgets/components/chart.js'))}" wire:ignore data-chart-type="${e(type)}" x-data="chart({
                                 cachedData: ${e(js(data))},
                                 options: ${options instanceof RawJs ? e(options.js) : e(js(options))},
                                 type: ${e(js(type))},
-                            })" class="${cls([...this.panel.colors.getComponentClasses('stat-chart', this.getColor()), 'fi-wi-chart-frame', 'fi-wi-chart-canvas-ctn', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"><canvas x-ref="canvas" aria-hidden="true" style="width: 100%; ${hasMaxHeight ? `max-height: ${e(maxHeight)}` : 'height: 100%; max-height: 100%'}"></canvas>${colors.map((name, index) => `<span aria-hidden="true" x-ref="${refs[index]}ColorElement" class="fi-wi-chart-${name}-color"></span>`).join('')}</div>`;
+                            })" class="${cls([...this.panel.colors.getComponentClasses('stat-chart', this.getColor()), 'nv-wi-chart-frame', 'nv-wi-chart-canvas-ctn', { 'nv-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"><canvas x-ref="canvas" aria-hidden="true" style="width: 100%; ${hasMaxHeight ? `max-height: ${e(maxHeight)}` : 'height: 100%; max-height: 100%'}"></canvas>${colors.map((name, index) => `<span aria-hidden="true" x-ref="${refs[index]}ColorElement" class="nv-wi-chart-${name}-color"></span>`).join('')}</div>`;
         const emptyStateActions = this.getEmptyStateActions();
         let empty = '';
         if (isEmpty) {
@@ -3606,21 +3606,21 @@ export abstract class ChartWidget extends Widget {
             else {
                 const actions: string[] = [];
                 for (const action of emptyStateActions) if (await action.isVisible(actionCtx)) actions.push(await action.toHtml(actionCtx));
-                const footer = actions.length ? `<div class="fi-ac fi-align-center">${actions.join('')}</div>` : undefined;
-                empty = `<div class="${cls(['fi-wi-chart-frame', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"${hasMaxHeight ? ` style="min-height: ${e(maxHeight)}"` : ''}>${emptyState({ heading: this.getEmptyStateHeading(), description: this.getEmptyStateDescription() ?? undefined, icon: this.getEmptyStateIcon() ?? undefined, iconColor: 'gray', contained: false, footer })}</div>`;
+                const footer = actions.length ? `<div class="nv-ac nv-align-center">${actions.join('')}</div>` : undefined;
+                empty = `<div class="${cls(['nv-wi-chart-frame', { 'nv-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"${hasMaxHeight ? ` style="min-height: ${e(maxHeight)}"` : ''}>${emptyState({ heading: this.getEmptyStateHeading(), description: this.getEmptyStateDescription() ?? undefined, icon: this.getEmptyStateIcon() ?? undefined, iconColor: 'gray', contained: false, footer })}</div>`;
             }
         }
         // Modals of the mounted actions (empty state actions, actions of filter fields).
         const modals = emptyStateActions.length || this.hasFiltersForm() ? await this.renderActionModals() : '';
-        const body = `<div${poll}${isEmpty ? ' style="display: none"' : ''}><div class="fi-wi-chart-image"${label ? ` role="img" aria-label="${e(label)}"` : ''}>${frame}</div>${assistive ? `<div class="fi-wi-chart-assistive-content fi-sr-only"><p>${e(assistive)}</p></div>` : ''}</div>${empty}`;
+        const body = `<div${poll}${isEmpty ? ' style="display: none"' : ''}><div class="nv-wi-chart-image"${label ? ` role="img" aria-label="${e(label)}"` : ''}>${frame}</div>${assistive ? `<div class="nv-wi-chart-assistive-content nv-sr-only"><p>${e(assistive)}</p></div>` : ''}</div>${empty}`;
         return this.wrap(`<section x-data="{
         isCollapsed:  false ,
-    }"${collapsible ? ` x-id="['fi-section-content']" x-on:collapse-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = true" x-on:expand="isCollapsed = false" x-on:expand-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:open-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:toggle-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed" x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : ''} class="${cls(['fi-section', { 'fi-section-has-header': hasHeader, 'fi-collapsible': collapsible }])}">${header}<div${collapsible ? ` x-bind:id="$id('fi-section-content')"` : ''} class="fi-section-content-ctn"><div class="fi-section-content">${body}</div></div></section>${modals}`, ['fi-wi-chart']);
+    }"${collapsible ? ` x-id="['nv-section-content']" x-on:collapse-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = true" x-on:expand="isCollapsed = false" x-on:expand-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:open-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:toggle-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed" x-bind:class="isCollapsed &amp;&amp; 'nv-collapsed'"` : ''} class="${cls(['nv-section', { 'nv-section-has-header': hasHeader, 'nv-collapsible': collapsible }])}">${header}<div${collapsible ? ` x-bind:id="$id('nv-section-content')"` : ''} class="nv-section-content-ctn"><div class="nv-section-content">${body}</div></div></section>${modals}`, ['nv-wi-chart']);
     }
     /** Filters dropdown of the header: the trigger button, the form, and the "Apply" / "Reset" buttons when deferred. */
     protected async renderFiltersDropdown(ctx: any): Promise<string> {
-        const buttons = this.hasDeferredFilters() ? `<div class="fi-wi-chart-filter-content-actions-ctn">${await this.getFiltersApplyAction().toHtml(ctx)}${await this.getFiltersResetAction().toHtml(ctx)}</div>` : '';
-        return `<div x-data="filamentDropdown({ isMenu: false })" class="fi-dropdown fi-wi-chart-filter"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${await this.getFiltersTriggerAction().toHtml(ctx)}</div><div x-cloak x-float.placement.bottom-end.flip.shift.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" class="fi-dropdown-panel fi-width-xs"><div class="fi-wi-chart-filter-content">${await this.getFiltersForm().toHtml()}${buttons}</div></div></div>`;
+        const buttons = this.hasDeferredFilters() ? `<div class="nv-wi-chart-filter-content-actions-ctn">${await this.getFiltersApplyAction().toHtml(ctx)}${await this.getFiltersResetAction().toHtml(ctx)}</div>` : '';
+        return `<div x-data="navetteDropdown({ isMenu: false })" class="nv-dropdown nv-wi-chart-filter"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger">${await this.getFiltersTriggerAction().toHtml(ctx)}</div><div x-cloak x-float.placement.bottom-end.flip.shift.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" class="nv-dropdown-panel nv-width-xs"><div class="nv-wi-chart-filter-content">${await this.getFiltersForm().toHtml()}${buttons}</div></div></div>`;
     }
 }
 
@@ -3670,9 +3670,9 @@ export abstract class TableWidget extends Widget implements TableHost {
     updatedTableSort(): void { this.paginators.page = 1; }
     async render(): Promise<string> {
         const scopes = [this.constructor];
-        return this.wrap(`${renderHook(WidgetsRenderHook.TABLE_WIDGET_START, scopes)}${await renderTable(this.getTable(), this, this.getDataAdapterForTable(), { bulkActions: [], after: `<div wire:partial="action-modals" x-data="filamentActionModals({
+        return this.wrap(`${renderHook(WidgetsRenderHook.TABLE_WIDGET_START, scopes)}${await renderTable(this.getTable(), this, this.getDataAdapterForTable(), { bulkActions: [], after: `<div wire:partial="action-modals" x-data="navetteActionModals({
                     livewireId: ${js(this.id)},
-                })" style="height: 0"></div>` })}${renderHook(WidgetsRenderHook.TABLE_WIDGET_END, scopes)}`, ['fi-wi-table']);
+                })" style="height: 0"></div>` })}${renderHook(WidgetsRenderHook.TABLE_WIDGET_END, scopes)}`, ['nv-wi-table']);
     }
 }
 
@@ -3878,7 +3878,7 @@ class RelationManagerTabs extends SchemaComponent {
         const id = page.id;
         const [activeKey] = tabs.find(([tabKey]) => tabKey === String(page.activeRelationManager)) ?? tabs[0];
         const q = (k: string) => e(js(k));
-        const tabId = (k: string) => `fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}`;
+        const tabId = (k: string) => `nv-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}`;
         const hasLazyBadges = tabs.some(([, tab]) => relationTabInfo.get(tab)?.lazyBadge);
         const header: string[] = [];
         for (const [k, tab] of tabs) {
@@ -3888,13 +3888,13 @@ class RelationManagerTabs extends SchemaComponent {
             let badgeHtml = '';
             if (info?.lazyBadge) {
                 const d = `deferredBadges[${q(k)}]`;
-                badgeHtml = `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="! isLoadingDeferredBadges &amp;&amp; ${d}?.badge != null"><span x-bind:class="'fi-badge fi-size-sm ' + (${d}?.badgeColorClasses ?? '')" x-init="let tooltip = ${d}?.badgeTooltip; if (tooltip) { window.tippy?.($el, { content: tooltip, theme: $store.theme }) }"><span class="fi-badge-label-ctn"><span class="fi-badge-label" x-text="${d}?.badge"></span></span></span></template>`;
+                badgeHtml = `<span x-show="isLoadingDeferredBadges" x-cloak class="nv-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="! isLoadingDeferredBadges &amp;&amp; ${d}?.badge != null"><span x-bind:class="'nv-badge nv-size-sm ' + (${d}?.badgeColorClasses ?? '')" x-init="let tooltip = ${d}?.badgeTooltip; if (tooltip) { window.tippy?.($el, { content: tooltip, theme: $store.theme }) }"><span class="nv-badge-label-ctn"><span class="nv-badge-label" x-text="${d}?.badge"></span></span></span></template>`;
             } else {
                 const badge = await tab.getBadge();
                 if (badge) badgeHtml = uiBadge({ color: badge.color, size: 'sm', attributes: badge.tooltip ? { 'x-tooltip': `{ content: ${js(badge.tooltip)}, theme: $store.theme, allowHTML: false }` } : {} }, e(badge.label));
             }
             const iconBefore = tab.getIconPosition() === 'before' ? iconHtml : '', iconAfter = tab.getIconPosition() === 'after' ? iconHtml : '';
-            header.push(`<button id="${tabId(k)}" role="tab" aria-controls="${e(`${key}.${k}`)}" aria-selected="${isActive ? 'true' : 'false'}" x-bind:aria-selected="isTabSelected(${q(k)})" tabindex="${isActive ? '0' : '-1'}" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeRelationManager', ${q(k)})" class="${cls(['fi-tabs-item', { 'fi-active': isActive }])}">${iconBefore}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${iconAfter}${badgeHtml}</button>`);
+            header.push(`<button id="${tabId(k)}" role="tab" aria-controls="${e(`${key}.${k}`)}" aria-selected="${isActive ? 'true' : 'false'}" x-bind:aria-selected="isTabSelected(${q(k)})" tabindex="${isActive ? '0' : '-1'}" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'nv-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeRelationManager', ${q(k)})" class="${cls(['nv-tabs-item', { 'nv-active': isActive }])}">${iconBefore}<span class="nv-tabs-item-label">${e(tab.getLabel())}</span>${iconAfter}${badgeHtml}</button>`);
         }
         const panels: string[] = [];
         const PageClass = page.constructor as typeof Page;
@@ -3913,11 +3913,11 @@ class RelationManagerTabs extends SchemaComponent {
                     const childKey = `${key}.${k}.${componentName}${info.managers.length > 1 ? `-${index}` : ''}`;
                     // `ownerRecord` and `pageClass` come last: properties of a registration cannot replace them.
                     const child = await page.mountChild(componentName, { ...properties, ownerRecord: page.recordKey, pageClass: (page as any)._runtime.nameOf(PageClass) }, `${id}.${childKey}`, { lazy: manager.isLazy() });
-                    parts.push(`<div wire:partial="schema-component::${e(childKey)}" x-data="filamentSchemaComponent(${e(js({ key: childKey, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${id}.${childKey}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${child}</div></div>`);
+                    parts.push(`<div wire:partial="schema-component::${e(childKey)}" x-data="navetteSchemaComponent(${e(js({ key: childKey, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${id}.${childKey}`)}" class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${child}</div></div>`);
                 }
-                content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${parts.join('')}</div>`;
+                content = `<div class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${parts.join('')}</div>`;
             }
-            panels.push(`<div aria-labelledby="${tabId(k)}" id="${e(`${key}.${k}`)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${key}.${k}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js({ key: `${key}.${k}`, exposedMethods: [], path: '', containerPath: '' }))})" class="${cls(['fi-sc-tabs-tab', { 'fi-active': isActive && !info }])}">${content}</div>`);
+            panels.push(`<div aria-labelledby="${tabId(k)}" id="${e(`${key}.${k}`)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${key}.${k}`)}.container" x-show="true" x-bind:class="{ 'nv-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="navetteSchemaComponent(${e(js({ key: `${key}.${k}`, exposedMethods: [], path: '', containerPath: '' }))})" class="${cls(['nv-sc-tabs-tab', { 'nv-active': isActive && !info }])}">${content}</div>`);
         }
         const activeIndex = tabs.findIndex(([k]) => k === activeKey);
         const lazyBadgeData = hasLazyBadges ? ` x-data="{
@@ -3940,7 +3940,7 @@ class RelationManagerTabs extends SchemaComponent {
  livewireId: ${e(js(id))},
  livewireProperty: 'activeRelationManager',
  tab: ${q(activeKey)},
- })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${e(activeKey)}" /><div${lazyBadgeData} x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_TABS_START, page.getRenderHookScopes())}${header.join('')}${renderHook(PanelsRenderHook.RESOURCE_TABS_END, page.getRenderHookScopes())}</div></div>${panels.join('')}</div>`;
+ })" x-load x-load-src="${e(page.panel.assetUrl('js/navette/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="nv-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${e(activeKey)}" /><div${lazyBadgeData} x-ref="tabsHeader" class="nv-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('navette::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="activeRelationManager" class="nv-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_TABS_START, page.getRenderHookScopes())}${header.join('')}${renderHook(PanelsRenderHook.RESOURCE_TABS_END, page.getRenderHookScopes())}</div></div>${panels.join('')}</div>`;
     }
 }
 /** List page tab: restricts the table query and can show a badge. */
@@ -4012,11 +4012,11 @@ class ResourceTabs extends SchemaComponent {
         const extraTabClass = (tab: Tab) => { const value = tab.getExtraAttributes().class; return typeof value === 'string' ? value : null; };
         const buttons = tabs.map(([k, tab]) => {
             const d = `deferredBadges[${q(k)}]`;
-            const badge = tab.hasBadge() ? `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="
+            const badge = tab.hasBadge() ? `<span x-show="isLoadingDeferredBadges" x-cloak class="nv-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="
  ! isLoadingDeferredBadges &&
  ${d}?.badge != null
  "><span x-bind:class="
- 'fi-badge fi-size-sm ' +
+ 'nv-badge nv-size-sm ' +
  (${d}?.badgeColorClasses ?? '')
  " x-bind:style="${d}?.badgeColorStyles ?? ''" x-init="
  let tooltip = ${d}?.badgeTooltip
@@ -4029,11 +4029,11 @@ class ResourceTabs extends SchemaComponent {
  "><template x-if="
  ${d}?.badgeIconHtml &&
  ${d}?.badgeIconPosition !== 'after'
- "><span x-html="${d}.badgeIconHtml"></span></template><span class="fi-badge-label-ctn"><span class="fi-badge-label" x-text="${d}?.badge"></span></span><template x-if="
+ "><span x-html="${d}.badgeIconHtml"></span></template><span class="nv-badge-label-ctn"><span class="nv-badge-label" x-text="${d}?.badge"></span></span><template x-if="
  ${d}?.badgeIconHtml &&
  ${d}?.badgeIconPosition === 'after'
  "><span x-html="${d}.badgeIconHtml"></span></template></span></template>` : '';
-            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})"${tabExtraAttributes(tab)} class="${cls(['fi-tabs-item', { 'fi-active': k === active }, extraTabClass(tab)])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}${badge}</button>`;
+            return `<button id="nv-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'nv-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})"${tabExtraAttributes(tab)} class="${cls(['nv-tabs-item', { 'nv-active': k === active }, extraTabClass(tab)])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['nv-tabs-item-icon']) }) : ''}<span class="nv-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['nv-tabs-item-icon']) }) : ''}${badge}</button>`;
         });
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${Math.max(tabs.findIndex(([k]) => k === active), 0) + 1},
@@ -4043,7 +4043,7 @@ class ResourceTabs extends SchemaComponent {
  livewireId: ${e(js(id))},
  livewireProperty: 'activeTab',
  tab: ${q(active)},
- })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${e(active)}" /><div x-data="{
+ })" x-load x-load-src="${e(page.panel.assetUrl('js/navette/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="nv-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${e(active)}" /><div x-data="{
  deferredBadges: {},
  isLoadingDeferredBadges: true,
  async init() {
@@ -4054,7 +4054,7 @@ class ResourceTabs extends SchemaComponent {
  this.isLoadingDeferredBadges = false
  }
  },
- }" x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="group" aria-label="${e(t('filament-panels::resources/pages/list-records.tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeTab" class="fi-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_START, page.getRenderHookScopes())}${buttons.join('')}${renderHook(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_END, page.getRenderHookScopes())}</div></div></div>`;
+ }" x-ref="tabsHeader" class="nv-tabs"><div x-ref="tablist" role="group" aria-label="${e(t('navette-panels::resources/pages/list-records.tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="activeTab" class="nv-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_START, page.getRenderHookScopes())}${buttons.join('')}${renderHook(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_END, page.getRenderHookScopes())}</div></div></div>`;
     }
 }
 
@@ -4493,7 +4493,7 @@ export class ListRecords extends Page implements TableHost {
                 return parts.join('');
             } : undefined,
             canReorder: table.getReorderColumn() !== null ? await canOn(this, 'reorder') : undefined,
-            rowActions: async (record) => resource.isSimple || table.getRecordActions().length || !(await canOn(this, 'update', record)) ? [] : [{ label: t('filament-actions::edit.single.label'), url: resource.getUrl('edit', resource.adapter.getKey(record)), icon: icons.resolve('actions::edit-action') ?? 'c-pencil-square', key: `edit.${createHash('md5').update(resource.adapter.getKey(record)).digest('hex')}` }],
+            rowActions: async (record) => resource.isSimple || table.getRecordActions().length || !(await canOn(this, 'update', record)) ? [] : [{ label: t('navette-actions::edit.single.label'), url: resource.getUrl('edit', resource.adapter.getKey(record)), icon: icons.resolve('actions::edit-action') ?? 'c-pencil-square', key: `edit.${createHash('md5').update(resource.adapter.getKey(record)).digest('hex')}` }],
         });
     }
 
@@ -4534,14 +4534,14 @@ export class ListRecords extends Page implements TableHost {
 
     getBreadcrumbs(): { label: string; url: string | null }[] {
         if (this.resource.isSimple) return [{ label: '', url: null }];
-        return [{ label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() }, { label: t('filament-panels::resources/pages/list-records.breadcrumb'), url: null }];
+        return [{ label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() }, { label: t('navette-panels::resources/pages/list-records.breadcrumb'), url: null }];
     }
     getHeaderActions(): Action[] {
         // Simple resource: create in a modal; otherwise link to the create page.
         if (this.resource.isSimple) return [CreateAction.make(this.resource)];
-        return [...((this.resource as any).listHeaderActions?.() ?? []), Action.make('create').label(t('filament-actions::create.single.label', { label: this.resource.modelLabel })).url(this.resource.getUrl('create')).authorize(({ livewire }) => canOn(livewire, 'create'))];
+        return [...((this.resource as any).listHeaderActions?.() ?? []), Action.make('create').label(t('navette-actions::create.single.label', { label: this.resource.modelLabel })).url(this.resource.getUrl('create')).authorize(({ livewire }) => canOn(livewire, 'create'))];
     }
-    getPageClasses(): string[] { return ['fi-resource-list-records-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`]; }
+    getPageClasses(): string[] { return ['nv-resource-list-records-page', `nv-resource-${this.resource.slug.replace(/\//g, '-')}`]; }
     contentSchema(schema: Schema): Schema {
         return schema.components([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER)]);
     }
@@ -4861,14 +4861,14 @@ export class RelationManager extends ListRecords {
     }
     getHeaderActions(): Action[] { return []; }
     placeholder(): string {
-        return `<div role="status" aria-busy="true" style="height: 8rem; ;" class="fi-section fi-loading-section fi-grid-col"><span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
+        return `<div role="status" aria-busy="true" style="height: 8rem; ;" class="nv-section nv-loading-section nv-grid-col"><span class="nv-sr-only">${e(t('navette::components/loading-section.label'))}</span></div>`;
     }
     /** A relation manager has its own render hook locations, not the list page's. */
     contentSchema(schema: Schema): Schema {
         return schema.components([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_AFTER)]);
     }
     async render(): Promise<string> {
-        return `<div class="fi-resource-relation-manager">${await this.getSchema('content').toHtml()}</div>`;
+        return `<div class="nv-resource-relation-manager">${await this.getSchema('content').toHtml()}</div>`;
     }
 }
 
@@ -4979,7 +4979,7 @@ export class ManageRelatedRecords extends ListRecords {
     contentSchema(schema: Schema): Schema {
         return schema.components([Group.make([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_AFTER)]), new RelationManagerTabs().key(null).hidden()]);
     }
-    getTitle(): string { return t('filament-panels::resources/pages/manage-related-records.title', { label: this.related.parentResource.getRecordTitle(this._owner), relationship: this.related.getTitle() }); }
+    getTitle(): string { return t('navette-panels::resources/pages/manage-related-records.title', { label: this.related.parentResource.getRecordTitle(this._owner), relationship: this.related.getTitle() }); }
     getSubNavigation(): SubNavigationItem[] { return this.related.parentResource.getRecordSubNavigation(this); }
     getBreadcrumbs(): { label: string; url: string | null }[] {
         const parent = this.related.parentResource;
@@ -4991,7 +4991,7 @@ export class ManageRelatedRecords extends ListRecords {
     }
     /** Render hook scopes: the page and the resource it belongs to (the parent record's). */
     getRenderHookScopes(): unknown[] { return [this.constructor, (this.constructor as typeof ManageRelatedRecords).parentResource]; }
-    getPageClasses(): string[] { return ['fi-resource-manage-related-records-page', `fi-resource-${this.related.parentResource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
+    getPageClasses(): string[] { return ['nv-resource-manage-related-records-page', `nv-resource-${this.related.parentResource.slug.replace(/\//g, '-')}`, `nv-resource-record-${this.recordKey}`]; }
 }
 
 /** Previous page URL if it belongs to this site, otherwise the site root (without a trailing slash). */
@@ -5060,8 +5060,8 @@ abstract class ResourceFormPage extends Page {
     async render(): Promise<string> {
         if (this.hasUnsavedDataChangesAlert()) {
             this.addScript('unsaved-data-changes-alert', this.panel.hasSpaMode()
-                ? `setUpFilamentSpaModeUnsavedDataChangesAlert({ body: ${js(t('filament-panels::unsaved-changes-alert.body'))}, resolveLivewireComponentUsing: () => window.Livewire.find(${js(this.id)}), $wire })`
-                : 'setUpFilamentUnsavedDataChangesAlert({ $wire })');
+                ? `setUpNavetteSpaModeUnsavedDataChangesAlert({ body: ${js(t('navette-panels::unsaved-changes-alert.body'))}, resolveLivewireComponentUsing: () => window.Livewire.find(${js(this.id)}), $wire })`
+                : 'setUpNavetteUnsavedDataChangesAlert({ $wire })');
         }
         return super.render();
     }
@@ -5110,7 +5110,7 @@ abstract class ResourceFormPage extends Page {
     /** Where "Cancel" goes when the browser has no history: the list page, unless the page decides otherwise. */
     protected getCancelUrl(): string { return this.resource.getUrl(); }
     protected cancelAction(): Action {
-        return Action.make('cancel').label(t(`filament-panels::resources/pages/${this.getOperation()}-record.form.actions.cancel.label`)).color('gray')
+        return Action.make('cancel').label(t(`navette-panels::resources/pages/${this.getOperation()}-record.form.actions.cancel.label`)).color('gray')
             .alpineClickHandler(`document.referrer ? window.history.back() : Livewire.navigate(${js(this.getCancelUrl())})`);
     }
     // --- lifecycle hooks around filling and validation (to override; none can be called from the browser)
@@ -5138,11 +5138,11 @@ export class CreateRecord extends ResourceFormPage {
     async mount(): Promise<void> { await this.beforeFill(); fillSchema(this.getSchema('form'), this.data); await this.afterFill(); this.rememberData(); }
     getOperation(): 'create' { return 'create'; }
     getSubmitMethod(): string { return 'create'; }
-    getTitle(): string { return t('filament-panels::resources/pages/create-record.title', { label: this.resource.getTitleCaseModelLabel() }); }
+    getTitle(): string { return t('navette-panels::resources/pages/create-record.title', { label: this.resource.getTitleCaseModelLabel() }); }
     getBreadcrumbs(): { label: string; url: string | null }[] {
-        return [{ label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() }, { label: t('filament-panels::resources/pages/create-record.breadcrumb'), url: null }];
+        return [{ label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() }, { label: t('navette-panels::resources/pages/create-record.breadcrumb'), url: null }];
     }
-    getPageClasses(): string[] { return ['fi-resource-create-record-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`]; }
+    getPageClasses(): string[] { return ['nv-resource-create-record-page', `nv-resource-${this.resource.slug.replace(/\//g, '-')}`]; }
     /**
      * Form buttons: create, "create & create another" (unless `canCreateAnother` is `false`) and cancel. To show them in the
      * page header instead, return `[]` here and `[this.getCreateFormAction().formId('form')]` from `getHeaderActions()`.
@@ -5153,8 +5153,8 @@ export class CreateRecord extends ResourceFormPage {
     /** `false`: no "Create & create another" button. */
     static canCreateAnother = true;
     canCreateAnother(): boolean { return (this.constructor as typeof CreateRecord).canCreateAnother; }
-    getCreateFormAction(): Action { return Action.make('create').label(t('filament-panels::resources/pages/create-record.form.actions.create.label')).submit('create').keyBindings(['mod+s']); }
-    getCreateAnotherFormAction(): Action { return Action.make('createAnother').label(t('filament-panels::resources/pages/create-record.form.actions.create_another.label')).color('gray').action('createAnother').keyBindings(['mod+shift+s']); }
+    getCreateFormAction(): Action { return Action.make('create').label(t('navette-panels::resources/pages/create-record.form.actions.create.label')).submit('create').keyBindings(['mod+s']); }
+    getCreateAnotherFormAction(): Action { return Action.make('createAnother').label(t('navette-panels::resources/pages/create-record.form.actions.create_another.label')).color('gray').action('createAnother').keyBindings(['mod+shift+s']); }
     getSubmitFormAction(): Action { return this.getCreateFormAction(); }
     // --- lifecycle hooks, to override in a subclass (none can be called from the browser)
     /** Transforms validated data before creation (add the author, compute a field…). */
@@ -5171,7 +5171,7 @@ export class CreateRecord extends ResourceFormPage {
      */
     protected getRedirectUrl(record: any): string | Promise<string> { return createPageRedirectUrl(this, record); }
     /** Success notification title; `null` to show nothing. */
-    protected getCreatedNotificationTitle(): string | null { return t('filament-panels::resources/pages/create-record.notifications.created.title'); }
+    protected getCreatedNotificationTitle(): string | null { return t('navette-panels::resources/pages/create-record.notifications.created.title'); }
     /** The notification sent after creating a record (body, icon, actions, duration…); `null` sends none. */
     protected getCreatedNotification(_record: any): Notification | null | Promise<Notification | null> {
         const title = this.getCreatedNotificationTitle();
@@ -5227,7 +5227,7 @@ export class EditRecord extends ResourceFormPage {
     getRelationManagers(): RelationManagerEntries { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
     /** `true`: the form becomes a tab (key `''`), next to the relation managers. */
     hasCombinedRelationManagerTabsWithContent(): boolean { return false; }
-    getContentTabLabel(): string { return t('filament-panels::resources/pages/edit-record.content.tab.label'); }
+    getContentTabLabel(): string { return t('navette-panels::resources/pages/edit-record.content.tab.label'); }
     getContentTabIcon(): string | null { return null; }
     /** The content tab (the form) of combined tabs: change its label or icon here. */
     getContentTabComponent(): SchemaTab { return SchemaTab.make(this.getContentTabLabel()).icon(this.getContentTabIcon()).schema(this.getContentComponents()); }
@@ -5305,23 +5305,23 @@ export class EditRecord extends ResourceFormPage {
     }
     getOperation(): 'edit' { return 'edit'; }
     getSubmitMethod(): string { return 'save'; }
-    getTitle(): string { return t('filament-panels::resources/pages/edit-record.title', { label: this.resource.getRecordTitle(this._record) }); }
+    getTitle(): string { return t('navette-panels::resources/pages/edit-record.title', { label: this.resource.getRecordTitle(this._record) }); }
     getBreadcrumbs(): { label: string; url: string | null }[] {
         return [
             { label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() },
             // The record title only appears if the resource declares `recordTitleAttribute`; it links to the view page when there is one.
             ...(this.resource.recordTitleAttribute ? [{ label: this.resource.getRecordTitle(this._record), url: this.resource.getUrl(this.resource.hasViewPage ? 'view' : 'edit', this.recordKey) }] : []),
-            { label: t('filament-panels::resources/pages/edit-record.breadcrumb'), url: null },
+            { label: t('navette-panels::resources/pages/edit-record.breadcrumb'), url: null },
         ];
     }
     getSubNavigation(): SubNavigationItem[] { return this.resource.getRecordSubNavigation(this); }
-    getPageClasses(): string[] { return ['fi-resource-edit-record-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
+    getPageClasses(): string[] { return ['nv-resource-edit-record-page', `nv-resource-${this.resource.slug.replace(/\//g, '-')}`, `nv-resource-record-${this.recordKey}`]; }
     /**
      * Form buttons: save and cancel. To show them in the page header instead, return `[]` here and
      * `[this.getSaveFormAction().formId('form'), ...]` from `getHeaderActions()`.
      */
     getFormActions(): Action[] { return [this.getSaveFormAction(), this.getCancelFormAction()]; }
-    getSaveFormAction(): Action { return Action.make('save').label(t('filament-panels::resources/pages/edit-record.form.actions.save.label')).submit('save').keyBindings(['mod+s']); }
+    getSaveFormAction(): Action { return Action.make('save').label(t('navette-panels::resources/pages/edit-record.form.actions.save.label')).submit('save').keyBindings(['mod+s']); }
     getSubmitFormAction(): Action { return this.getSaveFormAction(); }
     /**
      * Refills some form fields from the record, reloaded from the database (after an action changed it): `refreshFormData(['status'])`.
@@ -5349,7 +5349,7 @@ export class EditRecord extends ResourceFormPage {
      */
     protected getRedirectUrl(record: any): string | null | Promise<string | null> { return editPageRedirectUrl(this, record); }
     /** Success notification title; `null` to show nothing. */
-    protected getSavedNotificationTitle(): string | null { return t('filament-panels::resources/pages/edit-record.notifications.saved.title'); }
+    protected getSavedNotificationTitle(): string | null { return t('navette-panels::resources/pages/edit-record.notifications.saved.title'); }
     /** The notification sent after saving (body, icon, actions, duration…); `null` sends none. */
     protected getSavedNotification(_record: any): Notification | null | Promise<Notification | null> {
         const title = this.getSavedNotificationTitle();
@@ -5435,7 +5435,7 @@ export class ViewRecord extends Page {
     getRelationManagers(): RelationManagerEntries { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
     /** `true`: the infolist becomes a tab (key `''`), next to the relation managers. */
     hasCombinedRelationManagerTabsWithContent(): boolean { return false; }
-    getContentTabLabel(): string { return t('filament-panels::resources/pages/view-record.content.tab.label'); }
+    getContentTabLabel(): string { return t('navette-panels::resources/pages/view-record.content.tab.label'); }
     getContentTabIcon(): string | null { return null; }
     /** The content tab (the infolist) of combined tabs: change its label or icon here. */
     getContentTabComponent(): SchemaTab { return SchemaTab.make(this.getContentTabLabel()).icon(this.getContentTabIcon()).schema(this.getContentComponents()); }
@@ -5458,19 +5458,19 @@ export class ViewRecord extends Page {
     /** Defaults to a link to the edit page. */
     getHeaderActions(): Action[] { return [this.editAction()]; }
     protected editAction(): Action {
-        return Action.make('edit').authorize(({ livewire, record }) => canOn(livewire, 'update', record)).label(t('filament-actions::edit.single.label')).url(() => this.resource.getUrl('edit', this.recordKey));
+        return Action.make('edit').authorize(({ livewire, record }) => canOn(livewire, 'update', record)).label(t('navette-actions::edit.single.label')).url(() => this.resource.getUrl('edit', this.recordKey));
     }
-    getTitle(): string { return t('filament-panels::resources/pages/view-record.title', { label: this.resource.getRecordTitle(this._record) }); }
+    getTitle(): string { return t('navette-panels::resources/pages/view-record.title', { label: this.resource.getRecordTitle(this._record) }); }
     getBreadcrumbs(): { label: string; url: string | null }[] {
         return [
             { label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() },
             // The record title only appears if the resource declares `recordTitleAttribute`.
             ...(this.resource.recordTitleAttribute ? [{ label: this.resource.getRecordTitle(this._record), url: this.resource.getUrl('view', this.recordKey) }] : []),
-            { label: t('filament-panels::resources/pages/view-record.breadcrumb'), url: null },
+            { label: t('navette-panels::resources/pages/view-record.breadcrumb'), url: null },
         ];
     }
     getSubNavigation(): SubNavigationItem[] { return this.resource.getRecordSubNavigation(this); }
-    getPageClasses(): string[] { return ['fi-resource-view-record-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
+    getPageClasses(): string[] { return ['nv-resource-view-record-page', `nv-resource-${this.resource.slug.replace(/\//g, '-')}`, `nv-resource-record-${this.recordKey}`]; }
 }
 
 /** Evaluation context for panel menu actions (no record). */
@@ -5509,7 +5509,7 @@ function userMenuDefaults(panel: Panel, user: User): { key: string; action: Acti
     const profileUrl = panel.getProfileUrl();
     return [
         { key: 'profile', placement: 'start', action: Action.make('profile').label(profileUrl ? panel.getProfile()!.page.getLabel() : user.name).icon(icons.resolve('panels::user-menu.profile-item') ?? 'm-user-circle').url(profileUrl).color('gray').sort(-1) },
-        { key: 'logout', placement: 'end', action: Action.make('logout').label(t('filament-panels::layout.actions.logout.label')).icon(icons.resolve('panels::user-menu.logout-button') ?? 'm-arrow-left-on-rectangle').url(panel.getLogoutUrl()).postToUrl().color('gray').sort(Number.MAX_SAFE_INTEGER) },
+        { key: 'logout', placement: 'end', action: Action.make('logout').label(t('navette-panels::layout.actions.logout.label')).icon(icons.resolve('panels::user-menu.logout-button') ?? 'm-arrow-left-on-rectangle').url(panel.getLogoutUrl()).postToUrl().color('gray').sort(Number.MAX_SAFE_INTEGER) },
     ];
 }
 /** User menu groups of the request's user (`[]` without a user or with `userMenu(false)`). */
@@ -5537,7 +5537,7 @@ async function renderUserMenu(component: Component, position: 'topbar' | 'sideba
     const afterLists: string[][] = [];
     for (const group of after) afterLists.push(...(await menuLists(group, ctx, panel, profileHooks)));
     const profileIcon = profile ? await profile.getIcon(ctx as any) : null;
-    return views.render('filament-panels::components.user-menu', {
+    return views.render('navette-panels::components.user-menu', {
         position, isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), user, avatarUrl: panel.getUserAvatarUrl(user),
         profileHeader: hasProfileHeader ? { label: await profile!.getLabel(ctx as any), icon: profileIcon } : null,
         listsBefore: await menuLists(before, ctx, panel, profileHooks), listsAfter: afterLists,
@@ -5555,20 +5555,20 @@ export function renderErrorPage(panel: Panel, req: Request, res: Response, statu
     res.status(status);
     if (!req.accepts('html')) return void res.type('text').send(`${status}`);
     const scene = errorPageScene(status);
-    const text = (name: string) => t(`filament-panels::errors.${scene}.${name}`);
+    const text = (name: string) => t(`navette-panels::errors.${scene}.${name}`);
     // Inside the request's theme: the buttons' color classes depend on its palette.
     const html = runWithCspNonce(getResponseCspNonce(res) ?? cspNonce(), () => panel.withTheme(req, () => {
-        const home = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'primary' }, t('filament-panels::errors.actions.home'));
-        const homeGray = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'gray' }, t('filament-panels::errors.actions.home'));
-        const back = uiButton({ icon: icons.resolve('panels::error-page.actions.back') ?? 'm-arrow-left', color: 'gray', attributes: { 'data-history-back': '' } }, t('filament-panels::errors.actions.back'));
-        const retry = uiButton({ tag: 'a', href: req.method === 'GET' ? req.originalUrl : panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.retry') ?? 'm-arrow-path', color: 'primary' }, t('filament-panels::errors.actions.retry'));
-        const login = panel.getLoginPage() ? uiButton({ tag: 'a', href: panel.getLoginUrl(), icon: icons.resolve('panels::error-page.actions.login') ?? 'm-arrow-right-end-on-rectangle', color: 'primary' }, t('filament-panels::errors.actions.login')) : home;
+        const home = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'primary' }, t('navette-panels::errors.actions.home'));
+        const homeGray = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'gray' }, t('navette-panels::errors.actions.home'));
+        const back = uiButton({ icon: icons.resolve('panels::error-page.actions.back') ?? 'm-arrow-left', color: 'gray', attributes: { 'data-history-back': '' } }, t('navette-panels::errors.actions.back'));
+        const retry = uiButton({ tag: 'a', href: req.method === 'GET' ? req.originalUrl : panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.retry') ?? 'm-arrow-path', color: 'primary' }, t('navette-panels::errors.actions.retry'));
+        const login = panel.getLoginPage() ? uiButton({ tag: 'a', href: panel.getLoginUrl(), icon: icons.resolve('panels::error-page.actions.login') ?? 'm-arrow-right-end-on-rectangle', color: 'primary' }, t('navette-panels::errors.actions.login')) : home;
         const actions = scene === 401 ? (panel.getLoginPage() ? [login, homeGray] : [home]) : scene === 403 || scene === 404 ? [home, back] : scene === 503 ? [retry] : [retry, homeGray];
         const badgeColor = scene >= 500 ? 'danger' : scene === 419 || scene === 429 ? 'warning' : 'gray';
-        const label = t('filament-panels::errors.label', { code: status });
+        const label = t('navette-panels::errors.label', { code: status });
         const error = options.error instanceof Error ? options.error : null;
         const theme = panel.resolveTheme(req);
-        return views.render('filament-panels::errors.page', {
+        return views.render('navette-panels::errors.page', {
             status, locale: getLocale(), title: text('title'), heading: text('title'), description: options.description ?? text('description'),
             illustration: errorIllustration(status, `${label}: ${text('title')}`), badge: uiBadge({ color: badgeColor, size: 'lg' }, e(label)), actions, css: ERROR_PAGE_CSS,
             // The stack only helps while developing: never shown otherwise.
@@ -5589,7 +5589,7 @@ async function tenantMenuDefaults(panel: Panel, user: User, tenant: unknown): Pr
     const RegistrationPage = panel.getTenantRegistrationPage();
     return [
         { key: 'profile', placement: 'start', action: ProfilePage && provider.update ? Action.make('profile').label(ProfilePage.getLabel()).icon(icons.resolve('panels::tenant-menu.profile-button') ?? 'm-cog-6-tooth').url(panel.getUrl(ProfilePage.slug)).color('gray').sort(-1) : null },
-        { key: 'billing', placement: 'start', action: billingUrl ? Action.make('billing').label(t('filament-panels::layout.actions.billing.label')).icon(icons.resolve('panels::tenant-menu.billing-button') ?? 'm-credit-card').url(billingUrl).color('gray').sort(-1) : null },
+        { key: 'billing', placement: 'start', action: billingUrl ? Action.make('billing').label(t('navette-panels::layout.actions.billing.label')).icon(icons.resolve('panels::tenant-menu.billing-button') ?? 'm-credit-card').url(billingUrl).color('gray').sort(-1) : null },
         { key: 'register', placement: 'end', action: RegistrationPage && (await RegistrationPage.canView(panel, user)) ? Action.make('register').label(RegistrationPage.getLabel()).icon(icons.resolve('panels::tenant-menu.registration-button') ?? 'm-plus').url(panel.getBaseUrl(RegistrationPage.slug)).color('gray').sort(Number.MAX_SAFE_INTEGER) : null },
     ];
 }
@@ -5618,7 +5618,7 @@ async function renderTenantMenu(component: Component, options: { teleport: boole
         : [all.filter((entry) => !canSwitch || entry.sort >= 0)];
     const listsAfter: string[][] = [];
     for (const group of after) listsAfter.push(...(await menuLists(group, ctx, panel)));
-    return views.render('filament-panels::components.tenant-menu', {
+    return views.render('navette-panels::components.tenant-menu', {
         teleport: options.teleport, isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(),
         tenant: { ...tenantName(provider.getName(tenant)), label: provider.getCurrentTenantLabel?.(tenant) ?? null, avatarUrl: panel.getTenantAvatarUrl(tenant) },
         listsBefore: canSwitch ? await menuLists(all.filter((entry) => entry.sort < 0), ctx, panel) : [],
@@ -5652,7 +5652,7 @@ export class Sidebar extends MenuComponent {
     currentPath = '/';
     static locked = ['currentPath'];
     /** View rendered (a subclass may use its own). */
-    static view = 'filament-panels::livewire.sidebar';
+    static view = 'navette-panels::livewire.sidebar';
     mount(params: Record<string, unknown>): void { this.currentPath = String(params.path ?? '/'); }
     /** Data passed to the view. A resource item stays active on its create and edit pages. */
     async getViewData(): Promise<Record<string, unknown>> {
@@ -5695,7 +5695,7 @@ export class Topbar extends MenuComponent {
     currentPath = '/';
     static locked = ['currentPath'];
     /** View rendered (a subclass may use its own). */
-    static view = 'filament-panels::livewire.topbar';
+    static view = 'navette-panels::livewire.topbar';
     mount(params: Record<string, unknown>): void { this.currentPath = String(params.path ?? '/'); }
     /** Data passed to the view. */
     async getViewData(): Promise<Record<string, unknown>> {
@@ -5728,7 +5728,7 @@ export class Topbar extends MenuComponent {
 export class SimpleUserMenu extends MenuComponent {
     async render(): Promise<string> {
         if (!(this._ctx as PanelContext).user) return '<div></div>';
-        return `<div><div class="fi-simple-user-menu-ctn">${await renderUserMenu(this, 'topbar')}</div>${await this.renderActionModals()}</div>`;
+        return `<div><div class="nv-simple-user-menu-ctn">${await renderUserMenu(this, 'topbar')}</div>${await this.renderActionModals()}</div>`;
     }
 }
 
@@ -5898,9 +5898,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (domains.length) router.use((req, _res, next) => next(domains.includes(req.hostname) ? undefined : 'router'));
     // CSP nonce set before the panel (`useCspNonce(res, nonce)`): every inline script and style of the panel carries it.
     router.use((_req, res, next) => { let nonce: string | null; try { nonce = getResponseCspNonce(res); } catch (error) { return next(error); } runWithCspNonce(nonce, () => next()); });
-    router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
-    // Navette's own front-end files.
-    router.use(express.static(dir('../dist/navette')));
+    // Front-end files: the compiled CSS and JavaScript (versioned URLs, cached for a year) and, under `navette/`, the optional
+    // sheets and scripts (motion, calendar, security keys, broadcasting), revalidated on every request.
+    router.use(express.static(dir('../dist/navette'), {
+        maxAge: '1y',
+        setHeaders: (res, file) => { if (/[\\/]dist[\\/]navette[\\/]navette[\\/]/.test(file)) res.setHeader('Cache-Control', 'public, max-age=0'); },
+    }));
     // Registered assets (`NavetteAsset.register()`, `panel.assets()`).
     router.use(NavetteAsset.middleware());
     // `bootUsing()`: before every request of the panel (its pages, their updates).
@@ -5984,10 +5987,10 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         }
         if (pending.length) {
             const batch = publish(ctx.mailbox, pending);
-            result.filamentNotificationBatch = batch;
-            result.filamentNotifications = true;
-            res.setHeader('X-Filament-Notifications', batch);
-            if (result.components.some((c: any) => c.effects?.redirect)) res.setHeader('X-Filament-Notifications-Redirect', 'true');
+            result.navetteNotificationBatch = batch;
+            result.navetteNotifications = true;
+            res.setHeader('X-Navette-Notifications', batch);
+            if (result.components.some((c: any) => c.effects?.redirect)) res.setHeader('X-Navette-Notifications-Redirect', 'true');
         }
         return result;
     // Only a signed-in user can upload files.
@@ -6010,23 +6013,23 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const renderHookScopes = (mounted.component as any).getRenderHookScopes?.() ?? [];
         const hasNavigation = panel.hasNavigation();
         const body = options.layout === 'simple'
-            ? views.render('filament-panels::layout.simple', {
+            ? views.render('navette-panels::layout.simple', {
                 slot, renderHookScopes, maxContentWidth: (mounted.component.constructor as any).maxContentWidth ?? panel.getSimplePageMaxContentWidth() ?? 'lg',
                 header: panel.hasTopbar() && ctx.user ? (await runtime.mount(name('simple-user-menu'), {}, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-0" ') : null,
             })
-            : views.render('filament-panels::layout.index', {
+            : views.render('navette-panels::layout.index', {
                 slot, maxContentWidth: (mounted.component as any).getMaxContentWidth?.() ?? panel.getMaxContentWidth(), renderHookScopes, hasNavigation, hasTopNavigation: panel.hasTopNavigation(),
                 isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), isSidebarFullyCollapsibleOnDesktop: panel.isSidebarFullyCollapsibleOnDesktop(),
                 topbar: panel.hasTopbar() ? (await runtime.mount(name('topbar'), { path: req.path }, request)).replace(/^s*<div /, '<div wire:key="lw-1-0-1" ') : null,
                 sidebar: hasNavigation ? (await runtime.mount(name('sidebar'), { path: req.path }, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-1" ') : '',
             });
-        const bodyClass = options.layout === 'index' ? cls([{ 'fi-body-has-navigation': hasNavigation, 'fi-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'fi-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'fi-body-has-topbar': panel.hasTopbar(), 'fi-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
+        const bodyClass = options.layout === 'index' ? cls([{ 'nv-body-has-navigation': hasNavigation, 'nv-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'nv-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'nv-body-has-topbar': panel.hasTopbar(), 'nv-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
         // Failed component requests show a notification (not in development, where the error dialog helps).
         const errorNotifications = process.env.NODE_ENV === 'development' ? null : typeof (mounted.component as any).getErrorNotifications === 'function' ? (mounted.component as any).getErrorNotifications() : panel.hasErrorNotifications() ? panel.getErrorNotifications() : null;
         // The page's own body attributes (`extraBodyAttributes`): `class` joins the body's classes.
         const { class: extraBodyClass, ...extraBodyAttributes } = ((mounted.component as any).getExtraBodyAttributes?.() ?? {}) as Record<string, AttrValue>;
         const bodyAttributes = Object.keys(extraBodyAttributes).length ? new Attributes(Object.fromEntries(Object.entries(extraBodyAttributes).filter(([attribute]) => /^[a-zA-Z_:@][a-zA-Z0-9_:.@-]*$/.test(attribute)))).toHtml() : '';
-        res.send(spaLinks(views.render('filament-panels::layout.base', {
+        res.send(spaLinks(views.render('navette-panels::layout.base', {
             sidebarWidth: panel.getSidebarWidth(), collapsedSidebarWidth: panel.getCollapsedSidebarWidth(), errorNotifications,
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass: cls([bodyClass, typeof extraBodyClass === 'string' ? extraBodyClass : null]) || null, bodyAttributes, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
@@ -6083,20 +6086,20 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     });
 
     if (LoginPage) {
-        guestPage(panel.getAuthPaths().login, name('auth.login'), t('filament-panels::auth/pages/login.title'));
+        guestPage(panel.getAuthPaths().login, name('auth.login'), t('navette-panels::auth/pages/login.title'));
         router.post(panel.getLogoutUrl(), express.urlencoded({ extended: false }), (req, res) => {
             if (!verifyCsrf(req, req.body?._token)) return renderErrorPage(panel, req, res, 419);
             panel.logOut(res);
             res.redirect(panel.getLoginUrl());
         });
     }
-    if (RegistrationPage) guestPage(panel.getAuthPaths().registration, name('auth.register'), t('filament-panels::auth/pages/register.title'));
+    if (RegistrationPage) guestPage(panel.getAuthPaths().registration, name('auth.register'), t('navette-panels::auth/pages/register.title'));
     if (passwordReset) {
-        guestPage(panel.getAuthPaths().passwordResetRequest, name('auth.password-reset.request'), t('filament-panels::auth/pages/password-reset/request-password-reset.title'));
-        guestPage(panel.getAuthPaths().passwordReset, name('auth.password-reset.reset'), t('filament-panels::auth/pages/password-reset/reset-password.title'), (req) => ({ email: typeof req.query.email === 'string' ? req.query.email : null, token: typeof req.query.token === 'string' ? req.query.token : null }));
+        guestPage(panel.getAuthPaths().passwordResetRequest, name('auth.password-reset.request'), t('navette-panels::auth/pages/password-reset/request-password-reset.title'));
+        guestPage(panel.getAuthPaths().passwordReset, name('auth.password-reset.reset'), t('navette-panels::auth/pages/password-reset/reset-password.title'), (req) => ({ email: typeof req.query.email === 'string' ? req.query.email : null, token: typeof req.query.token === 'string' ? req.query.token : null }));
     }
     if (VerificationPrompt) {
-        userPage(panel.getAuthPaths().emailVerificationPrompt, name('auth.email-verification.prompt'), t('filament-panels::auth/pages/email-verification/email-verification-prompt.title'), 'simple', { beforeMultiFactorSetUp: true });
+        userPage(panel.getAuthPaths().emailVerificationPrompt, name('auth.email-verification.prompt'), t('navette-panels::auth/pages/email-verification/email-verification-prompt.title'), 'simple', { beforeMultiFactorSetUp: true });
         // Emailed link: signed, time-limited, and only valid for the signed-in user it designates.
         router.get(panel.getBaseUrl(`${panel.getAuthPaths().emailVerification}/:id/:hash`), async (req, res) => {
             const ctx = await context(req, res);
@@ -6104,7 +6107,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             const id = String(req.params.id), hash = String(req.params.hash);
             const expected = createHash('sha1').update(ctx.user.email).digest('hex');
-            if (String(ctx.user.id) !== id || hash !== expected || !panel.checkVerifyEmailUrl(id, hash, req.query.expires, req.query.signature)) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
+            if (String(ctx.user.id) !== id || hash !== expected || !panel.checkVerifyEmailUrl(id, hash, req.query.expires, req.query.signature)) return renderErrorPage(panel, req, res, 403, { description: t('navette-panels::errors.403.invalid_link') });
             await panel.getAuth().markEmailAsVerified?.(ctx.user);
             res.redirect((await homeUrl(ctx.user)) ?? panel.getBaseUrl());
         });
@@ -6112,16 +6115,16 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (profile) userPage(profile.page.slug, name('auth.profile'), profile.page.getLabel(), profile.isSimple ? 'simple' : 'index');
     if (panel.hasEmailChangeVerification()) {
         const flash = async (ctx: PanelContext, build: () => void) => { const { pending } = await runInRequest(ctx.mailbox, async () => build()); if (pending.length) publish(ctx.mailbox, pending); };
-        const group = 'filament-panels::auth/http/controllers';
+        const group = 'navette-panels::auth/http/controllers';
         // Link sent to the new address: only for the signed-in user who asked, while the old address is still theirs.
         router.get(panel.getBaseUrl(panel.getAuthPaths().emailChangeVerification), async (req, res) => {
             const ctx = await context(req, res);
             if (ctx.denied) return forbidden(req, res);
             if (!ctx.user) return res.redirect(panel.getLoginUrl());
             const payload = panel.readEmailChangeToken('verify', req.query.token);
-            if (!payload || String(payload.uid) !== String(ctx.user.id) || payload.from !== fingerprint(ctx.user.email)) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
+            if (!payload || String(payload.uid) !== String(ctx.user.id) || payload.from !== fingerprint(ctx.user.email)) return renderErrorPage(panel, req, res, 403, { description: t('navette-panels::errors.403.invalid_link') });
             const store = getDefaultCacheStore();
-            if (await store.get(`navette:email-change:blocked:${payload.nonce}`)) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.email_change_blocked') });
+            if (await store.get(`navette:email-change:blocked:${payload.nonce}`)) return renderErrorPage(panel, req, res, 403, { description: t('navette-panels::errors.403.email_change_blocked') });
             const auth = panel.getAuth();
             const other = await auth.findByEmail?.(payload.email);
             if (other && String(other.id) !== String(ctx.user.id)) {
@@ -6138,9 +6141,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         router.get(panel.getBaseUrl(panel.getAuthPaths().blockEmailChange), async (req, res) => {
             const ctx = await context(req, res);
             const payload = panel.readEmailChangeToken('block', req.query.token);
-            if (!payload) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
+            if (!payload) return renderErrorPage(panel, req, res, 403, { description: t('navette-panels::errors.403.invalid_link') });
             const user = await panel.getAuth().find(payload.uid);
-            if (!user) return renderErrorPage(panel, req, res, 403, { description: t('filament-panels::errors.403.invalid_link') });
+            if (!user) return renderErrorPage(panel, req, res, 403, { description: t('navette-panels::errors.403.invalid_link') });
             const changed = user.email === payload.email;
             if (!changed) await getDefaultCacheStore().put(`navette:email-change:blocked:${payload.nonce}`, true, 60 * 60 + 60);
             await flash(ctx, () => (changed
@@ -6150,7 +6153,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         });
     }
     if (TenantRegistration) userPage(TenantRegistration.slug, name('tenancy.registration'), TenantRegistration.getLabel());
-    if (MultiFactorSetUpPage) userPage(panel.getAuthPaths().setUpRequiredMultiFactor, name('auth.multi-factor-authentication.set-up-required'), t('filament-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'), 'simple', { beforeMultiFactorSetUp: true });
+    if (MultiFactorSetUpPage) userPage(panel.getAuthPaths().setUpRequiredMultiFactor, name('auth.multi-factor-authentication.set-up-required'), t('navette-panels::auth/multi-factor/pages/set-up-required-multi-factor-authentication.title'), 'simple', { beforeMultiFactorSetUp: true });
 
     /** Context of a protected page: login, email verification, tenant. Returns `null` after responding. */
     const pageContext = async (req: Request, res: Response): Promise<PanelContext | null> => {

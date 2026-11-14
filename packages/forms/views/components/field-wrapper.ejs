@@ -3,26 +3,26 @@
     <% const hasLabelSlots = locals.aboveLabel || locals.beforeLabel || locals.belowLabel || locals.afterLabel; %>
     <% if (locals.hiddenLabel) { %>
         <% if (locals.labelAsDiv) { %>
-            <div id="<%= id %>-label" class="fi-fo-field-label fi-sr-only">
+            <div id="<%= id %>-label" class="nv-fo-field-label nv-sr-only">
                 <%- label %>
             </div>
         <% } else { %>
-        <label for="<%= id %>" class="fi-fo-field-label fi-sr-only">
+        <label for="<%= id %>" class="nv-fo-field-label nv-sr-only">
             <%- label %>
         </label>
         <% } %>
     <% } %>
     <% if (! locals.hiddenLabel || locals.hasInlineLabel || hasLabelSlots) { %>
-    <div class="fi-fo-field-label-col<% if (locals.hasInlineLabel) { %> fi-vertical-align-start<% } %>">
+    <div class="nv-fo-field-label-col<% if (locals.hasInlineLabel) { %> nv-vertical-align-start<% } %>">
         <%- locals.aboveLabel ?? '' %>
-        <div class="fi-fo-field-label-ctn">
+        <div class="nv-fo-field-label-ctn">
             <%- locals.beforeLabel ?? '' %>
             <% if (! locals.hiddenLabel) { %>
             <%# Button groups: the label is a <div> referenced by aria-labelledby, not a <label> %>
-            <<%- locals.labelAsDiv ? 'div id="' + id + '-label"' : 'label for="' + id + '"' %> class="fi-fo-field-label">
+            <<%- locals.labelAsDiv ? 'div id="' + id + '-label"' : 'label for="' + id + '"' %> class="nv-fo-field-label">
                 <%- labelPrefix %>
-                <span class="fi-fo-field-label-content">
-                    <%- label %><% if (required) { %><sup class="fi-fo-field-label-required-mark">*</sup><% } %>
+                <span class="nv-fo-field-label-content">
+                    <%- label %><% if (required) { %><sup class="nv-fo-field-label-required-mark">*</sup><% } %>
                 </span>
             </<%- locals.labelAsDiv ? 'div' : 'label' %>>
             <% } %>
@@ -34,12 +34,12 @@
     <% } %>
     <% const below = locals.belowContent ?? ''; %>
     <% if (html !== '' || below !== '' || errorMessage !== null || locals.aboveContent || locals.beforeContent || locals.afterContent) { %>
-        <div class="fi-fo-field-content-col">
-            <% if (locals.hasAboveContent) { %><div class="fi-fo-field-content-slot"><%- locals.aboveContent %></div><% } %>
+        <div class="nv-fo-field-content-col">
+            <% if (locals.hasAboveContent) { %><div class="nv-fo-field-content-slot"><%- locals.aboveContent %></div><% } %>
             <% if (locals.hasBeforeContent || locals.hasAfterContent) { %>
-            <div class="fi-fo-field-content-ctn<% if (! (locals.beforeContent || locals.afterContent)) { %> fi-empty<% } %>">
-                <% if (locals.hasBeforeContent) { %><div class="fi-fo-field-content-slot"><%- locals.beforeContent %></div><% } %>
-                <div class="fi-fo-field-content"><%- html %></div>
+            <div class="nv-fo-field-content-ctn<% if (! (locals.beforeContent || locals.afterContent)) { %> nv-empty<% } %>">
+                <% if (locals.hasBeforeContent) { %><div class="nv-fo-field-content-slot"><%- locals.beforeContent %></div><% } %>
+                <div class="nv-fo-field-content"><%- html %></div>
                 <%- locals.afterContent ?? '' %>
             </div>
             <% } else { %>
@@ -49,11 +49,11 @@
             <% if (errorMessage !== null) { %>
                 <%- locals.aboveErrorMessage ?? '' %>
                 <% if (locals.htmlErrorMessages) { %>
-                <div id="<%= id %>-error" data-validation-error class="fi-fo-field-wrp-error-message">
+                <div id="<%= id %>-error" data-validation-error class="nv-fo-field-wrp-error-message">
                     <%- errorMessage %>
                 </div>
                 <% } else { %>
-                <p id="<%= id %>-error" data-validation-error class="fi-fo-field-wrp-error-message">
+                <p id="<%= id %>-error" data-validation-error class="nv-fo-field-wrp-error-message">
                     <%= errorMessage %>
                 </p>
                 <% } %>

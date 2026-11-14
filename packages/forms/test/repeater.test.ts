@@ -36,11 +36,11 @@ test('Repeater: stacked cards with labels, numbers, collapse, clone and grid', a
     const field = Repeater.make('members').schema([TextInput.make('name'), TextInput.make('role')])
         .itemLabel(({ state }) => (state.name as string) ?? null).itemNumbers().collapsed().cloneable().grid(2);
     const html = await form(livewire, [field]).toHtml();
-    assert.match(html, /class="fi-fo-repeater fi-collapsible"/);
-    assert.match(html, /fi-fo-repeater-item-header-label fi-truncated">Ada 1<\/h4>/);
+    assert.match(html, /class="nv-fo-repeater nv-collapsible"/);
+    assert.match(html, /nv-fo-repeater-item-header-label nv-truncated">Ada 1<\/h4>/);
     assert.match(html, /&lt;b&gt;Bob&lt;\/b&gt; 2/);
     assert.match(html, /isCollapsed.{1,12}true/);
-    assert.match(html, /fi-grid-cols/);
+    assert.match(html, /nv-grid-cols/);
     assert.match(html, /Collapse all/);
     await act(field, 'clone', { item: 'a' });
     assert.equal(Object.keys(livewire.data.members as object).length, 3);
@@ -56,7 +56,7 @@ test('Repeater: addable(false), deletable(false), minItems() are enforced on the
     assert.deepEqual(Object.keys(livewire.data.items as object), ['a']);
     assert.deepEqual(await validateSchema(schema), { 'data.items': ['The items field must have at least 2 items.'] });
     const html = await schema.toHtml();
-    assert.doesNotMatch(html, /fi-fo-repeater-add/);
+    assert.doesNotMatch(html, /nv-fo-repeater-add/);
     assert.doesNotMatch(html, /m-trash|Delete/);
 });
 
@@ -68,14 +68,14 @@ test('Repeater: simple() saves a list of values', async () => {
     assert.equal(Object.keys(livewire.data.emails as object).length, 2);
     assert.deepEqual(await getSchemaState(schema), { emails: ['a@example.com', 'b@example.com'] });
     const html = await schema.toHtml();
-    assert.match(html, /class="fi-fo-simple-repeater"/);
+    assert.match(html, /class="nv-fo-simple-repeater"/);
     (Object.values(livewire.data.emails as object)[0] as any).email = 'nope';
     assert.deepEqual(Object.values(await validateSchema(schema)), [['The email field must be a valid email address.']]);
 });
 
 test('Repeater: table() layout is unchanged', async () => {
     const html = await form(host({ rows: { a: { name: 'x' } } }), [Repeater.make('rows').table([TableColumn.make('Name')]).schema([TextInput.make('name')])]).toHtml();
-    assert.match(html, /class="fi-fo-table-repeater"/);
+    assert.match(html, /class="nv-fo-table-repeater"/);
 });
 
 test('Repeater: has-many relationship is loaded in order and synced after save', async () => {
@@ -105,7 +105,7 @@ test('Builder: block maxItems(), searchable picker, collapsible, addable/deletab
     assert.match(html, /x-data="blockPicker\(\)"/);
     assert.match(html, /data-block-label="paragraph"/);
     assert.doesNotMatch(html, /data-block-label="heading"/);
-    assert.match(html, /fi-fo-builder-item-header-collapse-action/);
+    assert.match(html, /nv-fo-builder-item-header-collapse-action/);
     assert.doesNotMatch(html, /m-trash|>Delete</);
     assert.deepEqual(await validateSchema(schema), { 'data.content': ['The content field must have at least 2 items.'] });
     const call = (name: string, args: Record<string, unknown>) => (field.getActions().find((action) => action.getName() === name) as any).call({ livewire, record: null, arguments: args, data: {} });

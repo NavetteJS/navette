@@ -92,7 +92,7 @@ export function InteractsWithRecord<T extends PageClass>(Base: T): T & (abstract
         getSubNavigation(): SubNavigationItem[] { return this.resource.getRecordSubNavigation(this as any); }
         getActionMountContext(): Record<string, unknown> { return { recordKey: this.recordKey }; }
         protected getActionRecord(): unknown { return this._record; }
-        getPageClasses(): string[] { return [...((Base.prototype as any).getPageClasses?.call(this) ?? []), `fi-resource-${this.resource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
+        getPageClasses(): string[] { return [...((Base.prototype as any).getPageClasses?.call(this) ?? []), `nv-resource-${this.resource.slug.replace(/\//g, '-')}`, `nv-resource-record-${this.recordKey}`]; }
     }
     return RecordPageBase as any;
 }

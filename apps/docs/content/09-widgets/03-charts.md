@@ -329,7 +329,7 @@ import { e } from '@navette-js/support';
 
 export class RevenueChart extends ChartWidget {
     getEmptyState(): string {
-        return `<div class="fi-wi-chart-frame"><p>${e(`No revenue since ${this.filter}`)}</p></div>`;
+        return `<div class="nv-wi-chart-frame"><p>${e(`No revenue since ${this.filter}`)}</p></div>`;
     }
 }
 ```
@@ -415,10 +415,10 @@ The JavaScript is written into the page as it is: never build it from user data.
 
 ## Styling charts in a theme
 
-To style the canvas-rendered chart from a [custom theme](/styling/overview#creating-a-custom-theme), set these CSS custom properties on `.fi-wi-chart` or a parent element:
+To style the canvas-rendered chart from a [custom theme](/styling/overview#creating-a-custom-theme), set these CSS custom properties on `.nv-wi-chart` or a parent element:
 
 ```css
-.fi-wi-chart {
+.nv-wi-chart {
     --chart-border-width: 1;
     --chart-line-tension: 0.4;
     --chart-point-radius: 3;
@@ -433,7 +433,7 @@ To style the canvas-rendered chart from a [custom theme](/styling/overview#creat
 - `--chart-point-style`: the marker shape: `circle`, `cross`, `crossRot`, `dash`, `line`, `rect`, `rectRounded`, `rectRot`, `star` or `triangle`. Use `none` to hide markers.
 - `--chart-bar-border-radius`: the corner radius of bars. Use `0` for square corners instead of the default rounded corners.
 
-Use unitless numbers and the supported keywords, not CSS lengths such as `3px`. You may set different values for light and dark mode (`.dark .fi-wi-chart { … }`).
+Use unitless numbers and the supported keywords, not CSS lengths such as `3px`. You may set different values for light and dark mode (`.dark .nv-wi-chart { … }`).
 
 <Aside variant="info">
 To configure an individual chart, use [`getOptions()`](#setting-chart-configuration-options). Explicit options for these settings take precedence over the CSS custom properties.
@@ -444,7 +444,7 @@ To configure an individual chart, use [`getOptions()`](#setting-chart-configurat
 The legend beneath a chart is drawn onto the canvas as well. Two properties control the color swatch next to each label:
 
 ```css
-.fi-wi-chart {
+.nv-wi-chart {
     --chart-legend-box-width: 16;
     --chart-legend-border-radius: 0;
 }
@@ -457,7 +457,7 @@ The legend beneath a chart is drawn onto the canvas as well. Two properties cont
 The tooltip that appears when hovering over a chart is drawn onto the canvas as well. Its shape comes from two more properties:
 
 ```css
-.fi-wi-chart {
+.nv-wi-chart {
     --chart-tooltip-corner-radius: 0;
     --chart-tooltip-border-width: 1;
 }
@@ -466,24 +466,24 @@ The tooltip that appears when hovering over a chart is drawn onto the canvas as 
 Its colors are set differently, so that you can use the same palette and dark mode variants as the rest of your theme. The chart reads them from hidden elements that you style with an ordinary `color` declaration:
 
 ```css
-.fi-wi-chart {
-    & .fi-wi-chart-tooltip-bg-color {
+.nv-wi-chart {
+    & .nv-wi-chart-tooltip-bg-color {
         @apply text-gray-900 dark:text-white;
     }
 
-    & .fi-wi-chart-tooltip-text-color {
+    & .nv-wi-chart-tooltip-text-color {
         @apply text-white dark:text-gray-900;
     }
 
-    & .fi-wi-chart-tooltip-border-color {
+    & .nv-wi-chart-tooltip-border-color {
         @apply text-gray-700 dark:text-gray-200;
     }
 }
 ```
 
-A tooltip has no border until you give it a width, so `--chart-tooltip-border-width` and `.fi-wi-chart-tooltip-border-color` usually change together.
+A tooltip has no border until you give it a width, so `--chart-tooltip-border-width` and `.nv-wi-chart-tooltip-border-color` usually change together.
 
-The colors of the chart itself work in the same way: `.fi-wi-chart-bg-color` and `.fi-wi-chart-border-color` fill and outline the data, `.fi-wi-chart-grid-color` draws the grid lines, and `.fi-wi-chart-text-color` labels the axes.
+The colors of the chart itself work in the same way: `.nv-wi-chart-bg-color` and `.nv-wi-chart-border-color` fill and outline the data, `.nv-wi-chart-grid-color` draws the grid lines, and `.nv-wi-chart-text-color` labels the axes.
 
 The small charts inside a [stats overview widget](/widgets/stats-overview#styling-stat-charts-in-a-theme) are styled separately, with their own set of properties.
 
@@ -558,13 +558,13 @@ npm install chartjs-plugin-datalabels --save-dev
 
 ### Step 2: Create a JavaScript file importing the plugin
 
-Create a new JavaScript file where you will define your custom plugin. In this guide, we'll call it `resources/js/chart-js-plugins.js`. Import the plugin, and add it to the `window.filamentChartJsPlugins` array:
+Create a new JavaScript file where you will define your custom plugin. In this guide, we'll call it `resources/js/chart-js-plugins.js`. Import the plugin, and add it to the `window.navetteChartJsPlugins` array:
 
 ```ts
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-window.filamentChartJsPlugins ??= [];
-window.filamentChartJsPlugins.push(ChartDataLabels);
+window.navetteChartJsPlugins ??= [];
+window.navetteChartJsPlugins.push(ChartDataLabels);
 ```
 
 This is equivalent to including the plugins "inline" via `new Chart(..., { plugins: [...] })` when instantiating a Chart.js chart.
@@ -574,8 +574,8 @@ It's important to initialize the array if it has not been already, before pushin
 You can push as many plugins to the array as you would like to install, you do not need a separate file to import each plugin. A plugin may also be an object written in the file itself:
 
 ```ts
-window.filamentChartJsPlugins ??= [];
-window.filamentChartJsPlugins.push({
+window.navetteChartJsPlugins ??= [];
+window.navetteChartJsPlugins.push({
     id: 'chartAreaBorder',
     afterDraw(chart) {
         const { ctx, chartArea } = chart;
@@ -587,13 +587,13 @@ window.filamentChartJsPlugins.push({
 });
 ```
 
-Additionally, you can also register any "global plugins" which will use `Chart.register([...])` in the `window.filamentChartJsGlobalPlugins` array:
+Additionally, you can also register any "global plugins" which will use `Chart.register([...])` in the `window.navetteChartJsGlobalPlugins` array:
 
 ```ts
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 
-window.filamentChartJsGlobalPlugins ??= [];
-window.filamentChartJsGlobalPlugins.push(ChartDataLabels);
+window.navetteChartJsGlobalPlugins ??= [];
+window.navetteChartJsGlobalPlugins.push(ChartDataLabels);
 ```
 
 Global plugins are registered when the first chart of the page loads, so the file must run before that.

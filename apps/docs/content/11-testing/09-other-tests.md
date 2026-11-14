@@ -125,12 +125,12 @@ await page.waitForURL(`${base}/`);
 await page.goto(`${base}/tasks/create`);
 await page.locator('input[id="form.title"]').fill('Write the tests');
 await page.locator('form#form button[type=submit]').click();
-await page.locator('.fi-no-notification', { hasText: 'Created' }).waitFor();
+await page.locator('.nv-no-notification', { hasText: 'Created' }).waitFor();
 
 await browser.close();
 ```
 
-Fields have the id of their state path (`form.title`), forms have the id `form`, and notifications the class `fi-no-notification`. Listen to the `pageerror` event of the page to fail on JavaScript errors.
+Fields have the id of their state path (`form.title`), forms have the id `form`, and notifications the class `nv-no-notification`. Listen to the `pageerror` event of the page to fail on JavaScript errors.
 
 <Aside variant="danger">
 End-to-end tests create and delete records. Never point them at a database you care about: copy a reference database to a temporary file before each run.

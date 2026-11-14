@@ -19,11 +19,11 @@ await login(page, BASE, user);
 try {
     await step('the custom record page shows the record, its breadcrumbs and the record sub-navigation', async () => {
         await page.goto(`${BASE}/lab/brand-pages/${brand.id}/summary`);
-        await page.locator('.fi-header-heading', { hasText: `Summary of ${brand.name}` }).waitFor({ timeout: 10000 });
-        const crumbs = (await page.locator('.fi-breadcrumbs-item').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+        await page.locator('.nv-header-heading', { hasText: `Summary of ${brand.name}` }).waitFor({ timeout: 10000 });
+        const crumbs = (await page.locator('.nv-breadcrumbs-item').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
         assert.deepEqual(crumbs, ['Brands', brand.name, `Summary of ${brand.name}`]);
-        assert.match(await page.locator('.fi-breadcrumbs-item a', { hasText: brand.name }).getAttribute('href'), new RegExp(`/lab/brand-pages/${brand.id}$`), 'the record links to its view page');
-        const items = page.locator('.fi-page-sub-navigation-tabs .fi-tabs-item, .fi-page-sub-navigation-sidebar .fi-sidebar-item');
+        assert.match(await page.locator('.nv-breadcrumbs-item a', { hasText: brand.name }).getAttribute('href'), new RegExp(`/lab/brand-pages/${brand.id}$`), 'the record links to its view page');
+        const items = page.locator('.nv-page-sub-navigation-tabs .nv-tabs-item, .nv-page-sub-navigation-sidebar .nv-sidebar-item');
         const labels = (await items.allInnerTexts()).map((text) => text.trim()).filter(Boolean);
         assert.ok(labels.includes('Summary'), labels.join(', '));
         await page.getByText(brand.slug, { exact: true }).first().waitFor();
@@ -38,20 +38,20 @@ try {
         await page.locator('[id="form.slug"]').fill('e2-brand');
         await page.locator('form#form button[type=submit]').first().click();
         await page.waitForURL((url) => /\/lab\/brand-pages\/\d+$/.test(url.pathname), { timeout: 10000 });
-        const notification = page.locator('.fi-no-notification', { hasText: 'Brand created' });
+        const notification = page.locator('.nv-no-notification', { hasText: 'Brand created' });
         await notification.waitFor({ timeout: 8000 });
         assert.match(await notification.innerText(), /E2 Brand is ready\./);
     });
     await step('the relation manager reads its owner record; the modal heading uses the table record title', async () => {
         await page.goto(`${BASE}/lab/brand-pages/${brand.id}/edit`);
-        const manager = page.locator('.fi-resource-relation-manager, [wire\\:id]').filter({ has: page.getByRole('button', { name: 'Owner' }) }).last();
+        const manager = page.locator('.nv-resource-relation-manager, [wire\\:id]').filter({ has: page.getByRole('button', { name: 'Owner' }) }).last();
         await manager.getByRole('button', { name: 'Owner' }).click();
-        await page.locator('.fi-no-notification', { hasText: `Owner: ${brand.name}` }).waitFor({ timeout: 8000 });
-        const row = manager.locator('.fi-ta-row').first();
-        const name = (await row.locator('.fi-ta-text-item').first().innerText()).trim();
+        await page.locator('.nv-no-notification', { hasText: `Owner: ${brand.name}` }).waitFor({ timeout: 8000 });
+        const row = manager.locator('.nv-ta-row').first();
+        const name = (await row.locator('.nv-ta-text-item').first().innerText()).trim();
         const { sku } = db.prepare('select sku from products where brand_id = ? and name = ?').get(brand.id, name);
-        await row.locator('.fi-ta-actions').getByText('View').click();
-        await page.locator('.fi-modal-heading', { hasText: `View ${name} (${sku ?? 'no SKU'})` }).waitFor({ timeout: 8000 });
+        await row.locator('.nv-ta-actions').getByText('View').click();
+        await page.locator('.nv-modal-heading', { hasText: `View ${name} (${sku ?? 'no SKU'})` }).waitFor({ timeout: 8000 });
     });
     assert.deepEqual(errors, []);
 } finally {

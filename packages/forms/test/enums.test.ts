@@ -36,10 +36,10 @@ test('Select: enum options and the `in` rule', async () => {
 
 test('Radio and CheckboxList: enum options with their descriptions', async () => {
     const radio = norm(await form({ status: 'draft' }, [Radio.make('status').options(Status)]).toHtml());
-    assert.match(radio, /<p>Draft<\/p><p class="fi-fo-radio-label-description">This has not finished being written yet\.<\/p>/);
+    assert.match(radio, /<p>Draft<\/p><p class="nv-fo-radio-label-description">This has not finished being written yet\.<\/p>/);
     assert.match(radio, /<p>Published<\/p><\/div>/);
     const overridden = norm(await form({}, [Radio.make('status').descriptions({ draft: 'Custom' }).options(Status)]).toHtml());
-    assert.match(overridden, /fi-fo-radio-label-description">Custom</);
+    assert.match(overridden, /nv-fo-radio-label-description">Custom</);
     assert.doesNotMatch(overridden, /staff member/);
     const list = norm(await form({ status: [] }, [CheckboxList.make('status').options(Status)]).toHtml());
     assert.match(list, /This is ready for a staff member to read\./);
@@ -50,10 +50,10 @@ test('Radio and CheckboxList: enum options with their descriptions', async () =>
 
 test('ToggleButtons: enum colors and icons', async () => {
     const html = norm(await form({ status: 'draft' }, [ToggleButtons.make('status').options(Status)]).toHtml());
-    assert.match(html, new RegExp(`class="fi-btn fi-size-md ${colors.getComponentClasses('button', 'warning').join(' ')}"><svg[^>]*fi-icon`));
-    assert.match(html, /<label for="form\.status-published"[^>]*class="fi-btn fi-size-md fi-color fi-color-success[^"]*"><svg/);
+    assert.match(html, new RegExp(`class="nv-btn nv-size-md ${colors.getComponentClasses('button', 'warning').join(' ')}"><svg[^>]*nv-icon`));
+    assert.match(html, /<label for="form\.status-published"[^>]*class="nv-btn nv-size-md nv-color nv-color-success[^"]*"><svg/);
     const custom = norm(await form({}, [ToggleButtons.make('status').colors({ draft: 'danger' }).options(Status)]).toHtml());
-    assert.match(custom, /status-draft"[^>]*class="fi-btn fi-size-md fi-color fi-color-danger/);
+    assert.match(custom, /status-draft"[^>]*class="nv-btn nv-size-md nv-color nv-color-danger/);
     assert.deepEqual(await validateSchema(form({ status: 'nope' }, [ToggleButtons.make('status').options(Status)])), { 'data.status': ['The selected status is invalid.'] });
 });
 

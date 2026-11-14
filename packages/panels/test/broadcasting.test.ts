@@ -130,7 +130,7 @@ test('a user never receives another user\'s notification on the stream', async (
         assert.deepEqual(graceStream.events.map((event) => event.data.title), ['For Grace']);
         assert.equal(adaStream.events[0].channel, 'web.users.1');
         assert.equal(adaStream.events[0].event, 'notification.broadcast');
-        assert.equal(adaStream.events[0].data.format, 'filament');
+        assert.equal(adaStream.events[0].data.format, 'navette');
         assert.equal(adaStream.events[0].data.status, 'success');
         // Several recipients at once.
         await Notification.make().title('Everyone').broadcast([ada, grace]);
@@ -243,7 +243,7 @@ test('database notifications: `sendToDatabase(store, user, true)` tells the bell
         assert.match(page.text, /navette\/broadcasting\.js/);
         assert.match(page.text, /window\.navetteBroadcasting\.configure\(JSON\.parse\('.*url.*livewire.*broadcasting.*'\)\)/);
         // The flash notifications component listens to the user's channel.
-        assert.match(page.text, /setUpFilamentBroadcastNotifications\(\{ \$wire, broadcastChannel: .{1,8}web\.users\.1.{1,8} event: .{1,8}\.notification\.broadcast/);
+        assert.match(page.text, /setUpNavetteBroadcastNotifications\(\{ \$wire, broadcastChannel: .{1,8}web\.users\.1.{1,8} event: .{1,8}\.notification\.broadcast/);
     });
     const bell = new DatabaseNotifications() as any;
     bell._ctx = { panel, user: ada };
@@ -262,8 +262,8 @@ test('without broadcasting, pages render no stream script', async () => {
     await serve(panel, async ({ cookieOf, get }) => {
         const page = await get('/', cookieOf(ada));
         assert.equal(page.status, 200);
-        assert.doesNotMatch(page.text, /navetteBroadcasting|setUpFilamentBroadcastNotifications/);
-        assert.match(page.text, /window\.filamentData = \[\]/);
+        assert.doesNotMatch(page.text, /navetteBroadcasting|setUpNavetteBroadcastNotifications/);
+        assert.match(page.text, /window\.navetteData = \[\]/);
     });
 });
 
@@ -272,7 +272,7 @@ test('a notification coming back from the browser is rebuilt from checked values
     component.handleBroadcastNotification({ format: 'other', id: 'x', title: 'Ignored' });
     assert.deepEqual(component.notifications, {});
     component.handleBroadcastNotification({
-        format: 'filament', id: 'abc', title: '<img src=x onerror=alert(1)>', body: 'Body', status: 'evil" onclick="x', icon: 'not an icon!', iconColor: 'red;', duration: 1e12,
+        format: 'navette', id: 'abc', title: '<img src=x onerror=alert(1)>', body: 'Body', status: 'evil" onclick="x', icon: 'not an icon!', iconColor: 'red;', duration: 1e12,
         actions: [{ label: 'Bad', url: 'javascript:alert(1)' }, { label: 'Event', dispatch: { event: 'bad event()' } }, { label: 'Open', url: '/orders/1' }],
     });
     const stored = component.notifications.abc;
@@ -287,7 +287,7 @@ test('a notification coming back from the browser is rebuilt from checked values
     assert.doesNotMatch(html, /javascript:/);
     assert.match(html, /href="\/orders\/1"/);
     // An unknown (but well-formed) icon is dropped instead of failing.
-    component.handleBroadcastNotification({ format: 'filament', id: 'def', title: 'Icon', icon: 'o-does-not-exist-anywhere' });
+    component.handleBroadcastNotification({ format: 'navette', id: 'def', title: 'Icon', icon: 'o-does-not-exist-anywhere' });
     assert.ok(component.notifications.def);
     assert.doesNotThrow(() => component.render());
     const copy = Notification.fromArray(Notification.make().title('Round trip').warning().persistent().getBroadcastMessage()).getData();

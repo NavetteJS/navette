@@ -63,7 +63,7 @@ export class RichEditorTool {
     label(label: string | null): this { this._label = label; this._labelKey = null; return this; }
     getLabel(): string {
         if (this._label !== null) return this._label;
-        if (this._labelKey) return t(`filament-forms::${this._labelKey.replace(/^filament-forms::/, '')}`);
+        if (this._labelKey) return t(`navette-forms::${this._labelKey.replace(/^navette-forms::/, '')}`);
         return this._name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
     }
     /** Shows the label next to the icon (by default, it is a tooltip). */
@@ -113,12 +113,12 @@ export class RichEditorTool {
             type: 'button',
             'aria-label': label,
             'aria-pressed': this._toggle ? 'false' : null,
-            'x-bind:class': `{ 'fi-active': ${this._activeStyling ? active : 'false'} }`,
+            'x-bind:class': `{ 'nv-active': ${this._activeStyling ? active : 'false'} }`,
             'x-bind:aria-pressed': this._toggle ? `(${active}) ? 'true' : 'false'` : null,
             'x-bind:disabled': this._disabledWhenNotActive ? `!(${active})` : null,
             'x-on:click': this._jsHandler,
             'x-tooltip': label && this._hiddenLabel ? `{ content: ${js(label)}, theme: $store.theme }` : null,
-        }).class(['fi-fo-rich-editor-tool', { 'fi-fo-rich-editor-tool-with-label': !this._hiddenLabel }]);
-        return `<button ${attributes.toHtml()}>${this.getIconHtml()}${this._hiddenLabel ? '' : `<span class="fi-fo-rich-editor-tool-label">${e(label)}</span>`}</button>`;
+        }).class(['nv-fo-rich-editor-tool', { 'nv-fo-rich-editor-tool-with-label': !this._hiddenLabel }]);
+        return `<button ${attributes.toHtml()}>${this.getIconHtml()}${this._hiddenLabel ? '' : `<span class="nv-fo-rich-editor-tool-label">${e(label)}</span>`}</button>`;
     }
 }

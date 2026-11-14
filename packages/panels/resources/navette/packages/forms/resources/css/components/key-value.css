@@ -1,0 +1,57 @@
+.nv-fo-key-value {
+    & .nv-fo-key-value-table-ctn {
+        @apply divide-y divide-gray-200 dark:divide-white/10;
+    }
+
+    & .nv-fo-key-value-table {
+        @apply w-full table-auto divide-y divide-gray-200 dark:divide-white/5;
+
+        & > thead {
+            & > tr {
+                & > th {
+                    @apply px-3 py-2 text-start text-sm font-medium text-gray-700 dark:text-gray-200;
+
+                    &.nv-has-action {
+                        @apply w-9 p-0;
+                    }
+                }
+            }
+        }
+
+        & > tbody {
+            @apply divide-y divide-gray-200 dark:divide-white/5;
+
+            & > tr {
+                @apply divide-x divide-gray-200 rtl:divide-x-reverse dark:divide-white/5;
+
+                & > td {
+                    @apply w-1/2 p-0;
+
+                    &.nv-has-action {
+                        @apply w-auto px-3 py-2;
+
+                        & .nv-fo-key-value-table-row-sortable-handle {
+                            @apply flex;
+                        }
+                    }
+
+                    & .nv-input {
+                        @apply font-mono;
+                    }
+                }
+            }
+        }
+    }
+
+    & .nv-fo-key-value-add-action-ctn {
+        @apply flex justify-center px-3 py-2;
+    }
+}
+
+.nv-fo-key-value-wrp {
+    &.nv-fo-field-has-inline-label {
+        & .nv-fo-field-label-col {
+            @apply sm:pt-1.5;
+        }
+    }
+}

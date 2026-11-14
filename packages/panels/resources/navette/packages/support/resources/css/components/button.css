@@ -1,0 +1,214 @@
+.nv-btn {
+    /* `align-middle` keeps the button's placement in inline flow independent of its internal baseline, which shifts when the loading indicator is the first grid item. */
+    @apply relative inline-grid grid-flow-col items-center justify-center gap-1.5 rounded-lg px-3 py-2 align-middle text-sm font-medium transition duration-75 outline-none;
+
+    &.nv-force-enabled,
+    &:not(.nv-disabled):not([disabled]) {
+        @apply focus-visible:ring-2;
+    }
+
+    &[aria-pressed]:focus-visible:not([disabled]) {
+        @apply z-1 ring-2 ring-gray-950/10 dark:ring-white/20;
+    }
+
+    &.nv-disabled:not(.nv-force-enabled),
+    &[disabled]:not(.nv-force-enabled) {
+        @apply cursor-default opacity-70;
+
+        &:not([x-tooltip]) {
+            @apply pointer-events-none;
+        }
+    }
+
+    & > .nv-icon {
+        @apply text-gray-400 transition duration-75 dark:text-gray-500;
+    }
+
+    &.nv-size-xs {
+        @apply gap-1 px-2 py-1.5 text-xs;
+    }
+
+    &.nv-size-sm {
+        @apply gap-1 px-2.5 py-1.5 text-sm;
+    }
+
+    &.nv-size-lg {
+        @apply gap-1.5 px-3.5 py-2.5 text-sm;
+    }
+
+    &.nv-size-xl {
+        @apply gap-1.5 px-4 py-3 text-sm;
+    }
+
+    &.nv-outlined {
+        @apply text-gray-950 shadow-sm ring-1 ring-gray-300 dark:text-white dark:ring-gray-700;
+
+        &.nv-force-enabled,
+        &:not(.nv-disabled):not([disabled]) {
+            @apply hover:bg-gray-400/10 focus-visible:ring-gray-400/40;
+        }
+
+        &.nv-color {
+            @apply ring-color-600 dark:ring-color-500 text-(--text) dark:text-(--dark-text);
+
+            &.nv-force-enabled,
+            &:not(.nv-disabled):not([disabled]) {
+                @apply focus-visible:ring-color-500/40 dark:focus-visible:ring-color-400/40 hover:bg-color-500/10 dark:hover:bg-color-600/10;
+            }
+
+            & > .nv-icon {
+                @apply text-color-600 dark:text-color-400;
+            }
+        }
+    }
+
+    &:not(.nv-outlined) {
+        @apply bg-white text-gray-950 dark:bg-white/5 dark:text-white;
+
+        &.nv-force-enabled,
+        &:not(.nv-disabled):not([disabled]) {
+            @apply hover:bg-gray-50 dark:hover:bg-white/10;
+        }
+
+        input:checked + label&,
+        &[aria-pressed='true'] {
+            @apply bg-gray-400 text-white ring-0 dark:bg-gray-600;
+
+            &.nv-force-enabled,
+            &:not(.nv-disabled):not([disabled]) {
+                @apply hover:bg-gray-300 dark:hover:bg-gray-500;
+            }
+        }
+
+        &.nv-color {
+            &:not(label):not([aria-pressed]) {
+                @apply bg-(--bg) text-(--text) dark:bg-(--dark-bg) dark:text-(--dark-text);
+
+                &.nv-force-enabled,
+                &:not(.nv-disabled):not([disabled]) {
+                    @apply focus-visible:ring-color-500/50 dark:focus-visible:ring-color-400/50 hover:bg-(--hover-bg) hover:text-(--hover-text) dark:hover:bg-(--dark-hover-bg) dark:hover:text-(--dark-hover-text);
+                }
+
+                & > .nv-icon {
+                    @apply text-(--text) dark:text-(--dark-text);
+                }
+            }
+
+            &:is(label, [aria-pressed]) {
+                input:checked + &,
+                &[aria-pressed='true'] {
+                    @apply bg-(--bg) text-(--text) ring-0 dark:bg-(--dark-bg) dark:text-(--dark-text);
+                }
+
+                &.nv-force-enabled,
+                &:not(.nv-disabled):not([disabled]) {
+                    input:checked + &,
+                    &[aria-pressed='true'] {
+                        @apply hover:bg-(--hover-bg) hover:text-(--hover-text) dark:hover:bg-(--dark-hover-bg) dark:hover:text-(--dark-hover-text);
+                    }
+
+                    input:checked:focus-visible + & {
+                        @apply ring-color-500/50 dark:ring-color-400/50;
+                    }
+                }
+
+                &[aria-pressed='true']:focus-visible:not([disabled]) {
+                    @apply ring-color-500/50 dark:ring-color-400/50 ring-2;
+                }
+            }
+        }
+    }
+
+    &:is(label, [aria-pressed]) {
+        @apply cursor-pointer;
+
+        &.nv-force-enabled,
+        &:not(.nv-disabled):not([disabled]) {
+            input:focus-visible + & {
+                @apply z-1 ring-2 ring-gray-950/10 dark:ring-white/20;
+            }
+        }
+
+        &
+            > .nv-icon:is(
+                :checked + label > .nv-icon,
+                [aria-pressed='true'] > .nv-icon
+            ) {
+            @apply text-(--text) dark:text-(--dark-text);
+        }
+    }
+
+    &:not(.nv-color),
+    &:is(label, [aria-pressed]) {
+        @apply ring-1 ring-gray-950/10 dark:ring-white/20;
+    }
+
+    &.nv-labeled-from-sm,
+    &.nv-labeled-from-md,
+    &.nv-labeled-from-lg,
+    &.nv-labeled-from-xl,
+    &.nv-labeled-from-2xl {
+        @apply hidden;
+    }
+
+    &.nv-labeled-from-sm {
+        @apply sm:inline-grid;
+    }
+
+    &.nv-labeled-from-md {
+        @apply md:inline-grid;
+    }
+
+    &.nv-labeled-from-lg {
+        @apply lg:inline-grid;
+    }
+
+    &.nv-labeled-from-xl {
+        @apply xl:inline-grid;
+    }
+
+    &.nv-labeled-from-2xl {
+        @apply 2xl:inline-grid;
+    }
+
+    & .nv-btn-badge-ctn {
+        @apply absolute start-full top-0 z-[1] flex w-max -translate-x-1/2 -translate-y-1/2 rounded-md bg-white rtl:translate-x-1/2 dark:bg-gray-900;
+    }
+}
+
+.nv-btn-group {
+    @apply grid grid-flow-col rounded-lg shadow-sm ring-1 ring-gray-950/10 dark:ring-white/20;
+
+    & > .nv-btn {
+        @apply flex-1 rounded-none;
+
+        &:nth-child(1 of .nv-btn) {
+            @apply rounded-s-lg;
+        }
+
+        &:nth-last-child(1 of .nv-btn) {
+            @apply rounded-e-lg;
+        }
+
+        &:not(:nth-child(1 of .nv-btn)) {
+            @apply shadow-[-1px_0_0_0_var(--color-gray-200)] rtl:shadow-[1px_0_0_0_var(--color-gray-200)] dark:shadow-[-1px_0_0_0_rgba(255,255,255,0.2)] rtl:dark:shadow-[1px_0_0_0_rgba(255,255,255,0.2)];
+        }
+
+        &:not(:nth-last-child(1 of .nv-btn)) {
+            @apply me-px;
+        }
+
+        &.nv-processing:enabled {
+            @apply cursor-wait opacity-70;
+        }
+
+        &:not(.nv-outlined) {
+            @apply shadow-none;
+        }
+
+        &:not(.nv-color),
+        &:is(label, [aria-pressed]) {
+            @apply ring-0;
+        }
+    }
+}

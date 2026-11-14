@@ -157,7 +157,7 @@ import { e } from '@navette-js/support';
 
 export class LeaveCalendar extends CalendarWidget {
     renderEvent(event: CalendarEvent) {
-        return `<span class="nv-cal-event fi-color fi-color-${e(event.color ?? 'primary')}">${e(event.title)} · ${e(String(event.extra?.type ?? ''))}</span>`;
+        return `<span class="nv-cal-event nv-color nv-color-${e(event.color ?? 'primary')}">${e(event.title)} · ${e(String(event.extra?.type ?? ''))}</span>`;
     }
 
     renderDayFooter(_day: string, events: CalendarEvent[]) {

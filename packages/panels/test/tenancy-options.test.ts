@@ -89,7 +89,7 @@ test('the tenant menu has a search field from ten tenants, or when asked', async
     await serve(make('many', 11), async (get) => {
         const html = (await get('/many/1')).text;
         assert.match(html, /x-model="search"/);
-        assert.match(html, /filamentDropdown\(\{ isMenu: false \}\)" class="fi-dropdown fi-tenant-menu"/);
+        assert.match(html, /navetteDropdown\(\{ isMenu: false \}\)" class="nv-dropdown nv-tenant-menu"/);
     });
     await serve(make('asked', 2).searchableTenantMenu(), async (get) => assert.match((await get('/asked/1')).text, /x-model="search"/));
 });

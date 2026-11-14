@@ -108,7 +108,7 @@ function currentPasswordInput(name: string, label: string, attribute: string): T
 /** Link showing the recovery code field: it sets `useRecoveryCode` next to the field, in the browser state. */
 function useRecoveryCodeLink(label: string, ctx: ComponentContext): Text {
     const path = [ctx.component.container.getStatePath(), 'useRecoveryCode'].filter(Boolean).join('.');
-    return Text.make(new HtmlString(`<button type="button" class="fi-link fi-size-sm fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400" x-on:click="${e(`$wire.set(${js(path)}, true)`)}"><span class="fi-link-label">${e(label)}</span></button>`));
+    return Text.make(new HtmlString(`<button type="button" class="nv-link nv-size-sm nv-color nv-color-primary nv-text-color-600 dark:nv-text-color-400" x-on:click="${e(`$wire.set(${js(path)}, true)`)}"><span class="nv-link-label">${e(label)}</span></button>`));
 }
 /** A rate limit as a validation rule: each validation counts as an attempt. */
 const throttleRule = (throttle: Throttle, key: (ctx: ComponentContext) => string, message: string) => ({
@@ -156,7 +156,7 @@ export class MultiFactorChallenge {
     getProviderPickerFormComponent(_user: User, enabled: MultiFactorAuthenticationProvider[]): Component | null {
         if (enabled.length <= 1) return null;
         return Section.make().compact().secondary().schema([
-            Radio.make('provider').label(t('filament-panels::auth/pages/login.multi_factor.form.provider.label'))
+            Radio.make('provider').label(t('navette-panels::auth/pages/login.multi_factor.form.provider.label'))
                 .options(Object.fromEntries(enabled.map((provider) => [provider.getId(), provider.getLoginFormLabel()])))
                 .default(enabled[0].getId()).live().required().markAsRequired(false),
         ]);
@@ -234,7 +234,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     getId(): string { return this._id; }
     /** Changes the id (to register two app providers with different settings). */
     id(id: string): this { this._id = id; return this; }
-    getLoginFormLabel(): string { return t('filament-panels::auth/multi-factor/app/provider.login_form.label'); }
+    getLoginFormLabel(): string { return t('navette-panels::auth/multi-factor/app/provider.login_form.label'); }
 
     /** Single-use recovery codes, shown once at setup, to sign in without the app. Needs `get`/`saveAppAuthenticationRecoveryCodes` on the store. */
     recoverable(condition = true): this { this._recoverable = condition; return this; }
@@ -304,7 +304,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     /** `otpauth://` URI of a secret, for the QR code. */
     getUri(user: User, panel: Panel, secret: string): string { return totpUri(secret, user.email, this.getBrandName(panel), this.codeOptionsOf()); }
     /** QR code of a secret, as a `data:` URI. */
-    generateQrCodeDataUri(user: User, panel: Panel, secret: string): string { return qrCodeDataUri(this.getUri(user, panel, secret), { title: t('filament-panels::auth/multi-factor/app/actions/set-up.modal.content.qr_code.alt') }); }
+    generateQrCodeDataUri(user: User, panel: Panel, secret: string): string { return qrCodeDataUri(this.getUri(user, panel, secret), { title: t('navette-panels::auth/multi-factor/app/actions/set-up.modal.content.qr_code.alt') }); }
 
     /**
      * Checks a code. With `preventReuse` (sign-in and sensitive actions), a code is accepted once: the time step of the last
@@ -342,7 +342,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
 
     getChallengeFormComponents(user: User, panel: Panel): Component[] {
         const recoverable = this._recoverable;
-        const group = 'filament-panels::auth/multi-factor/app/provider.login_form';
+        const group = 'navette-panels::auth/multi-factor/app/provider.login_form';
         return [
             OneTimeCodeInput.make('code').length(this._digits).label(t(`${group}.code.label`)).validationAttribute(t(`${group}.code.validation_attribute`))
                 .submitOnCompletion().autofocus()
@@ -358,7 +358,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     }
 
     getManagementSchemaComponents(user: User, panel: Panel): Component[] {
-        const group = 'filament-panels::auth/multi-factor/app/provider.management_schema.actions';
+        const group = 'navette-panels::auth/multi-factor/app/provider.management_schema.actions';
         const enabled = () => this.isEnabled(user, panel);
         return [
             Actions.make(this.getActions(user, panel)).key(`${this._id}-actions`)
@@ -378,7 +378,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
 
     /** Setup modal: QR code and secret, a code from the app (and the password), then the recovery codes. */
     setUpAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/app/actions/set-up';
+        const group = 'navette-panels::auth/multi-factor/app/actions/set-up';
         const purpose = `${panel.getId()}.mfa-app-set-up`;
         // The secret and recovery codes travel with the mounted action, signed: the browser can show them but not change them.
         const pending = (ctx: { arguments?: Record<string, unknown>; livewire: any }) => {
@@ -426,7 +426,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
             .modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.set-up.modal') ?? 'o-lock-closed').modalIconColor('primary')
             .modalHeading(t(`${group}.modal.heading`))
             .modalDescription(() => new HtmlString(t(`${group}.modal.description`)
-                .replace(/<x-filament::link href="([^"]+)" target="_blank">([^<]+)<\/x-filament::link>/g, (_match, href: string, label: string) => `<a href="${e(href)}" target="_blank" rel="noopener" class="fi-link fi-size-md fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400"><span class="fi-link-label">${e(label)}</span></a>`)
+                .replace(/<x-navette::link href="([^"]+)" target="_blank">([^<]+)<\/x-navette::link>/g, (_match, href: string, label: string) => `<a href="${e(href)}" target="_blank" rel="noopener" class="nv-link nv-size-md nv-color nv-color-primary nv-text-color-600 dark:nv-text-color-400"><span class="nv-link-label">${e(label)}</span></a>`)
                 .trim()) as any)
             .modalSubmitActionLabel(t(`${group}.modal.actions.submit.label`))
             .steps(steps)
@@ -443,14 +443,14 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     }
     /** Recovery codes, with "copy" and "download" links. */
     protected recoveryCodesContent(codes: (ctx: ComponentContext) => string[], instruction: string): Component[] {
-        const content = 'filament-panels::auth/multi-factor/recovery-codes-modal-content';
+        const content = 'navette-panels::auth/multi-factor/recovery-codes-modal-content';
         return [
             Text.make(instruction).weight('bold').color('neutral'),
-            Html.make((ctx) => `<ul class="fi-sc-unordered-list fi-size-xs">${codes(ctx).map((code) => `<li><span class="fi-sc-text fi-font-mono fi-size-xs fi-color-neutral">${e(code)}</span></li>`).join('')}</ul>`),
+            Html.make((ctx) => `<ul class="nv-sc-unordered-list nv-size-xs">${codes(ctx).map((code) => `<li><span class="nv-sc-text nv-font-mono nv-size-xs nv-color-neutral">${e(code)}</span></li>`).join('')}</ul>`),
             Text.make((ctx) => {
                 const text = codes(ctx).join('\n');
-                const linkClass = 'fi-link fi-size-sm fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400';
-                return new HtmlString(`<span>${e(t(`${content}.actions.0`))} <button type="button" class="${linkClass}" x-on:click="${e(`window.navigator.clipboard.writeText(${js(text)}); $tooltip(${js(t(`${content}.messages.copied`))}, { theme: $store.theme })`)}"><span class="fi-link-label">${e(t(`${content}.actions.copy.label`))}</span></button> ${e(t(`${content}.actions.1`))} <a href="${e(`data:application/octet-stream,${encodeURIComponent(text)}`)}" download="recovery-codes.txt" class="${linkClass}"><span class="fi-link-label">${e(t(`${content}.actions.download.label`))}</span></a> ${e(t(`${content}.actions.2`))}</span>`);
+                const linkClass = 'nv-link nv-size-sm nv-color nv-color-primary nv-text-color-600 dark:nv-text-color-400';
+                return new HtmlString(`<span>${e(t(`${content}.actions.0`))} <button type="button" class="${linkClass}" x-on:click="${e(`window.navigator.clipboard.writeText(${js(text)}); $tooltip(${js(t(`${content}.messages.copied`))}, { theme: $store.theme })`)}"><span class="nv-link-label">${e(t(`${content}.actions.copy.label`))}</span></button> ${e(t(`${content}.actions.1`))} <a href="${e(`data:application/octet-stream,${encodeURIComponent(text)}`)}" download="recovery-codes.txt" class="${linkClass}"><span class="nv-link-label">${e(t(`${content}.actions.download.label`))}</span></a> ${e(t(`${content}.actions.2`))}</span>`);
             }),
         ];
     }
@@ -476,7 +476,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     }
     /** Turns app authentication off, after a code (or a recovery code) and the password. */
     disableAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/app/actions/disable';
+        const group = 'navette-panels::auth/multi-factor/app/actions/disable';
         return Action.make('disableAppAuthentication')
             .label(t(`${group}.label`)).color('danger').icon(icons.resolve('panels::auth.multi-factor.app.actions.disable') ?? 'm-lock-open').link()
             .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.disable.modal') ?? 'o-lock-open').modalIconColor('danger')
@@ -492,7 +492,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     }
     /** Replaces the recovery codes, after a code from the app and the password; the new codes are shown once. */
     regenerateRecoveryCodesAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/app/actions/regenerate-recovery-codes';
+        const group = 'navette-panels::auth/multi-factor/app/actions/regenerate-recovery-codes';
         return Action.make('regenerateAppAuthenticationRecoveryCodes')
             .label(t(`${group}.label`)).color('gray').icon(icons.resolve('panels::auth.multi-factor.app.actions.regenerate-recovery-codes') ?? 'm-arrow-path').link()
             .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.app.actions.regenerate-recovery-codes.modal') ?? 'o-arrow-path')
@@ -510,7 +510,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
     }
     /** Shows recovery codes just generated; only opened by `regenerateRecoveryCodesAction()`. */
     showNewRecoveryCodesAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/app/actions/regenerate-recovery-codes.show_new_recovery_codes.modal';
+        const group = 'navette-panels::auth/multi-factor/app/actions/regenerate-recovery-codes.show_new_recovery_codes.modal';
         const codes = (ctx: ComponentContext): string[] => {
             const mounted = (ctx.livewire as any).mountedActions?.find?.((candidate: any) => candidate.name === 'showNewAppAuthenticationRecoveryCodes');
             const payload = readToken(panel.getAuthKey(), `${panel.getId()}.mfa-app-recovery-codes`, mounted?.arguments?.codes) as { codes?: unknown; user?: string } | null;
@@ -557,14 +557,14 @@ export class SecurityKeyInput extends Field {
     }
     hydrateState(value: unknown): unknown { return typeof value === 'string' && value.length <= 100_000 ? value : null; }
     async toHtml(): Promise<string> {
-        const group = 'filament-panels::auth/multi-factor/security-keys/field';
+        const group = 'navette-panels::auth/multi-factor/security-keys/field';
         const messages = {
             waiting: t(`${group}.messages.waiting`), success: t(`${group}.messages.${this._mode === 'register' ? 'registered' : 'verified'}`),
             cancelled: t(`${group}.messages.cancelled`), unsupported: t(`${group}.messages.unsupported`), failed: t(`${group}.messages.failed`),
         };
         const config = { mode: this._mode, key: this.getKey(), submitOnSuccess: this._submitOnSuccess, autoStart: this._autoStart, messages };
         const label = this._buttonLabel ?? t(`${group}.actions.${this._mode === 'register' ? 'register' : 'authenticate'}.label`);
-        const control = button({ color: 'gray', icon: icons.resolve('panels::auth.multi-factor.security-keys.field.button') ?? 'o-key', attributes: { 'x-on:click': 'start()', 'x-bind:disabled': 'isWaiting', id: this.getId(), 'aria-describedby': `${this.getId()}-status` } }, `<span class="fi-btn-label">${e(label)}</span>`);
+        const control = button({ color: 'gray', icon: icons.resolve('panels::auth.multi-factor.security-keys.field.button') ?? 'o-key', attributes: { 'x-on:click': 'start()', 'x-bind:disabled': 'isWaiting', id: this.getId(), 'aria-describedby': `${this.getId()}-status` } }, `<span class="nv-btn-label">${e(label)}</span>`);
         return this.wrap(`<div x-data="${e(`navetteSecurityKey({ state: $wire.$entangle(${js(this.getStatePath())}, false), ...${js(config)} })`)}" class="nv-security-key">${control}<p id="${e(this.getId())}-status" class="nv-security-key-status" role="status" aria-live="polite" x-show="message" x-text="message" x-bind:class="{ 'nv-security-key-status-error': isError }" x-cloak></p></div>`, { labelAsDiv: true });
     }
 }
@@ -591,7 +591,7 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
     static make(): SecurityKeyAuthentication { return new this(); }
     getId(): string { return this._id; }
     id(id: string): this { this._id = id; return this; }
-    getLoginFormLabel(): string { return t('filament-panels::auth/multi-factor/security-keys/provider.login_form.label'); }
+    getLoginFormLabel(): string { return t('navette-panels::auth/multi-factor/security-keys/provider.login_form.label'); }
     /** Relying party id: the domain the keys are bound to (by default, the host of `panel.appUrl()` or of the request). */
     relyingPartyId(id: string | null): this { this._rpId = id; return this; }
     /** Name shown by the browser while registering a key (the panel's brand name by default). */
@@ -678,7 +678,7 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
     }
 
     getChallengeFormComponents(user: User, panel: Panel): Component[] {
-        const group = 'filament-panels::auth/multi-factor/security-keys/provider.login_form';
+        const group = 'navette-panels::auth/multi-factor/security-keys/provider.login_form';
         return [
             SecurityKeyInput.make('credential').mode('authenticate').label(t(`${group}.credential.label`)).validationAttribute(t(`${group}.credential.validation_attribute`))
                 .submitOnSuccess().autoStart().required()
@@ -691,7 +691,7 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
     }
 
     getManagementSchemaComponents(user: User, panel: Panel): Component[] {
-        const group = 'filament-panels::auth/multi-factor/security-keys/provider.management_schema.actions';
+        const group = 'navette-panels::auth/multi-factor/security-keys/provider.management_schema.actions';
         const keys = () => this.getKeys(user, panel);
         return [
             Actions.make([this.registerAction(panel), this.removeAction(panel).visible(async () => (await keys()).length > 0)]).key(`${this._id}-actions`)
@@ -707,7 +707,7 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
 
     /** Adds a key: a name, the ceremony in the browser, and the password. */
     registerAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/security-keys/actions/register';
+        const group = 'navette-panels::auth/multi-factor/security-keys/actions/register';
         return Action.make('registerSecurityKey')
             .label(t(`${group}.label`)).color('primary').icon(icons.resolve('panels::auth.multi-factor.security-keys.actions.register') ?? 'm-key').link()
             .visible(async (ctx) => { const user = contextOf(ctx.livewire)?.user; return Boolean(user) && (await this.getKeys(user!, panel)).length < this._maxKeys; })
@@ -758,7 +758,7 @@ export class SecurityKeyAuthentication implements MultiFactorAuthenticationProvi
     }
     /** Removes one of the user's keys, after the password. */
     removeAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/security-keys/actions/remove';
+        const group = 'navette-panels::auth/multi-factor/security-keys/actions/remove';
         return Action.make('removeSecurityKey')
             .label(t(`${group}.label`)).color('danger').icon(icons.resolve('panels::auth.multi-factor.security-keys.actions.remove') ?? 'm-trash').link()
             .modalWidth('md').modalIcon(icons.resolve('panels::auth.multi-factor.security-keys.actions.remove.modal') ?? 'o-trash').modalIconColor('danger')
@@ -800,7 +800,7 @@ export class EmailCodeInput extends OneTimeCodeInput {
     resendUsing(callback: ((field: EmailCodeInput) => MaybePromise<void>) | null, label = ''): this {
         this._resend = callback;
         this._resendLabel = label;
-        if (callback) this.belowContent(() => Text.make(new HtmlString(`<button type="button" class="fi-link fi-size-sm fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-400" x-on:click="${e(`$wire.callSchemaComponentMethod(${js(this.getKey())}, 'resendCode', {})`)}"><span class="fi-link-label">${e(this._resendLabel)}</span></button>`)));
+        if (callback) this.belowContent(() => Text.make(new HtmlString(`<button type="button" class="nv-link nv-size-sm nv-color nv-color-primary nv-text-color-600 dark:nv-text-color-400" x-on:click="${e(`$wire.callSchemaComponentMethod(${js(this.getKey())}, 'resendCode', {})`)}"><span class="nv-link-label">${e(this._resendLabel)}</span></button>`)));
         return this;
     }
     getExposedMethods(): string[] { return this._resend ? ['resendCode'] : []; }
@@ -828,7 +828,7 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
     static make(): EmailAuthentication { return new this(); }
     getId(): string { return this._id; }
     id(id: string): this { this._id = id; return this; }
-    getLoginFormLabel(): string { return t('filament-panels::auth/multi-factor/email/provider.login_form.label'); }
+    getLoginFormLabel(): string { return t('navette-panels::auth/multi-factor/email/provider.login_form.label'); }
     /** Minutes a code stays valid. */
     codeExpiryMinutes(minutes: number): this { this._codeExpiryMinutes = Math.max(1, Math.min(60, Math.floor(minutes))); return this; }
     getCodeExpiryMinutes(): number { return this._codeExpiryMinutes; }
@@ -861,7 +861,7 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
         const minutes = this._codeExpiryMinutes;
         await this.cache().put(this.codeKey(user, panel), { hash: createHash('sha256').update(code).digest('hex'), expires: Date.now() + minutes * 60_000 }, minutes * 60);
         if (this._sendCode) { await this._sendCode(user, code, minutes, panel); return true; }
-        const group = 'filament-panels::auth/multi-factor/email/notifications/verify-email-authentication';
+        const group = 'navette-panels::auth/multi-factor/email/notifications/verify-email-authentication';
         await panel.sendMail({ to: user.email, subject: t(`${group}.subject`), lines: [t(`${group}.lines.0`, { code }), tc(`${group}.lines.1`, minutes, { minutes })] });
         return true;
     }
@@ -886,7 +886,7 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
     }
 
     getChallengeFormComponents(user: User, panel: Panel): Component[] {
-        const group = 'filament-panels::auth/multi-factor/email/provider.login_form.code';
+        const group = 'navette-panels::auth/multi-factor/email/provider.login_form.code';
         return [
             EmailCodeInput.make('code').label(t(`${group}.label`)).validationAttribute(t(`${group}.validation_attribute`))
                 .submitOnCompletion().autofocus().required()
@@ -903,7 +903,7 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
             .rule({ name: 'email_code', passes: (value, ctx) => this.verifyCode(value, contextOf(ctx.livewire).user!, panel), message: () => t(`${group}.modal.form.code.messages.invalid`) });
     }
     getManagementSchemaComponents(user: User, panel: Panel): Component[] {
-        const group = 'filament-panels::auth/multi-factor/email/provider.management_schema.actions';
+        const group = 'navette-panels::auth/multi-factor/email/provider.management_schema.actions';
         const enabled = () => this.isEnabled(user, panel);
         return [
             Actions.make([this.setUpAction(panel).hidden(enabled), this.disableAction(panel).visible(enabled)]).key(`${this._id}-actions`)
@@ -913,7 +913,7 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
     }
     /** Sends a code when the modal opens; entering it turns email codes on. */
     setUpAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/email/actions/set-up';
+        const group = 'navette-panels::auth/multi-factor/email/actions/set-up';
         return Action.make('setUpEmailAuthentication')
             .label(t(`${group}.label`)).color('primary').icon(icons.resolve('panels::auth.multi-factor.email.actions.set-up') ?? 'm-lock-closed').link()
             .mountUsing(async (ctx) => { await this.sendCode(currentUser(ctx.livewire), panel); })
@@ -928,7 +928,7 @@ export class EmailAuthentication implements MultiFactorAuthenticationProvider {
     }
     /** Sends a code when the modal opens; entering it turns email codes off. */
     disableAction(panel: Panel): Action {
-        const group = 'filament-panels::auth/multi-factor/email/actions/disable';
+        const group = 'navette-panels::auth/multi-factor/email/actions/disable';
         return Action.make('disableEmailAuthentication')
             .label(t(`${group}.label`)).color('danger').icon(icons.resolve('panels::auth.multi-factor.email.actions.disable') ?? 'm-lock-open').link()
             .mountUsing(async (ctx) => { await this.sendCode(currentUser(ctx.livewire), panel); })

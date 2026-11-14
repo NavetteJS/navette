@@ -115,9 +115,9 @@ test('modal options, `modalHidden()`, `mountUsing()` and a footer action working
     const html = await list.renderActionModals();
     assert.doesNotMatch(html, /x-on:click\.self/);
     assert.doesNotMatch(html, /keydown\.window\.escape/);
-    assert.doesNotMatch(html, /fi-modal-close-btn/);
-    assert.match(html, /fi-modal-has-sticky-footer/);
-    assert.match(html, /fi-modal-footer fi-align-end/);
+    assert.doesNotMatch(html, /nv-modal-close-btn/);
+    assert.match(html, /nv-modal-has-sticky-footer/);
+    assert.match(html, /nv-modal-footer nv-align-end/);
     assert.ok(html.includes(`wire:click="mountAction('fill', {}, JSON.parse(`) && html.includes('parentAction'), 'the footer action mounts on top of its parent');
     await run(() => list.mountAction('fill', {}, { parentAction: 0 }));
     assert.equal(list.mountedActions[0].data.title, 'Filled by the footer');
@@ -146,8 +146,8 @@ test('modal wizard: `steps()` renders a wizard without footer, the last step sub
     await list.mount({});
     await run(() => list.mountAction('onboard', {}, { table: true }));
     const html = await list.renderActionModals();
-    assert.match(html, /fi-sc-wizard/);
-    assert.doesNotMatch(html, /fi-modal-footer/);
+    assert.match(html, /nv-sc-wizard/);
+    assert.doesNotMatch(html, /nv-modal-footer/);
     assert.match(html, /Finish/);
     await run(() => list.callMountedAction());
     assert.deepEqual(received, [], 'a required field of a step blocks the submission');
@@ -163,7 +163,7 @@ test('notification actions: links with safe URLs, buttons that dispatch an event
         { label: 'View', url: '/posts/5' },
         { label: 'Evil', url: 'javascript:alert(1)' },
     ]).getData());
-    assert.match(html, /<button type="button" x-on:click="Livewire\.dispatch\(&#039;undoDelete&#039;, [^"]+\); close\(\)" class="fi-ac-btn-action fi-btn fi-size-sm">Undo<\/button>/);
+    assert.match(html, /<button type="button" x-on:click="Livewire\.dispatch\(&#039;undoDelete&#039;, [^"]+\); close\(\)" class="nv-ac-btn-action nv-btn nv-size-sm">Undo<\/button>/);
     assert.match(html, /<a href="\/posts\/5"/);
     assert.doesNotMatch(html, /javascript:|Evil/);
     assert.throws(() => Notification.make().actions([{ label: 'x', dispatch: { event: 'a" onclick="b' } }]), /Invalid notification event name/);

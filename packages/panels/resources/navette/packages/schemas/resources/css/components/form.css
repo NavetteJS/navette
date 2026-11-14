@@ -1,0 +1,7 @@
+.nv-sc-form {
+    @apply flex flex-col gap-6;
+
+    &.nv-dense {
+        @apply gap-3;
+    }
+}

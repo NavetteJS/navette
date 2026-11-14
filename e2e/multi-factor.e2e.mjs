@@ -15,9 +15,9 @@ const password = 'mfa-password-123';
 let secret = null;
 let recoveryCodes = [];
 
-const modal = (page) => page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+const modal = (page) => page.locator('.nv-modal.nv-modal-open .nv-modal-window');
 const typeCode = async (page, scope, code) => {
-    await scope.locator('.fi-one-time-code-input-digit').first().click();
+    await scope.locator('.nv-one-time-code-input-digit').first().click();
     await page.keyboard.type(code);
 };
 const signIn = async (page, origin = base) => {
@@ -58,7 +58,7 @@ try {
         db.prepare("update users set email_verified_at = datetime('now') where email = ?").run(email);
         db.close();
         await page.goto(`${base}/app/profile`);
-        const text = await page.locator('.fi-section.fi-divided').innerText();
+        const text = await page.locator('.nv-section.nv-divided').innerText();
         assert.match(text, /Authenticator app\s*Disabled/);
         assert.match(text, /Security keys\s*Disabled/);
     });
@@ -66,25 +66,25 @@ try {
     await step('setting up the authenticator app: QR code, wrong then right code, password, recovery codes', async () => {
         await page.locator('[id$="app-actions"]').getByText('Set up', { exact: true }).click();
         await modal(page).waitFor();
-        const qr = modal(page).locator('img.fi-sc-image, .fi-sc-image img, img[src^="data:image/svg+xml"]').first();
+        const qr = modal(page).locator('img.nv-sc-image, .nv-sc-image img, img[src^="data:image/svg+xml"]').first();
         assert.match(await qr.getAttribute('src'), /^data:image\/svg\+xml;base64,/);
-        secret = (await modal(page).locator('.fi-font-mono.fi-copyable').innerText()).trim();
+        secret = (await modal(page).locator('.nv-font-mono.nv-copyable').innerText()).trim();
         assert.match(secret, /^[A-Z2-7]{32}$/);
         await typeCode(page, modal(page), '000000');
         await modal(page).locator('input[type=password]').fill(password);
         await modal(page).getByRole('button', { name: 'Next' }).click();
-        await modal(page).locator('.fi-fo-field-wrp-error-message').first().waitFor();
+        await modal(page).locator('.nv-fo-field-wrp-error-message').first().waitFor();
         assert.match(await modal(page).innerText(), /The code you entered is invalid/);
-        await modal(page).locator('.fi-one-time-code-input-digit').first().click();
+        await modal(page).locator('.nv-one-time-code-input-digit').first().click();
         for (let i = 0; i < 6; i++) await page.keyboard.press('Backspace');
         await typeCode(page, modal(page), totpCode(secret));
         await modal(page).getByRole('button', { name: 'Next' }).click();
         await modal(page).getByText(/save the following recovery codes/).waitFor();
-        recoveryCodes = await modal(page).locator('.fi-sc-unordered-list .fi-font-mono').allInnerTexts();
+        recoveryCodes = await modal(page).locator('.nv-sc-unordered-list .nv-font-mono').allInnerTexts();
         assert.equal(recoveryCodes.length, 8);
         await modal(page).getByRole('button', { name: 'Enable authenticator app' }).click();
         await page.getByText('Authenticator app has been enabled').waitFor();
-        await page.locator('.fi-section.fi-divided').getByText('Enabled').first().waitFor();
+        await page.locator('.nv-section.nv-divided').getByText('Enabled').first().waitFor();
         const row = openDatabase(dbFile).prepare('select app_authentication_secret as secret, app_authentication_recovery_codes as codes from users where email = ?').get(email);
         assert.match(row.secret, /^enc:v1:/, 'the secret is encrypted at rest');
         assert.ok(!row.secret.includes(secret));
@@ -98,10 +98,10 @@ try {
         await signIn(login);
         await login.getByRole('heading', { name: 'Verify your identity' }).waitFor();
         await typeCode(login, login.locator('#multiFactorChallengeForm'), '123456');
-        await login.locator('.fi-fo-field-wrp-error-message').first().waitFor();
-        assert.match(await login.locator('.fi-fo-field-wrp-error-message').first().innerText(), /code you entered is invalid/);
+        await login.locator('.nv-fo-field-wrp-error-message').first().waitFor();
+        assert.match(await login.locator('.nv-fo-field-wrp-error-message').first().innerText(), /code you entered is invalid/);
         assert.deepEqual((await fresh.cookies()).filter((cookie) => cookie.name.endsWith('_session')), [], 'no session before the second factor');
-        await login.locator('.fi-one-time-code-input-digit').first().click();
+        await login.locator('.nv-one-time-code-input-digit').first().click();
         for (let i = 0; i < 6; i++) await login.keyboard.press('Backspace');
         await typeCode(login, login.locator('#multiFactorChallengeForm'), await freshCode());
         await signedIn(login);
@@ -115,8 +115,8 @@ try {
         // An empty recovery code is refused: the code field is hidden, the recovery code becomes required.
         // Called on the server directly: the browser would block the empty required field itself.
         await login.evaluate(() => window.Livewire.all().find((component) => component.name.endsWith('.auth.login')).$wire.authenticate());
-        await login.locator('.fi-fo-field-wrp-error-message').first().waitFor();
-        assert.match(await login.locator('.fi-fo-field-wrp-error-message').first().innerText(), /required/);
+        await login.locator('.nv-fo-field-wrp-error-message').first().waitFor();
+        assert.match(await login.locator('.nv-fo-field-wrp-error-message').first().innerText(), /required/);
         assert.ok(login.url().endsWith('/login'));
         await login.locator('input[type=password]').last().fill(recoveryCodes[0]);
         await login.getByRole('button', { name: 'Confirm sign in' }).click();

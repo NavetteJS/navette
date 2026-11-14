@@ -21,7 +21,7 @@ const host = (data: Record<string, unknown>, files: TemporaryUpload[] = []) => (
 });
 const form = (livewire: any, components: any[]) => Schema.make(livewire).key('form').statePath('data').components(components);
 const tools = (html: string) => [...html.matchAll(/data-rich-editor-tool="([A-Za-z0-9]+)"/g)].map((match) => match[1]).filter((tool) => !/^(grid|table[A-Z])/.test(tool));
-const groups = (html: string) => html.slice(html.indexOf('data-rich-editor-toolbar="main"'), html.indexOf('x-show="isUploadingFile"')).split('fi-fo-rich-editor-toolbar-group').length - 1;
+const groups = (html: string) => html.slice(html.indexOf('data-rich-editor-toolbar="main"'), html.indexOf('x-show="isUploadingFile"')).split('nv-fo-rich-editor-toolbar-group').length - 1;
 
 test('RichEditor: toolbar buttons, disabled buttons, placeholder', async () => {
     const html = await form(host({ body: '' }), [RichEditor.make('body').toolbarButtons([['bold', 'italic', 'link'], ['undo', 'redo']]).disableToolbarButtons(['italic']).placeholder('Write something')]).toHtml();

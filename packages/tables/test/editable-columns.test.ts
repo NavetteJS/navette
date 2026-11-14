@@ -70,7 +70,7 @@ test('updateTableColumnState: column, record, permission and value checked again
         TextInputColumn.make<Post>('rating').rules(['integer']).disabled((record) => record.id === 2).toggleable(),
         TextInputColumn.make<Post>('author.name'),
     ]);
-    const unavailable = { error: t('filament-tables::table.columns.editable.unavailable') };
+    const unavailable = { error: t('navette-tables::table.columns.editable.unavailable') };
     // Non-editable, unknown, user-hidden column, or relationship column without a custom write.
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'title', 1, 'Hacked'), unavailable);
     assert.deepEqual(await updateTableColumnState(table, host(), adapter, 'secret', 1, 'x'), unavailable);
@@ -106,29 +106,29 @@ test('updateStateUsing replaces the write; afterStateUpdated runs even on error'
 
 test('render: Alpine component markup, escaped values', async () => {
     const toggle = await ToggleColumn.make('is_featured').onIcon('m-check').toHtml({ is_featured: 1 }, 7);
-    assert.match(toggle, /^<div wire:ignore\.self x-load="x-load" x-load-src="\/js\/filament\/tables\/components\/columns\/toggle\.js" x-data="toggleTableColumn\(\{/);
+    assert.match(toggle, /^<div wire:ignore\.self x-load="x-load" x-load-src="\/js\/navette\/tables\/components\/columns\/toggle\.js" x-data="toggleTableColumn\(\{/);
     assert.match(toggle, /recordKey: '7',\n\s+state: true,/);
     assert.match(toggle, /<input type="hidden" value="1" x-ref="serverState" \/><div aria-checked="true"/);
     assert.match(toggle, / x-cloak role="switch" aria-disabled="true" aria-label="Is featured" wire:loading\.attr="disabled"/);
-    assert.match(toggle, /x-bind:class="state \? 'fi-toggle-on fi-color fi-color-primary [^"]*' : 'fi-toggle-off'"/);
-    assert.match(toggle, /<div x-cloak="inline-flex" wire:ignore class="fi-toggle fi-toggle-on fi-hidden fi-color fi-color-primary/);
-    assert.equal((toggle.match(/fi-size-xs/g) ?? []).length, 2);
+    assert.match(toggle, /x-bind:class="state \? 'nv-toggle-on nv-color nv-color-primary [^"]*' : 'nv-toggle-off'"/);
+    assert.match(toggle, /<div x-cloak="inline-flex" wire:ignore class="nv-toggle nv-toggle-on nv-hidden nv-color nv-color-primary/);
+    assert.equal((toggle.match(/nv-size-xs/g) ?? []).length, 2);
     const off = await ToggleColumn.make('is_featured').disabled().toHtml({ is_featured: 0 }, 7);
     assert.ok(!off.includes('x-cloak role') && !off.includes('inline-flex') && off.includes(' disabled="disabled"'));
 
     const checkbox = await CheckboxColumn.make('is_featured').alignCenter().tooltip('Featured').toHtml({ is_featured: 0 }, 3);
     assert.match(checkbox, /^<div x-on:click\.stop wire:ignore\.self x-load="x-load"/);
-    assert.match(checkbox, /class="fi-ta-checkbox fi-align-center"><input type="hidden" value="0" x-ref="serverState" \/><input type="checkbox"/);
+    assert.match(checkbox, /class="nv-ta-checkbox nv-align-center"><input type="hidden" value="0" x-ref="serverState" \/><input type="checkbox"/);
     assert.match(checkbox, /x-tooltip="error === undefined \? \{\n\s+content: 'Featured',/);
 
     const evil = '"><script>alert(1)</script>';
     const input = await TextInputColumn.make('slug').prefix('/').suffixIcon('m-check-circle').suffixIconColor('success').placeholder(evil).toHtml({ slug: evil }, 1);
     assert.ok(!input.includes('<script>'));
     assert.match(input, /<input type="hidden" value="&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;" x-ref="serverState" \/>/);
-    assert.match(input, /<div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content  fi-input-wrp-prefix-has-label"><span class="fi-input-wrp-label">\/<\/span><\/div>/);
-    assert.match(input, /<div class="fi-input-wrp-suffix  "><svg class="fi-color fi-color-success fi-icon fi-size-md"/);
+    assert.match(input, /<div class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content  nv-input-wrp-prefix-has-label"><span class="nv-input-wrp-label">\/<\/span><\/div>/);
+    assert.match(input, /<div class="nv-input-wrp-suffix  "><svg class="nv-color nv-color-success nv-icon nv-size-md"/);
     assert.match(input, /x-on:input="clearError\(\)" placeholder="[^"]*" type="text" x-tooltip=/);
-    assert.match(input, /class="fi-input fi-align-start" \/><\/div>/);
+    assert.match(input, /class="nv-input nv-align-start" \/><\/div>/);
     assert.match(await TextInputColumn.make('code').mask('99-99').type('number').toHtml({ code: 12 }, 1), /state: 12,[\s\S]*type="text" x-mask="99-99"/);
 });
 
@@ -137,7 +137,7 @@ test('ViewColumn and deprecated aliases', async () => {
     assert.equal(await view.toHtml({ name: 'ada' }), '<b>ADA</b>');
     await assert.rejects(() => ViewColumn.make('x').toHtml({}), /no view declared/);
     assert.equal(await BadgeColumn.make('status').toHtml({ status: 'draft' }), await TextColumn.make('status').badge().toHtml({ status: 'draft' }));
-    assert.match(await BooleanColumn.make('ok').toHtml({ ok: 1 }), /fi-ta-icon/);
+    assert.match(await BooleanColumn.make('ok').toHtml({ ok: 1 }), /nv-ta-icon/);
 });
 
 test('SelectColumn: options per record, disabled options refused on the server, JavaScript select', async () => {

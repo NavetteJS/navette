@@ -55,8 +55,8 @@ beforeEach(async () => {
 test('extra attributes are rendered on the tab button, its class joins the tab classes', async () => {
     await livewire(pages.index)
         .assertSeeHtml('data-cy="all-tab"')
-        .assertSeeHtml('class="fi-tabs-item fi-active is-default"')
-        .assertSeeHtml('<span class="fi-tabs-item-label">Active</span>');
+        .assertSeeHtml('class="nv-tabs-item nv-active is-default"')
+        .assertSeeHtml('<span class="nv-tabs-item-label">Active</span>');
 });
 
 test('a record that no longer matches the active tab cannot be acted upon, unless the tab excludes its query', async () => {

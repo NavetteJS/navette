@@ -340,7 +340,7 @@ test('access: forbidden pages, guests and panel access', async () => {
 });
 
 test('rendered HTML: assertSee and assertDontSee', async () => {
-    await livewire(pages.index).assertSee('Alpha').assertSeeText('Charlie').assertDontSee('Zulu').assertSeeHtml('fi-ta-table');
+    await livewire(pages.index).assertSee('Alpha').assertSeeText('Charlie').assertDontSee('Zulu').assertSeeHtml('nv-ta-table');
 });
 
 test('exports: the file of an export action, and Exporter.test()', async () => {

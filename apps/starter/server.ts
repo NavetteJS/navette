@@ -186,7 +186,7 @@ class StatusPage extends Page {
             Section.make('Database').schema([
                 TextEntry.make('tasks').label('Stored tasks').state(async () => String(await Task.query().resultSize())),
             ]),
-            Html.make(() => `<p class="fi-status-note">Node ${e(process.version)}</p>`),
+            Html.make(() => `<p class="nv-status-note">Node ${e(process.version)}</p>`),
         ]);
     }
 }

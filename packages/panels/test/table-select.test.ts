@@ -148,18 +148,18 @@ test('labels from the title attribute or from the record, as text or badges', as
     const single = field(ModalTableSelect.make('category_id').relationship('category', 'name').tableConfiguration(CategoriesTable), { category_id: '6' });
     assert.equal(await single.getOptionLabel(), 'Art');
     let html = await single.toHtml();
-    assert.match(html, /class="fi-fo-modal-table-select"/);
+    assert.match(html, /class="nv-fo-modal-table-select"/);
     assert.match(html, /<div>Art<\/div>/);
     assert.match(html, /mountAction\('select', \{\}, [^"]*form\.category_id/);
-    assert.match(html, /fi-ac-icon-btn-action/, 'an icon button once something is selected');
+    assert.match(html, /nv-ac-icon-btn-action/, 'an icon button once something is selected');
     const many = field(ModalTableSelect.make('categories').relationship('categories').multiple().getOptionLabelFromRecordUsing((record) => `#${record.id} ${record.name}`).badgeColor('success').tableConfiguration(CategoriesTable), { categories: ['6', '1'] });
     assert.deepEqual(await many.getOptionLabels(), [['6', '#6 Art'], ['1', '#1 News']]);
     html = await many.toHtml();
-    assert.match(html, /fi-fo-modal-table-select-multiple/);
-    assert.equal([...html.matchAll(/class="fi-badge fi-size-md[^"]*fi-color-success/g)].length, 2);
-    assert.match(html, /fi-ac-link-action/);
+    assert.match(html, /nv-fo-modal-table-select-multiple/);
+    assert.equal([...html.matchAll(/class="nv-badge nv-size-md[^"]*nv-color-success/g)].length, 2);
+    assert.match(html, /nv-ac-link-action/);
     const empty = field(ModalTableSelect.make('category_id').relationship('category', 'name').placeholder('<None>').tableConfiguration(CategoriesTable), { category_id: null });
-    assert.match(await empty.toHtml(), /fi-fo-modal-table-select-placeholder">&lt;None&gt;</);
+    assert.match(await empty.toHtml(), /nv-fo-modal-table-select-placeholder">&lt;None&gt;</);
     const escaped = field(ModalTableSelect.make('category_id').getOptionLabelUsing(() => '<b>x</b>').tableConfiguration(TenantCategoriesTable), { category_id: '1' });
     assert.match(await escaped.toHtml(), /&lt;b&gt;x&lt;\/b&gt;/);
     await assert.rejects(field(TableSelect.make('x'), { x: '1' }).validate(), /tableConfiguration\(\)/);
@@ -170,12 +170,12 @@ test('the "Select" action opens the table in a slide-over, and its submit copies
     assert.equal(page.data.category_id, '1');
     await page.mountAction('select', {}, { schemaComponent: 'form.category_id' });
     const modal = String(page._effects.partials['action-modals']);
-    assert.match(modal, /fi-modal-slide-over/);
+    assert.match(modal, /nv-modal-slide-over/);
     // The child table: checkboxes bound to the modal's `selection`, with its own snapshot.
     assert.match(modal, /wire:model="\$parent\.mountedActions\.0\.data\.selection"/);
     assert.match(modal, /x-modelable="\$wire\.state"/);
     assert.match(modal, /currentSelectionLivewireProperty: 'state'/);
-    assert.equal([...modal.matchAll(/class="fi-ta-record-checkbox/g)].length, 4, 'News, Sport, Art and nothing hidden; Locked has no checkbox');
+    assert.equal([...modal.matchAll(/class="nv-ta-record-checkbox/g)].length, 4, 'News, Sport, Art and nothing hidden; Locked has no checkbox');
     assert.deepEqual(page.mountedActions[0].data, { selection: '1' });
     // A forged selection is refused by the modal's TableSelect.
     page.mountedActions[0].data.selection = '3';
@@ -243,7 +243,7 @@ test('TableSelect renders the table in the form, bound to the field state', asyn
     const child = snapshotOf(html, 'navette.table-select-test.table-select');
     assert.equal(child.data.state, '6');
     assert.equal(child.data.maxSelectableRecords, 1);
-    assert.doesNotMatch(html, /fi-ta-page-checkbox/, 'a single selection has no "select page" checkbox');
+    assert.doesNotMatch(html, /nv-ta-page-checkbox/, 'a single selection has no "select page" checkbox');
 });
 
 test('Table.modifyQueryUsing() and arguments(): applied by getTableQuery()', async () => {

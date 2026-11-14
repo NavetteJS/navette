@@ -3,7 +3,7 @@
  *
  * A Navette component. Everything goes through variables: redefine them on `.nv-cal` (or on a class added by
  * `getExtraClasses()`) to change the height of the cells, the radii, the borders… Event colors come from Filament's
- * `fi-color fi-color-<name>` classes: any color declared by the panel works.
+ * `nv-color nv-color-<name>` classes: any color declared by the panel works.
  */
 .nv-cal {
     --nv-cal-border: var(--gray-200);
@@ -81,7 +81,7 @@ button.nv-cal-day-number:hover { background: var(--nv-cal-surface-muted); }
     text-align: start;
 }
 :where(.dark) .nv-cal-event { background: color-mix(in oklab, var(--color-400) 12%, transparent); color: var(--color-300); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-400) 30%, transparent); }
-.nv-cal-event.fi-color-gray { --color-50: var(--gray-50); --color-300: var(--gray-300); --color-400: var(--gray-400); --color-600: var(--gray-600); --color-700: var(--gray-700); }
+.nv-cal-event.nv-color-gray { --color-50: var(--gray-50); --color-300: var(--gray-300); --color-400: var(--gray-400); --color-600: var(--gray-600); --color-700: var(--gray-700); }
 :is(a, button).nv-cal-event:hover { background: var(--color-100); }
 :where(.dark) :is(a, button).nv-cal-event:hover { background: color-mix(in oklab, var(--color-400) 22%, transparent); }
 .nv-cal-event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,0 +1,90 @@
+.nv-link {
+    @apply relative inline-flex items-center justify-center gap-1.5 font-medium text-gray-700 outline-none dark:text-gray-200;
+
+    /* Pinning the link's baseline to the label keeps it aligned with surrounding text, even when the loading indicator is the first flex item. */
+    & > .nv-link-label {
+        @apply self-baseline;
+    }
+
+    &.nv-force-enabled,
+    &:not(.nv-disabled):not([disabled]) {
+        /* `outline-solid` is load-bearing: the base `outline-none` above leaves `--tw-outline-style: none` on the element, which `outline-2` alone resolves to, so the focus outline never paints without it. */
+        @apply hover:underline focus-visible:rounded-sm focus-visible:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current focus-visible:outline-solid;
+    }
+
+    &.nv-disabled:not(.nv-force-enabled),
+    &[disabled]:not(.nv-force-enabled) {
+        @apply cursor-default opacity-70;
+
+        &:not([x-tooltip]) {
+            @apply pointer-events-none;
+        }
+    }
+
+    &.nv-size-xs {
+        @apply gap-1 text-xs;
+    }
+
+    &.nv-size-sm {
+        @apply gap-1 text-sm;
+    }
+
+    &.nv-size-md,
+    &.nv-size-lg,
+    &.nv-size-xl {
+        @apply gap-1.5 text-sm;
+    }
+
+    &.nv-font-thin {
+        @apply font-thin;
+    }
+
+    &.nv-font-extralight {
+        @apply font-extralight;
+    }
+
+    &.nv-font-light {
+        @apply font-light;
+    }
+
+    &.nv-font-normal {
+        @apply font-normal;
+    }
+
+    &.nv-font-semibold {
+        @apply font-semibold;
+    }
+
+    &.nv-font-bold {
+        @apply font-bold;
+    }
+
+    &.nv-font-extrabold {
+        @apply font-extrabold;
+    }
+
+    &.nv-font-black {
+        @apply font-black;
+    }
+
+    &.nv-color {
+        @apply text-(--text) dark:text-(--dark-text);
+    }
+
+    &:not(.nv-color) > .nv-icon {
+        @apply text-gray-400 dark:text-gray-500;
+    }
+
+    & .nv-link-badge-ctn {
+        @apply absolute start-full top-0 z-[1] flex w-max -translate-x-1/4 -translate-y-3/4 rounded-md bg-white font-normal hover:no-underline focus-visible:no-underline rtl:translate-x-1/4 dark:bg-gray-900;
+    }
+}
+
+/**
+ * Align links embedded within text.
+ */
+p > .nv-link,
+span > .nv-link {
+    @apply pb-[2px] align-middle;
+    text-align: inherit;
+}

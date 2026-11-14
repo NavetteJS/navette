@@ -80,12 +80,12 @@ test('TableColumn header options and compact table repeaters', async () => {
         TableColumn.make('Role').hiddenHeaderLabel(),
     ]).schema([TextInput.make('name'), TextInput.make('role')]);
     const html = await form(livewire, [field]).toHtml();
-    assert.match(html, /class="fi-fo-table-repeater fi-compact"/);
-    assert.match(html, /<th scope="col" class="fi-wrapped fi-align-center" style="width: 200px;">Name<sup class="fi-fo-table-repeater-header-required-mark">\*<\/sup><\/th>/);
-    assert.match(html, /<th scope="col"><span class="fi-sr-only">Role<\/span><\/th>/);
-    assert.match(html, /<td class="fi-vertical-align-start">/);
+    assert.match(html, /class="nv-fo-table-repeater nv-compact"/);
+    assert.match(html, /<th scope="col" class="nv-wrapped nv-align-center" style="width: 200px;">Name<sup class="nv-fo-table-repeater-header-required-mark">\*<\/sup><\/th>/);
+    assert.match(html, /<th scope="col"><span class="nv-sr-only">Role<\/span><\/th>/);
+    assert.match(html, /<td class="nv-vertical-align-start">/);
     const plain = await form(host({ rows: { a: { name: 'x' } } }), [Repeater.make('rows').table([TableColumn.make('Name')]).schema([TextInput.make('name')])]).toHtml();
-    assert.match(plain, /class="fi-fo-table-repeater"/);
+    assert.match(plain, /class="nv-fo-table-repeater"/);
     assert.match(plain, /<th scope="col">Name<\/th>/);
 });
 

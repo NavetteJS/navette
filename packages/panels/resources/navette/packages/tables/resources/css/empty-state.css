@@ -1,0 +1,31 @@
+.nv-ta-empty-state {
+    @apply px-6 py-12;
+
+    &:not(.nv-ta-ctn-with-content-layout .nv-ta-empty-state) {
+        @apply border-t border-gray-200 dark:border-white/10;
+    }
+
+    & .nv-ta-empty-state-content {
+        @apply mx-auto grid max-w-lg justify-items-center text-center;
+    }
+
+    & .nv-ta-empty-state-icon-bg {
+        @apply mb-4 rounded-full bg-gray-100 p-3 dark:bg-gray-500/20;
+
+        & .nv-icon {
+            @apply text-gray-500 dark:text-gray-400;
+        }
+    }
+
+    & .nv-ta-empty-state-heading {
+        @apply text-base leading-6 font-semibold text-gray-950 dark:text-white;
+    }
+
+    & .nv-ta-empty-state-description {
+        @apply mt-1 text-sm text-gray-500 dark:text-gray-400;
+    }
+
+    & .nv-ta-actions {
+        @apply mt-6;
+    }
+}

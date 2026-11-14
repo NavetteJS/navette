@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 type Bundle = Record<string, Record<string, Record<string, Record<string, string>>>>;
 const bundle: Bundle = JSON.parse(readFileSync(fileURLToPath(new URL('../data/lang.en-fr.json', import.meta.url)), 'utf8'));
 const NAMESPACES: Record<string, string> = {
-    'filament-panels': 'panels', 'filament-forms': 'forms', 'filament-tables': 'tables', 'filament-actions': 'actions', 'filament-schemas': 'schemas',
-    'filament-notifications': 'notifications', 'filament-infolists': 'infolists', 'filament-widgets': 'widgets', 'filament-query-builder': 'query-builder', filament: 'support',
+    'navette-panels': 'panels', 'navette-forms': 'forms', 'navette-tables': 'tables', 'navette-actions': 'actions', 'navette-schemas': 'schemas',
+    'navette-notifications': 'notifications', 'navette-infolists': 'infolists', 'navette-widgets': 'widgets', 'navette-query-builder': 'query-builder', navette: 'support',
 };
 let currentLocale = 'en';
 export const setLocale = (locale: string) => { currentLocale = locale; };
@@ -27,7 +27,7 @@ const flatten = (entries: Translations, prefix = '', into: Record<string, string
 /**
  * Adds translations to a namespace, by locale then group: `addTranslations('blog', { en: { posts: { title: 'Posts' } } })`
  * makes `t('blog::posts.title')` available. Nested objects give dotted keys. Keys added later replace earlier ones, so an
- * application may also override the translations of a plugin, or Navette's own (`filament-panels`, `filament-forms`…).
+ * application may also override the translations of a plugin, or Navette's own (`navette-panels`, `navette-forms`…).
  */
 export function addTranslations(namespace: string, translations: Record<string, Record<string, Translations>>): void {
     if (!/^[A-Za-z0-9_-]+$/.test(namespace) || UNSAFE_KEYS.has(namespace)) throw new Error(`Invalid translation namespace: ${namespace}`);
@@ -59,7 +59,7 @@ export function loadTranslationsFrom(directory: string | URL, namespace: string)
     addTranslations(namespace, translations);
 }
 
-/** Translates a key such as `t('filament-panels::auth/pages/login.form.email.label')`; returns the key when it is missing. */
+/** Translates a key such as `t('navette-panels::auth/pages/login.form.email.label')`; returns the key when it is missing. */
 export function t(key: string, params: Record<string, string | number> = {}, locale = currentLocale): string {
     const [ns, rest] = key.split('::');
     const dot = rest.indexOf('.');

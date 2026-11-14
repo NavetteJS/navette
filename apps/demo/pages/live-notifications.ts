@@ -18,7 +18,7 @@ export class LiveNotificationsPage extends Page {
 
     contentSchema(schema: Schema): Schema {
         return schema.components([
-            Html.make(() => `<div class="fi-section"><div class="fi-section-content-ctn"><div class="fi-section-content">Server time: <span wire:ignore x-load x-load-src="${NavetteAsset.getAlpineComponentSrc('live-clock')}" x-data="liveClock()" x-text="time" data-live-clock></span></div></div></div>`),
+            Html.make(() => `<div class="nv-section"><div class="nv-section-content-ctn"><div class="nv-section-content">Server time: <span wire:ignore x-load x-load-src="${NavetteAsset.getAlpineComponentSrc('live-clock')}" x-data="liveClock()" x-text="time" data-live-clock></span></div></div></div>`),
         ]);
     }
 

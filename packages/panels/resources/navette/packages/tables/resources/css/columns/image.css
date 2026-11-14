@@ -1,0 +1,207 @@
+.nv-ta-image {
+    @apply flex w-full items-center gap-1.5;
+
+    .nv-ta-content-loading > .nv-ta-content &,
+    .nv-ta-content-loading > .nv-ta-table > .nv-ta-records > .nv-ta-row & {
+        @apply relative w-fit max-w-full text-transparent;
+
+        &.nv-align-center {
+            @apply mx-auto;
+        }
+
+        &.nv-align-end,
+        &.nv-align-right {
+            @apply ms-auto;
+        }
+
+        &::after {
+            @apply absolute inset-y-4 start-3 aspect-square;
+            animation: var(--loading-skeleton-animation);
+            background-color: var(--loading-skeleton-bg);
+            border-radius: var(--loading-skeleton-border-radius);
+            content: '';
+        }
+
+        &.nv-inline::after {
+            @apply inset-y-0 start-0;
+        }
+
+        .nv-ta-table-stacked-on-mobile &::after {
+            @apply inset-y-0 start-0 sm:inset-y-4 sm:start-3;
+        }
+
+        &.nv-circular::after {
+            @apply rounded-full;
+        }
+
+        & > * {
+            @apply opacity-0;
+        }
+    }
+
+    & img {
+        @apply max-w-none object-cover object-center;
+    }
+
+    &.nv-circular {
+        & img {
+            @apply rounded-full;
+        }
+    }
+
+    &.nv-ta-image-ring {
+        & img,
+        & .nv-ta-image-limited-remaining-text {
+            @apply ring ring-white dark:ring-gray-900;
+        }
+
+        &.nv-ta-image-ring-0 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-0;
+            }
+        }
+
+        &.nv-ta-image-ring-1 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-1;
+            }
+        }
+
+        &.nv-ta-image-ring-2 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-2;
+            }
+        }
+
+        &.nv-ta-image-ring-3 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-3;
+            }
+        }
+
+        &.nv-ta-image-ring-4 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-4;
+            }
+        }
+
+        &.nv-ta-image-ring-5 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-5;
+            }
+        }
+
+        &.nv-ta-image-ring-6 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-6;
+            }
+        }
+
+        &.nv-ta-image-ring-7 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-7;
+            }
+        }
+
+        &.nv-ta-image-ring-8 {
+            & img,
+            & .nv-ta-image-limited-remaining-text {
+                @apply ring-8;
+            }
+        }
+    }
+
+    &.nv-ta-image-overlap-1 {
+        @apply gap-x-0 -space-x-1;
+    }
+
+    &.nv-ta-image-overlap-2 {
+        @apply gap-x-0 -space-x-2;
+    }
+
+    &.nv-ta-image-overlap-3 {
+        @apply gap-x-0 -space-x-3;
+    }
+
+    &.nv-ta-image-overlap-4 {
+        @apply gap-x-0 -space-x-4;
+    }
+
+    &.nv-ta-image-overlap-5 {
+        @apply gap-x-0 -space-x-5;
+    }
+
+    &.nv-ta-image-overlap-6 {
+        @apply gap-x-0 -space-x-6;
+    }
+
+    &.nv-ta-image-overlap-7 {
+        @apply gap-x-0 -space-x-7;
+    }
+
+    &.nv-ta-image-overlap-8 {
+        @apply gap-x-0 -space-x-8;
+    }
+
+    &.nv-wrapped {
+        @apply flex-wrap;
+    }
+
+    &:not(.nv-inline) {
+        @apply px-3 py-4;
+    }
+
+    .nv-ta-table-stacked-on-mobile & {
+        @apply p-0 sm:px-3 sm:py-4;
+    }
+
+    &.nv-align-start,
+    &.nv-align-left {
+        @apply justify-start;
+    }
+
+    &.nv-align-center {
+        @apply justify-center;
+    }
+
+    &.nv-align-end,
+    &.nv-align-right {
+        @apply justify-end;
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply justify-between;
+    }
+
+    &.nv-stacked {
+        & .nv-ta-image-limited-remaining-text {
+            @apply rounded-full bg-gray-100 dark:bg-gray-800;
+        }
+    }
+
+    & .nv-ta-image-limited-remaining-text {
+        @apply flex items-center justify-center text-sm font-medium text-gray-500 dark:text-gray-400;
+
+        &.nv-size-xs {
+            @apply text-xs;
+        }
+
+        &.nv-size-base,
+        &.nv-size-md {
+            @apply text-base;
+        }
+
+        &.nv-size-lg {
+            @apply text-lg;
+        }
+    }
+}

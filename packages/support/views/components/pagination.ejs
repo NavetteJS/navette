@@ -4,64 +4,64 @@
 <% const onFirstPage = cursor ? !cursor.previous : page.page <= 1, hasMorePages = cursor ? !!cursor.next : page.page < page.lastPage; %>
 <% const previousClick = cursor ? 'setPage(' + js(cursor.previous) + ', ' + js(pageName) + ')' : 'previousPage(' + js(pageName) + ')', nextClick = cursor ? 'setPage(' + js(cursor.next) + ', ' + js(pageName) + ')' : 'nextPage(' + js(pageName) + ')'; %>
 <% const perPageSelect = () => { %>
-    <select class="fi-select-input" wire:model.live="<%= property %>">
+    <select class="nv-select-input" wire:model.live="<%= property %>">
         <% for (const option of pageOptions) { %>
             <option value="<%- option %>">
-                <%= option === 'all' ? t('filament::components/pagination.fields.records_per_page.options.all') : option %>
+                <%= option === 'all' ? t('navette::components/pagination.fields.records_per_page.options.all') : option %>
             </option>
         <% } %>
     </select>
 <% } %>
 <% const item = (o) => { %>
-    <li class="<%- cls(['fi-pagination-item', { 'fi-active': o.active, 'fi-disabled': o.disabled }]) %>"<% if (o.rel) { %> rel="<%- o.rel %>"<% } %><% if (o.key) { %> wire:key="<%= id %>.pagination.<%- o.key %>"<% } %>>
-        <button<% if (o.ariaLabel) { %> aria-label="<%= o.ariaLabel %>"<% } %><% if (o.active) { %> aria-current="page"<% } %><% if (o.disabled) { %> aria-hidden="true" disabled<% } %> data-prevent-disabled-clicks type="button" class="fi-pagination-item-btn"<% if (o.click) { %> wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" wire:click="<%= o.click %>"<% } %>>
+    <li class="<%- cls(['nv-pagination-item', { 'nv-active': o.active, 'nv-disabled': o.disabled }]) %>"<% if (o.rel) { %> rel="<%- o.rel %>"<% } %><% if (o.key) { %> wire:key="<%= id %>.pagination.<%- o.key %>"<% } %>>
+        <button<% if (o.ariaLabel) { %> aria-label="<%= o.ariaLabel %>"<% } %><% if (o.active) { %> aria-current="page"<% } %><% if (o.disabled) { %> aria-hidden="true" disabled<% } %> data-prevent-disabled-clicks type="button" class="nv-pagination-item-btn"<% if (o.click) { %> wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="<%- targets %>" wire:click="<%= o.click %>"<% } %>>
             <% if (o.icon) { %>
-                <%- icon(o.icon, { alias: o.iconAlias, attributes: attrs({ 'aria-hidden': 'true', class: 'fi-pagination-item-icon' }) }) %>
+                <%- icon(o.icon, { alias: o.iconAlias, attributes: attrs({ 'aria-hidden': 'true', class: 'nv-pagination-item-icon' }) }) %>
             <% } else { %>
-                <span class="fi-pagination-item-label">
+                <span class="nv-pagination-item-label">
                     <%= o.label %>
                 </span>
             <% } %>
         </button>
     </li>
 <% } %>
-<nav aria-label="<%= t('filament::components/pagination.label') %>" class="<%- cls(['fi-pagination', { 'fi-simple': simple }]) %>">
+<nav aria-label="<%= t('navette::components/pagination.label') %>" class="<%- cls(['nv-pagination', { 'nv-simple': simple }]) %>">
     <% if (!onFirstPage) { %>
-        <button class="fi-btn fi-size-md  fi-pagination-previous-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" rel="prev" wire:click="<%= previousClick %>" wire:key="<%= id %>.pagination.previous">
+        <button class="nv-btn nv-size-md  nv-pagination-previous-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="<%- targets %>" rel="prev" wire:click="<%= previousClick %>" wire:key="<%= id %>.pagination.previous">
             <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': previousClick })) %>
-            <%= t('filament::components/pagination.actions.previous.label') %>
+            <%= t('navette::components/pagination.actions.previous.label') %>
         </button>
     <% } %>
 
     <% if (!simple) { %>
-    <span class="fi-pagination-overview">
-        <%= tc('filament::components/pagination.overview', page.total, { first: number(page.from ?? 0), last: number(page.to ?? 0), total: number(page.total) }) %>
+    <span class="nv-pagination-overview">
+        <%= tc('navette::components/pagination.overview', page.total, { first: number(page.from ?? 0), last: number(page.to ?? 0), total: number(page.total) }) %>
     </span>
     <% } %>
 
     <% if (pageOptions.length > 1) { %>
-        <div class="fi-pagination-records-per-page-select-ctn">
-            <label class="fi-pagination-records-per-page-select fi-compact">
-                <div class="fi-input-wrp">
-                    <div class="fi-input-wrp-content-ctn">
+        <div class="nv-pagination-records-per-page-select-ctn">
+            <label class="nv-pagination-records-per-page-select nv-compact">
+                <div class="nv-input-wrp">
+                    <div class="nv-input-wrp-content-ctn">
                         <% perPageSelect() %>
                     </div>
                 </div>
 
-                <span class="fi-sr-only">
-                    <%= t('filament::components/pagination.fields.records_per_page.label') %>
+                <span class="nv-sr-only">
+                    <%= t('navette::components/pagination.fields.records_per_page.label') %>
                 </span>
             </label>
 
-            <label class="fi-pagination-records-per-page-select">
-                <div class="fi-input-wrp">
-                    <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-input-wrp-prefix-has-label">
-                        <span class="fi-input-wrp-label">
-                            <%= t('filament::components/pagination.fields.records_per_page.label') %>
+            <label class="nv-pagination-records-per-page-select">
+                <div class="nv-input-wrp">
+                    <div x-on:click="if (! $event.target.closest('.nv-input-wrp-actions')) $dispatch('focus-input')" class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content nv-input-wrp-prefix-has-label">
+                        <span class="nv-input-wrp-label">
+                            <%= t('navette::components/pagination.fields.records_per_page.label') %>
                         </span>
                     </div>
 
-                    <div class="fi-input-wrp-content-ctn">
+                    <div class="nv-input-wrp-content-ctn">
                         <% perPageSelect() %>
                     </div>
                 </div>
@@ -70,21 +70,21 @@
     <% } %>
 
     <% if (hasMorePages) { %>
-        <button class="fi-btn fi-size-md  fi-pagination-next-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" rel="next" wire:click="<%= nextClick %>" wire:key="<%= id %>.pagination.next">
+        <button class="nv-btn nv-size-md  nv-pagination-next-btn" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="<%- targets %>" rel="next" wire:click="<%= nextClick %>" wire:key="<%= id %>.pagination.next">
             <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': nextClick })) %>
-            <%= t('filament::components/pagination.actions.next.label') %>
+            <%= t('navette::components/pagination.actions.next.label') %>
         </button>
     <% } %>
 
     <% if (!simple && page.lastPage > 1) { %>
-        <ol class="fi-pagination-items">
-            <% if (extremeLinks && page.page > 1) { item({ rel: 'first', key: 'first', ariaLabel: t('filament::components/pagination.actions.first.label'), click: 'gotoPage(1, ' + js(pageName) + ')', icon: 'm-chevron-double-left', iconAlias: 'pagination.first-button' }) } %>
-            <% if (page.page > 1) { item({ rel: 'prev', key: 'previous', ariaLabel: t('filament::components/pagination.actions.previous.label'), click: 'previousPage(' + js(pageName) + ')', icon: 'm-chevron-left', iconAlias: 'pagination.previous-button' }) } %>
+        <ol class="nv-pagination-items">
+            <% if (extremeLinks && page.page > 1) { item({ rel: 'first', key: 'first', ariaLabel: t('navette::components/pagination.actions.first.label'), click: 'gotoPage(1, ' + js(pageName) + ')', icon: 'm-chevron-double-left', iconAlias: 'pagination.first-button' }) } %>
+            <% if (page.page > 1) { item({ rel: 'prev', key: 'previous', ariaLabel: t('navette::components/pagination.actions.previous.label'), click: 'previousPage(' + js(pageName) + ')', icon: 'm-chevron-left', iconAlias: 'pagination.previous-button' }) } %>
             <% for (const element of elements) { %>
-                <% if (element === '...') { item({ disabled: true, label: '...' }) } else { item({ active: element === page.page, key: 'page.' + element, ariaLabel: t('filament::components/pagination.actions.go_to_page.label', { page: element }), click: 'gotoPage(' + element + ', ' + js(pageName) + ')', label: element }) } %>
+                <% if (element === '...') { item({ disabled: true, label: '...' }) } else { item({ active: element === page.page, key: 'page.' + element, ariaLabel: t('navette::components/pagination.actions.go_to_page.label', { page: element }), click: 'gotoPage(' + element + ', ' + js(pageName) + ')', label: element }) } %>
             <% } %>
-            <% if (page.page < page.lastPage) { item({ rel: 'next', key: 'next', ariaLabel: t('filament::components/pagination.actions.next.label'), click: 'nextPage(' + js(pageName) + ')', icon: 'm-chevron-right', iconAlias: 'pagination.next-button' }) } %>
-            <% if (extremeLinks && page.page < page.lastPage) { item({ rel: 'last', key: 'last', ariaLabel: t('filament::components/pagination.actions.last.label'), click: 'gotoPage(' + page.lastPage + ', ' + js(pageName) + ')', icon: 'm-chevron-double-right', iconAlias: 'pagination.last-button' }) } %>
+            <% if (page.page < page.lastPage) { item({ rel: 'next', key: 'next', ariaLabel: t('navette::components/pagination.actions.next.label'), click: 'nextPage(' + js(pageName) + ')', icon: 'm-chevron-right', iconAlias: 'pagination.next-button' }) } %>
+            <% if (extremeLinks && page.page < page.lastPage) { item({ rel: 'last', key: 'last', ariaLabel: t('navette::components/pagination.actions.last.label'), click: 'gotoPage(' + page.lastPage + ', ' + js(pageName) + ')', icon: 'm-chevron-double-right', iconAlias: 'pagination.last-button' }) } %>
         </ol>
     <% } %>
 </nav>

@@ -79,7 +79,7 @@ test('cells: relationship values, lists of has-many values, and aggregates', asy
     assert.equal(await table().getColumn('author.country.name')!.getState(records[1]), 'Belgium');
     assert.equal(Number(await table().getColumn('comments_avg_rating')!.getState(records[0])), 4.5);
     // The summary of an aggregate column sums it over every record of the query.
-    assert.ok(html.includes('>3<') || /fi-ta-text-item[^>]*>\s*3\s*</.test(html));
+    assert.ok(html.includes('>3<') || /nv-ta-text-item[^>]*>\s*3\s*</.test(html));
     // Default label of a relationship column: the relationship's attribute's owner.
     assert.equal(table().getColumn('author.name')!.getLabel(), 'Author');
 });
@@ -118,8 +118,8 @@ test('editable relationship columns save the related record; JSON keys update th
     assert.equal(await updateTableColumnState(editable, host(), adapter, 'meta.lang', '2', 'de'), 'de');
     assert.deepEqual(JSON.parse((await db('posts').where('id', 2).first()).meta), { lang: 'de' });
     // No related record, or several: unavailable, nothing written.
-    assert.deepEqual(await updateTableColumnState(editable, host(), adapter, 'author.name', '3', 'Ghost'), { error: t('filament-tables::table.columns.editable.unavailable') });
-    assert.deepEqual(await updateTableColumnState(editable, host(), adapter, 'tags.name', '1', 'x'), { error: t('filament-tables::table.columns.editable.unavailable') });
+    assert.deepEqual(await updateTableColumnState(editable, host(), adapter, 'author.name', '3', 'Ghost'), { error: t('navette-tables::table.columns.editable.unavailable') });
+    assert.deepEqual(await updateTableColumnState(editable, host(), adapter, 'tags.name', '1', 'x'), { error: t('navette-tables::table.columns.editable.unavailable') });
     assert.deepEqual((await db('tags').select('name')).map((r: any) => r.name), ['news', 'tech']);
     await db('authors').where('id', 2).update({ name: 'Amy' });
     await db('posts').where('id', 2).update({ meta: JSON.stringify({ lang: 'fr' }) });

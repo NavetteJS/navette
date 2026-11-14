@@ -396,7 +396,7 @@ The child schema shares the state path, record and operation of the parent schem
 
 ### Styling components outside the container grid
 
-Components using `liberatedFromContainerGrid()` are rendered outside the grid of their schema: instead of a grid column, they receive a `.fi-sc-liberated` Alpine scope wrapper with `display: contents`, so their contents still participate in the surrounding layout. `isLiberatedFromContainerGrid()` tells whether a component is liberated; a custom component class may also override it to return `true`, like the `RenderHook` component does. If your [custom CSS](/styling/css-hooks) targets their output as a direct child of `.fi-sc`, include `.fi-sc > .fi-sc-liberated > ...` in that selector too. The wrapper provides the scope for [calling component methods](#calling-component-methods-from-javascript), but does not generate its own layout box.
+Components using `liberatedFromContainerGrid()` are rendered outside the grid of their schema: instead of a grid column, they receive a `.nv-sc-liberated` Alpine scope wrapper with `display: contents`, so their contents still participate in the surrounding layout. `isLiberatedFromContainerGrid()` tells whether a component is liberated; a custom component class may also override it to return `true`, like the `RenderHook` component does. If your [custom CSS](/styling/css-hooks) targets their output as a direct child of `.nv-sc`, include `.nv-sc > .nv-sc-liberated > ...` in that selector too. The wrapper provides the scope for [calling component methods](#calling-component-methods-from-javascript), but does not generate its own layout box.
 
 ```ts
 import { Text } from '@navette-js/schemas';

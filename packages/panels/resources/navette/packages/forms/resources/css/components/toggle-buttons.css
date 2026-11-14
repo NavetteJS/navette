@@ -1,0 +1,49 @@
+.nv-fo-toggle-buttons {
+    &.nv-btn-group {
+        @apply w-max max-w-full;
+
+        &.nv-width-full {
+            @apply w-full;
+        }
+    }
+
+    &:not(.nv-btn-group) {
+        @apply gap-3;
+
+        &.nv-inline {
+            @apply flex flex-wrap;
+
+            &.nv-width-full {
+                & .nv-fo-toggle-buttons-btn-ctn {
+                    @apply grow;
+                }
+            }
+        }
+
+        &:not(.nv-inline).nv-grid-direction-col {
+            @apply -mt-3;
+
+            & .nv-fo-toggle-buttons-btn-ctn {
+                @apply break-inside-avoid pt-3;
+            }
+        }
+
+        &.nv-width-full .nv-fo-toggle-buttons-btn-ctn .nv-btn {
+            @apply w-full;
+        }
+    }
+
+    & .nv-fo-toggle-buttons-input {
+        @apply pointer-events-none absolute opacity-0;
+    }
+}
+
+.nv-fo-toggle-buttons-wrp {
+    @apply outline-none;
+
+    &.nv-fo-field-has-inline-label {
+        & .nv-fo-field-label-col {
+            @apply sm:pt-1.5;
+        }
+    }
+}

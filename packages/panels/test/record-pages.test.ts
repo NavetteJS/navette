@@ -50,12 +50,12 @@ test('another edit page of the record is served under the record, and groups and
     assert.equal(Companies.getUrl('contact', '1'), '/companies/1/contact');
     const edit = await page(pages.edit);
     let html = await edit.getSchema('content').toHtml();
-    const labels = [...html.matchAll(/<span class="fi-tabs-item-label">([^<]+)<\/span>/g)].map((match) => match[1]);
+    const labels = [...html.matchAll(/<span class="nv-tabs-item-label">([^<]+)<\/span>/g)].map((match) => match[1]);
     assert.deepEqual(labels, ['Contact'], 'the secrets manager is hidden for a regular company');
     assert.match(html, /data-child="manager-phones"[\s\S]*data-child="manager-emails"/, 'both managers of the group, one below the other');
     records[1].vip = true;
     html = await (await page(pages.edit)).getSchema('content').toHtml();
-    assert.deepEqual([...html.matchAll(/<span class="fi-tabs-item-label">([^<]+)<\/span>/g)].map((match) => match[1]), ['Contact', 'Secrets']);
+    assert.deepEqual([...html.matchAll(/<span class="nv-tabs-item-label">([^<]+)<\/span>/g)].map((match) => match[1]), ['Contact', 'Secrets']);
     records[1].vip = false;
 });
 

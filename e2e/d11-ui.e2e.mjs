@@ -13,7 +13,7 @@ const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
 const { step, exitCode } = reporter({ errorLines: 5 });
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
-const flash = (text) => page.locator('.fi-no .fi-no-notification', { hasText: text });
+const flash = (text) => page.locator('.nv-no .nv-no-notification', { hasText: text });
 
 await login(page, BASE, user);
 try {
@@ -26,15 +26,15 @@ try {
         const notification = flash('New comment');
         await notification.waitFor({ timeout: 5000 });
         // Markdown became HTML; the image with an event handler was removed.
-        assert.equal(await notification.locator('.fi-no-notification-title strong').innerText(), 'comment');
-        assert.equal(await notification.locator('.fi-no-notification-body em').innerText(), '"Great release!"');
+        assert.equal(await notification.locator('.nv-no-notification-title strong').innerText(), 'comment');
+        assert.equal(await notification.locator('.nv-no-notification-body em').innerText(), '"Great release!"');
         assert.equal(await notification.locator('img').count(), 0);
         assert.equal(await page.evaluate(() => window.injected ?? false), false);
         // A button with its icon, a disabled link without href, an icon button keeping only harmless attributes.
-        const view = notification.locator('a.fi-btn', { hasText: 'View' });
+        const view = notification.locator('a.nv-btn', { hasText: 'View' });
         assert.equal(await view.getAttribute('href'), '/lab');
         assert.equal(await view.locator('svg').count(), 1);
-        const locked = notification.locator('.fi-link', { hasText: 'Locked' });
+        const locked = notification.locator('.nv-link', { hasText: 'Locked' });
         assert.equal(await locked.getAttribute('href'), null);
         assert.equal(await locked.getAttribute('aria-disabled'), 'true');
         // Its tooltip is plain text, and the tooltip directive is set up on it.
@@ -49,20 +49,20 @@ try {
 
     await step('an action group: its item dispatches a Livewire event, another one closes the notification', async () => {
         const notification = flash('New comment');
-        await notification.locator('.fi-ac-link-group', { hasText: 'More' }).click();
+        await notification.locator('.nv-ac-link-group', { hasText: 'More' }).click();
         const approve = page.getByRole('menuitem', { name: 'Approve' });
         await approve.waitFor({ timeout: 3000 });
         await approve.click();
         await until(async () => (await page.getByText('Approvals: 1').count()) === 1, 'the page listener');
         // The notification is still there; "Dismiss" closes it (the notification's close, not the dropdown's).
-        await notification.locator('.fi-ac-link-group', { hasText: 'More' }).click();
+        await notification.locator('.nv-ac-link-group', { hasText: 'More' }).click();
         await page.getByRole('menuitem', { name: 'Dismiss' }).click();
         await flash('New comment').waitFor({ state: 'hidden', timeout: 5000 });
     });
 
     await step('a text entry suffix action: a small icon button running its action', async () => {
-        const entry = page.locator('.fi-in-text-affixed', { hasText: '€12' });
-        const button = entry.locator('.fi-in-text-affix button.fi-icon-btn.fi-size-sm');
+        const entry = page.locator('.nv-in-text-affixed', { hasText: '€12' });
+        const button = entry.locator('.nv-in-text-affix button.nv-icon-btn.nv-size-sm');
         assert.equal(await button.getAttribute('aria-label'), 'Copy cost to price');
         await button.click();
         await flash('Cost copied to the price').waitFor({ timeout: 5000 });
@@ -71,7 +71,7 @@ try {
     });
 
     await step('a private image is shown through a temporary signed URL; forged and unsigned URLs are refused', async () => {
-        const image = page.locator('.fi-in-image img').first();
+        const image = page.locator('.nv-in-image img').first();
         const src = await image.getAttribute('src');
         assert.match(src, /^\/lab-private-files\/scans\/receipt\.png\?expires=\d+&signature=[A-Za-z0-9_-]{43}$/);
         await until(async () => image.evaluate((img) => img.complete && img.naturalWidth === 2), 'the image to load');
@@ -83,7 +83,7 @@ try {
         assert.equal(await status(src.replace('receipt.png', 'receipt.png.meta.json')), 404);
         assert.ok([403, 404].includes(await status(`/lab-private-files/..%2F..%2Fe2e.sqlite?${src.split('?')[1]}`)));
         // A missing private file shows the default image.
-        assert.match(await page.locator('.fi-in-image img').nth(1).getAttribute('src'), /navette-icon\.svg$/);
+        assert.match(await page.locator('.nv-in-image img').nth(1).getAttribute('src'), /navette-icon\.svg$/);
     });
 
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));

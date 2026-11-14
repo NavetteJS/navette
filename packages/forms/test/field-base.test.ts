@@ -37,16 +37,16 @@ test('field content slots render around the label, the content and the error mes
 
 test('hiddenJs() / visibleJs(), inlineLabel() on a field, a layout and a schema', async () => {
     const html = norm(await form(host(), [TextInput.make('a').hiddenJs("$get('b') === 'x'"), TextInput.make('c').visibleJs("$get('b') !== 'x'")]).toHtml());
-    assert.match(html, /x-show="!\(\$get\('b'\) === 'x'\)"|x-show="! \(\$get\('b'\) === 'x'\)"|x-bind:class="\{ 'fi-hidden'/);
+    assert.match(html, /x-show="!\(\$get\('b'\) === 'x'\)"|x-show="! \(\$get\('b'\) === 'x'\)"|x-bind:class="\{ 'nv-hidden'/);
     assert.ok(html.includes("$get('b') !== 'x'"));
     const inline = norm(await form(host(), [TextInput.make('a').inlineLabel()]).toHtml());
-    assert.match(inline, /fi-fo-field-has-inline-label|fi-inline/);
+    assert.match(inline, /nv-fo-field-has-inline-label|nv-inline/);
     const viaSection = norm(await form(host(), [Section.make('S').inlineLabel().schema([TextInput.make('a')])]).toHtml());
-    assert.match(viaSection, /fi-fo-field-has-inline-label|fi-inline/);
+    assert.match(viaSection, /nv-fo-field-has-inline-label|nv-inline/);
     const viaSchema = norm(await form(host(), [TextInput.make('a')]).inlineLabel().toHtml());
-    assert.match(viaSchema, /fi-fo-field-has-inline-label|fi-inline/);
+    assert.match(viaSchema, /nv-fo-field-has-inline-label|nv-inline/);
     const optOut = norm(await form(host(), [TextInput.make('a').inlineLabel(false)]).inlineLabel().toHtml());
-    assert.doesNotMatch(optOut, /fi-fo-field-has-inline-label/);
+    assert.doesNotMatch(optOut, /nv-fo-field-has-inline-label/);
 });
 
 test('disabledOn() / hiddenOn() / visibleOn() follow the schema operation', async () => {

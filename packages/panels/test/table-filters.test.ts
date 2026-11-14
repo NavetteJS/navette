@@ -115,8 +115,8 @@ test('query builder: grouped constraints and picker width in the constraint pick
     list._ctx = { panel: Searchable.panel, user: admin, mailbox: 'qb', req: { query: {} }, res: {} };
     await list.mount({});
     const form = await list.getSchema('tableFiltersForm').toHtml();
-    assert.match(form, /class="fi-dropdown-panel fi-width-3xl"/);
-    assert.match(form, /fi-fo-builder-block-picker-groups/);
-    assert.match(form, /<div class="fi-fo-builder-block-picker-group" role="group" aria-label="Content"><div class="fi-fo-builder-block-picker-group-label">Content<\/div>/);
+    assert.match(form, /class="nv-dropdown-panel nv-width-3xl"/);
+    assert.match(form, /nv-fo-builder-block-picker-groups/);
+    assert.match(form, /<div class="nv-fo-builder-block-picker-group" role="group" aria-label="Content"><div class="nv-fo-builder-block-picker-group-label">Content<\/div>/);
     assert.match(form, /aria-label="Numbers"/);
 });

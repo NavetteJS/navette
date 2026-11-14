@@ -1,0 +1,15 @@
+.nv-avatar {
+    @apply size-8 rounded-md object-cover object-center;
+
+    &.nv-circular {
+        @apply rounded-full;
+    }
+
+    &.nv-size-sm {
+        @apply size-6;
+    }
+
+    &.nv-size-lg {
+        @apply size-10;
+    }
+}

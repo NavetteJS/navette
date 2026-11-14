@@ -10,15 +10,15 @@ const clean = (html: string) => html.replace(/\s+/g, ' ');
 
 test('trigger styles: link, icon button, badge, outlined and labeled from a breakpoint', async () => {
     const run = Action.make('run').label('Run').icon('m-play').action(() => {});
-    assert.match(clean(await Action.make('run').label('Run').action(() => {}).link().toHtml(ctx)), /class="fi-ac-link-action fi-link fi-size-md[^"]*">(<svg[^]*?<\/svg>)?<span class="fi-link-label">Run<\/span><\/button>/);
-    assert.match(clean(await Action.make('run').label('Run').icon('m-play').action(() => {}).iconButton().toHtml(ctx)), /<button title="Run" aria-label="Run" [^>]*class="fi-ac-icon-btn-action fi-icon-btn fi-size-md/);
-    assert.match(clean(await Action.make('run').label('Run').action(() => {}).badge().toHtml(ctx)), /class="fi-ac-badge-action fi-badge fi-size-md[^"]*">(<svg[^]*?<\/svg>)?<span class="fi-badge-label-ctn"><span class="fi-badge-label">Run<\/span>/);
-    assert.match(clean(await Action.make('run').label('Run').action(() => {}).badge(3).toHtml(ctx)), /fi-btn-badge-ctn|class="fi-ac-btn-action fi-btn/, 'badge(value) keeps the counter');
-    assert.match(clean(await Action.make('run').label('Run').color('danger').action(() => {}).outlined().toHtml(ctx)), /fi-btn fi-size-md fi-outlined/);
+    assert.match(clean(await Action.make('run').label('Run').action(() => {}).link().toHtml(ctx)), /class="nv-ac-link-action nv-link nv-size-md[^"]*">(<svg[^]*?<\/svg>)?<span class="nv-link-label">Run<\/span><\/button>/);
+    assert.match(clean(await Action.make('run').label('Run').icon('m-play').action(() => {}).iconButton().toHtml(ctx)), /<button title="Run" aria-label="Run" [^>]*class="nv-ac-icon-btn-action nv-icon-btn nv-size-md/);
+    assert.match(clean(await Action.make('run').label('Run').action(() => {}).badge().toHtml(ctx)), /class="nv-ac-badge-action nv-badge nv-size-md[^"]*">(<svg[^]*?<\/svg>)?<span class="nv-badge-label-ctn"><span class="nv-badge-label">Run<\/span>/);
+    assert.match(clean(await Action.make('run').label('Run').action(() => {}).badge(3).toHtml(ctx)), /nv-btn-badge-ctn|class="nv-ac-btn-action nv-btn/, 'badge(value) keeps the counter');
+    assert.match(clean(await Action.make('run').label('Run').color('danger').action(() => {}).outlined().toHtml(ctx)), /nv-btn nv-size-md nv-outlined/);
     const labeled = clean(await run.labeledFrom('md').toHtml(ctx));
-    assert.match(labeled, /class="md:fi-hidden fi-ac-icon-btn-action fi-icon-btn/);
-    assert.match(labeled, /fi-btn [^"]*fi-hidden md:fi-inline-grid"/);
-    assert.match(clean(await Action.make('docs').label('Docs').url('/docs').link().toHtml(ctx)), /<a href="\/docs" wire:navigate[^>]*class="fi-ac-link-action fi-link/);
+    assert.match(labeled, /class="md:nv-hidden nv-ac-icon-btn-action nv-icon-btn/);
+    assert.match(labeled, /nv-btn [^"]*nv-hidden md:nv-inline-grid"/);
+    assert.match(clean(await Action.make('docs').label('Docs').url('/docs').link().toHtml(ctx)), /<a href="\/docs" wire:navigate[^>]*class="nv-ac-link-action nv-link/);
     assert.doesNotMatch(clean(await Action.make('bad').label('Bad').url('javascript:alert(1)').link().toHtml(ctx)), /javascript/);
     // Protocol-relative URLs that browsers read as another site (`/\host`, `/<tab>/host`) are no links either.
     for (const url of ['//evil.example', '/\\evil.example', '/\t/evil.example']) {
@@ -33,17 +33,17 @@ test('action groups: custom trigger, dropdown options, sections with dividers, b
         .label('More').icon('m-cog').button().tooltip('Options')
         .dropdownPlacement('top-start').dropdownWidth('xs').dropdownOffset(16).maxHeight('200px');
     const html = clean(await group.toHtml(ctx, {}, keyOf));
-    assert.match(html, /class="fi-ac-btn-group fi-btn fi-size-md[^"]*"><svg[^]*?<\/svg>More<\/button>/);
+    assert.match(html, /class="nv-ac-btn-group nv-btn nv-size-md[^"]*"><svg[^]*?<\/svg>More<\/button>/);
     assert.match(html, /x-tooltip=/);
     assert.match(html, /x-float\.placement\.top-start\.flip\.teleport\.offset="\{ offset: 16 \}"/);
-    assert.match(html, /class="fi-dropdown-panel fi-width-xs fi-scrollable" style="max-height: 200px"/);
-    assert.equal((html.match(/class="fi-dropdown-list" role="group"/g) ?? []).length, 2, 'the nested group is a separate section');
+    assert.match(html, /class="nv-dropdown-panel nv-width-xs nv-scrollable" style="max-height: 200px"/);
+    assert.equal((html.match(/class="nv-dropdown-list" role="group"/g) ?? []).length, 2, 'the nested group is a separate section');
     assert.deepEqual(group.getActions().map((action) => action.getName()), ['view', 'edit', 'delete']);
     assert.equal(group.isMountable(), false);
-    assert.match(clean(await ActionGroup.make([view, edit]).buttonGroup().toHtml(ctx)), /^<div class="fi-btn-group"> ?<button/);
+    assert.match(clean(await ActionGroup.make([view, edit]).buttonGroup().toHtml(ctx)), /^<div class="nv-btn-group"> ?<button/);
     assert.equal(await ActionGroup.make([Action.make('x').hidden().action(() => {})]).toHtml(ctx), '');
     const defaults = clean(await ActionGroup.make([view]).toHtml(ctx, {}, keyOf));
-    assert.match(defaults, /<button title="Actions" aria-label="Actions" type="button"[^>]*class="fi-ac-icon-btn-group fi-icon-btn fi-size-md/);
+    assert.match(defaults, /<button title="Actions" aria-label="Actions" type="button"[^>]*class="nv-ac-icon-btn-group nv-icon-btn nv-size-md/);
     assert.match(defaults, /x-float\.placement\.bottom-end\.flip\.teleport\.offset="\{ offset: 8 \}"/);
 });
 

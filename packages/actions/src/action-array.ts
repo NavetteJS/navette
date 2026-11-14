@@ -114,7 +114,7 @@ export function actionFromArray(ActionClass: typeof Action, raw: unknown): Actio
     if (data.shouldOpenUrlInNewTab === true) action.openUrlInNewTab();
     if (data.isOutlined === true) action.outlined();
     if (data.isDisabled === true) action.disabled();
-    const view = data.view === 'filament::components.button.index' ? 'button' : data.view === 'filament::components.link' ? 'link' : data.view;
+    const view = data.view === 'navette::components.button.index' ? 'button' : data.view === 'navette::components.link' ? 'link' : data.view;
     if (view === 'button') action.button(); else if (view === 'link') action.link(); else if (view === 'icon-button') action.iconButton(); else if (view === 'badge') action.badge?.();
     if (data.shouldClose === true) action.close();
     if (data.shouldMarkAsRead === true) action.markAsRead();

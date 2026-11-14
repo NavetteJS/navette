@@ -63,7 +63,7 @@ test('Select: allowHtml() sanitizes labels, maxItems() is enforced, affixes rend
     assert.doesNotMatch(html, /<script>x\(\)/);
     assert.match(html, /isHtmlAllowed: true/);
     assert.match(html, /maxItems: 2,/);
-    assert.match(html, /fi-input-wrp-prefix[^>]*><span class="fi-input-wrp-label">#<\/span>/);
+    assert.match(html, /nv-input-wrp-prefix[^>]*><span class="nv-input-wrp-label">#<\/span>/);
     assert.deepEqual(await validateSchema(schema), { 'data.tags': ['The tags field must not have more than 2 items.'] });
     livewire.data.tags = ['a', 'b'];
     assert.deepEqual(await validateSchema(schema), {});

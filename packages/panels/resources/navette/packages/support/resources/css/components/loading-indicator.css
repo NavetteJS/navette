@@ -1,0 +1,3 @@
+.nv-loading-indicator {
+    @apply motion-safe:animate-spin;
+}

@@ -1,0 +1,35 @@
+.nv-ta-split {
+    @apply flex;
+
+    &.default\:nv-ta-split {
+        @apply items-center gap-3;
+    }
+
+    &.sm\:nv-ta-split,
+    &.md\:nv-ta-split,
+    &.lg\:nv-ta-split,
+    &.xl\:nv-ta-split,
+    &.\32xl\:nv-ta-split {
+        @apply flex-col gap-2;
+    }
+
+    &.sm\:nv-ta-split {
+        @apply sm:flex-row sm:items-center sm:gap-3;
+    }
+
+    &.md\:nv-ta-split {
+        @apply md:flex-row md:items-center md:gap-3;
+    }
+
+    &.lg\:nv-ta-split {
+        @apply lg:flex-row lg:items-center lg:gap-3;
+    }
+
+    &.xl\:nv-ta-split {
+        @apply xl:flex-row xl:items-center xl:gap-3;
+    }
+
+    &.\32xl\:nv-ta-split {
+        @apply 2xl:flex-row 2xl:items-center 2xl:gap-3;
+    }
+}

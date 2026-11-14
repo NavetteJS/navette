@@ -1,0 +1,30 @@
+.nv-ac {
+    @apply gap-3;
+
+    &:not(.nv-width-full) {
+        @apply flex flex-wrap items-center;
+
+        &.nv-align-start,
+        &.nv-align-left {
+            @apply justify-start;
+        }
+
+        &.nv-align-center {
+            @apply justify-center;
+        }
+
+        &.nv-align-end,
+        &.nv-align-right {
+            @apply flex-row-reverse;
+        }
+
+        &.nv-align-between,
+        &.nv-align-justify {
+            @apply justify-between;
+        }
+    }
+
+    &.nv-width-full {
+        @apply grid grid-cols-[repeat(auto-fit,minmax(0,1fr))];
+    }
+}

@@ -74,7 +74,7 @@ A label is escaped. To render HTML in a navigation item or a [navigation group](
 ```ts
 import { HtmlString } from '@navette-js/support';
 
-NavigationItem.make(new HtmlString('Reports <span class="fi-badge fi-size-xs">beta</span>'))
+NavigationItem.make(new HtmlString('Reports <span class="nv-badge nv-size-xs">beta</span>'))
 ```
 
 Tooltips, the `aria-label` of a collapsed sidebar and the group keys remembered by the browser use the label's text, without its tags.
@@ -188,7 +188,7 @@ As in Filament, the items of a group with an icon are displayed without their ow
 
 ### Collapsing navigation groups by default
 
-`collapsed()` makes a group start collapsed, the first time the user opens the panel. Afterwards, the browser remembers which groups the user collapsed (in `localStorage`, under `filament:sidebar:collapsed_groups`, shared by every panel of the site, as in Filament):
+`collapsed()` makes a group start collapsed, the first time the user opens the panel. Afterwards, the browser remembers which groups the user collapsed (in `localStorage`, under `navette:sidebar:collapsed_groups`, shared by every panel of the site, as in Filament):
 
 ```ts
 NavigationGroup.make('Settings').collapsed()

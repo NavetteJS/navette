@@ -1,0 +1,54 @@
+.nv-ta-group-header {
+    @apply flex w-full items-center gap-x-3 py-2;
+
+    .nv-ta-content-loading > .nv-ta-content &,
+    .nv-ta-content-loading > .nv-ta-table > .nv-ta-records > .nv-ta-row & {
+        & > div {
+            @apply relative w-fit max-w-full text-transparent;
+
+            &::after {
+                @apply absolute inset-x-0 top-1/2 h-4 -translate-y-1/2;
+                animation: var(--loading-skeleton-animation);
+                background-color: var(--loading-skeleton-bg);
+                border-radius: var(--loading-skeleton-border-radius);
+                content: '';
+            }
+
+            & > * {
+                @apply opacity-0;
+            }
+        }
+
+        & > .nv-icon-btn {
+            @apply opacity-0;
+        }
+    }
+
+    &.nv-collapsible {
+        @apply cursor-pointer;
+
+        &.nv-collapsed {
+            & .nv-icon-btn {
+                @apply -rotate-180;
+            }
+        }
+    }
+
+    & .nv-ta-group-heading {
+        @apply text-sm font-medium text-gray-950 dark:text-white;
+    }
+
+    & .nv-ta-group-description {
+        @apply text-sm text-gray-500 dark:text-gray-400;
+    }
+}
+
+.nv-ta-group-checkbox {
+    .nv-ta-content-loading > .nv-ta-content &,
+    .nv-ta-content-loading > .nv-ta-table > .nv-ta-records > .nv-ta-row & {
+        @apply shadow-none ring-0 transition-none;
+        animation: var(--loading-skeleton-animation);
+        background-color: var(--loading-skeleton-bg) !important;
+        background-image: none !important;
+    }
+}

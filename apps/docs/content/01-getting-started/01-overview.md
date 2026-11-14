@@ -56,7 +56,7 @@ Interfaces are built from small, chainable objects:
 
 ## Customizing the appearance
 
-Every component renders semantic CSS classes (`fi-btn`, `fi-ta-table`…) on top of a Tailwind CSS design system. You can change colors per panel, offer several themes that users choose from, compile your own Tailwind theme, and target those classes to override any component. See [Styling](/styling/overview).
+Every component renders semantic CSS classes (`nv-btn`, `nv-ta-table`…) on top of a Tailwind CSS design system. You can change colors per panel, offer several themes that users choose from, compile your own Tailwind theme, and target those classes to override any component. See [Styling](/styling/overview).
 
 ## When Navette is a good fit
 

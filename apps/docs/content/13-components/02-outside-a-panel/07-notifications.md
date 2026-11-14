@@ -11,7 +11,7 @@ app.get('/shop', async (req, res) => {
     res.send(`<!DOCTYPE html>
 <html class="fi">
 <head>${livewire.styles(req, res)}</head>
-<body class="fi-body">
+<body class="nv-body">
     ${await livewire.mount('list-products', {}, req, res)}
     ${await livewire.notifications(req, res)}
     ${livewire.scripts(req, res)}

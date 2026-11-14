@@ -14,10 +14,10 @@ const { step, exitCode } = reporter({ errorLines: 5 });
 const db = openDatabase(dbFile);
 
 const PRODUCT = db.prepare('select id from products order by id limit 1').get().id;
-const brandField = () => page.locator('.fi-fo-modal-table-select').nth(0);
-const categoriesField = () => page.locator('.fi-fo-modal-table-select').nth(1);
-const modal = () => page.locator('.fi-modal.fi-modal-open .fi-modal-window');
-const row = (name) => modal().locator('.fi-ta-row', { has: page.getByText(name, { exact: true }) });
+const brandField = () => page.locator('.nv-fo-modal-table-select').nth(0);
+const categoriesField = () => page.locator('.nv-fo-modal-table-select').nth(1);
+const modal = () => page.locator('.nv-modal.nv-modal-open .nv-modal-window');
+const row = (name) => modal().locator('.nv-ta-row', { has: page.getByText(name, { exact: true }) });
 const categoriesOf = () => db.prepare('select product_category_id as id from product_category_product where product_id = ? order by product_category_id').all(PRODUCT).map((r) => r.id);
 /** Clicks "Save changes" and waits for the answer (the "Saved" notification, or a validation error). */
 const save = async () => {
@@ -29,7 +29,7 @@ const save = async () => {
 /** Types in the table's search field and waits for the table to answer (the search is debounced). */
 const search = async (text) => {
     const answered = page.waitForResponse((response) => response.url().includes('/livewire') && (response.request().postData() ?? '').includes('tableSearch'));
-    await modal().locator('.fi-ta-search-field input').fill(text);
+    await modal().locator('.nv-ta-search-field input').fill(text);
     await answered;
     await page.waitForLoadState('networkidle');
 };
@@ -50,13 +50,13 @@ try {
         // The current brand is checked when the table opens on its page; search for another one.
         await search('Abshire');
         await row(target.name).waitFor();
-        assert.ok(await modal().locator('.fi-ta-record-checkbox').count() <= 10);
-        await row(target.name).locator('.fi-ta-record-checkbox').check();
+        assert.ok(await modal().locator('.nv-ta-record-checkbox').count() <= 10);
+        await row(target.name).locator('.nv-ta-record-checkbox').check();
         // A single selection: checking a row unchecks the others, and no "select page" checkbox is offered.
-        assert.equal(await modal().locator('.fi-ta-page-checkbox').count(), 0);
+        assert.equal(await modal().locator('.nv-ta-page-checkbox').count(), 0);
         await modal().getByRole('button', { name: 'Select', exact: true }).last().click();
         await modal().waitFor({ state: 'detached' });
-        await page.waitForFunction((name) => document.querySelectorAll('.fi-fo-modal-table-select')[0]?.textContent.includes(name), target.name);
+        await page.waitForFunction((name) => document.querySelectorAll('.nv-fo-modal-table-select')[0]?.textContent.includes(name), target.name);
     });
 
     const initial = categoriesOf();
@@ -66,15 +66,15 @@ try {
         await modal().waitFor();
         // The categories already linked are checked when the table opens.
         await search(extra[0].name);
-        await row(extra[0].name).locator('.fi-ta-record-checkbox').check();
+        await row(extra[0].name).locator('.nv-ta-record-checkbox').check();
         await search(extra[1].name);
-        await row(extra[1].name).locator('.fi-ta-record-checkbox').check();
+        await row(extra[1].name).locator('.nv-ta-record-checkbox').check();
         // The selection survives the searches.
         await search('');
         await modal().getByRole('button', { name: 'Select', exact: true }).last().click();
         await modal().waitFor({ state: 'detached' });
-        await page.waitForFunction(() => document.querySelectorAll('.fi-fo-modal-table-select')[1]?.querySelectorAll('.fi-badge').length > 0);
-        const badges = await categoriesField().locator('.fi-badge').allInnerTexts();
+        await page.waitForFunction(() => document.querySelectorAll('.nv-fo-modal-table-select')[1]?.querySelectorAll('.nv-badge').length > 0);
+        const badges = await categoriesField().locator('.nv-badge').allInnerTexts();
         for (const category of extra) assert.ok(badges.map((b) => b.trim()).includes(category.name), `${category.name} in ${badges}`);
         assert.equal(badges.length, initial.length + 2);
     });
@@ -87,7 +87,7 @@ try {
 
     await step('a key forged in the browser, outside the table, is refused', async () => {
         await page.evaluate(() => {
-            const root = document.querySelector('.fi-fo-modal-table-select').closest('[wire\\:id]');
+            const root = document.querySelector('.nv-fo-modal-table-select').closest('[wire\\:id]');
             window.Livewire.find(root.getAttribute('wire:id')).$set('data.brand_id', '999999', false);
         });
         await save();

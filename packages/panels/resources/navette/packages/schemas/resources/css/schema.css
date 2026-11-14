@@ -1,0 +1,132 @@
+.nv-sc {
+    @apply text-sm;
+
+    & > .nv-sc-liberated {
+        @apply contents;
+    }
+
+    &.nv-sc-loading {
+        @apply grid min-h-32 place-items-center text-gray-400 dark:text-gray-500;
+    }
+
+    &.nv-inline {
+        @apply flex grow flex-wrap items-center;
+
+        & > .nv-growable,
+        & > .nv-sc-liberated > .nv-growable {
+            @apply w-full flex-1;
+        }
+
+        & > .nv-sc-action:not(.nv-hidden) {
+            @apply contents;
+        }
+    }
+
+    &.nv-sc-has-gap {
+        @apply gap-6;
+
+        &.nv-sc-dense {
+            @apply gap-3;
+        }
+    }
+
+    &.nv-align-start,
+    &.nv-align-left {
+        @apply justify-start;
+    }
+
+    &.nv-align-center {
+        @apply justify-center;
+    }
+
+    &.nv-align-end,
+    &.nv-align-right {
+        @apply justify-end;
+    }
+
+    &.nv-align-between,
+    &.nv-align-justify {
+        @apply justify-between;
+    }
+
+    & > .nv-hidden,
+    & > .nv-sc-liberated > .nv-hidden {
+        @apply hidden;
+    }
+
+    & > .nv-grid-col,
+    & > .nv-sc-liberated > .nv-grid-col {
+        &.nv-width-3xs {
+            @apply max-w-3xs;
+        }
+
+        &.nv-width-2xs {
+            @apply max-w-2xs;
+        }
+
+        &.nv-width-xs {
+            @apply max-w-xs;
+        }
+
+        &.nv-width-sm {
+            @apply max-w-sm;
+        }
+
+        &.nv-width-md {
+            @apply max-w-md;
+        }
+
+        &.nv-width-lg {
+            @apply max-w-lg;
+        }
+
+        &.nv-width-xl {
+            @apply max-w-xl;
+        }
+
+        &.nv-width-2xl {
+            @apply max-w-2xl;
+        }
+
+        &.nv-width-3xl {
+            @apply max-w-3xl;
+        }
+
+        &.nv-width-4xl {
+            @apply max-w-4xl;
+        }
+
+        &.nv-width-5xl {
+            @apply max-w-5xl;
+        }
+
+        &.nv-width-6xl {
+            @apply max-w-6xl;
+        }
+
+        &.nv-width-7xl {
+            @apply max-w-7xl;
+        }
+
+        &.nv-width-none {
+            @apply max-w-none;
+        }
+
+        &.nv-width-container {
+            @apply container;
+        }
+
+        & > .nv-sc-component {
+            @apply h-full;
+        }
+    }
+}
+
+/* The `<fieldset>` around a component with a client-side visibility condition exists to
+   be `disabled` while the component is hidden, not to group controls, so it must not
+   affect the layout like a fieldset. */
+fieldset.nv-sc-visibility-fieldset {
+    @apply m-0 min-w-0 border-0 p-0;
+
+    min-inline-size: 0;
+}

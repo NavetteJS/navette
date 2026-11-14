@@ -192,7 +192,7 @@ test('InteractsWithRecord(Page): a custom resource page bound to a record', asyn
     assert.deepEqual(tabs.map((tab: any) => [tab.label, tab.url, tab.active]), [['View', '/orders/1', false], ['Receipt', '/orders/1/receipt', true]]);
     assert.equal(tabs[1].icon, 'o-receipt-percent');
     assert.deepEqual(page.getActionMountContext(), { recordKey: '1' });
-    assert.ok(page.getPageClasses().includes('fi-resource-record-1'));
+    assert.ok(page.getPageClasses().includes('nv-resource-record-1'));
     // Unknown and forbidden records.
     await assert.rejects(mount(Receipt, panel, { record: '404' }), (error: unknown) => error instanceof WireError && error.status === 404);
     rows[9] = { id: 9, title: 'Secret' };

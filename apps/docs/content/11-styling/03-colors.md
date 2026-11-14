@@ -62,10 +62,10 @@ panel.setColors({ brand: '#0ea5e9' });
 Action.make('export').color('brand')
 ```
 
-The palette of the new color is available as CSS variables (`--brand-50` to `--brand-950`), and components receive the classes `fi-color fi-color-brand`. The panel also writes the rule mapping that class to the color variables of components, next to the palette variables, so a button, a badge or an icon colored `brand` uses it with nothing else to add:
+The palette of the new color is available as CSS variables (`--brand-50` to `--brand-950`), and components receive the classes `nv-color nv-color-brand`. The panel also writes the rule mapping that class to the color variables of components, next to the palette variables, so a button, a badge or an icon colored `brand` uses it with nothing else to add:
 
 ```css
-.fi-color-brand {
+.nv-color-brand {
     --color-50: var(--brand-50);
     --color-100: var(--brand-100);
     /* … every shade up to 950 */
@@ -144,7 +144,7 @@ The first argument of `overrideColorMap()` names the component:
 | `'text'` | Colored text of text columns, text entries and schema text |
 | `'icon-column'` | Icons of icon columns and icon entries |
 | `'stat-description'` | Descriptions of the stats overview widget |
-| `'stat-chart'` | Charts of the stats overview widget (no shades: only the `fi-color` classes) |
+| `'stat-chart'` | Charts of the stats overview widget (no shades: only the `nv-color` classes) |
 
 The second argument is a function. It receives the palette of the color being rendered, and a context with the `gray` palette, the name of the `color` (`'primary'`, `'danger'`…), and `getDefault()`, which returns the map Navette would use. It returns the new map:
 

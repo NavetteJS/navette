@@ -1,0 +1,56 @@
+.nv-header {
+    @apply flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
+
+    & .nv-breadcrumbs {
+        @apply mb-2 hidden sm:block;
+    }
+
+    & > div:first-child:not(.nv-header-actions-ctn) {
+        @apply max-w-full sm:w-max;
+    }
+
+    &.nv-header-has-subheading {
+        & .nv-header-actions-ctn {
+            @apply sm:self-center;
+        }
+    }
+}
+
+.nv-header-heading {
+    @apply text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl dark:text-white;
+}
+
+.nv-header-subheading {
+    @apply mt-2 max-w-2xl text-lg text-gray-600 dark:text-gray-400;
+}
+
+.nv-header-actions-ctn {
+    @apply flex max-w-full shrink-0 items-center gap-3 sm:self-end;
+
+    & > .nv-ac {
+        @apply flex-1;
+
+        &:not(.nv-width-full) {
+            &.nv-align-end,
+            &.nv-align-right {
+                @apply flex-row justify-end;
+            }
+        }
+    }
+}
+
+.nv-simple-header {
+    @apply flex flex-col items-center;
+
+    & .nv-logo {
+        @apply mb-4 text-center leading-6 text-balance;
+    }
+}
+
+.nv-simple-header-heading {
+    @apply text-center text-2xl font-bold tracking-tight text-gray-950 dark:text-white;
+}
+
+.nv-simple-header-subheading {
+    @apply mt-2 text-center text-sm text-gray-500 dark:text-gray-400;
+}

@@ -65,9 +65,9 @@ const attribute = (html: string, name: string): string => {
 
 test('a JS widget renders Filament\'s js-widget markup in a section', async () => {
     const html = await render(RevenueOverview);
-    assert.match(html, /^<div wire:snapshot="[^"]*"[^>]* class="fi-wi-widget fi-grid-col lg:fi-grid-col-span fi-wi-js"><section/);
-    assert.match(html, /<section x-data="\{[\s\S]*?isCollapsed: {2}false ,[\s\S]*?\}" class="fi-section"><div class="fi-section-content-ctn"><div class="fi-section-content">/);
-    assert.match(html, /\sx-load\s+x-load-src="\/js\/filament\/widgets\/components\/js-widget\.js\?v=[^"]+"/);
+    assert.match(html, /^<div wire:snapshot="[^"]*"[^>]* class="nv-wi-widget nv-grid-col lg:nv-grid-col-span nv-wi-js"><section/);
+    assert.match(html, /<section x-data="\{[\s\S]*?isCollapsed: {2}false ,[\s\S]*?\}" class="nv-section"><div class="nv-section-content-ctn"><div class="nv-section-content">/);
+    assert.match(html, /\sx-load\s+x-load-src="\/js\/navette\/widgets\/components\/js-widget\.js\?v=[^"]+"/);
     const component = /x-data="(jsWidgetComponent\([^"]*)"/.exec(html)![1].replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&');
     assert.match(component, /renderer: '\\\/js\\\/acme\\\/reports\\\/revenue-overview\.js\?v=[a-f0-9]{12}',/);
     assert.match(component, /rendererConfiguration: JSON\.parse\(\s*\$el\.querySelector\('\[data-renderer-configuration\]'\)\.dataset\s*\.rendererConfiguration,\s*\)/);

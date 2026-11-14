@@ -16,7 +16,7 @@ const db = openDatabase(dbFile);
 const editor = () => page.locator('[data-rich-editor-key="form.description"]');
 const content = () => editor().locator('.tiptap[contenteditable="true"]');
 const tool = (name) => editor().locator(`[data-rich-editor-tool="${name}"]`);
-const modal = () => page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+const modal = () => page.locator('.nv-modal.nv-modal-open .nv-modal-window');
 const name = `Rich options ${Date.now()}`;
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
@@ -43,7 +43,7 @@ try {
         assert.equal(await item.locator('span').innerText(), 'Heading 2');
         await item.click();
         await content().locator('h2', { hasText: 'Big title' }).waitFor();
-        await until(async () => (await tool('Heading').getAttribute('class')).includes('fi-active'), 'active Heading trigger');
+        await until(async () => (await tool('Heading').getAttribute('class')).includes('nv-active'), 'active Heading trigger');
         assert.equal(await editor().getByRole('menuitemcheckbox', { name: 'Heading 2' }).isVisible(), false, 'the menu closed');
     });
 
@@ -57,7 +57,7 @@ try {
         await floating.waitFor({ state: 'visible', timeout: 5000 });
         assert.equal(await floating.locator('[data-rich-editor-tool]').count(), 3);
         await page.keyboard.press('End');
-        await editor().locator('.fi-fo-rich-editor-toolbar [data-rich-editor-tool="table"]').click();
+        await editor().locator('.nv-fo-rich-editor-toolbar [data-rich-editor-tool="table"]').click();
         await content().locator('table').waitFor();
         await content().locator('td').first().click();
         await editor().locator('[x-ref="floatingToolbar::table"]').waitFor({ state: 'visible', timeout: 5000 });
@@ -68,18 +68,18 @@ try {
 
     await step('height limits, sticky toolbar and sticky panels', async () => {
         const styles = await editor().evaluate((element) => {
-            const wrapper = element.closest('.fi-fo-rich-editor');
-            const toolbar = element.querySelector('.fi-fo-rich-editor-toolbar');
-            return { style: wrapper.getAttribute('style'), position: getComputedStyle(toolbar).position, panels: element.querySelector('.fi-fo-rich-editor-panels').className };
+            const wrapper = element.closest('.nv-fo-rich-editor');
+            const toolbar = element.querySelector('.nv-fo-rich-editor-toolbar');
+            return { style: wrapper.getAttribute('style'), position: getComputedStyle(toolbar).position, panels: element.querySelector('.nv-fo-rich-editor-panels').className };
         });
         assert.equal(styles.style, '--min-height: 8rem; --max-height: 16rem; --rich-editor-sticky-offset: 4rem;');
         assert.equal(styles.position, 'sticky');
-        assert.match(styles.panels, /fi-fo-rich-editor-sticky-panels/);
+        assert.match(styles.panels, /nv-fo-rich-editor-sticky-panels/);
         // Past 16rem, the content scrolls instead of growing.
         await content().click();
         await page.keyboard.press('Control+End');
         for (let i = 0; i < 25; i++) await page.keyboard.press('Enter');
-        const box = await editor().locator('.fi-fo-rich-editor-content').boundingBox();
+        const box = await editor().locator('.nv-fo-rich-editor-content').boundingBox();
         assert.ok(box.height <= 16 * 16 + 2, `content height ${box.height}`);
         for (let i = 0; i < 25; i++) await page.keyboard.press('Backspace');
     });
@@ -90,7 +90,7 @@ try {
         await page.keyboard.press('Enter');
         await page.keyboard.type('Write to us');
         await page.keyboard.press('Shift+Home');
-        await editor().locator('.fi-fo-rich-editor-toolbar [data-rich-editor-tool="link"]').click();
+        await editor().locator('.nv-fo-rich-editor-toolbar [data-rich-editor-tool="link"]').click();
         await modal().waitFor();
         await modal().locator('input[id$=".url"]').fill('tel:+33100000000');
         await modal().getByRole('button', { name: /Save|Submit|Link/ }).last().click();

@@ -1,17 +1,17 @@
 <%# Filters panel: heading, reset link (header or footer), form, and the apply button of deferred filters. %>
-<% const resetButton = (extra) => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(extra)}" data-table-filter-action="reset" wire:click="resetTableFiltersForm">${loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'resetTableFiltersForm' }))}`; %>
+<% const resetButton = (extra) => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(extra)}" data-table-filter-action="reset" wire:click="resetTableFiltersForm">${loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'resetTableFiltersForm' }))}`; %>
 <div <%- attributes %>>
-    <div class="fi-ta-filters-header">
-        <h2 class="fi-ta-filters-heading">
-            <%= t('filament-tables::table.filters.heading') %>
+    <div class="nv-ta-filters-header">
+        <h2 class="nv-ta-filters-heading">
+            <%= t('navette-tables::table.filters.heading') %>
         </h2>
         <% if (resetPosition === 'header' && !filterActions.reset.hidden) { %>
 
         <div>
-            <% if (filterActions.reset.customized) { %><%- filterActionHtml(filterActions.reset, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-table-filter-action="reset" wire:click="resetTableFiltersForm"') %><% } else { %>
-            <%- resetButton(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...dangerLinkClasses]) %>
-                <span class="fi-link-label">
-                    <%= t('filament-tables::table.filters.actions.reset.label') %>
+            <% if (filterActions.reset.customized) { %><%- filterActionHtml(filterActions.reset, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" data-table-filter-action="reset" wire:click="resetTableFiltersForm"') %><% } else { %>
+            <%- resetButton(['nv-ac-link-action', 'nv-link', 'nv-size-md', ...dangerLinkClasses]) %>
+                <span class="nv-link-label">
+                    <%= t('navette-tables::table.filters.actions.reset.label') %>
                 </span>
             </button>
             <% } %>
@@ -23,20 +23,20 @@
     <% const showApply = deferred && !filterActions.apply.hidden, showFooterReset = resetPosition === 'footer' && !filterActions.reset.hidden; %>
     <% if (showApply || showFooterReset) { %>
 
-    <div class="fi-ta-filters-actions-ctn">
+    <div class="nv-ta-filters-actions-ctn">
         <% if (showApply && filterActions.apply.customized) { %>
-        <%- filterActionHtml(filterActions.apply, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-table-filter-action="apply" wire:click="applyTableFilters"' + (closeModal ? ' x-on:click="' + e("$dispatch('close-modal', { id: " + js(closeModal) + ' })') + '"' : '')) %>
+        <%- filterActionHtml(filterActions.apply, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" data-table-filter-action="apply" wire:click="applyTableFilters"' + (closeModal ? ' x-on:click="' + e("$dispatch('close-modal', { id: " + js(closeModal) + ' })') + '"' : '')) %>
         <% } else if (showApply) { %>
-        <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...primaryButtonClasses]) %>" data-table-filter-action="apply" wire:click="applyTableFilters"<% if (closeModal) { %> x-on:click="$dispatch('close-modal', { id: <%= js(closeModal) %> })"<% } %>>
+        <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="<%- cls(['nv-ac-btn-action', 'nv-btn', 'nv-size-md', ...primaryButtonClasses]) %>" data-table-filter-action="apply" wire:click="applyTableFilters"<% if (closeModal) { %> x-on:click="$dispatch('close-modal', { id: <%= js(closeModal) %> })"<% } %>>
             <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'applyTableFilters' })) %>
-            <%= t('filament-tables::table.filters.actions.apply.label') %>
+            <%= t('navette-tables::table.filters.actions.apply.label') %>
         </button>
         <% } %>
         <% if (showFooterReset && filterActions.reset.customized) { %>
-        <%- filterActionHtml(filterActions.reset, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" data-table-filter-action="reset" wire:click="resetTableFiltersForm"') %>
+        <%- filterActionHtml(filterActions.reset, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" data-table-filter-action="reset" wire:click="resetTableFiltersForm"') %>
         <% } else if (showFooterReset) { %>
-        <%- resetButton(['fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...grayButtonClasses]) %>
-            <%= t('filament-tables::table.filters.actions.reset.label') %>
+        <%- resetButton(['nv-ac-btn-action', 'nv-btn', 'nv-size-md', ...grayButtonClasses]) %>
+            <%= t('navette-tables::table.filters.actions.reset.label') %>
         </button>
         <% } %>
     </div>

@@ -959,7 +959,7 @@
    "auth/multi-factor/app/actions/set-up": {
     "label": "Set up",
     "modal.heading": "Set up authenticator app",
-    "modal.description": "You'll need an app like Google Authenticator (<x-filament::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-filament::link>, <x-filament::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-filament::link>) to complete this process.",
+    "modal.description": "You'll need an app like Google Authenticator (<x-navette::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-navette::link>, <x-navette::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-navette::link>) to complete this process.",
     "modal.content.qr_code.instruction": "Scan this QR code with your authenticator app:",
     "modal.content.qr_code.alt": "QR code to scan with an authenticator app",
     "modal.content.text_code.instruction": "Or enter this code manually:",
@@ -1227,7 +1227,7 @@
     "actions.logout.label": "Sign out",
     "welcome": "Welcome"
    },
-   "widgets/filament-info-widget": {
+   "widgets/navette-info-widget": {
     "actions.open_documentation.label": "Documentation",
     "actions.open_github.label": "GitHub"
    },
@@ -1348,7 +1348,7 @@
    "auth/multi-factor/app/actions/set-up": {
     "label": "Configurer",
     "modal.heading": "Configurer l'application d'authentification",
-    "modal.description": "Vous aurez besoin d'une application comme Google Authenticator (<x-filament::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-filament::link>, <x-filament::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-filament::link>) pour compléter cette procédure.",
+    "modal.description": "Vous aurez besoin d'une application comme Google Authenticator (<x-navette::link href=\"https://itunes.apple.com/us/app/google-authenticator/id388497605\" target=\"_blank\">iOS</x-navette::link>, <x-navette::link href=\"https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2\" target=\"_blank\">Android</x-navette::link>) pour compléter cette procédure.",
     "modal.content.qr_code.instruction": "Scannez ce QR code avec votre application d'authentification :",
     "modal.content.qr_code.alt": "QR code à scanner avec une application d'authentification",
     "modal.content.text_code.instruction": "Ou entrez ce code manuellement :",
@@ -1595,7 +1595,7 @@
     "actions.logout.label": "Déconnexion",
     "welcome": "Bonjour"
    },
-   "widgets/filament-info-widget": {
+   "widgets/navette-info-widget": {
     "actions.open_documentation.label": "Documentation",
     "actions.open_github.label": "GitHub"
    },

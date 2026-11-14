@@ -112,5 +112,5 @@ As with `<x-modal>`, the modal also opens with an `open-modal` browser event car
 import { cls, e, js } from '@navette-js/support/ui';
 
 const attribute = `x-on:click="${e(`select(${js(record.id)})`)}"`;
-const classes = cls(['fi-card', { 'fi-active': isActive }]);
+const classes = cls(['nv-card', { 'nv-active': isActive }]);
 ```

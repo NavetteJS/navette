@@ -14,7 +14,7 @@ const isAbilityAuthorization = (value: unknown): value is ActionAuthorization =>
 import { actionFromArray, actionGroupFromArray, actionGroupToArray, actionToArray, type ActionArray, type ActionGroupArray } from './action-array.ts';
 export type { ActionArray, ActionGroupArray } from './action-array.ts';
 
-views.namespace('filament-actions', fileURLToPath(new URL('../views', import.meta.url)));
+views.namespace('navette-actions', fileURLToPath(new URL('../views', import.meta.url)));
 
 /** Render hook slots of an action modal. Hooks receive the action as `data.action`. */
 export const ActionsRenderHook = {
@@ -183,16 +183,16 @@ export class Action implements Renderable {
     }
     /** Text under the heading (the confirmation text by default with `requiresConfirmation()`), or `null`. */
     async getModalDescription(ctx?: ActionCallContext | null): Promise<string | null> {
-        return Action.modalText(await evaluate(this._modalDescription, this.getterContext(ctx))) ?? (this._requiresConfirmation ? t('filament-actions::modal.confirmation') : null);
+        return Action.modalText(await evaluate(this._modalDescription, this.getterContext(ctx))) ?? (this._requiresConfirmation ? t('navette-actions::modal.confirmation') : null);
     }
     /** Small text above the heading, or `null`. */
     async getModalEyebrow(ctx?: ActionCallContext | null): Promise<string | null> { return Action.modalText(await evaluate(this._modalEyebrow, this.getterContext(ctx))); }
     /** Label of the submit button ("Confirm" with `requiresConfirmation()`, otherwise "Submit", by default). */
     async getModalSubmitActionLabel(ctx?: ActionCallContext | null): Promise<string> {
-        return this._lazySubmitLabel?.(this.getterContext(ctx)) ?? this._modalSubmitActionLabel ?? t(this._requiresConfirmation ? 'filament-actions::modal.actions.confirm.label' : 'filament-actions::modal.actions.submit.label');
+        return this._lazySubmitLabel?.(this.getterContext(ctx)) ?? this._modalSubmitActionLabel ?? t(this._requiresConfirmation ? 'navette-actions::modal.actions.confirm.label' : 'navette-actions::modal.actions.submit.label');
     }
     /** Label of the cancel button. */
-    getModalCancelActionLabel(): string { return this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label'); }
+    getModalCancelActionLabel(): string { return this._cancelLabel ?? t('navette-actions::modal.actions.cancel.label'); }
     /** Icon of the modal (the warning icon with `requiresConfirmation()`), or `null`. */
     getModalIcon(): string | null { return this._modalIcon ?? (this._requiresConfirmation ? icons.resolve('actions::modal.confirmation') ?? 'o-exclamation-triangle' : null); }
     /** Color of the modal icon (the action's color by default). */
@@ -265,15 +265,15 @@ export class Action implements Renderable {
         const iconName = await this.getIcon(ctx);
         const color = this._lazyColor ? await this._lazyColor(ctx) : this._color;
         const colors = color !== 'gray' && color !== 'primary' ? colorManager.getComponentClasses('dropdown-item', color) : [];
-        const glyph = iconName ? icon(iconName, { attributes: new Attributes().class(colors.length ? ['fi-color', `fi-color-${color}`] : []) }) : '';
-        const label = `<span class="fi-dropdown-list-item-label">${e(await this.getLabel(ctx))}</span>`;
+        const glyph = iconName ? icon(iconName, { attributes: new Attributes().class(colors.length ? ['nv-color', `nv-color-${color}`] : []) }) : '';
+        const label = `<span class="nv-dropdown-list-item-label">${e(await this.getLabel(ctx))}</span>`;
         const tooltip = await this.tooltipAttribute(ctx);
         const disabled = this._disabled !== false && (await this.isDisabled(ctx));
         if (href !== null) {
             if (!isLocalOrHttpUrl(href)) return '';
-            if (this._postToUrl) return postForm(href, ctx, ['fi-ac-grouped-action'], `<button ${tooltip}role="menuitem" tabindex="-1" type="submit"${disabled ? ' disabled aria-disabled="true"' : ''} class="${cls(['fi-dropdown-list-item', ...colors, { 'fi-disabled': disabled }])}">${glyph}${label}</button>`);
-            if (disabled) return `<span ${tooltip}aria-disabled="true" class="${cls(['fi-dropdown-list-item', 'fi-ac-grouped-action', 'fi-disabled', ...colors])}" role="menuitem" tabindex="-1">${glyph}${label}</span>`;
-            return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} ${tooltip}class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}${label}</a>`;
+            if (this._postToUrl) return postForm(href, ctx, ['nv-ac-grouped-action'], `<button ${tooltip}role="menuitem" tabindex="-1" type="submit"${disabled ? ' disabled aria-disabled="true"' : ''} class="${cls(['nv-dropdown-list-item', ...colors, { 'nv-disabled': disabled }])}">${glyph}${label}</button>`);
+            if (disabled) return `<span ${tooltip}aria-disabled="true" class="${cls(['nv-dropdown-list-item', 'nv-ac-grouped-action', 'nv-disabled', ...colors])}" role="menuitem" tabindex="-1">${glyph}${label}</span>`;
+            return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} ${tooltip}class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}${label}</a>`;
         }
         // A handler or a modal: mounted on the menu's component; a string action is a method or a `$dispatch()`.
         const expression = this._handler || this._schema ? this.mountExpressionFor({}) : this._action;
@@ -281,8 +281,8 @@ export class Action implements Renderable {
         const target = expression ?? null;
         const attributes = new Attributes({
             type: 'button', role: 'menuitem', tabindex: '-1', 'aria-disabled': disabled ? 'true' : null, disabled: disabled ? true : null,
-            'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'fi-disabled', 'wire:target': target, 'wire:click': disabled ? null : expression, 'x-on:click': disabled ? null : this._alpineClick,
-        }).class(['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors, disabled ? 'fi-disabled' : null]);
+            'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'nv-disabled', 'wire:target': target, 'wire:click': disabled ? null : expression, 'x-on:click': disabled ? null : this._alpineClick,
+        }).class(['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors, disabled ? 'nv-disabled' : null]);
         return `<button ${tooltip}${attributes.toHtml()}>${glyph}${target ? loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': target })) : ''}${label}</button>`;
     }
     /** A computed URL depends on the record, so the host checks it again on mount (`resolveUrl`). */
@@ -474,9 +474,9 @@ export class Action implements Renderable {
         this._steps = steps;
         this._schema = steps === null ? null : (schema: any) => {
             if (!Action.stepsRenderer) throw new Error('Action.steps() needs @navette-js/forms to be loaded.');
-            const submitLabel = this._modalSubmitActionLabel ?? t('filament-actions::modal.actions.submit.label');
+            const submitLabel = this._modalSubmitActionLabel ?? t('navette-actions::modal.actions.submit.label');
             const submit = Action.make('submit').label(submitLabel).color(this._color === 'gray' ? 'primary' : this._color).submit('callMountedAction');
-            const cancel = Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
+            const cancel = Action.make('cancel').label(this._cancelLabel ?? t('navette-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
             const wizard = Action.stepsRenderer(steps, submit, cancel);
             if (this._skippableSteps) wizard.skippable();
             return schema.components([this._modifyWizard?.(wizard) ?? wizard]);
@@ -733,11 +733,11 @@ export class Action implements Renderable {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const expression = `mountAction(${js(this.name)}, {}, ${js(context)})`;
         const attributes = new Attributes()
-            .merge({ role: 'menuitem', tabindex: '-1', type: 'button', 'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'fi-disabled', 'wire:target': expression })
-            .class(['fi-ac-grouped-action', 'fi-dropdown-list-item', ...(this._color !== 'gray' ? colorManager.getComponentClasses('dropdown-item', this._color) : [])])
+            .merge({ role: 'menuitem', tabindex: '-1', type: 'button', 'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'nv-disabled', 'wire:target': expression })
+            .class(['nv-ac-grouped-action', 'nv-dropdown-list-item', ...(this._color !== 'gray' ? colorManager.getComponentClasses('dropdown-item', this._color) : [])])
             .set('x-cloak', 'x-cloak').set('x-show', 'getSelectedRecordsCount()').set('x-on:click', expression);
-        const iconHtml = this._icon ? icon(this._icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expression }).class(this._color !== 'gray' ? ['fi-color', `fi-color-${this._color}`] : []) }) : '';
-        return `<button ${attributes.toHtml()}>${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression }))}<span class="fi-dropdown-list-item-label">${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}</span></button>`;
+        const iconHtml = this._icon ? icon(this._icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expression }).class(this._color !== 'gray' ? ['nv-color', `nv-color-${this._color}`] : []) }) : '';
+        return `<button ${attributes.toHtml()}>${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression }))}<span class="nv-dropdown-list-item-label">${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}</span></button>`;
     }
 
     /**
@@ -753,26 +753,26 @@ export class Action implements Renderable {
         const click = alpineClick ? `x-on:click="${e(alpineClick)}"` : `${this.clickAttribute()}="${e(`mountAction(${js(this.name)}, {}, ${js(context)})`)}"`;
         const colors = color !== 'gray' ? colorManager.getComponentClasses('dropdown-item', color) : [];
         const label = (await evaluate(this._label, ctx)) ?? this.getDefaultLabel();
-        const iconHtml = iconName ? icon(iconName, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': `mountAction(${js(this.name)}, {}, ${js(context)})` }).class(color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : '';
-        const inner = `${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': `mountAction(${js(this.name)}, {}, ${js(context)})` }))}<span class="fi-dropdown-list-item-label">${e(label)}</span>`;
+        const iconHtml = iconName ? icon(iconName, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': `mountAction(${js(this.name)}, {}, ${js(context)})` }).class(color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []) }) : '';
+        const inner = `${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': `mountAction(${js(this.name)}, {}, ${js(context)})` }))}<span class="nv-dropdown-list-item-label">${e(label)}</span>`;
         // Navigation action: a plain link, nothing is mounted on the server.
         const href = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
         if (href) {
-            const plainIcon = iconName ? icon(iconName, { attributes: new Attributes().class(color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : '';
+            const plainIcon = iconName ? icon(iconName, { attributes: new Attributes().class(color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []) }) : '';
             // New-tab link: no `wire:navigate`.
-            if (this._newTab) return `<a href="${e(href)}" target="_blank" role="menuitem" tabindex="-1" wire:key="${e(wireKey)}" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}">${plainIcon}<span class="fi-dropdown-list-item-label">${e(label)}</span></a>`;
-            return `<a href="${e(href)}" wire:navigate wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${plainIcon}<span class="fi-dropdown-list-item-label">${e(label)}</span></a>`;
+            if (this._newTab) return `<a href="${e(href)}" target="_blank" role="menuitem" tabindex="-1" wire:key="${e(wireKey)}" class="${['nv-ac-grouped-action', 'nv-dropdown-list-item', ...colors].join(' ')}">${plainIcon}<span class="nv-dropdown-list-item-label">${e(label)}</span></a>`;
+            return `<a href="${e(href)}" wire:navigate wire:key="${e(wireKey)}" class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${plainIcon}<span class="nv-dropdown-list-item-label">${e(label)}</span></a>`;
         }
         if (this.canBeDisabled()) {
             // Conditionally disabled: this markup is used whether or not the action ends up disabled.
             const disabled = await this.isDisabled(ctx);
             const tooltip = disabled ? await this.tooltipAttribute(ctx) : '';
-            return `<button ${tooltip}${disabled ? 'aria-disabled="true" ' : ''}role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', disabled ? 'fi-disabled' : null, ...colors].filter(Boolean).join(' ')}" ${click} wire:key="${e(wireKey)}">${inner}</button>`;
+            return `<button ${tooltip}${disabled ? 'aria-disabled="true" ' : ''}role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${['nv-ac-grouped-action', 'nv-dropdown-list-item', disabled ? 'nv-disabled' : null, ...colors].filter(Boolean).join(' ')}" ${click} wire:key="${e(wireKey)}">${inner}</button>`;
         }
         if (this._keyBindings.length) {
-            return `<button x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}" ${click} wire:key="${e(wireKey)}">${inner}</button>`;
+            return `<button x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${['nv-ac-grouped-action', 'nv-dropdown-list-item', ...colors].join(' ')}" ${click} wire:key="${e(wireKey)}">${inner}</button>`;
         }
-        return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${click} wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${inner}</button>`;
+        return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" ${click} wire:key="${e(wireKey)}" class="${['nv-dropdown-list-item', 'nv-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${inner}</button>`;
     }
 
     /** Small link (or icon button) for a table row action. */
@@ -785,12 +785,12 @@ export class Action implements Renderable {
         const iconName = this._lazyIcon ? await this._lazyIcon(ctx) : (this._tableIcon ?? this._icon);
         const raw = `mountAction(${js(this.name)}, {}, ${js(context)})`;
         const label = (await evaluate(this._label, ctx)) ?? this.getDefaultLabel();
-        const classes = ['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...(color !== 'gray' ? colorManager.getComponentClasses('link', color) : [])].join(' ');
+        const classes = ['nv-ac-link-action', 'nv-link', 'nv-size-sm', ...(color !== 'gray' ? colorManager.getComponentClasses('link', color) : [])].join(' ');
         if (this._iconButton) {
             const disabled = this.canBeDisabled() && (await this.isDisabled(ctx));
-            const buttonClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', disabled ? 'fi-disabled' : null, ...(color !== 'gray' ? colorManager.getComponentClasses('icon-button', color) : [])].filter(Boolean).join(' ');
+            const buttonClasses = ['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', disabled ? 'nv-disabled' : null, ...(color !== 'gray' ? colorManager.getComponentClasses('icon-button', color) : [])].filter(Boolean).join(' ');
             const glyph = iconName ? icon(iconName, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': raw }) }) : '';
-            return `<button title="${e(label)}" aria-label="${e(label)}" ${disabled ? 'disabled ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${buttonClasses}"${disabled ? '' : ` ${this.clickAttribute()}="${e(raw)}"`} wire:key="${e(wireKey)}">${glyph}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }))}</button>`;
+            return `<button title="${e(label)}" aria-label="${e(label)}" ${disabled ? 'disabled ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${buttonClasses}"${disabled ? '' : ` ${this.clickAttribute()}="${e(raw)}"`} wire:key="${e(wireKey)}">${glyph}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }))}</button>`;
         }
         const iconHtml = iconName ? icon(iconName, { size: 'sm', attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': raw }) }) : '';
         const href = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
@@ -798,11 +798,11 @@ export class Action implements Renderable {
         const alpineClick = await this.resolveAlpineClick(ctx);
         const linkDisabled = this.canBeDisabled() && (await this.isDisabled(ctx));
         // Only local or http(s) URLs become links (no `javascript:` or protocol-relative URLs).
-        if (href && isLocalOrHttpUrl(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="fi-link-label">${e(label)}</span></a>`;
+        if (href && isLocalOrHttpUrl(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="nv-link-label">${e(label)}</span></a>`;
         const keys = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
         // Disabled: no click (a tooltip still shows), `disabled` when there is no tooltip.
         const rowClick = linkDisabled ? '' : alpineClick ? ` x-on:click="${e(alpineClick)}"` : ` ${this.clickAttribute()}="${e(raw)}"`;
-        return `<button ${keys}${tooltip}${linkDisabled ? `aria-disabled="true" ${tooltip ? '' : 'disabled '}` : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${linkDisabled ? `${classes} fi-disabled` : classes}"${rowClick} wire:key="${e(wireKey)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }), 'sm')}<span class="fi-link-label">${e(label)}</span></button>`;
+        return `<button ${keys}${tooltip}${linkDisabled ? `aria-disabled="true" ${tooltip ? '' : 'disabled '}` : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${linkDisabled ? `${classes} nv-disabled` : classes}"${rowClick} wire:key="${e(wireKey)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }), 'sm')}<span class="nv-link-label">${e(label)}</span></button>`;
     }
 
     /** Modal of a mounted action; `content` is the rendered form, if any. */
@@ -815,7 +815,7 @@ export class Action implements Renderable {
         const confirmation = this._requiresConfirmation;
         // A confirmation is centered (md); a form is start-aligned (4xl), except at small widths.
         const width = this._modalWidth ?? (confirmation ? 'md' : '4xl');
-        const submitLabel = this._lazySubmitLabel?.(ctx) ?? this._modalSubmitActionLabel ?? t(confirmation ? 'filament-actions::modal.actions.confirm.label' : 'filament-actions::modal.actions.submit.label');
+        const submitLabel = this._lazySubmitLabel?.(ctx) ?? this._modalSubmitActionLabel ?? t(confirmation ? 'navette-actions::modal.actions.confirm.label' : 'navette-actions::modal.actions.submit.label');
         // Actions of the modal (footer, custom content) are mounted on top of this one, with its context.
         const childContext = { ...mountContext, parentAction: index };
         this._modalActionMountContext = childContext;
@@ -846,7 +846,7 @@ export class Action implements Renderable {
             footer.push(action.isMountable() ? await action.toHtml(schemaCtx, childContext) : await action.toHtml(schemaCtx));
         }
         if (this._hasCancel) {
-            let cancel: Action | false | void = Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
+            let cancel: Action | false | void = Action.make('cancel').label(this._cancelLabel ?? t('navette-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
             cancel = this._modalCancelCustomizer ? (this._modalCancelCustomizer(cancel) ?? cancel) : cancel;
             if (cancel) footer.push(await cancel.toHtml(schemaCtx));
         }
@@ -854,7 +854,7 @@ export class Action implements Renderable {
         const clickThrough = Boolean(await evaluate(this._clickThrough, ctx));
         const icon = this._modalIcon ?? (this._requiresConfirmation ? icons.resolve('actions::modal.confirmation') ?? 'o-exclamation-triangle' : null);
         const eyebrow = await evaluate(this._modalEyebrow, ctx);
-        return views.render('filament-actions::modal', {
+        return views.render('navette-actions::modal', {
             // A wizard has its own buttons (back, next, submit): the modal has no footer.
             hasFooter: !this.isWizard() && footer.length > 0,
             closeByClickingAway: (this._closeByClickingAway ?? ModalComponent.isClosedByClickingAway) && !clickThrough, closeByEscaping: this._closeByEscaping ?? ModalComponent.isClosedByEscaping, closeButton: this._closeButton ?? ModalComponent.hasCloseButton, stickyHeader: this._stickyHeader, stickyFooter: this._stickyFooter,
@@ -865,10 +865,10 @@ export class Action implements Renderable {
             attributesToHtml,
             footerAlignment, footer: footer.join(''),
             slideOver: this._slideOver, content, confirmation, width, alignment: this._modalAlignment ?? (confirmation || ['xs', 'sm'].includes(width) ? 'center' : 'start'),
-            livewireId: ctx.livewire.id, id: `fi-${ctx.livewire.id}-action-${index}`, index, name: this.name,
+            livewireId: ctx.livewire.id, id: `nv-${ctx.livewire.id}-action-${index}`, index, name: this.name,
             heading: (await evaluate(this._modalHeading, ctx)) ?? label,
             eyebrow: eyebrow === null || eyebrow === undefined || eyebrow === '' ? null : eyebrow,
-            description: (await evaluate(this._modalDescription, ctx)) ?? (this._requiresConfirmation ? t('filament-actions::modal.confirmation') : null),
+            description: (await evaluate(this._modalDescription, ctx)) ?? (this._requiresConfirmation ? t('navette-actions::modal.confirmation') : null),
             iconName: icon, color: this._modalIconColor ?? color ?? 'primary',
             // Closing the modal unmounts the action (and its parents, with `cancelParentActionsOnClose()`).
             cancelParentActionsOnClose: this.getParentActionsToCancelOnClose(),
@@ -1012,10 +1012,10 @@ export class Action implements Renderable {
         const tooltip = await this.tooltipAttribute(ctx);
         // Disabled: with a tooltip, the element must still receive the pointer, so it loses its click instead of being `disabled`.
         if (disabled) attributes = `${tooltip ? stripClickAttributes(attributes) : `${attributes}${tag === 'button' ? ' disabled' : ''}`} aria-disabled="true"`;
-        const state = disabled ? 'fi-disabled' : null;
-        if (view === 'icon-button') return `<${tag} title="${e(label)}" aria-label="${e(label)}" ${tooltip}${attributes} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', state, `fi-size-${this._size}`, ...colors('icon-button')])}">${glyph}${loader}</${tag}>`;
-        if (view === 'badge') return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-badge-action', 'fi-badge', state, `fi-size-${this._size}`, ...colors('badge')])}">${glyph}${loader}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(label)}</span></span></${tag}>`;
-        return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-link-action', 'fi-link', state, `fi-size-${this._size}`, ...colors('link')])}">${glyph}${loader}<span class="fi-link-label">${e(label)}</span></${tag}>`;
+        const state = disabled ? 'nv-disabled' : null;
+        if (view === 'icon-button') return `<${tag} title="${e(label)}" aria-label="${e(label)}" ${tooltip}${attributes} class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', state, `nv-size-${this._size}`, ...colors('icon-button')])}">${glyph}${loader}</${tag}>`;
+        if (view === 'badge') return `<${tag} ${tooltip}${attributes} class="${cls(['nv-ac-badge-action', 'nv-badge', state, `nv-size-${this._size}`, ...colors('badge')])}">${glyph}${loader}<span class="nv-badge-label-ctn"><span class="nv-badge-label">${e(label)}</span></span></${tag}>`;
+        return `<${tag} ${tooltip}${attributes} class="${cls(['nv-ac-link-action', 'nv-link', state, `nv-size-${this._size}`, ...colors('link')])}">${glyph}${loader}<span class="nv-link-label">${e(label)}</span></${tag}>`;
     }
 
     /** Renders the action as a button (or as a link when it has a URL), with its extra attributes. */
@@ -1034,30 +1034,30 @@ export class Action implements Renderable {
             // JavaScript click handler (`actionJs()`): nothing is sent to the server.
             const mountExpression = (this._handler || this.hasModalContentOnly()) && !alpineClick ? this.mountExpressionFor(mountContext) : null;
             const wireClick = alpineClick ? null : (mountExpression ?? this._action);
-            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${alpineClick ? `x-on:click="${e(alpineClick)}" ` : ''}${wireClick ? `${mountExpression ? this.clickAttribute() : 'wire:click'}="${e(wireClick)}" ` : ''}`;
+            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" ${alpineClick ? `x-on:click="${e(alpineClick)}" ` : ''}${wireClick ? `${mountExpression ? this.clickAttribute() : 'wire:click'}="${e(wireClick)}" ` : ''}`;
             const tag = safeUrl ? 'a' : 'button';
             const target = this._livewireTarget ?? wireClick;
             if (this._labeledFrom) {
-                const iconButton = (await this.styledTriggerHtml(ctx, 'icon-button', click.trim(), tag, target, disabled)).replace('class="fi-ac-icon-btn-action', `class="${this._labeledFrom}:fi-hidden fi-ac-icon-btn-action`);
+                const iconButton = (await this.styledTriggerHtml(ctx, 'icon-button', click.trim(), tag, target, disabled)).replace('class="nv-ac-icon-btn-action', `class="${this._labeledFrom}:nv-hidden nv-ac-icon-btn-action`);
                 const previousView = this._view, previousLabeled = this._labeledFrom;
                 this._view = null; this._labeledFrom = null;
                 try {
-                    const labeled = (await this.toHtml(ctx, explicitMountContext)).replace(/class="([^"]*\bfi-btn\b[^"]*)"/, (_match, classes: string) => `class="${classes} fi-hidden ${previousLabeled}:fi-inline-grid"`);
+                    const labeled = (await this.toHtml(ctx, explicitMountContext)).replace(/class="([^"]*\bnv-btn\b[^"]*)"/, (_match, classes: string) => `class="${classes} nv-hidden ${previousLabeled}:nv-inline-grid"`);
                     return iconButton + labeled;
                 } finally { this._view = previousView; this._labeledFrom = previousLabeled; }
             }
             return this.styledTriggerHtml(ctx, this._view as 'link' | 'icon-button' | 'badge', click.trim(), tag, target, disabled);
         }
         if (linkUrl !== null && this._postToUrl && isLocalOrHttpUrl(linkUrl)) {
-            const classes = cls(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
+            const classes = cls(['nv-ac-btn-action', 'nv-btn', `nv-size-${this._size}`, ...(this._outlined ? ['nv-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
             return postForm(linkUrl, ctx, [], `<button type="submit" ${await this.tooltipAttribute(ctx)}class="${classes}">${this._icon ? icon(this._icon) : ''}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}</button>`);
         }
         const tooltip = await this.tooltipAttribute(ctx);
         if (linkUrl !== null && isLocalOrHttpUrl(linkUrl)) {
-            const link = new Attributes().class(['fi-ac-btn-action', 'fi-btn', { 'fi-disabled': disabled }, `fi-size-${this._size}`, ...(this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
+            const link = new Attributes().class(['nv-ac-btn-action', 'nv-btn', { 'nv-disabled': disabled }, `nv-size-${this._size}`, ...(this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
             const linkIcon = this._icon ? icon(this._icon) : '';
             const badge = typeof this._badge === 'function' ? await this._badge() : this._badge;
-            const badgeHtml = badge !== null && badge !== '' ? `<div class="fi-btn-badge-ctn"><span class="${['fi-color', `fi-color-${this._badgeColor}`, ...colorManager.getComponentClasses('badge', this._badgeColor).filter((c) => !c.startsWith('fi-color')), 'fi-badge', 'fi-size-xs'].join(' ')}">${e(String(badge))}</span></div>` : '';
+            const badgeHtml = badge !== null && badge !== '' ? `<div class="nv-btn-badge-ctn"><span class="${['nv-color', `nv-color-${this._badgeColor}`, ...colorManager.getComponentClasses('badge', this._badgeColor).filter((c) => !c.startsWith('nv-color')), 'nv-badge', 'nv-size-xs'].join(' ')}">${e(String(badge))}</span></div>` : '';
             // Disabled with a tooltip: no link, but still focusable for the tooltip.
             const linkOff = disabled && tooltip !== '';
             const href = linkOff ? 'tabindex="0" ' : `href="${e(linkUrl)}" ${this._newTab ? 'target="_blank" ' : ''}`;
@@ -1078,16 +1078,16 @@ export class Action implements Renderable {
                 type: isSubmit ? 'submit' : 'button',
                 form: isSubmit ? this._formId : null,
                 'wire:loading.attr': 'aria-disabled',
-                'wire:loading.class': 'fi-disabled',
+                'wire:loading.class': 'nv-disabled',
                 'wire:target': this._livewireTarget ?? this._submit ?? (this._accessSelectedRecords && mountExpression ? mountExpression : null),
                 'x-bind:disabled': isSubmit ? 'isProcessing' : null,
             })
-            .class(['fi-ac-btn-action', 'fi-btn', { 'fi-disabled': disabled }, `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : colorManager.getComponentClasses('button', this._color))])
+            .class(['nv-ac-btn-action', 'nv-btn', { 'nv-disabled': disabled }, `nv-size-${this._size}`, ...(this._outlined ? ['nv-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : colorManager.getComponentClasses('button', this._color))])
             .when(clickable && wireClick, (a) => a.set(mountExpression ? this.clickAttribute() : 'wire:click', wireClick!))
             .when(clickable && alpineClick, (a) => a.set('x-on:click', alpineClick!));
         const wireTarget = this._livewireTarget ?? this._submit ?? wireClick;
         const keyBindings = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
-        return views.render('filament-actions::button', {
+        return views.render('navette-actions::button', {
             attributes: attributes.toHtml(), isSubmit, keyBindings: keyBindings + tooltip, iconAfter: this._iconAfter, hasWireLoader: wireTarget !== null,
             label: (await evaluate(this._label, ctx)) ?? this.getDefaultLabel(),
             wireLoader: loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': wireTarget })),
@@ -1213,12 +1213,12 @@ export class ActionGroup {
     }
     private triggerHtml(): string {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
-        const label = this._label ?? t('filament-actions::group.trigger.label');
+        const label = this._label ?? t('navette-actions::group.trigger.label');
         const tooltip = this._tooltip ? ` x-tooltip="${e(`{ content: ${js(this._tooltip)}, theme: $store.theme, allowHTML: false }`)}"` : '';
         const colors = (component: 'icon-button' | 'button' | 'link') => (this._color !== 'gray' || component === 'icon-button' ? colorManager!.getComponentClasses(component, this._color) : []);
-        if (this._view === 'button') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-group', 'fi-btn', `fi-size-${this._size}`, ...colors('button')])}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}${e(label)}</button>`;
-        if (this._view === 'link') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-link-group', 'fi-link', `fi-size-${this._size}`, ...colors('link')])}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}<span class="fi-link-label">${e(label)}</span></button>`;
-        return `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-icon-btn-group', 'fi-icon-btn', `fi-size-${this._size}`, ...colors('icon-button')].join(' ')}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}</button>`;
+        if (this._view === 'button') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-btn-group', 'nv-btn', `nv-size-${this._size}`, ...colors('button')])}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}${e(label)}</button>`;
+        if (this._view === 'link') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-link-group', 'nv-link', `nv-size-${this._size}`, ...colors('link')])}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}<span class="nv-link-label">${e(label)}</span></button>`;
+        return `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${['nv-ac-icon-btn-group', 'nv-icon-btn', `nv-size-${this._size}`, ...colors('icon-button')].join(' ')}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}</button>`;
     }
     /** Menu items of the visible actions, one list per section (nested groups without dropdown). */
     private async itemLists(ctx: ComponentContext, context: Record<string, unknown>, keyOf: (action: Action) => string): Promise<string[][]> {
@@ -1245,13 +1245,13 @@ export class ActionGroup {
         if (this._buttonGroup) {
             const buttons: string[] = [];
             for (const action of this.getActions()) if (await action.isVisible(ctx)) buttons.push(await action.toHtml(ctx, explicitContext));
-            return buttons.length ? `<div class="fi-btn-group">${buttons.join('')}</div>` : '';
+            return buttons.length ? `<div class="nv-btn-group">${buttons.join('')}</div>` : '';
         }
         const lists = await this.itemLists(ctx, context, keyOf);
         if (!lists.length) return '';
-        const panelClasses = cls(['fi-dropdown-panel', this._width ? `fi-width-${this._width}` : null, { 'fi-scrollable': this._maxHeight !== null }]);
+        const panelClasses = cls(['nv-dropdown-panel', this._width ? `nv-width-${this._width}` : null, { 'nv-scrollable': this._maxHeight !== null }]);
         const style = this._maxHeight ? ` style="max-height: ${this._maxHeight}"` : '';
-        return `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${this.triggerHtml()}</div><div x-cloak x-float.placement.${this._placement ?? 'bottom-end'}${this._flip ? '.flip' : ''}.teleport.offset="{ offset: ${this._offset ?? 8} }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="fi-dropdown-list" role="group">${items.join(' ')}</div>`).join('')}</div></div>`;
+        return `<div x-data="navetteDropdown" class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger">${this.triggerHtml()}</div><div x-cloak x-float.placement.${this._placement ?? 'bottom-end'}${this._flip ? '.flip' : ''}.teleport.offset="{ offset: ${this._offset ?? 8} }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="nv-dropdown-list" role="group">${items.join(' ')}</div>`).join('')}</div></div>`;
     }
 
     private _viewSet = false;

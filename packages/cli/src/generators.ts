@@ -281,9 +281,9 @@ export class ${name} extends Field {
         const disabled = await this.isDisabled();
 
         return this.wrap(
-            \`<div class="fi-input-wrp\${this.hasError() ? ' fi-invalid' : ''}" x-data="{ state: $wire.$entangle(\${e(js(this.getStatePath()))}) }">
-                <div class="fi-input-wrp-content-ctn">
-                    <input id="\${e(id)}" type="text" class="fi-input" x-model="state"\${disabled ? ' disabled' : ''}\${this.hasError() ? \` aria-invalid="true" aria-describedby="\${e(id)}-error"\` : ''} />
+            \`<div class="nv-input-wrp\${this.hasError() ? ' nv-invalid' : ''}" x-data="{ state: $wire.$entangle(\${e(js(this.getStatePath()))}) }">
+                <div class="nv-input-wrp-content-ctn">
+                    <input id="\${e(id)}" type="text" class="nv-input" x-model="state"\${disabled ? ' disabled' : ''}\${this.hasError() ? \` aria-invalid="true" aria-describedby="\${e(id)}-error"\` : ''} />
                 </div>
             </div>\`,
         );
@@ -326,7 +326,7 @@ export class ${name}<R = any> extends Column<R> {
     async toHtml(record: R): Promise<string> {
         const state = await this.getState(record);
 
-        return \`<div class="fi-ta-text"><span>\${e(state ?? '')}</span></div>\`;
+        return \`<div class="nv-ta-text"><span>\${e(state ?? '')}</span></div>\`;
     }
 }
 `;

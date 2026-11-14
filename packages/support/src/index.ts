@@ -112,23 +112,23 @@ export class Attributes {
     }
     when(condition: unknown, fn: (a: Attributes) => Attributes): Attributes { return condition ? fn(this) : this; }
 
-    /** Grid container: `fi-grid` classes and `--cols-*` variables per breakpoint. */
+    /** Grid container: `nv-grid` classes and `--cols-*` variables per breakpoint. */
     grid(columns: Record<string, number> | number | null = {}): Attributes {
         const cols: Record<string, number> = typeof columns === 'number' ? { lg: columns } : { ...(columns ?? {}) };
         for (const k of Object.keys(cols)) if (!cols[k]) delete cols[k];
         cols.default ??= 1;
         const v = (bp: string) => bp.replace(/@/g, 'c').replace(/!/g, 'n');
         return this
-            .class(['fi-grid', ...Object.keys(cols).map((bp) => (bp === 'default' ? (cols[bp] > 1 ? 'fi-grid-cols' : '') : `${bp}:fi-grid-cols`))])
+            .class(['nv-grid', ...Object.keys(cols).map((bp) => (bp === 'default' ? (cols[bp] > 1 ? 'nv-grid-cols' : '') : `${bp}:nv-grid-cols`))])
             .style(Object.entries(cols).map(([bp, n]) => `--cols-${v(bp)}: repeat(${n}, minmax(0, 1fr))`));
     }
-    /** Grid column: `fi-grid-col` classes and `--col-span-*` variables per breakpoint. */
+    /** Grid column: `nv-grid-col` classes and `--col-span-*` variables per breakpoint. */
     gridColumn(span: Record<string, number | string> | number | string | null = {}, isHidden = false): Attributes {
         const s: Record<string, number | string> = span !== null && typeof span === 'object' ? { ...span } : span ? { lg: span } : {};
         for (const k of Object.keys(s)) if (!s[k]) delete s[k];
         const v = (bp: string) => bp.replace(/@/g, 'c').replace(/!/g, 'n');
         return this
-            .class(['fi-grid-col', { 'fi-hidden': isHidden || s.default === 'hidden' }, ...Object.keys(s).map((bp) => (bp === 'default' ? '' : `${bp}:fi-grid-col-span`))])
+            .class(['nv-grid-col', { 'nv-hidden': isHidden || s.default === 'hidden' }, ...Object.keys(s).map((bp) => (bp === 'default' ? '' : `${bp}:nv-grid-col-span`))])
             .style(Object.entries(s).map(([bp, n]) => `--col-span-${v(bp)}: ${n === 'full' ? '1 / -1' : `span ${n} / span ${n}`}`));
     }
 
@@ -279,7 +279,7 @@ const COMPONENT_COLOR_MAPS = {
     'icon-count-summary': (palette: Palette, gray: Palette) => ({ text: findShade(palette, 'oklch(1 0 0)', { minRatio: 3 }) ?? 900, 'dark:text': findShade(palette, gray[900], { minRatio: 3, fromDarkest: true }) ?? 200 }),
     'icon-button': iconButtonColorMap,
     toggle: toggleColorMap,
-    // Stat description and stat chart (the chart only gets `fi-color`).
+    // Stat description and stat chart (the chart only gets `nv-color`).
     'stat-description': (palette: Palette, gray: Palette) => ({ text: findShade(palette, 'oklch(1 0 0)', { minShade: 600 }) ?? 950, 'dark:text': findShade(palette, gray[900], { maxShade: 400, fromDarkest: true }) ?? 200 }),
     'stat-chart': () => ({}),
     // Colored text of a column or entry: fixed 500 / 400 for gray, otherwise the same contrast search as stat descriptions.
@@ -290,8 +290,8 @@ export type ColoredComponent = keyof typeof COMPONENT_COLOR_MAPS;
 export type ColorMapResolver = (palette: Palette, context: { gray: Palette; color: string; getDefault: () => Record<string, number> }) => Record<string, number>;
 
 const CLASS_FOR: Record<string, (s: number) => string> = {
-    bg: (s) => `fi-bg-color-${s}`, 'hover:bg': (s) => `hover:fi-bg-color-${s}`, 'dark:bg': (s) => `dark:fi-bg-color-${s}`, 'dark:hover:bg': (s) => `dark:hover:fi-bg-color-${s}`,
-    text: (s) => `fi-text-color-${s}`, 'hover:text': (s) => `hover:fi-text-color-${s}`, 'dark:text': (s) => `dark:fi-text-color-${s}`, 'dark:hover:text': (s) => `dark:hover:fi-text-color-${s}`,
+    bg: (s) => `nv-bg-color-${s}`, 'hover:bg': (s) => `hover:nv-bg-color-${s}`, 'dark:bg': (s) => `dark:nv-bg-color-${s}`, 'dark:hover:bg': (s) => `dark:hover:nv-bg-color-${s}`,
+    text: (s) => `nv-text-color-${s}`, 'hover:text': (s) => `hover:nv-text-color-${s}`, 'dark:text': (s) => `dark:nv-text-color-${s}`, 'dark:hover:text': (s) => `dark:hover:nv-text-color-${s}`,
 };
 import { ButtonComponentColorMap, IconButtonComponentColorMap } from './color-maps.ts';
 export { ButtonComponentColorMap, ComponentColorMap, IconButtonComponentColorMap, WCAG_AA_NON_TEXT, WCAG_AAA_TEXT, type ColorMap, type ColorMapSlotOptions } from './color-maps.ts';
@@ -345,7 +345,7 @@ export class ColorManager {
         let classes: string[] = [];
         // Gray is the button's default color and gets no color classes; other components still get them.
         if (color !== 'gray' || component !== 'button') {
-            classes = ['fi-color', 'fi-color-' + color.replace(/[^a-zA-Z0-9_-]/g, '')];
+            classes = ['nv-color', 'nv-color-' + color.replace(/[^a-zA-Z0-9_-]/g, '')];
             const palette = this.getColor(color);
             if (palette) {
                 const gray = this.getColor('gray')!;
@@ -358,7 +358,7 @@ export class ColorManager {
     }
     /**
      * `<style>` block defining the `--<color>-<shade>` variables, injected into `<head>`. A color registered under a new name
-     * (`brand`) also gets the rule mapping `fi-color-brand` to the component color variables (`--color-50: var(--brand-50)`…):
+     * (`brand`) also gets the rule mapping `nv-color-brand` to the component color variables (`--color-50: var(--brand-50)`…):
      * the stylesheet only has these rules for the default colors.
      */
     renderCssVariables(): string {
@@ -366,17 +366,17 @@ export class ColorManager {
         const vars = Object.entries(colors).map(([name, palette]) => Object.entries(palette).map(([shade, value]) => ` --${name}-${shade}:${value}; `).join('')).join('');
         return `<style${cspNonceAttribute()}>\n    :root {\n        ${vars}}\n${this.renderCustomColorRules(colors)}</style>`;
     }
-    /** `.fi-color-<name> { --color-<shade>: var(--<name>-<shade>); … }` for each registered color that is not a default one. */
+    /** `.nv-color-<name> { --color-<shade>: var(--<name>-<shade>); … }` for each registered color that is not a default one. */
     renderCustomColorRules(colors: Record<string, Palette> = this.getColors()): string {
         return Object.entries(colors)
             .filter(([name]) => !Object.hasOwn(ColorManager.DEFAULT_COLORS, name) && /^[a-zA-Z0-9_-]+$/.test(name))
-            .map(([name, palette]) => `    .fi-color-${name} { ${Object.keys(palette).filter((shade) => /^\d+$/.test(shade)).map((shade) => `--color-${shade}:var(--${name}-${shade});`).join(' ')} }\n`)
+            .map(([name, palette]) => `    .nv-color-${name} { ${Object.keys(palette).filter((shade) => /^\d+$/.test(shade)).map((shade) => `--color-${shade}:var(--${name}-${shade});`).join(' ')} }\n`)
             .join('');
     }
 }
 
 // ------------------------------------------------------------------ icons
-/** An icon: a name (`m-eye`, `lucide:house`, a name given to `registerIcon()`), or HTML rendered inside a `fi-icon` span. */
+/** An icon: a name (`m-eye`, `lucide:house`, a name given to `registerIcon()`), or HTML rendered inside a `nv-icon` span. */
 export type IconValue = string | HtmlString;
 /** Resolves the name of an icon of a set (`house` for `lucide:house`) to a full `<svg>`; `null` or `undefined`: unknown icon. */
 export type IconSetResolver = (name: string) => string | null | undefined;
@@ -524,8 +524,8 @@ function iconSvg(name: string): string {
         if (typeof resolved !== 'string' || !/^<svg[\s>]/.test(resolved.trim())) throw new Error(`Icon not found: ${name}`);
         svg = resolved.trim();
     } else {
-        // `fi-o-crop`: Filament's own icons (MIT), shipped next to Heroicons.
-        const file = name.startsWith('fi-') ? here(`../icons/filament/${name.slice(3).replace(/[^a-z0-9-]/g, '')}.svg`) : here(`../icons/heroicons/${name.replace(/^heroicon-/, '').replace(/[^a-z0-9-]/g, '')}.svg`);
+        // `nv-o-crop`: Filament's own icons (MIT), shipped next to Heroicons.
+        const file = name.startsWith('nv-') ? here(`../icons/navette/${name.slice(3).replace(/[^a-z0-9-]/g, '')}.svg`) : here(`../icons/heroicons/${name.replace(/^heroicon-/, '').replace(/[^a-z0-9-]/g, '')}.svg`);
         if (!existsSync(file)) throw new Error(`Icon not found: ${name}`);
         svg = readFileSync(file, 'utf8').trim();
     }
@@ -534,13 +534,13 @@ function iconSvg(name: string): string {
 }
 
 /**
- * Icon markup with the `fi-icon fi-size-<size>` classes: a Heroicons name (`m-eye`, `o-user`, `s-…`, `c-…`), a Filament
- * icon (`fi-o-crop`), a registered icon, an icon of a registered set (`lucide:house`) or HTML. With `alias`, the icon
+ * Icon markup with the `nv-icon nv-size-<size>` classes: a Heroicons name (`m-eye`, `o-user`, `s-…`, `c-…`), a Filament
+ * icon (`nv-o-crop`), a registered icon, an icon of a registered set (`lucide:house`) or HTML. With `alias`, the icon
  * registered for that alias (`icons.alias()`) replaces the given one, like Filament's `generate_icon_html()`.
  */
 export function icon(name: IconValue, options: { size?: string; attributes?: Attributes; alias?: string | string[] } = {}): string {
     if (options.alias) name = icons.resolve(options.alias) ?? name;
-    const a = (options.attributes ?? new Attributes()).class(['fi-icon', `fi-size-${options.size ?? 'md'}`]);
+    const a = (options.attributes ?? new Attributes()).class(['nv-icon', `nv-size-${options.size ?? 'md'}`]);
     const html = name instanceof HtmlString ? name.html : iconAliasHtml.get(name);
     if (html !== undefined) return `<span ${a.toHtml()}>${html}</span>`;
     return iconSvg(name as string).replace(/^<svg/, `<svg ${a.toHtml()}`);
@@ -550,7 +550,7 @@ export function registerIcon(name: string, svg: string): void {
     if (!/^<svg[\s>]/.test(svg.trim())) throw new Error(`registerIcon(${name}) expects an <svg> element.`);
     iconCache.set(name, svg.trim());
 }
-/** Renders the loading indicator from its attributes, which already hold the `fi-icon fi-loading-indicator fi-size-*` classes. */
+/** Renders the loading indicator from its attributes, which already hold the `nv-icon nv-loading-indicator nv-size-*` classes. */
 export type LoadingIndicatorRenderer = (attributes: Attributes) => string;
 let loadingIndicatorRenderer: LoadingIndicatorRenderer | null = null;
 /**
@@ -560,7 +560,7 @@ let loadingIndicatorRenderer: LoadingIndicatorRenderer | null = null;
 export function useLoadingIndicator(renderer: LoadingIndicatorRenderer | null): void { loadingIndicatorRenderer = renderer; }
 /** Loading spinner SVG (or the indicator given to `useLoadingIndicator()`). */
 export function loadingIndicator(attributes: Attributes = new Attributes(), size = 'md'): string {
-    const a = attributes.class(['fi-icon fi-loading-indicator', `fi-size-${size}`]);
+    const a = attributes.class(['nv-icon nv-loading-indicator', `nv-size-${size}`]);
     if (loadingIndicatorRenderer) return loadingIndicatorRenderer(a);
     return `<svg fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" ${a.toHtml()}><path clip-rule="evenodd" d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19ZM12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill-rule="evenodd" fill="currentColor" opacity="0.2"></path><path d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z" fill="currentColor"></path></svg>`;
 }
@@ -570,7 +570,7 @@ export function loadingIndicator(attributes: Attributes = new Attributes(), size
 export type ComponentRenderer = (props: Record<string, any> & { attributes: Record<string, any> }, slot: string) => string;
 
 /**
- * View registry: `filament-forms::components.text-input` resolves to an EJS file; override directories are checked first.
+ * View registry: `navette-forms::components.text-input` resolves to an EJS file; override directories are checked first.
  * Views may use component tags (`<x-section heading="Orders">…</x-section>`): built-in components, components registered with
  * `component()`, and EJS files of the directories given to `components()`.
  */

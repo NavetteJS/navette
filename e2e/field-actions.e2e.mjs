@@ -12,11 +12,11 @@ const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
 const { step, exitCode } = reporter({ errorLines: 5 });
 const db = openDatabase(dbFile);
-const modal = () => page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+const modal = () => page.locator('.nv-modal.nv-modal-open .nv-modal-window');
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
 
-const repeater = () => page.locator('.fi-fo-repeater').first();
-const items = () => repeater().locator(':scope > ul > li.fi-fo-repeater-item');
+const repeater = () => page.locator('.nv-fo-repeater').first();
+const items = () => repeater().locator(':scope > ul > li.nv-fo-repeater-item');
 /** Value of the name field of each item, in display order. */
 const names = async () => {
     const values = [];
@@ -34,12 +34,12 @@ try {
         await until(async () => (await items().count()) === 2, 'a second item');
         await setName(0, 'Ada');
         await setName(1, 'Grace');
-        const between = repeater().locator('.fi-fo-repeater-add-between-items-ctn');
+        const between = repeater().locator('.nv-fo-repeater-add-between-items-ctn');
         assert.equal(await between.count(), 1, 'one "Insert between" button between two items');
         await between.getByRole('button', { name: 'Insert between' }).click();
         await until(async () => (await items().count()) === 3, 'the inserted item');
         assert.deepEqual(await names(), ['Ada', '', 'Grace']);
-        assert.equal(await repeater().locator('.fi-fo-repeater-add-between-items-ctn').count(), 2);
+        assert.equal(await repeater().locator('.nv-fo-repeater-add-between-items-ctn').count(), 2);
     });
 
     await step('repeater: delete asks for a confirmation in a modal; cancelling keeps the item', async () => {
@@ -68,7 +68,7 @@ try {
         const categories = db.prepare('select id, name from product_categories where parent_id is null order by name limit 2').all();
         db.prepare('delete from product_category_product where product_id = ?').run(product.id);
         await page.goto(`${BASE}/lab/cards/${product.id}/edit`);
-        const list = page.locator('.fi-fo-checkbox-list');
+        const list = page.locator('.nv-fo-checkbox-list');
         await list.waitFor();
         for (const category of categories) await list.getByLabel(category.name, { exact: true }).check();
         await page.getByRole('button', { name: 'Save changes' }).click();

@@ -125,14 +125,14 @@ Pass the name of an [icon](/styling/icons) to the `icon` prop. Its color is `pri
 
 ## Adding a footer to a modal
 
-Put the buttons of the modal in a `footer` [named slot](/components/overview#using-named-slots). Wrap them in a `fi-modal-footer-actions` element to lay them out like the footer of an action modal:
+Put the buttons of the modal in a `footer` [named slot](/components/overview#using-named-slots). Wrap them in a `nv-modal-footer-actions` element to lay them out like the footer of an action modal:
 
 ```html
 <x-modal id="delete-user" heading="Delete user" icon="o-trash" icon-color="danger">
     <p>This cannot be undone.</p>
 
     <x-slot name="footer">
-        <div class="fi-modal-footer-actions">
+        <div class="nv-modal-footer-actions">
             <x-button color="danger" wire:click="deleteUser">Delete</x-button>
             <x-button color="gray" x-on:click="$dispatch('close-modal', { id: 'delete-user' })">Cancel</x-button>
         </div>
@@ -140,7 +140,7 @@ Put the buttons of the modal in a `footer` [named slot](/components/overview#usi
 </x-modal>
 ```
 
-You may instead pass the buttons as an array of HTML strings to `footer-actions`, as a bound value (`:footer-actions="buttons"`): the modal places them in the `fi-modal-footer-actions` element itself.
+You may instead pass the buttons as an array of HTML strings to `footer-actions`, as a bound value (`:footer-actions="buttons"`): the modal places them in the `nv-modal-footer-actions` element itself.
 
 ### Aligning the footer
 

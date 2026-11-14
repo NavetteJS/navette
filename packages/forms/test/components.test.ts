@@ -19,8 +19,8 @@ const norm = (html: string) => html.replace(/>\s+/g, '>').replace(/\s+</g, '<').
 
 test('MarkdownEditor: markup, toolbar, no attachments', async () => {
     const html = norm(await form(host({ body: '# Title' }), [MarkdownEditor.make('body').label('Content')]).toHtml());
-    assert.match(html, /<div id="form\.body-label" class="fi-fo-field-label">/);
-    assert.match(html, /<div class="fi-fo-markdown-editor fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ><\/div><div aria-labelledby="form\.body-label" id="form\.body" role="group" x-load x-load-src="\/js\/filament\/forms\/components\/markdown-editor\.js" x-data="markdownEditorFormComponent\(/);
+    assert.match(html, /<div id="form\.body-label" class="nv-fo-field-label">/);
+    assert.match(html, /<div class="nv-fo-markdown-editor nv-input-wrp"><div class="nv-input-wrp-content-ctn"><div hidden data-field-accessibility ><\/div><div aria-labelledby="form\.body-label" id="form\.body" role="group" x-load x-load-src="\/js\/navette\/forms\/components\/markdown-editor\.js" x-data="markdownEditorFormComponent\(/);
     assert.match(html, /canAttachFiles: false/);
     assert.match(html, /minHeight: '10rem'/);
     assert.match(html, /state: \$wire\.\$entangle\('data\.body', false\)/);
@@ -32,7 +32,7 @@ test('MarkdownEditor: markup, toolbar, no attachments', async () => {
     assert.match(custom, /\$entangle\(&#039;data\.body&#039;, true\)/);
     // Read-only: escaped text, never interpreted.
     const disabled = await form(host({ body: '<script>x</script>' }), [MarkdownEditor.make('body').disabled()]).toHtml();
-    assert.match(disabled, /class="fi-fo-markdown-editor fi-disabled fi-prose"/);
+    assert.match(disabled, /class="nv-fo-markdown-editor nv-disabled nv-prose"/);
     assert.ok(disabled.includes('&lt;script&gt;') && !disabled.includes('<script>'));
 });
 
@@ -45,7 +45,7 @@ test('CodeEditor: language, wrapping, stable key hash', async () => {
     const html = norm(await form(host(), [CodeEditor.make('code')]).toHtml());
     // Expected key hash for the default options.
     assert.match(html, /wire:key="lw\.form\.code\.bba3c214551109422365e6bf973a6cd7"/);
-    assert.match(html, /<div class="fi-fo-code-editor fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ><\/div><div aria-labelledby="form\.code-label" id="form\.code" role="group"/);
+    assert.match(html, /<div class="nv-fo-code-editor nv-input-wrp"><div class="nv-input-wrp-content-ctn"><div hidden data-field-accessibility ><\/div><div aria-labelledby="form\.code-label" id="form\.code" role="group"/);
     assert.match(html, /canWrap: false,\n isDisabled: false,/);
     assert.match(html, /<div x-ref="editor" x-cloak><\/div>/);
     const php = await form(host(), [CodeEditor.make('code').language('php').wrap()]).toHtml();
@@ -62,13 +62,13 @@ test('Slider: configuration, key hash, classes and bounds validation', async () 
         Slider.make('price').tooltips(RawJs.make('`$${$value.toFixed(2)}`')),
     ]);
     const html = norm(await schema.toHtml());
-    assert.match(html, /Slider<sup class="fi-fo-field-label-required-mark">\*<\/sup>/);
+    assert.match(html, /Slider<sup class="nv-fo-field-label-required-mark">\*<\/sup>/);
     // Expected key hash for the default options.
-    assert.match(html, /wire:key="lw\.form\.volume\.a8cf63fecab3eb3edf6760bc02f258a6" aria-labelledby="form\.volume-label" id="form\.volume" role="group" class="fi-fo-slider"/);
+    assert.match(html, /wire:key="lw\.form\.volume\.a8cf63fecab3eb3edf6760bc02f258a6" aria-labelledby="form\.volume-label" id="form\.volume" role="group" class="nv-fo-slider"/);
     assert.match(html, /behavior: 'tap',/);
     assert.match(html, /tooltips: \[true, false\]/);
     assert.match(html, /fillTrack: JSON\.parse\('\[false,true,false\]'\)/);
-    assert.match(html, /class="fi-fo-slider fi-fo-slider-has-pips fi-fo-slider-has-tooltips fi-fo-slider-vertical"/);
+    assert.match(html, /class="nv-fo-slider nv-fo-slider-has-pips nv-fo-slider-has-tooltips nv-fo-slider-vertical"/);
     assert.match(html, /isRtl: true/);
     assert.match(html, /tooltips: \{ to: \(\$value\) =&gt; `\$\$\{\$value\.toFixed\(2\)\}` \}/);
     assert.deepEqual(await validateSchema(schema), { 'data.price': ['The price field is required.'] });
@@ -89,18 +89,18 @@ test('Slider: configuration, key hash, classes and bounds validation', async () 
 
 test('Hidden: plain hidden input, outside the grid', async () => {
     const html = norm(await form(host(), [Hidden.make('token')]).toHtml());
-    assert.match(html, /class="fi-grid-col fi-hidden"/);
-    assert.match(html, /<input id="form\.token" type="hidden" wire:model="data\.token" class="fi-fo-hidden" \/>/);
+    assert.match(html, /class="nv-grid-col nv-hidden"/);
+    assert.match(html, /<input id="form\.token" type="hidden" wire:model="data\.token" class="nv-fo-hidden" \/>/);
 });
 
 test('OneTimeCodeInput: one box per digit, strict validation', async () => {
     const livewire = host({ code: '12a456' });
     const schema = form(livewire, [OneTimeCodeInput.make('code').length(4).required()]);
     const html = norm(await schema.toHtml());
-    assert.equal(html.match(/class="fi-one-time-code-input-digit"/g)?.length, 4);
-    assert.match(html, /<input autocomplete="one-time-code" inputmode="numeric" type="text" id="form\.code" required="required" class="fi-one-time-code-input-digit" \/>/);
+    assert.equal(html.match(/class="nv-one-time-code-input-digit"/g)?.length, 4);
+    assert.match(html, /<input autocomplete="one-time-code" inputmode="numeric" type="text" id="form\.code" required="required" class="nv-one-time-code-input-digit" \/>/);
     assert.match(html, /aria-label="Character 2 of 4"/);
-    assert.match(html, /x-data="filamentOneTimeCodeInput\(\{ shouldSubmitOnCompletion: false \}\)" x-modelable="state" x-model="code" dir="ltr" role="group" aria-label="Code" class="fi-one-time-code-input-ctn"/);
+    assert.match(html, /x-data="navetteOneTimeCodeInput\(\{ shouldSubmitOnCompletion: false \}\)" x-modelable="state" x-model="code" dir="ltr" role="group" aria-label="Code" class="nv-one-time-code-input-ctn"/);
     assert.deepEqual(await validateSchema(schema), { 'data.code': ['The code field must be a number.'] });
     livewire.data.code = '01234';
     assert.deepEqual(await validateSchema(schema), { 'data.code': ['The code field must be 4 digits.'] });
@@ -111,7 +111,7 @@ test('OneTimeCodeInput: one box per digit, strict validation', async () => {
 test('Placeholder: escaped text in an entry, nothing saved', async () => {
     const schema = form(host(), [Placeholder.make('created').label('Created').content('<b>yesterday</b>'), Placeholder.make('link').content(raw('<a href="/x">x</a>'))]);
     const html = norm(await schema.toHtml());
-    assert.match(html, /<div class="fi-in-entry-label" role="term">Created<\/div>/);
+    assert.match(html, /<div class="nv-in-entry-label" role="term">Created<\/div>/);
     assert.ok(html.includes('&lt;b&gt;yesterday&lt;/b&gt;'));
     assert.ok(html.includes('<a href="/x">x</a>'));
     assert.deepEqual(await getSchemaState(schema), {});
@@ -119,18 +119,18 @@ test('Placeholder: escaped text in an entry, nothing saved', async () => {
 
 test('hint: text, raw HTML, icon and action after the label (login page markup)', async () => {
     const html = norm(await form(host(), [
-        TextInput.make('password').required().hint(raw('<a href="/reset" class="fi-link" tabindex="-1"><span class="fi-link-label">Forgot password?</span></a>')),
+        TextInput.make('password').required().hint(raw('<a href="/reset" class="nv-link" tabindex="-1"><span class="nv-link-label">Forgot password?</span></a>')),
         TextInput.make('name').hint('<i>escaped</i>').hintColor('danger').hintIcon('o-information-circle', 'Help'),
         TextInput.make('email').hintAction(Action.make('check').label('Check').action(() => {})),
     ]).toHtml());
-    assert.ok(html.includes(`<label for="form.password" class="fi-fo-field-label">`));
-    assert.ok(html.includes(`</label><div class="fi-sc fi-inline fi-align-end fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(JSON.parse('{\\u0022key\\u0022:null,\\u0022exposedMethods\\u0022:[],\\u0022path\\u0022:\\u0022data.password\\u0022,\\u0022containerPath\\u0022:\\u0022data\\u0022}'))"><div class="fi-sc-component"><span class="fi-sc-text"><a href="/reset" class="fi-link" tabindex="-1"><span class="fi-link-label">Forgot password?</span></a></span></div></div></div></div></div>`));
+    assert.ok(html.includes(`<label for="form.password" class="nv-fo-field-label">`));
+    assert.ok(html.includes(`</label><div class="nv-sc nv-inline nv-align-end nv-sc-has-gap nv-sc-dense"><div x-data="navetteSchemaComponent(JSON.parse('{\\u0022key\\u0022:null,\\u0022exposedMethods\\u0022:[],\\u0022path\\u0022:\\u0022data.password\\u0022,\\u0022containerPath\\u0022:\\u0022data\\u0022}'))"><div class="nv-sc-component"><span class="nv-sc-text"><a href="/reset" class="nv-link" tabindex="-1"><span class="nv-link-label">Forgot password?</span></a></span></div></div></div></div></div>`));
     assert.ok(html.includes('&lt;i&gt;escaped&lt;/i&gt;'));
-    assert.match(html, /class="fi-color fi-color-danger fi-text-color-\d+ dark:fi-text-color-\d+ fi-sc-text"/);
+    assert.match(html, /class="nv-color nv-color-danger nv-text-color-\d+ dark:nv-text-color-\d+ nv-sc-text"/);
     assert.match(html, /x-tooltip="\{ content: &#039;Help&#039;|x-tooltip="\{ content: 'Help'/);
-    assert.match(html, /aria-hidden="true"[^>]*class="fi-color fi-color-danger fi-sc-icon fi-icon fi-size-md"/);
-    assert.match(html, /<span aria-label="Help" role="img" class="fi-sr-only"><\/span>/);
-    assert.match(html, /<div class="fi-sc-action"><button type="button" [^>]*class="fi-ac-link-action fi-link fi-size-sm[^"]*" wire:click="mountAction\('check', \{\}, JSON\.parse\('\{\\u0022schemaComponent\\u0022:\\u0022form\.email\\u0022\}'\)\)">/);
+    assert.match(html, /aria-hidden="true"[^>]*class="nv-color nv-color-danger nv-sc-icon nv-icon nv-size-md"/);
+    assert.match(html, /<span aria-label="Help" role="img" class="nv-sr-only"><\/span>/);
+    assert.match(html, /<div class="nv-sc-action"><button type="button" [^>]*class="nv-ac-link-action nv-link nv-size-sm[^"]*" wire:click="mountAction\('check', \{\}, JSON\.parse\('\{\\u0022schemaComponent\\u0022:\\u0022form\.email\\u0022\}'\)\)">/);
     assert.ok(!html.includes('wire:key=""'));
 });
 
@@ -143,10 +143,10 @@ test('FusedGroup: joined fields, screen-reader labels, first error under the gro
     const livewire = host();
     livewire._errors = { 'data.country': ['The country field is required.'] };
     const html = norm(await form(livewire, [FusedGroup.make([TextInput.make('city').placeholder('City'), Select.make('country').placeholder('Country')]).label('Location').columns(2)]).toHtml());
-    assert.ok(html.includes('<div data-field-wrapper class="fi-fo-field"><div class="fi-fo-field-label-col"><div class="fi-fo-field-label-ctn"><label class="fi-fo-field-label"><span class="fi-fo-field-label-content">Location</span></label></div></div><div class="fi-fo-field-content-col"><div role="group" class="fi-sc-fused-group"><div class="fi-grid lg:fi-grid-cols fi-sc" style="--cols-lg: repeat(2, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">'));
-    assert.ok(html.includes('<div data-field-wrapper class="fi-fo-field"><label for="form.city" class="fi-fo-field-label fi-sr-only">City</label><div x-on:focus-input.stop="$el.querySelector(\'input\')?.focus()" class="fi-fo-text-input fi-input-wrp"><div class="fi-input-wrp-content-ctn"><input id="form.city" placeholder="City" type="text" wire:model="data.city" class="fi-input" /></div></div></div>'));
+    assert.ok(html.includes('<div data-field-wrapper class="nv-fo-field"><div class="nv-fo-field-label-col"><div class="nv-fo-field-label-ctn"><label class="nv-fo-field-label"><span class="nv-fo-field-label-content">Location</span></label></div></div><div class="nv-fo-field-content-col"><div role="group" class="nv-sc-fused-group"><div class="nv-grid lg:nv-grid-cols nv-sc" style="--cols-lg: repeat(2, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">'));
+    assert.ok(html.includes('<div data-field-wrapper class="nv-fo-field"><label for="form.city" class="nv-fo-field-label nv-sr-only">City</label><div x-on:focus-input.stop="$el.querySelector(\'input\')?.focus()" class="nv-fo-text-input nv-input-wrp"><div class="nv-input-wrp-content-ctn"><input id="form.city" placeholder="City" type="text" wire:model="data.city" class="nv-input" /></div></div></div>'));
     assert.ok(html.includes('<option value="">Country</option>'));
-    assert.match(html, /<p data-validation-error class="fi-fo-field-wrp-error-message">The country field is required\.<\/p><\/div><\/div>/);
+    assert.match(html, /<p data-validation-error class="nv-fo-field-wrp-error-message">The country field is required\.<\/p><\/div><\/div>/);
     assert.equal(html.match(/data-validation-error/g)?.length, 1);
 });
 
@@ -161,7 +161,7 @@ test('Select: "+" button, create modal, the created option becomes the state', a
         .createOptionUsing((data) => { const id = String(Object.keys(authors).length + 1); authors[id] = String(data.name); return id; });
     const schema = form(livewire, [select]);
     const html = norm(await schema.toHtml());
-    assert.ok(html.includes(`</select></div><div class="fi-input-wrp-suffix"><div class="fi-input-wrp-actions"><button title="Create" aria-label="Create" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" wire:click="mountAction('createOption', {}, JSON.parse('{\\u0022schemaComponent\\u0022:\\u0022form.author\\u0022}'))"><svg wire:loading.remove.delay.default="1"`));
+    assert.ok(html.includes(`</select></div><div class="nv-input-wrp-suffix"><div class="nv-input-wrp-actions"><button title="Create" aria-label="Create" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm" wire:click="mountAction('createOption', {}, JSON.parse('{\\u0022schemaComponent\\u0022:\\u0022form.author\\u0022}'))"><svg wire:loading.remove.delay.default="1"`));
     assert.ok(!html.includes('editOption'));
     const [create] = select.getActions();
     assert.equal(create.getName(), 'createOption');

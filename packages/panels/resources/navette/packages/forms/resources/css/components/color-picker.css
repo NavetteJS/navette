@@ -1,0 +1,17 @@
+.nv-fo-color-picker {
+    & .nv-input-wrp-content {
+        @apply flex;
+    }
+
+    & .nv-fo-color-picker-preview {
+        @apply my-auto me-3 size-5 shrink-0 rounded-full select-none;
+
+        &.nv-empty {
+            @apply ring-1 ring-gray-200 ring-inset dark:ring-white/10;
+        }
+    }
+
+    & .nv-fo-color-picker-panel {
+        @apply absolute z-20 hidden rounded-lg shadow-lg;
+    }
+}

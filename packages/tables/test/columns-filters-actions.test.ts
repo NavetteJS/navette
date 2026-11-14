@@ -53,12 +53,12 @@ test('column options: URL in a new tab, disabled click, header tooltip, alignmen
             .extraHeaderAttributes({ 'data-header': 'status', style: 'min-width: 10rem' }),
     ]);
     const html = clean(await renderTable(table, host(), adapter));
-    assert.match(html, /<a href="https:\/\/example.com\/1" target="_blank" class="fi-ta-col fi-ta-col-has-column-url">/);
-    assert.match(html, /<span x-tooltip="\{ content: &#039;The post title&#039;, theme: \$store.theme, \}" class="fi-ta-header-cell-tooltip">Title<\/span>/);
+    assert.match(html, /<a href="https:\/\/example.com\/1" target="_blank" class="nv-ta-col nv-ta-col-has-column-url">/);
+    assert.match(html, /<span x-tooltip="\{ content: &#039;The post title&#039;, theme: \$store.theme, \}" class="nv-ta-header-cell-tooltip">Title<\/span>/);
     // `disabledClick()`: the record URL does not wrap the cell.
-    assert.match(html, /data-cell="&quot;quoted&quot;" class="fi-ta-cell fi-ta-cell-status fi-align-right fi-vertical-align-start status-cell"><div class="fi-ta-col"><div class="fi-ta-text fi-ta-text-item fi-size-sm fi-align-right my-status" data-status="draft">/);
+    assert.match(html, /data-cell="&quot;quoted&quot;" class="nv-ta-cell nv-ta-cell-status nv-align-right nv-vertical-align-start status-cell"><div class="nv-ta-col"><div class="nv-ta-text nv-ta-text-item nv-size-sm nv-align-right my-status" data-status="draft">/);
     assert.doesNotMatch(html, /onclick/);
-    assert.match(html, /<th scope="col" data-header="status" class="fi-ta-header-cell fi-ta-header-cell-status fi-align-right" style="min-width: 10rem">/);
+    assert.match(html, /<th scope="col" data-header="status" class="nv-ta-header-cell nv-ta-header-cell-status nv-align-right" style="min-width: 10rem">/);
     // Neither column links to the record: one has its own URL, the other a disabled click.
     assert.doesNotMatch(html, /href="\/posts\//);
     assert.match(clean(await renderTable(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')]), host(), adapter)), /<a href="\/posts\/2"/);
@@ -72,9 +72,9 @@ test('column options: URL in a new tab, disabled click, header tooltip, alignmen
 test('column groups: label, alignment, header wrapping, extra attributes and placeholder cells', async () => {
     const group = ColumnGroup.make<Post>('Details', [TextColumn.make('status'), TextColumn.make('price')]).alignment('center').wrapHeader().extraHeaderAttributes({ 'data-group': 'details' }).hiddenFrom('md');
     const html = clean(await renderTable(new Table<Post>().columns([TextColumn.make('title'), group]), host(), adapter, { bulkActions: ['<button>Delete</button>'] }));
-    assert.match(html, /<tr class="fi-ta-table-head-groups-row"><th><\/th><th><\/th><th colspan="2" scope="colgroup" data-group="details" class="fi-ta-header-group-cell fi-wrapped fi-align-center md:fi-hidden">Details<\/th><\/tr>/);
+    assert.match(html, /<tr class="nv-ta-table-head-groups-row"><th><\/th><th><\/th><th colspan="2" scope="colgroup" data-group="details" class="nv-ta-header-group-cell nv-wrapped nv-align-center md:nv-hidden">Details<\/th><\/tr>/);
     assert.equal(group.getLabel(), 'Details');
-    assert.match(html, /fi-ta-header-cell-price fi-grouped/);
+    assert.match(html, /nv-ta-header-cell-price nv-grouped/);
 });
 
 test('TextColumn: date tooltips, ISO formats, numbers and money with a locale, limits', async () => {
@@ -211,7 +211,7 @@ test('filters actions and selection: remove-all action, deselect when filtered, 
     const filters = () => [SelectFilter.make('status').options({ draft: 'Draft' })];
     const filtered = host({ tableFilters: { status: { value: 'draft' } } as any });
     const custom = clean(await renderTable(new Table<Post>().columns([TextColumn.make('title')]).filters(filters()).filtersRemoveAllAction((action) => action.label('Clear').link().color('danger')), filtered, adapter, { filtersForm: '' }));
-    assert.match(custom, /<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="removeTableFilters,removeTableFilter" wire:click="removeTableFilters" class="fi-ac-link-action fi-link fi-size-sm[^"]*"><svg[\s\S]*?<\/svg><span class="fi-link-label">Clear<\/span><\/button>/);
+    assert.match(custom, /<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="removeTableFilters,removeTableFilter" wire:click="removeTableFilters" class="nv-ac-link-action nv-link nv-size-sm[^"]*"><svg[\s\S]*?<\/svg><span class="nv-link-label">Clear<\/span><\/button>/);
     const hidden = clean(await renderTable(new Table<Post>().columns([TextColumn.make('title')]).filters(filters()).filtersRemoveAllAction((action) => action.hidden()), filtered, adapter, { filtersForm: '' }));
     assert.doesNotMatch(hidden, /removeTableFilters"/);
     assert.match(clean(await renderTable(new Table<Post>().columns([TextColumn.make('title')]).filters(filters()), filtered, adapter, { filtersForm: '' })), /aria-label="Remove all filters"/);
@@ -221,14 +221,14 @@ test('filters actions and selection: remove-all action, deselect when filtered, 
     assert.match(await renderTable(base().deselectAllRecordsWhenFiltered(false), host(), adapter, { bulkActions: ['<b>x</b>'] }), /canTrackDeselectedRecords: false,/);
     // `selectable()`: checkboxes without bulk actions; `selectable(false)`: none despite bulk actions.
     const selectable = await renderTable(base().selectable(), host(), adapter);
-    assert.equal((selectable.match(/class="fi-ta-record-checkbox/g) ?? []).length, 3);
-    assert.match(selectable, /class="fi-ta-selection-indicator"/);
-    assert.equal((await renderTable(base().selectable(false), host(), adapter, { bulkActions: ['<b>x</b>'] })).includes('fi-ta-record-checkbox'), false);
-    assert.equal((await renderTable(base(), host(), adapter)).includes('fi-ta-record-checkbox'), false);
+    assert.equal((selectable.match(/class="nv-ta-record-checkbox/g) ?? []).length, 3);
+    assert.match(selectable, /class="nv-ta-selection-indicator"/);
+    assert.equal((await renderTable(base().selectable(false), host(), adapter, { bulkActions: ['<b>x</b>'] })).includes('nv-ta-record-checkbox'), false);
+    assert.equal((await renderTable(base(), host(), adapter)).includes('nv-ta-record-checkbox'), false);
     // `selectGroupsOnly()`: no "select all" and no page checkbox; group checkboxes stay.
     const groups = await renderTable(base().groups(['status']).selectGroupsOnly(), host({ tableGrouping: 'status' }), adapter, { bulkActions: ['<b>x</b>'] });
-    assert.doesNotMatch(groups, /x-on:click="selectAllRecords"|fi-ta-page-checkbox/);
-    assert.match(groups, /fi-ta-group-checkbox/);
+    assert.doesNotMatch(groups, /x-on:click="selectAllRecords"|nv-ta-page-checkbox/);
+    assert.match(groups, /nv-ta-group-checkbox/);
     assert.equal(base().persistGroupInSession().persistsGroupingInSession(), true);
 });
 
@@ -339,9 +339,9 @@ test('query builder: unshiftOperators(), configureUsing(), constraint groups, se
 
 test('deprecated BadgeColumn and TextColumn iconPosition(), copyableState(), inline()', async () => {
     const badge = await BadgeColumn.make('status').toHtml(post());
-    assert.match(badge, /fi-badge/);
+    assert.match(badge, /nv-badge/);
     const html = await TextColumn.make('status').icon('m-check').iconPosition('after').copyable().copyableState('DRAFT').inline().toHtml(post());
-    assert.match(html, /fi-inline/);
+    assert.match(html, /nv-inline/);
     assert.match(html, /draft<svg/);
     assert.match(html, /DRAFT/);
 });

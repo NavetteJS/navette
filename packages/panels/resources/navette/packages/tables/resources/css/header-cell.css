@@ -1,0 +1,224 @@
+.nv-ta-header-cell {
+    @apply px-3 py-3.5 text-start text-sm font-semibold text-gray-950 sm:first-of-type:ps-6 sm:last-of-type:pe-6 dark:text-white;
+
+    &.nv-growable {
+        @apply w-full;
+    }
+
+    &.nv-grouped {
+        @apply border-gray-200 dark:border-white/5 [&:not(:first-of-type)]:border-s [&:not(:last-of-type)]:border-e;
+    }
+
+    &.nv-align-center {
+        @apply text-center;
+
+        & .nv-ta-header-cell-sort-btn {
+            @apply justify-center;
+        }
+    }
+
+    &.nv-align-end {
+        @apply text-end;
+
+        & .nv-ta-header-cell-sort-btn {
+            @apply justify-end;
+        }
+    }
+
+    &.nv-align-left {
+        @apply text-left;
+
+        & .nv-ta-header-cell-sort-btn {
+            @apply justify-start rtl:flex-row-reverse;
+        }
+    }
+
+    &.nv-align-right {
+        @apply text-right;
+
+        & .nv-ta-header-cell-sort-btn {
+            @apply justify-end rtl:flex-row-reverse;
+        }
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply text-justify;
+
+        & .nv-ta-header-cell-sort-btn {
+            @apply justify-between;
+        }
+    }
+
+    &.nv-ta-header-cell-sorted {
+        & .nv-icon {
+            @apply text-gray-950 dark:text-white;
+        }
+    }
+
+    &:not(.nv-ta-header-cell-sorted) {
+        & .nv-icon {
+            @apply text-gray-400 dark:text-gray-500;
+        }
+
+        & .nv-ta-header-cell-sort-btn:hover {
+            & .nv-icon {
+                @apply text-gray-500 dark:text-gray-400;
+            }
+        }
+
+        & .nv-ta-header-cell-sort-btn:focus-visible {
+            & .nv-icon {
+                @apply text-gray-500 dark:text-gray-400;
+            }
+        }
+    }
+
+    &.sm\:nv-hidden {
+        @apply sm:hidden;
+    }
+
+    &.md\:nv-hidden {
+        @apply md:hidden;
+    }
+
+    &.lg\:nv-hidden {
+        @apply lg:hidden;
+    }
+
+    &.xl\:nv-hidden {
+        @apply xl:hidden;
+    }
+
+    &.\32xl\:nv-hidden {
+        @apply 2xl:hidden;
+    }
+
+    &.sm\:nv-visible {
+        @apply hidden sm:table-cell;
+    }
+
+    &.md\:nv-visible {
+        @apply hidden md:table-cell;
+    }
+
+    &.lg\:nv-visible {
+        @apply hidden lg:table-cell;
+    }
+
+    &.xl\:nv-visible {
+        @apply hidden xl:table-cell;
+    }
+
+    &.\32xl\:nv-visible {
+        @apply hidden 2xl:table-cell;
+    }
+
+    &.nv-wrapped {
+        @apply whitespace-normal;
+    }
+
+    &:not(.nv-wrapped) {
+        @apply whitespace-nowrap;
+    }
+
+    & .nv-ta-header-cell-sort-btn {
+        @apply focus-visible:ring-primary-600 dark:focus-visible:ring-primary-500 flex w-full cursor-pointer appearance-none items-center justify-start gap-x-1 rounded-md border-0 bg-transparent p-0 text-start outline-none focus-visible:ring-2;
+
+        &.nv-disabled {
+            @apply cursor-default opacity-70;
+        }
+
+        /* The user agent stylesheet sets `text-transform: none` on form controls, and preflight only restores `font`, `letter-spacing`, and `color` inheritance — so without this, styling applied to the header cell reaches the plain label but not the sortable button. */
+        text-transform: inherit;
+    }
+
+    & .nv-icon {
+        @apply shrink-0 transition duration-75;
+    }
+
+    & .nv-loading-indicator {
+        @apply text-gray-400 dark:text-gray-500;
+    }
+}
+
+.nv-ta-header-group-cell {
+    @apply border-gray-200 px-3 py-2 text-sm font-semibold text-gray-950 sm:first-of-type:ps-6 sm:last-of-type:pe-6 dark:border-white/5 dark:text-white [&:not(:first-of-type)]:border-s [&:not(:last-of-type)]:border-e;
+
+    &.nv-align-start {
+        @apply text-start;
+    }
+
+    &.nv-align-center {
+        @apply text-center;
+    }
+
+    &.nv-align-end {
+        @apply text-end;
+    }
+
+    &.nv-align-left {
+        @apply text-left;
+    }
+
+    &.nv-align-right {
+        @apply text-right;
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply text-justify;
+    }
+
+    &.sm\:nv-hidden {
+        @apply sm:hidden;
+    }
+
+    &.md\:nv-hidden {
+        @apply md:hidden;
+    }
+
+    &.lg\:nv-hidden {
+        @apply lg:hidden;
+    }
+
+    &.xl\:nv-hidden {
+        @apply xl:hidden;
+    }
+
+    &.\32xl\:nv-hidden {
+        @apply 2xl:hidden;
+    }
+
+    &.sm\:nv-visible {
+        @apply hidden sm:table-cell;
+    }
+
+    &.md\:nv-visible {
+        @apply hidden md:table-cell;
+    }
+
+    &.lg\:nv-visible {
+        @apply hidden lg:table-cell;
+    }
+
+    &.xl\:nv-visible {
+        @apply hidden xl:table-cell;
+    }
+
+    &.\32xl\:nv-visible {
+        @apply hidden 2xl:table-cell;
+    }
+
+    &.nv-wrapped {
+        @apply whitespace-normal;
+    }
+
+    &:not(.nv-wrapped) {
+        @apply whitespace-nowrap;
+    }
+}
+
+.nv-ta-empty-header-cell {
+    @apply w-1;
+}

@@ -560,7 +560,7 @@ TextColumn.make('tags')
     .verticallyAlignStart()
 ```
 
-The cells get Filament's `fi-vertical-align-*` class.
+The cells get the `nv-vertical-align-*` class.
 
 ## Grouping columns
 
@@ -626,7 +626,7 @@ ColumnGroup.make('Shipping address', [
 
 Three methods add HTML attributes to a column:
 
-- `extraAttributes()`: the element holding the column's content (`.fi-ta-text`, `.fi-ta-icon`...),
+- `extraAttributes()`: the element holding the column's content (`.nv-ta-text`, `.nv-ta-icon`...),
 - `extraCellAttributes()`: each `<td>` cell,
 - `extraHeaderAttributes()`: the `<th>` header cell.
 

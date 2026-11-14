@@ -40,13 +40,13 @@
             }
         </style>
 
-        <link href="<%- assetUrl('fonts/filament/filament/inter/index.css') %>" rel="stylesheet" data-navigate-track />
+        <link href="<%- assetUrl('fonts/navette/navette/inter/index.css') %>" rel="stylesheet" data-navigate-track />
 
         <%- colorVariables %>
         <% if (locals.assetStyles) { %><%- assetStyles %><% } %>
 
         <%# The application's compiled theme if any, otherwise the default stylesheet %>
-        <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/filament/filament/app.css') %>" data-navigate-track="reload" />
+        <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/navette/navette/app.css') %>" data-navigate-track="reload" />
 
         <% if (font.url) { %>
             <% if (font.preconnect) { %><link rel="preconnect" href="<%- font.preconnect %>"><% } %>
@@ -77,7 +77,7 @@
         <script<%- cspNonceAttribute() %>>
             const loadDarkMode = () => {
                 window.theme =
-                    localStorage.getItem('filament:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
+                    localStorage.getItem('navette:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
 
                 if (
                     window.theme === 'dark' ||
@@ -105,7 +105,7 @@
         <%- renderHook('panels::head.end', renderHookScopes) %>
     </head>
 
-    <body <% if (locals.bodyAttributes) { %><%- bodyAttributes %> <% } %>class="<%- cls(['fi-body', 'fi-panel-' + panelId, bodyClass]) %>">
+    <body <% if (locals.bodyAttributes) { %><%- bodyAttributes %> <% } %>class="<%- cls(['nv-body', 'nv-panel-' + panelId, bodyClass]) %>">
         <%- renderHook('panels::body.start', renderHookScopes) %>
         <%- body %>
 
@@ -113,16 +113,16 @@
 
         <%- renderHook('panels::scripts.before', renderHookScopes) %>
         <script<%- cspNonceAttribute() %>>
-            <%- locals.scriptData ?? 'window.filamentData = []' %>
+            <%- locals.scriptData ?? 'window.navetteData = []' %>
         </script>
         <% if (locals.errorNotifications) { %>
         <script<%- cspNonceAttribute() %>>
-            window.filamentErrorNotifications = <%- js(errorNotifications) %>
+            window.navetteErrorNotifications = <%- js(errorNotifications) %>
         </script>
         <% } %>
 
         <% if (locals.assetScripts) { %><%- assetScripts %><% } %>
-        <% for (const src of ['js/filament/actions/actions.js', 'js/filament/notifications/notifications.js', 'js/filament/schemas/schemas.js', 'js/filament/support/support.js', 'js/filament/tables/tables.js', 'js/filament/filament/echo.js', 'js/filament/filament/app.js']) { %>
+        <% for (const src of ['js/navette/actions/actions.js', 'js/navette/notifications/notifications.js', 'js/navette/schemas/schemas.js', 'js/navette/support/support.js', 'js/navette/tables/tables.js', 'js/navette/navette/echo.js', 'js/navette/navette/app.js']) { %>
             <script<%- cspNonceAttribute() %> src="<%- assetUrl(src) %>"<% if (locals.spa !== false) { %> data-navigate-once data-navigate-track<% } %>></script>
         <% } %>
 

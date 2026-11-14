@@ -1,7 +1,7 @@
 <%# Badge without icon or delete button; `tooltip` shows on hover. %>
-<span<% if (locals.tooltip) { %> x-tooltip="<%= '{ content: ' + js(tooltip) + ', theme: $store.theme, allowHTML: false }' %>"<% } %> class="<%- cls([...colorClasses, 'fi-badge', 'fi-size-' + (locals.size ?? 'md')]) %>">
-    <span class="fi-badge-label-ctn">
-        <span class="fi-badge-label">
+<span<% if (locals.tooltip) { %> x-tooltip="<%= '{ content: ' + js(tooltip) + ', theme: $store.theme, allowHTML: false }' %>"<% } %> class="<%- cls([...colorClasses, 'nv-badge', 'nv-size-' + (locals.size ?? 'md')]) %>">
+    <span class="nv-badge-label-ctn">
+        <span class="nv-badge-label">
             <%= label %>
         </span>
     </span>

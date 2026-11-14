@@ -51,9 +51,9 @@ export class ToolbarButtonGroup {
         const groupActive = tools.map((tool) => `(${tool.getActiveExpression()})`).join(' || ');
         const trigger = new Attributes(this._extraAttributes).merge({
             type: 'button', tabindex: '-1', 'data-rich-editor-tool': label, 'aria-label': label,
-            'x-bind:class': `{ 'fi-active': ${groupActive} }`,
+            'x-bind:class': `{ 'nv-active': ${groupActive} }`,
             'x-tooltip': `{ content: ${js(label)}, theme: $store.theme }`,
-        }).class(['fi-fo-rich-editor-dropdown-tool-trigger']);
+        }).class(['nv-fo-rich-editor-dropdown-tool-trigger']);
         const textual = this._textualButtons;
         const items = tools.map((tool) => {
             const active = tool.getActiveExpression();
@@ -65,14 +65,14 @@ export class ToolbarButtonGroup {
                 'aria-checked': tool.isToggle() ? 'false' : null,
                 'x-bind:aria-checked': tool.isToggle() ? `(${active}) ? 'true' : 'false'` : null,
                 'x-bind:aria-disabled': tool.isDisabledWhenNotActive() ? `!(${active}) ? 'true' : 'false'` : null,
-                'x-on:click': `$event.stopPropagation(); if ($el.getAttribute('aria-disabled') === 'true') return; Alpine.$data($el.closest('.fi-dropdown')).closeMenuHierarchy(); ${tool.getJsHandler() ?? ''}`,
-                'x-bind:class': `{ 'fi-active': ${tool.hasActiveStyling() ? active : 'false'} }`,
+                'x-on:click': `$event.stopPropagation(); if ($el.getAttribute('aria-disabled') === 'true') return; Alpine.$data($el.closest('.nv-dropdown')).closeMenuHierarchy(); ${tool.getJsHandler() ?? ''}`,
+                'x-bind:class': `{ 'nv-active': ${tool.hasActiveStyling() ? active : 'false'} }`,
                 'x-tooltip': textual ? null : `{ content: ${js(toolLabel)}, theme: $store.theme }`,
-            }).class(['fi-dropdown-list-item', 'fi-fo-rich-editor-dropdown-tool-option']);
+            }).class(['nv-dropdown-list-item', 'nv-fo-rich-editor-dropdown-tool-option']);
             return `<button ${attributes.toHtml()}>${tool.getIconHtml()}${textual ? ` <span>${e(toolLabel)}</span>` : ''}</button>`;
         }).join('');
-        const chevron = '<svg class="fi-fo-rich-editor-dropdown-tool-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        return `<div x-data="${e(`{ ...filamentDropdown(), triggerContent: ${js(defaultContent)} }`)}" x-effect="${e(triggerEffect)}" class="fi-dropdown fi-fo-rich-editor-dropdown-tool${textual ? ' fi-fo-rich-editor-dropdown-tool-textual' : ''}"><div class="fi-dropdown-trigger" x-on:mousedown="if ($event.button === 0) toggle($event)"><button ${trigger.toHtml()}><span x-html="triggerContent">${defaultContent}</span>${chevron}</button></div><div x-cloak x-ref="panel" x-float.placement.bottom-start.flip="{ offset: 4 }" aria-orientation="${textual ? 'vertical' : 'horizontal'}" x-on:keydown.capture="handleToolbarMenuKeydown($event)" class="fi-dropdown-panel fi-fo-rich-editor-dropdown-tool-panel"><div class="fi-fo-rich-editor-dropdown-tool-menu">${items}</div></div></div>`;
+        const chevron = '<svg class="nv-fo-rich-editor-dropdown-tool-chevron" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M3 4.5 6 7.5l3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        return `<div x-data="${e(`{ ...navetteDropdown(), triggerContent: ${js(defaultContent)} }`)}" x-effect="${e(triggerEffect)}" class="nv-dropdown nv-fo-rich-editor-dropdown-tool${textual ? ' nv-fo-rich-editor-dropdown-tool-textual' : ''}"><div class="nv-dropdown-trigger" x-on:mousedown="if ($event.button === 0) toggle($event)"><button ${trigger.toHtml()}><span x-html="triggerContent">${defaultContent}</span>${chevron}</button></div><div x-cloak x-ref="panel" x-float.placement.bottom-start.flip="{ offset: 4 }" aria-orientation="${textual ? 'vertical' : 'horizontal'}" x-on:keydown.capture="handleToolbarMenuKeydown($event)" class="nv-dropdown-panel nv-fo-rich-editor-dropdown-tool-panel"><div class="nv-fo-rich-editor-dropdown-tool-menu">${items}</div></div></div>`;
     }
 }
 

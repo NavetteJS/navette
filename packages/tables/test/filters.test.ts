@@ -82,30 +82,30 @@ test('custom indicators: `Indicator` objects, removable or not, with a color', a
     assert.equal(await isTableFilterRemovable(table, host(state), 'locked'), false);
     assert.equal(await isTableFilterRemovable(table, host(state), 'free'), true);
     const html = await renderTable(table.columns([TextColumn.make('title')]), host(state), adapter, { filtersForm: '<form></form>' });
-    assert.equal((html.match(/fi-badge-delete-btn"/g) ?? []).length, 1, 'only the removable indicator has a remove button');
+    assert.equal((html.match(/nv-badge-delete-btn"/g) ?? []).length, 1, 'only the removable indicator has a remove button');
     assert.match(html, /removeTableFilters/);
     const hidden = await renderTable(table.hiddenFilterIndicators(), host(state), adapter, { filtersForm: '<form></form>' });
-    assert.doesNotMatch(hidden, /fi-ta-filter-indicators/);
+    assert.doesNotMatch(hidden, /nv-ta-filter-indicators/);
 });
 
 test('filters layouts, live filters and form options', async () => {
     const render = (table: Table) => renderTable(table.columns([TextColumn.make('title')]).filters([SelectFilter.make('status').options(STATUSES)]), host(), adapter, { filtersForm: '<div class="the-form"></div>' });
     const dropdown = await render(new Table().filtersFormWidth('md').filtersFormMaxHeight('400px'));
-    assert.match(dropdown, /fi-dropdown-panel fi-width-md" style="max-height: 400px"/);
+    assert.match(dropdown, /nv-dropdown-panel nv-width-md" style="max-height: 400px"/);
     assert.match(dropdown, /data-table-filter-action="apply"/);
     const live = await render(new Table().deferFilters(false));
     assert.doesNotMatch(live, /data-table-filter-action="apply"/);
     const modal = await render(new Table().filtersLayout('modal'));
     assert.match(modal, /x-on:click="\$dispatch\('open-modal', \{ id: &#39;H-table-filters&#39; \}\)"/);
-    assert.match(modal, /class="fi-modal /);
-    assert.match(await render(new Table().filtersLayout('below-content')), /class="fi-ta-filters fi-ta-filters-below-content"/);
+    assert.match(modal, /class="nv-modal /);
+    assert.match(await render(new Table().filtersLayout('below-content')), /class="nv-ta-filters nv-ta-filters-below-content"/);
     const before = await render(new Table().filtersLayout('before-content-collapsible'));
-    assert.match(before, /fi-ta-filters-before-content-ctn fi-width-xs/);
+    assert.match(before, /nv-ta-filters-before-content-ctn nv-width-xs/);
     assert.match(before, /x-on:click="toggleFiltersDropdown"/);
     const above = await render(new Table().filtersLayout('above-content').filtersResetActionPosition('footer'));
-    assert.match(above, /fi-ta-filters-above-content-ctn/);
+    assert.match(above, /nv-ta-filters-above-content-ctn/);
     assert.doesNotMatch(above, /areFiltersOpen = ! areFiltersOpen/, 'not collapsible: no trigger');
-    assert.match(above, /fi-ta-filters-actions-ctn">\s*<button[^>]*data-table-filter-action="apply"[\s\S]*data-table-filter-action="reset"/);
+    assert.match(above, /nv-ta-filters-actions-ctn">\s*<button[^>]*data-table-filter-action="apply"[\s\S]*data-table-filter-action="reset"/);
     assert.deepEqual(new Table().filtersLayout('below-content').getFiltersFormColumns(), { sm: 2, lg: 3, xl: 4, '2xl': 5 });
     assert.equal(new Table().filtersLayout('modal').getFiltersFormColumns(), 1);
     assert.equal(new Table().filtersFormWidth('100px; color: red').getFiltersFormWidth(), null, 'only known widths');
@@ -118,8 +118,8 @@ test('customized filters actions: trigger, apply and reset', async () => {
         .filtersApplyAction((action) => action.link().label('Save filters'))
         .filtersResetAction((action) => action.hidden());
     const html = (await renderTable(table, host(), adapter, { filtersForm: '<div></div>' })).replace(/\s+/g, ' ');
-    assert.match(html, /<button type="button" wire:loading\.attr="aria-disabled" wire:loading\.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-md"><svg[^]*?<\/svg>Refine<div class="fi-btn-badge-ctn"><span class="[^"]*fi-badge fi-size-xs">0<\/span><\/div><\/button>/);
-    assert.match(html, /data-table-filter-action="apply" wire:click="applyTableFilters" class="fi-ac-link-action fi-link fi-size-md[^"]*"><span class="fi-link-label">Save filters<\/span>/);
+    assert.match(html, /<button type="button" wire:loading\.attr="aria-disabled" wire:loading\.class="nv-disabled" class="nv-ac-btn-action nv-btn nv-size-md"><svg[^]*?<\/svg>Refine<div class="nv-btn-badge-ctn"><span class="[^"]*nv-badge nv-size-xs">0<\/span><\/div><\/button>/);
+    assert.match(html, /data-table-filter-action="apply" wire:click="applyTableFilters" class="nv-ac-link-action nv-link nv-size-md[^"]*"><span class="nv-link-label">Save filters<\/span>/);
     assert.doesNotMatch(html, /data-table-filter-action="reset"/);
     const defaults = await renderTable(new Table().columns([TextColumn.make('title')]).filters([SelectFilter.make('status').options(STATUSES)]), host(), adapter, { filtersForm: '<div></div>' });
     assert.match(defaults, /title="Filter" aria-label="Filter"/);

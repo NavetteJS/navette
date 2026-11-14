@@ -12,10 +12,10 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
 const { step, skip, exitCode } = reporter({ errorLines: 3 });
-const rows = page.locator('.fi-ta-records tr.fi-ta-row:not(.fi-ta-summary-row):not(.fi-ta-summary-header-row)');
-const cell = (row, name) => row.locator(`.fi-ta-cell-${name.replace(/_/g, '-').replace(/\./g, '\\.')}`);
+const rows = page.locator('.nv-ta-records tr.nv-ta-row:not(.nv-ta-summary-row):not(.nv-ta-summary-header-row)');
+const cell = (row, name) => row.locator(`.nv-ta-cell-${name.replace(/_/g, '-').replace(/\./g, '\\.')}`);
 const text = async (locator) => (await locator.innerText()).replace(/\s+/g, ' ').trim();
-const firstCell = (name) => `.fi-ta-records tr.fi-ta-row .fi-ta-cell-${name.replace(/_/g, '-').replace(/\./g, '\\.')}`;
+const firstCell = (name) => `.nv-ta-records tr.nv-ta-row .nv-ta-cell-${name.replace(/_/g, '-').replace(/\./g, '\\.')}`;
 const labeled = async (label, promise) => { try { return await promise; } catch (error) { throw new Error(`[${label}] ${error.message}`); } };
 const LIVE = 'o.deleted_at is null';
 /** Aggregates of one order, from the database. */
@@ -36,24 +36,24 @@ try {
             assert.equal(await text(cell(row, 'customer.name')), expected.customer ?? '');
             assert.equal(await text(cell(row, 'items_count')), String(expected.items));
             assert.equal(await text(cell(row, 'items_sum_qty')), String(expected.qty ?? ''));
-            assert.equal(await cell(row, 'payments_exists').locator(expected.paid ? '.fi-color-success' : '.fi-color-danger').count(), 1);
+            assert.equal(await cell(row, 'payments_exists').locator(expected.paid ? '.nv-color-success' : '.nv-color-danger').count(), 1);
             // The summary sums the item counts of every order.
             const total = db.prepare(`select count(*) n from order_items i join orders o on o.id = i.order_id where ${LIVE}`).get().n;
-            assert.ok((await text(page.locator('.fi-ta-summary-row').last())).includes(total.toLocaleString('en-US')));
+            assert.ok((await text(page.locator('.nv-ta-summary-row').last())).includes(total.toLocaleString('en-US')));
         });
 
         await step('sorting by the customer name (a subquery of the relationship), then by the item count', async () => {
-            const sort = page.locator('.fi-ta-header-cell-sort-btn', { hasText: 'Customer' }).first();
+            const sort = page.locator('.nv-ta-header-cell-sort-btn', { hasText: 'Customer' }).first();
             await sort.click();
-            await page.locator('th.fi-ta-header-cell-customer\\.name[aria-sort="ascending"]').waitFor({ timeout: 8000 });
+            await page.locator('th.nv-ta-header-cell-customer\\.name[aria-sort="ascending"]').waitFor({ timeout: 8000 });
             await sort.click();
-            await page.locator('th.fi-ta-header-cell-customer\\.name[aria-sort="descending"]').waitFor({ timeout: 8000 });
+            await page.locator('th.nv-ta-header-cell-customer\\.name[aria-sort="descending"]').waitFor({ timeout: 8000 });
             const last = db.prepare(`select c.name from orders o join customers c on c.id = o.customer_id where ${LIVE} order by c.name desc limit 1`).get().name;
             await page.waitForFunction(([selector, name]) => document.querySelector(selector)?.innerText.trim() === name, [firstCell('customer.name'), last], { timeout: 8000 });
-            const items = page.locator('.fi-ta-header-cell-sort-btn', { hasText: 'Items' }).first();
+            const items = page.locator('.nv-ta-header-cell-sort-btn', { hasText: 'Items' }).first();
             await items.click();
             await items.click();
-            await page.locator('th.fi-ta-header-cell-items-count[aria-sort="descending"]').waitFor({ timeout: 8000 });
+            await page.locator('th.nv-ta-header-cell-items-count[aria-sort="descending"]').waitFor({ timeout: 8000 });
             const most = db.prepare(`select max(n) n from (select count(i.id) n from orders o left join order_items i on i.order_id = o.id where ${LIVE} group by o.id)`).get().n;
             await page.waitForFunction(([selector, n]) => document.querySelector(selector)?.innerText.trim() === String(n), [firstCell('items_count'), most], { timeout: 8000 });
         });
@@ -63,27 +63,27 @@ try {
             const words = customer.toLowerCase().split(/\s+/);
             // Each word must match the order number or the customer's name.
             const n = db.prepare(`select count(*) n from orders o where ${LIVE} and ${words.map(() => '(exists(select 1 from customers c where c.id = o.customer_id and lower(c.name) like ?) or lower(o.number) like ?)').join(' and ')}`).get(...words.flatMap((w) => [`%${w}%`, `%${w}%`])).n;
-            await page.locator('.fi-ta-header-toolbar .fi-ta-search-field input').fill(customer);
-            await labeled(1, page.waitForFunction((k) => document.querySelector('.fi-pagination-overview')?.innerText.includes(`of ${k} `) || document.querySelectorAll('.fi-ta-records tr.fi-ta-row:not(.fi-ta-summary-row):not(.fi-ta-summary-header-row)').length === k, n, { timeout: 8000 }));
-            assert.deepEqual([...new Set(await rows.locator('.fi-ta-cell-customer\\.name').allInnerTexts())].map((name) => name.trim()), [customer]);
-            await page.locator('.fi-ta-header-toolbar .fi-ta-search-field input').fill("zz' or 'zz'='zz");
-            await labeled('empty', page.locator('.fi-ta-empty-state').waitFor({ timeout: 8000 }));
-            await page.locator('.fi-ta-header-toolbar .fi-ta-search-field input').fill('');
+            await page.locator('.nv-ta-header-toolbar .nv-ta-search-field input').fill(customer);
+            await labeled(1, page.waitForFunction((k) => document.querySelector('.nv-pagination-overview')?.innerText.includes(`of ${k} `) || document.querySelectorAll('.nv-ta-records tr.nv-ta-row:not(.nv-ta-summary-row):not(.nv-ta-summary-header-row)').length === k, n, { timeout: 8000 }));
+            assert.deepEqual([...new Set(await rows.locator('.nv-ta-cell-customer\\.name').allInnerTexts())].map((name) => name.trim()), [customer]);
+            await page.locator('.nv-ta-header-toolbar .nv-ta-search-field input').fill("zz' or 'zz'='zz");
+            await labeled('empty', page.locator('.nv-ta-empty-state').waitFor({ timeout: 8000 }));
+            await page.locator('.nv-ta-header-toolbar .nv-ta-search-field input').fill('');
             await labeled('rows', rows.first().waitFor({ timeout: 8000 }));
-            const individual = page.locator('.fi-ta-individual-search-row input').first();
+            const individual = page.locator('.nv-ta-individual-search-row input').first();
             await individual.fill(customer);
-            await labeled(2, page.waitForFunction((name) => { const cells = [...document.querySelectorAll('.fi-ta-records tr.fi-ta-row .fi-ta-cell-customer\\.name')]; return cells.length > 0 && cells.every((c) => c.innerText.trim() === name); }, customer, { timeout: 8000 }));
+            await labeled(2, page.waitForFunction((name) => { const cells = [...document.querySelectorAll('.nv-ta-records tr.nv-ta-row .nv-ta-cell-customer\\.name')]; return cells.length > 0 && cells.every((c) => c.innerText.trim() === name); }, customer, { timeout: 8000 }));
             await individual.fill('');
-            await labeled(3, page.waitForFunction(() => document.querySelector('.fi-pagination-overview') !== null, null, { timeout: 8000 }));
+            await labeled(3, page.waitForFunction(() => document.querySelector('.nv-pagination-overview') !== null, null, { timeout: 8000 }));
         });
 
         await step('an editable relationship column saves the phone of the order\'s customer', async () => {
             await page.goto(`${BASE}/lab/relations`);
             await rows.first().waitFor({ timeout: 8000 });
             const order = db.prepare(`select o.id, o.number, o.customer_id from orders o where ${LIVE} and o.customer_id is not null order by o.id limit 1`).get();
-            await page.locator('.fi-ta-header-toolbar .fi-ta-search-field input').fill(order.number);
-            await page.waitForFunction(() => document.querySelectorAll('.fi-ta-records tr.fi-ta-row:not(.fi-ta-summary-row):not(.fi-ta-summary-header-row)').length === 1, null, { timeout: 8000 });
-            const input = cell(rows.first(), 'customer.phone').locator('input.fi-input');
+            await page.locator('.nv-ta-header-toolbar .nv-ta-search-field input').fill(order.number);
+            await page.waitForFunction(() => document.querySelectorAll('.nv-ta-records tr.nv-ta-row:not(.nv-ta-summary-row):not(.nv-ta-summary-header-row)').length === 1, null, { timeout: 8000 });
+            const input = cell(rows.first(), 'customer.phone').locator('input.nv-input');
             const saved = page.waitForResponse((r) => r.url().includes('/livewire') && (r.request().postData() ?? '').includes('updateTableColumnState'));
             await input.fill('+33 1 23 45 67 89');
             await input.blur();
@@ -94,9 +94,9 @@ try {
         await step('view page: relationship entries loaded on demand, and the aggregate entries', async () => {
             const order = db.prepare(`select o.id from orders o where ${LIVE} and o.customer_id is not null and exists(select 1 from payments p where p.order_id = o.id) order by o.id limit 1`).get();
             await page.goto(`${BASE}/lab/relations/${order.id}`);
-            const entries = page.locator('.fi-in-entry');
+            const entries = page.locator('.nv-in-entry');
             await entries.first().waitFor({ timeout: 8000 });
-            const entry = async (label) => text(entries.filter({ has: page.locator('.fi-in-entry-label', { hasText: new RegExp(`^${label}$`) }) }).first().locator('.fi-in-entry-content-col'));
+            const entry = async (label) => text(entries.filter({ has: page.locator('.nv-in-entry-label', { hasText: new RegExp(`^${label}$`) }) }).first().locator('.nv-in-entry-content-col'));
             const expected = aggregatesOf(order.id);
             assert.equal(await entry('Customer'), expected.customer);
             assert.equal(await entry('Items'), String(expected.items));
@@ -110,13 +110,13 @@ try {
             await page.goto(`${BASE}/lab/relations`);
             await rows.first().waitFor({ timeout: 8000 });
             const first = db.prepare(`select o.id, o.number from orders o where ${LIVE} order by o.number asc, o.id asc limit 1`).get();
-            await page.locator('.fi-ta-header-toolbar .fi-ta-search-field input').fill(first.number);
-            await page.waitForFunction((number) => [...document.querySelectorAll('.fi-ta-records tr.fi-ta-row .fi-ta-cell-number')].every((c) => c.innerText.includes(number)), first.number, { timeout: 8000 });
-            await page.locator('.fi-ta-header .fi-ac-btn-action', { hasText: /Export/ }).first().click();
-            const modal = page.locator('.fi-modal-window:visible');
+            await page.locator('.nv-ta-header-toolbar .nv-ta-search-field input').fill(first.number);
+            await page.waitForFunction((number) => [...document.querySelectorAll('.nv-ta-records tr.nv-ta-row .nv-ta-cell-number')].every((c) => c.innerText.includes(number)), first.number, { timeout: 8000 });
+            await page.locator('.nv-ta-header .nv-ac-btn-action', { hasText: /Export/ }).first().click();
+            const modal = page.locator('.nv-modal-window:visible');
             await modal.waitFor({ timeout: 5000 });
-            await modal.locator('.fi-modal-footer button', { hasText: 'Export' }).click();
-            const link = page.locator('.fi-no-notification a', { hasText: /\.csv/i }).first();
+            await modal.locator('.nv-modal-footer button', { hasText: 'Export' }).click();
+            const link = page.locator('.nv-no-notification a', { hasText: /\.csv/i }).first();
             await link.waitFor({ timeout: 8000 });
             const csv = (await (await page.request.get(new URL(await link.getAttribute('href'), BASE).toString())).text()).replace(/^﻿/, '');
             const lines = csv.trim().split(/\r?\n/);

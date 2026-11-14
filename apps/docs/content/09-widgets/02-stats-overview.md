@@ -208,10 +208,10 @@ The trend line is drawn in the browser by Chart.js.
 
 ## Styling stat charts in a theme
 
-To style stat charts from a [custom theme](/styling/overview#creating-a-custom-theme), set these CSS custom properties on `.fi-wi-stats-overview-stat` or a parent element:
+To style stat charts from a [custom theme](/styling/overview#creating-a-custom-theme), set these CSS custom properties on `.nv-wi-stats-overview-stat` or a parent element:
 
 ```css
-.fi-wi-stats-overview-stat {
+.nv-wi-stats-overview-stat {
     --stat-chart-border-width: 1;
     --stat-chart-line-tension: 0;
     --stat-chart-fill: none;
@@ -224,11 +224,11 @@ To style stat charts from a [custom theme](/styling/overview#creating-a-custom-t
 
 Use unitless numbers and the supported keywords, not CSS lengths. You may set different values for light and dark mode.
 
-The chart takes its colors from the [color of the stat](#changing-the-color-of-the-stat). To change them in a theme, style the `.fi-wi-stats-overview-stat-chart-bg-color` and `.fi-wi-stats-overview-stat-chart-border-color` elements with an ordinary `color` declaration:
+The chart takes its colors from the [color of the stat](#changing-the-color-of-the-stat). To change them in a theme, style the `.nv-wi-stats-overview-stat-chart-bg-color` and `.nv-wi-stats-overview-stat-chart-border-color` elements with an ordinary `color` declaration:
 
 ```css
-.fi-wi-stats-overview-stat {
-    & .fi-wi-stats-overview-stat-chart-border-color {
+.nv-wi-stats-overview-stat {
+    & .nv-wi-stats-overview-stat-chart-border-color {
         @apply text-gray-400 dark:text-gray-500;
     }
 }

@@ -71,14 +71,14 @@ export class Orders extends Page {
 
 ### Switching tabs in the browser
 
-To switch without a request, keep the current tab in Alpine.js. Build the items in an EJS block, where quotes are free, and bind the `fi-active` class of each tab:
+To switch without a request, keep the current tab in Alpine.js. Build the items in an EJS block, where quotes are free, and bind the `nv-active` class of each tab:
 
 ```html
 <%
 const item = (key, label) => ({
     label,
     active: key === 'details',
-    attributes: { 'x-on:click': `tab = '${key}'`, 'x-bind:class': `{ 'fi-active': tab === '${key}' }` },
+    attributes: { 'x-on:click': `tab = '${key}'`, 'x-bind:class': `{ 'nv-active': tab === '${key}' }` },
 });
 %>
 <div x-data="{ tab: 'details' }">

@@ -1,0 +1,49 @@
+.nv-tenant-menu-trigger {
+    @apply flex w-full items-center justify-center gap-x-3 rounded-lg p-2 text-sm font-medium outline-hidden transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5;
+
+    & .nv-tenant-avatar {
+        @apply max-w-none shrink-0;
+    }
+
+    & .nv-icon {
+        @apply ms-auto size-5 shrink-0 text-gray-400 transition duration-75 group-hover:text-gray-500 group-focus-visible:text-gray-500 dark:text-gray-500 dark:group-hover:text-gray-400 dark:group-focus-visible:text-gray-400;
+    }
+
+    &:hover {
+        & .nv-icon {
+            @apply text-gray-500 dark:text-gray-400;
+        }
+    }
+
+    &:focus-visible {
+        & .nv-icon {
+            @apply text-gray-500 dark:text-gray-400;
+        }
+    }
+}
+
+.nv-tenant-menu-trigger-text {
+    @apply grid justify-items-start text-start;
+}
+
+.nv-tenant-menu-trigger-current-tenant-label {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+.nv-tenant-menu-trigger-tenant-name {
+    @apply text-gray-950 dark:text-white;
+}
+
+.nv-tenant-menu-item {
+    @apply min-w-0;
+
+    & .nv-dropdown-list-item-image {
+        @apply rounded-sm;
+    }
+}
+
+.nv-sidebar {
+    & .nv-tenant-menu {
+        @apply mx-4 mt-3;
+    }
+}

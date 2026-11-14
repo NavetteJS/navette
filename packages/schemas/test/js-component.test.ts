@@ -13,9 +13,9 @@ const decode = (value: string) => value.replace(/&quot;/g, '"').replace(/&#039;/
 
 test('JsComponent: Filament markup, renderer URL, configuration and id', async () => {
     const html = await render([JsComponent.make().key('chart').renderer('/js/components/chart.js').rendererConfiguration({ points: [1, 2, 3] })]);
-    assert.ok(html.includes('x-data="filamentSchemaComponent('));
+    assert.ok(html.includes('x-data="navetteSchemaComponent('));
     assert.ok(html.includes(`wire:key="lw.form.chart.${md5('{"id":"form.chart"}/js/components/chart.js')}"`));
-    assert.ok(html.includes('x-load-src="/js/filament/schemas/components/js-component.js"'));
+    assert.ok(html.includes('x-load-src="/js/navette/schemas/components/js-component.js"'));
     assert.ok(html.includes('x-data="jsSchemaComponent({'));
     assert.ok(html.includes('renderer: &#039;\\/js\\/components\\/chart.js&#039;,'));
     assert.ok(html.includes("rendererConfiguration: JSON.parse($el.querySelector('[data-renderer-configuration]').dataset.rendererConfiguration),"));

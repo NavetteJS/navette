@@ -13,7 +13,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
 const { step, exitCode } = reporter({ errorLines: 5 });
-const modal = () => page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+const modal = () => page.locator('.nv-modal.nv-modal-open .nv-modal-window');
 const db = openDatabase(dbFile);
 
 const openImport = async (file) => {

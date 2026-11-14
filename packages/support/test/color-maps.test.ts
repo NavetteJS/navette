@@ -14,7 +14,7 @@ test('the builders reproduce the default maps', () => {
         .slot('dark:text', { surface: Color.Zinc[600], maxShade: 500, shouldStartFromDarkest: true, fallback: 200 })
         .get();
     const classes = new ColorManager().register({ x: Color.Blue }).getComponentClasses('badge', 'x');
-    assert.ok(classes.includes(`fi-text-color-${badge.text}`) && classes.includes(`dark:fi-text-color-${badge['dark:text']}`), classes.join(' '));
+    assert.ok(classes.includes(`nv-text-color-${badge.text}`) && classes.includes(`dark:nv-text-color-${badge['dark:text']}`), classes.join(' '));
     assert.equal(WCAG_AA_NON_TEXT, 3);
     assert.equal(WCAG_AAA_TEXT, 7);
 });
@@ -29,7 +29,7 @@ test('overrideColorMap() changes the classes of a component in every color manag
     const colors = new ColorManager();
     const before = colors.getComponentClasses('button', 'primary');
     const dangerBefore = colors.getComponentClasses('button', 'danger');
-    assert.ok(before.includes('fi-bg-color-400'), 'amber: pale background by default');
+    assert.ok(before.includes('nv-bg-color-400'), 'amber: pale background by default');
     ColorManager.overrideColorMap('button', (palette, { color, getDefault }) => (color === 'danger' ? getDefault() : ButtonComponentColorMap.make(palette)
         .minContrastRatio(WCAG_AAA_TEXT)
         .lightBackground(800, 700)
@@ -38,7 +38,7 @@ test('overrideColorMap() changes the classes of a component in every color manag
         .get()));
     const after = colors.getComponentClasses('button', 'primary');
     assert.notDeepEqual(after, before, 'the cache is invalidated');
-    assert.ok(after.includes('fi-bg-color-800'), after.join(' '));
+    assert.ok(after.includes('nv-bg-color-800'), after.join(' '));
     assert.deepEqual(colors.getComponentClasses('button', 'danger'), dangerBefore, 'getDefault() keeps the default map');
     // Other components keep their default maps.
     assert.deepEqual(colors.getComponentClasses('badge', 'primary'), new ColorManager().getComponentClasses('badge', 'primary'));
@@ -53,5 +53,5 @@ test('overrideColorMap() refuses unknown components, slots and shades', () => {
     ColorManager.overrideColorMap('badge', () => ({ text: 550.5 }));
     assert.throws(() => new ColorManager().getComponentClasses('badge', 'info'), /Invalid shade/);
     ColorManager.overrideColorMap('badge', () => ComponentColorMap.make(Color.Blue).slot('text', { surface: 'oklch(1 0 0)', minRatio: WCAG_AAA_TEXT }).get());
-    assert.ok(new ColorManager().getComponentClasses('badge', 'info').some((c) => /^fi-text-color-\d+$/.test(c)));
+    assert.ok(new ColorManager().getComponentClasses('badge', 'info').some((c) => /^nv-text-color-\d+$/.test(c)));
 });

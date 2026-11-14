@@ -16,8 +16,8 @@ export class LocationPicker extends Field {
     }
 
     async toHtml(): Promise<string> {
-        return this.wrap(`<div class="fi-input-wrp"><div class="fi-input-wrp-content-ctn">
-            <input type="text" id="${e(this.getId())}" wire:model="${e(this.getStatePath())}" class="fi-input" />
+        return this.wrap(`<div class="nv-input-wrp"><div class="nv-input-wrp-content-ctn">
+            <input type="text" id="${e(this.getId())}" wire:model="${e(this.getStatePath())}" class="nv-input" />
         </div></div>`);
     }
 }
@@ -40,8 +40,8 @@ class LocationPicker extends Field {
     }
 
     async toHtml() {
-        return this.wrap(`<div class="fi-input-wrp"><div class="fi-input-wrp-content-ctn">
-            <input type="text" id="${e(this.getId())}" wire:model="${e(this.getStatePath())}" class="fi-input" />
+        return this.wrap(`<div class="nv-input-wrp"><div class="nv-input-wrp-content-ctn">
+            <input type="text" id="${e(this.getId())}" wire:model="${e(this.getStatePath())}" class="nv-input" />
         </div></div>`);
     }
 }
@@ -488,7 +488,7 @@ export default function mountLocationPicker({ host, props: initialProps }) {
 }
 ```
 
-The examples leave the styling to you. Your component may use the panel's classes, such as `fi-input-wrp` and `fi-input`, to look like the other fields.
+The examples leave the styling to you. Your component may use the panel's classes, such as `nv-input-wrp` and `nv-input`, to look like the other fields.
 
 ### Receiving state and emitting changes
 

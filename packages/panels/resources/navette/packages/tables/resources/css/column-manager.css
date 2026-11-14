@@ -1,0 +1,48 @@
+.nv-ta-col-manager {
+    @apply grid gap-4;
+
+    & .nv-ta-col-manager-header {
+        @apply flex items-center justify-between;
+    }
+
+    & .nv-ta-col-manager-heading {
+        @apply text-base leading-6 font-semibold text-gray-950 dark:text-white;
+    }
+
+    & .nv-ta-col-manager-items {
+        @apply -mt-6 gap-x-6;
+    }
+
+    & .nv-ta-col-manager-reorder-controls,
+    & .nv-ta-col-manager-status {
+        @apply sr-only;
+    }
+
+    & .nv-ta-col-manager-item {
+        @apply flex break-inside-avoid items-center gap-3 pt-6;
+
+        & .nv-ta-col-manager-label {
+            @apply flex w-full flex-1 items-center gap-x-3 text-sm font-medium text-gray-950 dark:text-white;
+
+            & .nv-checkbox-input {
+                @apply shrink-0;
+            }
+        }
+
+        & .nv-ta-col-manager-reorder-handle {
+            @apply cursor-move;
+        }
+    }
+
+    & .nv-ta-col-manager-group {
+        @apply break-inside-avoid;
+
+        & .nv-ta-col-manager-group-items {
+            @apply ps-8;
+        }
+    }
+
+    & .nv-ta-col-manager-actions-ctn {
+        @apply flex gap-3;
+    }
+}

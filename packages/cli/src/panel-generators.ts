@@ -371,7 +371,7 @@ export function generateTheme(panel: string): { files: GeneratedFiles; script: {
 @source '../../../src/views/**/*.ejs';
 
 /* Your own CSS, e.g. a rounder look: */
-/* .fi-btn { border-radius: var(--radius-full); } */
+/* .nv-btn { border-radius: var(--radius-full); } */
 `,
         },
         script: { name: `build:theme:${panel}`, command: `tailwindcss -i ${source} -o ${output} --minify` },

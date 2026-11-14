@@ -11,7 +11,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
 const { step, exitCode } = reporter({ errorLines: 5 });
-const modal = () => page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+const modal = () => page.locator('.nv-modal.nv-modal-open .nv-modal-window');
 const content = page.locator('[data-rich-editor-key="form.content"] .tiptap[contenteditable="true"]');
 const tool = (name) => page.locator(`[data-rich-editor-key="form.content"] [data-rich-editor-tool="${name}"]`);
 const title = `Rich features ${Date.now()}`;
@@ -40,13 +40,13 @@ try {
         await page.keyboard.press('Enter');
         await page.keyboard.type('Written by ');
         await tool('mergeTags').click();
-        await page.locator('.fi-fo-rich-editor-merge-tag-btn', { hasText: 'Author name' }).click();
+        await page.locator('.nv-fo-rich-editor-merge-tag-btn', { hasText: 'Author name' }).click();
         await content.locator('[data-type="mergeTag"]').waitFor();
         await content.click();
         await page.keyboard.press('Control+End');
         // Authors are searched on the server as the user types.
         await page.keyboard.type(' thanks @Eri');
-        const suggestion = page.locator('.fi-dropdown-panel.fi-scrollable:visible .fi-dropdown-list-item', { hasText: 'Erick' }).first();
+        const suggestion = page.locator('.nv-dropdown-panel.nv-scrollable:visible .nv-dropdown-list-item', { hasText: 'Erick' }).first();
         await suggestion.waitFor({ timeout: 8000 });
         await suggestion.click();
         await content.locator('[data-type="mention"]').waitFor();
@@ -54,8 +54,8 @@ try {
         for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowLeft');
         await tool('textColor').click();
         await modal().waitFor();
-        await modal().locator('.fi-select-input-btn').click();
-        await page.locator('.fi-select-input-option', { hasText: 'Red' }).first().click();
+        await modal().locator('.nv-select-input-btn').click();
+        await page.locator('.nv-select-input-option', { hasText: 'Red' }).first().click();
         await modal().getByRole('button', { name: 'Submit' }).click();
         await content.locator('span.color[data-color="red"]').waitFor({ timeout: 8000 });
     });
@@ -65,9 +65,9 @@ try {
         const db = openDatabase(dbFile);
         const names = [db.prepare('select name from authors order by name limit 1').get().name, db.prepare('select name from post_categories order by name limit 1').get().name];
         for (const [index, name] of names.entries()) {
-            await page.locator('.fi-fo-select .fi-select-input-btn').nth(index).click();
-            await page.locator('.fi-select-input input:visible').first().fill(name.slice(0, 5));
-            await page.locator('.fi-select-input-option', { hasText: name }).first().click();
+            await page.locator('.nv-fo-select .nv-select-input-btn').nth(index).click();
+            await page.locator('.nv-select-input input:visible').first().fill(name.slice(0, 5));
+            await page.locator('.nv-select-input-option', { hasText: name }).first().click();
         }
         await page.locator('form#form button[type=submit]').first().click();
         await page.waitForURL((url) => /\/blog\/posts\/\d+/.test(url.pathname), { timeout: 10000 });
@@ -80,17 +80,17 @@ try {
     });
     await step('the lazy Image section loads when it comes into view', async () => {
         await page.goto(`${BASE}/blog/posts/create`);
-        const section = page.locator('.fi-section', { has: page.getByRole('heading', { name: 'Image' }) });
+        const section = page.locator('.nv-section', { has: page.getByRole('heading', { name: 'Image' }) });
         await section.scrollIntoViewIfNeeded();
-        await section.locator('.fi-fo-file-upload').waitFor({ timeout: 10000 });
-        assert.equal(await section.locator('.fi-sc-loading').count(), 0);
+        await section.locator('.nv-fo-file-upload').waitFor({ timeout: 10000 });
+        assert.equal(await section.locator('.nv-sc-loading').count(), 0);
     });
     await step('global search results of posts have Edit and Comments actions', async () => {
         await page.goto(`${BASE}/blog/posts`);
-        await page.locator('.fi-global-search input[type=search]').fill(title.slice(0, 14));
-        const result = page.locator('.fi-global-search-result.fi-global-search-result-has-actions').first();
+        await page.locator('.nv-global-search input[type=search]').fill(title.slice(0, 14));
+        const result = page.locator('.nv-global-search-result.nv-global-search-result-has-actions').first();
         await result.waitFor({ timeout: 10000 });
-        const edit = result.locator('.fi-global-search-result-actions a', { hasText: 'Edit' });
+        const edit = result.locator('.nv-global-search-result-actions a', { hasText: 'Edit' });
         assert.match(await edit.getAttribute('href'), /\/blog\/posts\/\d+\/edit$/);
         await edit.click();
         await page.waitForURL(/\/blog\/posts\/\d+\/edit$/, { timeout: 10000 });

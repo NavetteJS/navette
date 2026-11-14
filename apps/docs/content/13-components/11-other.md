@@ -183,7 +183,7 @@ HTML attributes are placed on the `<svg>` element.
 
 ### Replacing the loading indicator
 
-`useLoadingIndicator()` from `@navette-js/support` replaces the indicator everywhere: buttons, tables, modals, `<x-loading-indicator>` and `<x-spinner>`. The function receives the attributes of the indicator, which already hold the `fi-icon fi-loading-indicator` classes and the size class, and returns its HTML:
+`useLoadingIndicator()` from `@navette-js/support` replaces the indicator everywhere: buttons, tables, modals, `<x-loading-indicator>` and `<x-spinner>`. The function receives the attributes of the indicator, which already hold the `nv-icon nv-loading-indicator` classes and the size class, and returns its HTML:
 
 ```ts
 import { useLoadingIndicator } from '@navette-js/support';

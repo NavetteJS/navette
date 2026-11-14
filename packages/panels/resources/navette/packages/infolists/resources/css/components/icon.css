@@ -1,0 +1,39 @@
+.nv-in-icon {
+    @apply flex w-full gap-1.5;
+
+    &.nv-wrapped {
+        @apply flex-wrap;
+    }
+
+    &.nv-in-icon-has-line-breaks {
+        @apply flex-col;
+    }
+
+    &.nv-align-start,
+    &.nv-align-left {
+        @apply justify-start;
+    }
+
+    &.nv-align-center {
+        @apply justify-center;
+    }
+
+    &.nv-align-end,
+    &.nv-align-right {
+        @apply justify-end;
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply justify-between;
+    }
+
+    & > .nv-icon,
+    & > a > .nv-icon {
+        @apply text-gray-400 dark:text-gray-500;
+
+        &.nv-color {
+            @apply text-(--text) dark:text-(--dark-text);
+        }
+    }
+}

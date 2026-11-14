@@ -191,7 +191,7 @@ export type NavigationGroupView = {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const attributesHtml = (attributes: Record<string, string | number | boolean | null>) => (Object.keys(attributes).length ? new Attributes(attributes as any).toHtml() : '');
 /** `id` of a group's item list: the label's slug and a short hash, so that two labels never share one. */
-export const navigationGroupItemsId = (key: string) => `fi-sidebar-group-items-${slug(key)}-${createHash('md5').update(key).digest('hex').slice(0, 8)}`;
+export const navigationGroupItemsId = (key: string) => `nv-sidebar-group-items-${slug(key)}-${createHash('md5').update(key).digest('hex').slice(0, 8)}`;
 
 export type NavigationViewOptions = {
     path: string;
@@ -260,7 +260,7 @@ export function cssLength(value: string, option: string): string {
     if (typeof value !== 'string' || !/^[a-zA-Z0-9.%()+\-*/ ]{1,60}$/.test(value)) throw new Error(`${option}(): invalid CSS length "${String(value)}".`);
     return value;
 }
-/** A content width name (`lg`, `7xl`, `full`, `screen-2xl`…), used in a `fi-width-*` class. */
+/** A content width name (`lg`, `7xl`, `full`, `screen-2xl`…), used in a `nv-width-*` class. */
 export function contentWidth(value: string): string {
     if (typeof value !== 'string' || !/^[a-z0-9-]{1,30}$/.test(value)) throw new Error(`Invalid content width "${String(value)}": use a width name such as "lg", "7xl" or "full".`);
     return value;

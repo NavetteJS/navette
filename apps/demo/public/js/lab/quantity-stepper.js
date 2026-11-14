@@ -11,19 +11,19 @@ const QuantityStepper = {
         const change = (value) => props.onChange(value === null ? null : clamp(value));
         const button = (label, icon, delta) => h('button', {
             type: 'button',
-            class: 'fi-icon-btn fi-size-md',
+            class: 'nv-icon-btn nv-size-md',
             'aria-label': label,
             'aria-controls': props.id,
             disabled: isLocked(),
             onClick: () => change((Number(props.value) || 0) + delta * step()),
         }, icon);
 
-        return () => h('div', { class: ['fi-input-wrp', { 'fi-disabled': props.isDisabled, 'fi-invalid': props.isInvalid }] }, [
-            h('div', { class: 'fi-input-wrp-prefix fi-input-wrp-prefix-has-content' }, [button('Decrease', '−', -1)]),
-            h('div', { class: 'fi-input-wrp-content-ctn' }, [
+        return () => h('div', { class: ['nv-input-wrp', { 'nv-disabled': props.isDisabled, 'nv-invalid': props.isInvalid }] }, [
+            h('div', { class: 'nv-input-wrp-prefix nv-input-wrp-prefix-has-content' }, [button('Decrease', '−', -1)]),
+            h('div', { class: 'nv-input-wrp-content-ctn' }, [
                 h('input', {
                     id: props.id,
-                    class: 'fi-input',
+                    class: 'nv-input',
                     type: 'number',
                     inputmode: 'numeric',
                     step: step(),
@@ -39,7 +39,7 @@ const QuantityStepper = {
                     onBlur: props.onBlur,
                 }),
             ]),
-            h('div', { class: 'fi-input-wrp-suffix fi-input-wrp-suffix-has-content' }, [button('Increase', '+', 1)]),
+            h('div', { class: 'nv-input-wrp-suffix nv-input-wrp-suffix-has-content' }, [button('Increase', '+', 1)]),
         ]);
     },
 };

@@ -1,0 +1,25 @@
+.nv-breadcrumbs {
+    & ol {
+        @apply flex flex-wrap items-center gap-x-2;
+
+        & li {
+            @apply flex items-center gap-x-2 text-sm font-medium text-gray-500 dark:text-gray-400;
+
+            & a {
+                @apply transition duration-75 hover:text-gray-700 dark:hover:text-gray-200;
+            }
+
+            & .nv-icon {
+                @apply flex text-gray-400 dark:text-gray-500;
+
+                &.nv-ltr {
+                    @apply rtl:hidden;
+                }
+
+                &.nv-rtl {
+                    @apply ltr:hidden;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,57 @@
+.nv-callout {
+    @apply flex w-full gap-3 rounded-xl bg-white p-4 ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10;
+
+    & .nv-callout-icon {
+        @apply text-gray-400;
+
+        &.nv-color {
+            @apply text-color-400;
+        }
+    }
+
+    & .nv-callout-main {
+        @apply mt-0.5 grid flex-1 gap-3;
+    }
+
+    & .nv-callout-text {
+        @apply grid gap-1;
+    }
+
+    & .nv-callout-heading {
+        @apply text-sm font-medium text-gray-950 dark:text-white;
+    }
+
+    & .nv-callout-description {
+        @apply overflow-hidden text-sm text-pretty break-words text-gray-500 dark:text-gray-400;
+
+        & > p:not(:first-of-type) {
+            @apply mt-1;
+        }
+    }
+
+    & .nv-callout-footer {
+        @apply flex flex-wrap gap-3;
+    }
+
+    & .nv-callout-controls {
+        @apply self-start;
+    }
+
+    &.nv-color {
+        @apply ring-color-600/20 dark:ring-color-400/30;
+
+        background-color: color-mix(in oklab, white 90%, var(--color-400));
+
+        @variant dark {
+            background-color: color-mix(
+                in oklab,
+                var(--gray-900) 90%,
+                var(--color-400)
+            );
+        }
+
+        & .nv-callout-description {
+            @apply text-gray-700/75 dark:text-gray-300/75;
+        }
+    }
+}

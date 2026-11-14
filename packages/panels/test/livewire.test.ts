@@ -104,7 +104,7 @@ test('a form, an infolist, actions and a widget in a component view, served as a
     assert.match(html, /mountAction\('delete', JSON\.parse\('\{.u0022post.u0022:7\}'\)/);
     assert.match(html, /wire:name="product-stats"/);
     assert.match(html, /wire:partial="action-modals"/);
-    assert.match(html, /css\/filament\/filament\/app\.css/);
+    assert.match(html, /css\/navette\/navette\/app\.css/);
     assert.match(html, /\/_navette\/livewire\/livewire\.js/);
     assert.match(html, /x-data="notificationsComponent\(\)"/);
 
@@ -117,7 +117,7 @@ test('a form, an infolist, actions and a widget in a component view, served as a
     assert.ok(JSON.parse(invalid.components[0].snapshot).memo.errors['data.title']);
     const saved = await post({ _token: token, components: [{ snapshot, updates: { 'data.title': 'Hello' }, calls: [{ method: 'create', params: [] }] }] });
     assert.equal(saved.status, 200);
-    assert.ok(saved.headers.get('x-filament-notifications'), 'the notification is announced to the browser');
+    assert.ok(saved.headers.get('x-navette-notifications'), 'the notification is announced to the browser');
     assert.deepEqual(created.at(-1), { title: 'Hello' });
     // Refused: no CSRF token, a forged snapshot, a method that is not callable.
     assert.equal((await post({ _token: 'nope', components: [{ snapshot, updates: {}, calls: [] }] })).status, 419);
@@ -125,13 +125,13 @@ test('a form, an infolist, actions and a widget in a component view, served as a
     assert.equal((await post({ _token: token, components: [{ snapshot, updates: {}, calls: [{ method: 'mount', params: [] }] }] })).status, 404);
     // An action method mounts its modal; a framework method is not an action.
     const mounted = await (await post({ _token: token, components: [{ snapshot, updates: {}, calls: [{ method: 'mountAction', params: ['delete', { post: 7 }] }] }] })).json();
-    assert.match(JSON.stringify(mounted.components[0].effects.partials), /fi-modal/);
+    assert.match(JSON.stringify(mounted.components[0].effects.partials), /nv-modal/);
     assert.equal((await post({ _token: token, components: [{ snapshot, updates: {}, calls: [{ method: 'mountAction', params: ['callMounted', {}] }] }] })).status, 404);
 });
 
 test('a table component: as a page and embedded in a page of the application', async () => {
     const html = await (await fetch(url('/products'))).text();
-    assert.match(html, /fi-ta-table/);
+    assert.match(html, /nv-ta-table/);
     assert.match(html, /Lamp/);
     assert.match(html, /\$30\.00/);
     const embedded = await (await fetch(url('/embedded'))).text();

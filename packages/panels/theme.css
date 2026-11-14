@@ -1,6 +1,6 @@
 /* Navette's base theme (MIT-licensed sources under resources/), compiled by Tailwind with the application's sources.
    An application imports it from its own theme stylesheet, then declares its sources with `@source`. */
-@import './resources/filament/packages/panels/resources/css/theme.css';
+@import './resources/navette/packages/panels/resources/css/theme.css';
 
 /* Utility classes used in Navette's own views and code. */
 @source './views/**/*.ejs';

@@ -150,10 +150,10 @@ test('one resource in two panels over HTTP: each panel serves the resource with 
         assert.match(await get('/admin/authors'), /href="\/admin\/authors\/1"/);
         // Page options: body attributes and content width of the page, subheading, alignment, footer, widget properties and columns.
         const report = await get('/admin/report');
-        assert.match(report, /<body data-report="yes" class="fi-body fi-panel-d10-admin [^"]*report-body">/);
-        assert.match(report, /fi-main fi-width-full/);
-        assert.match(report, /<p class="fi-header-subheading">\s*Monthly &lt;figures&gt;\s*<\/p>/);
-        assert.match(report, /fi-ac fi-align-end/);
+        assert.match(report, /<body data-report="yes" class="nv-body nv-panel-d10-admin [^"]*report-body">/);
+        assert.match(report, /nv-main nv-width-full/);
+        assert.match(report, /<p class="nv-header-subheading">\s*Monthly &lt;figures&gt;\s*<\/p>/);
+        assert.match(report, /nv-ac nv-align-end/);
         assert.match(report, /<footer class="report-footer">Footer<\/footer>/);
         assert.match(report, /Hello Grace/);
         assert.match(report, /Hello nobody/);
@@ -161,9 +161,9 @@ test('one resource in two panels over HTTP: each panel serves the resource with 
         assert.match(report, /--cols-xl: repeat\(4, minmax\(0, 1fr\)\)/);
         const custom = await get('/admin/custom-header');
         assert.match(custom, /<div class="my-header">Custom<\/div>/);
-        assert.doesNotMatch(custom, /class="fi-header-heading"/);
+        assert.doesNotMatch(custom, /class="nv-header-heading"/);
         // Without options: the panel's width.
-        assert.match(await get('/admin'), /fi-main fi-width-7xl/);
+        assert.match(await get('/admin'), /nv-main nv-width-7xl/);
     } finally { server.close(); }
 });
 
@@ -240,9 +240,9 @@ test('relation managers: read-only on view pages, properties of make(), hiddenOn
     await onEdit.assertOk().assertSee('New book').assertSee('Notes').assertDontSee('Compilers');
     assert.equal(onEdit.instance().isReadOnly(), false);
     // The column, filter and field hidden in this manager.
-    assert.doesNotMatch(onEdit.html(), /fi-ta-header-cell-author-id/);
+    assert.doesNotMatch(onEdit.html(), /nv-ta-header-cell-author-id/);
     assert.deepEqual(onEdit.instance().getTable().getFilters().map((filter: any) => filter.name), []);
-    await livewire(AuthorResource.getPages().index).assertOk().assertSeeHtml('fi-ta-header-cell-author-id');
+    await livewire(AuthorResource.getPages().index).assertOk().assertSeeHtml('nv-ta-header-cell-author-id');
     // The panel may keep relation managers editable on view pages.
     const editable = Panel.make().id('d10-editable').key('k').authGuard('d10-editable').auth(auth).resources([AuthorResource]).readOnlyRelationManagersOnResourceViewPagesByDefault(false);
     const viewInEditable = livewire(ViewAuthor, { record: 1 }, { panel: editable });
@@ -290,10 +290,10 @@ test('registration and profile forms reuse their components; revealablePasswords
     assert.equal(panel.arePasswordsRevealable(), false);
     const register = livewire(CompanyRegister, {}, { panel, user: null });
     await register.assertOk().assertFormFieldExists('company').assertFormFieldExists('passwordConfirmation');
-    assert.doesNotMatch(register.html(), /fi-revealable/);
+    assert.doesNotMatch(register.html(), /nv-revealable/);
     const login = livewire(Login, {}, { panel, user: null });
     await login.assertOk();
-    assert.doesNotMatch(login.html(), /fi-revealable/);
+    assert.doesNotMatch(login.html(), /nv-revealable/);
     class NoPasswordProfile extends EditProfile {
         protected getFormComponents() { return [this.getNameFormComponent(), this.getEmailFormComponent(), this.getCurrentPasswordFormComponent()]; }
     }

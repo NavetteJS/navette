@@ -1,0 +1,13 @@
+.nv-fo-select {
+    & .nv-hidden {
+        @apply hidden;
+    }
+}
+
+.nv-fo-select-wrp {
+    &.nv-fo-field-has-inline-label {
+        & .nv-fo-field-label-col {
+            @apply sm:pt-1.5;
+        }
+    }
+}

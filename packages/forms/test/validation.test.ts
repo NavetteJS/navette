@@ -96,7 +96,7 @@ test('markAsRequired() controls the asterisk only', async () => {
     const livewire = host({ a: '' });
     const schema = Schema.make(livewire as any).key('form').statePath('data').components([TextInput.make('a').required().markAsRequired(false), TextInput.make('b').markAsRequired()]);
     const html = await schema.toHtml();
-    assert.equal(html.match(/fi-fo-field-label-required-mark/g)?.length, 1);
+    assert.equal(html.match(/nv-fo-field-label-required-mark/g)?.length, 1);
     assert.deepEqual(await validateSchema(schema), { 'data.a': ['The a field is required.'] });
 });
 

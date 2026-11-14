@@ -213,7 +213,7 @@ export function intervalToMilliseconds(interval: string | null): number | null {
  */
 export function databaseNotificationsBroadcastScript(channel: string, interval: string | null): string {
     const ms = intervalToMilliseconds(interval);
-    return `setUpFilamentBroadcastNotifications({ $wire, broadcastChannel: ${JSON.stringify(channel)}, event: ${JSON.stringify('.' + DATABASE_NOTIFICATIONS_SENT_EVENT)}, onNotification: () => $wire.$refresh(), })
+    return `setUpNavetteBroadcastNotifications({ $wire, broadcastChannel: ${JSON.stringify(channel)}, event: ${JSON.stringify('.' + DATABASE_NOTIFICATIONS_SENT_EVENT)}, onNotification: () => $wire.$refresh(), })
 const navetteRefresh = () => $wire.$refresh()
 window.addEventListener('navette-broadcasting-reconnected', navetteRefresh)
 const navetteFallback = ${ms === null ? 'null' : `setInterval(() => { if (! window.navetteBroadcasting?.isConnected()) $wire.$refresh() }, ${Math.max(ms, 1000)})`}

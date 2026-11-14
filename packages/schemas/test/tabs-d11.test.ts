@@ -21,11 +21,11 @@ test('Tabs: lazy-loaded badges are fetched after rendering, keyed by tab, and th
     const html = await render([tabs]);
     assert.equal(queries, 0, 'the badge of a lazy tab is not computed while rendering');
     assert.ok(html.includes('const badges = await this.$getLazyLoadedTabBadges()'));
-    assert.ok(html.includes('class="fi-tabs-item-badge-placeholder"'));
+    assert.ok(html.includes('class="nv-tabs-item-badge-placeholder"'));
     assert.ok(html.includes('x-text="deferredBadges[1]?.badge"'));
     assert.ok(html.includes('x-text="deferredBadges[2]?.badge"'));
     assert.ok(!html.includes('deferredBadges[0]'), 'a regular badge is rendered directly');
-    assert.match(html, /<span class="fi-badge-label">3<\/span>/);
+    assert.match(html, /<span class="nv-badge-label">3<\/span>/);
     assert.equal(await tabs.hasLazyLoadedBadges(), true);
     assert.ok(tabs.getExposedMethods().includes('getLazyLoadedTabBadges'));
 
@@ -33,7 +33,7 @@ test('Tabs: lazy-loaded badges are fetched after rendering, keyed by tab, and th
     assert.equal(queries, 1);
     assert.deepEqual(Object.keys(badges), ['1', '2']);
     assert.equal(badges['1'].badge, '<b>7</b>', 'the label is data, inserted with x-text');
-    assert.match(badges['1'].badgeColorClasses, /^fi-color fi-color-danger/);
+    assert.match(badges['1'].badgeColorClasses, /^nv-color nv-color-danger/);
     assert.match(badges['1'].badgeIconHtml ?? '', /^<svg/);
     assert.equal(badges['1'].badgeIconPosition, 'before');
     assert.equal(badges['1'].badgeTooltip, 'Unread messages');
@@ -52,24 +52,24 @@ test('Tabs: lazy badges in the overflow dropdown, hidden tabs are skipped', asyn
         Tab.make('Secret').hidden().badge(() => 9).lazyLoadedBadge().schema([]),
     ]);
     const html = await render([tabs]);
-    assert.ok(html.includes('class="fi-dropdown-list-item-badge-placeholder"'));
-    assert.ok(html.includes(`x-bind:class="'fi-badge ' + (deferredBadges[1]?.badgeColorClasses ?? '')"`));
+    assert.ok(html.includes('class="nv-dropdown-list-item-badge-placeholder"'));
+    assert.ok(html.includes(`x-bind:class="'nv-badge ' + (deferredBadges[1]?.badgeColorClasses ?? '')"`));
     assert.deepEqual(Object.keys(await tabs.getLazyLoadedTabBadges()), ['1']);
 });
 
 test('Tabs: tabPanels(false) renders a group of pressed buttons without panels', async () => {
     const html = await render([Tabs.make('Filter').tabPanels(false).schema([Tab.make('All').schema([Text.make('content-a')]), Tab.make('Mine').schema([Text.make('content-b')])])]);
     assert.ok(html.includes('hasTabPanels: false,'));
-    assert.ok(html.includes('<div x-ref="tablist" role="group" aria-label="Filter" x-on:keydown="handleKeydown($event)" class="fi-sc-tabs-tablist">'));
+    assert.ok(html.includes('<div x-ref="tablist" role="group" aria-label="Filter" x-on:keydown="handleKeydown($event)" class="nv-sc-tabs-tablist">'));
     assert.ok(html.includes(`tabindex="0" x-bind:tabindex="getTabIndex('all::data::tab')" data-tab-key="all::data::tab"`));
     assert.ok(html.includes(`x-bind:aria-pressed="isTabSelected('all::data::tab')"`));
     assert.ok(html.includes(`x-show="(true) &amp;&amp; ! overflowTabs.includes('all::data::tab')"`));
     assert.ok(!html.includes('role="tab"') && !html.includes('role="tabpanel"') && !html.includes('aria-controls'));
-    assert.ok(!html.includes('fi-sc-tabs-header-overflow'));
+    assert.ok(!html.includes('nv-sc-tabs-header-overflow'));
     assert.ok(!html.includes('content-a'), 'no panel content');
 
     const overflow = await render([Tabs.make('Filter').tabPanels(false).scrollable(false).schema([Tab.make('All').schema([]), Tab.make('Mine').schema([])])]);
-    assert.ok(overflow.includes('<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { toggle($event) }" class="fi-dropdown-trigger">'));
+    assert.ok(overflow.includes('<div x-data="navetteDropdown" class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) { toggle($event) }" class="nv-dropdown-trigger">'));
     assert.ok(overflow.includes(`<button role="menuitem" type="button" data-tab-menu-key="mine::data::tab" x-bind:aria-disabled="availableTabs.includes('mine::data::tab') ? 'false' : 'true'" x-on:click="if ($el.getAttribute('aria-disabled') !== 'true') selectTab('mine::data::tab', $event, true)"`));
     assert.ok(overflow.includes(`x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8 }" x-ref="panel"`));
     assert.ok(!overflow.includes('x-ref="overflowPanel"'));
@@ -92,10 +92,10 @@ test('Tabs: livewireProperty() binds the active tab to a property of the host, o
     assert.ok(html.includes('activeTab: 2,'));
     assert.ok(html.includes('isScrollable: true,'));
     assert.ok(html.includes('<input type="hidden" x-ref="tabsData" data-active-tab="published" />'));
-    assert.ok(html.includes('data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeStatus" class="fi-sc-tabs-tablist"'));
+    assert.ok(html.includes('data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" wire:target="activeStatus" class="nv-sc-tabs-tablist"'));
     assert.ok(html.includes(`role="tab" aria-controls="form.published" aria-selected="true" x-bind:aria-selected="isTabSelected('published')" tabindex="0"`));
     assert.ok(html.includes(`aria-selected="false" x-bind:aria-selected="isTabSelected('all')" tabindex="-1"`));
-    assert.ok(html.includes(`wire:click="$set('activeStatus', 'published')" class="fi-tabs-item fi-active"`));
+    assert.ok(html.includes(`wire:click="$set('activeStatus', 'published')" class="nv-tabs-item nv-active"`));
     assert.ok(html.includes(`x-on:click.capture="if (! selectTab('published', $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }"`));
     // A key with a quote is escaped in the JavaScript.
     assert.ok(html.includes(`wire:click="$set('activeStatus', 'it\\u0027s')"`));
@@ -113,7 +113,7 @@ test('Tabs: livewireProperty() binds the active tab to a property of the host, o
     // An unknown value activates no tab; the default active tab is announced.
     const none = await render([make()], host({ activeStatus: null }));
     assert.ok(none.includes("tab: '',") && none.includes('activeTab: 1,'));
-    assert.ok(!none.includes('fi-tabs-item fi-active'));
+    assert.ok(!none.includes('nv-tabs-item nv-active'));
 });
 
 test('Tabs: a livewireProperty() name must be an identifier', () => {
@@ -123,7 +123,7 @@ test('Tabs: a livewireProperty() name must be an identifier', () => {
 
 test('Components liberated from the container grid get a display-contents scope wrapper', async () => {
     const html = await render([Text.make('free').key('free').liberatedFromContainerGrid(), Text.make('boxed')]);
-    assert.match(html, /<div class="fi-sc-liberated" wire:key="lw\.form\.free" x-data="filamentSchemaComponent\([^"]*\)">/);
+    assert.match(html, /<div class="nv-sc-liberated" wire:key="lw\.form\.free" x-data="navetteSchemaComponent\([^"]*\)">/);
     assert.equal(Text.make('x').isLiberatedFromContainerGrid(), false);
-    assert.ok(html.includes('fi-grid-col'), 'other components keep their grid column');
+    assert.ok(html.includes('nv-grid-col'), 'other components keep their grid column');
 });

@@ -1,0 +1,7 @@
+.nv-dropdown-list {
+    @apply grid gap-px p-1;
+
+    & > .nv-grid {
+        @apply overflow-x-hidden;
+    }
+}

@@ -20,9 +20,9 @@ export class FilterAction {
     static getDefaultName(): string { return 'filter'; }
     static make(name: string = FilterAction.getDefaultName()): Action {
         const action = Action.make(name)
-            .label(t('filament-panels::pages/dashboard.actions.filter.label'))
-            .modalHeading(() => t('filament-panels::pages/dashboard.actions.filter.modal.heading'))
-            .modalSubmitActionLabel(t('filament-panels::pages/dashboard.actions.filter.modal.actions.apply.label'))
+            .label(t('navette-panels::pages/dashboard.actions.filter.label'))
+            .modalHeading(() => t('navette-panels::pages/dashboard.actions.filter.modal.heading'))
+            .modalSubmitActionLabel(t('navette-panels::pages/dashboard.actions.filter.modal.actions.apply.label'))
             .icon(icons.resolve('panels::pages.dashboard.actions.filter') ?? 'm-funnel')
             .color('gray')
             .fillForm(({ livewire }: any) => {

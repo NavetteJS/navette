@@ -23,22 +23,22 @@ test('built-in components: props, default slot, attributes and named slots', () 
 <p><%= message %></p>
 <x-slot name="footer"><x-button color="danger" icon="o-trash" wire:click="clear">Clear</x-button></x-slot>
 </x-section>`, { message: '<b>hi</b>' });
-    assert.match(html, /<section [^>]*class="[^"]*fi-section[^"]*my-section|<section [^>]*class="my-section[^"]*fi-section/);
+    assert.match(html, /<section [^>]*class="[^"]*nv-section[^"]*my-section|<section [^>]*class="my-section[^"]*nv-section/);
     assert.match(html, /x-data="\{ open: true \}"/);
-    assert.match(html, /<h2 class="fi-section-header-heading">Orders<\/h2>/);
+    assert.match(html, /<h2 class="nv-section-header-heading">Orders<\/h2>/);
     assert.match(html, /<p>&lt;b&gt;hi&lt;\/b&gt;<\/p>/);
-    assert.match(html, /<footer class="fi-section-footer"><button [^>]*wire:click="clear"[^>]*>/);
-    assert.match(html, /fi-color-danger/);
-    assert.equal((html.match(/fi-section-footer/g) ?? []).length, 1, 'the named slot is not repeated in the content');
+    assert.match(html, /<footer class="nv-section-footer"><button [^>]*wire:click="clear"[^>]*>/);
+    assert.match(html, /nv-color-danger/);
+    assert.equal((html.match(/nv-section-footer/g) ?? []).length, 1, 'the named slot is not repeated in the content');
 });
 
 test('bound props, flags, self-closing tags and the slot:name syntax', () => {
     const html = render(`<x-badge :color="status === 'paid' ? 'success' : 'gray'">Paid</x-badge><x-icon name="o-check" size="lg" /><x-section heading="A" collapsible collapsed><x-slot:after-header><span>after</span></x-slot>Body</x-section>`, { status: 'paid' });
-    assert.match(html, /fi-color-success[^"]*fi-badge|fi-badge[^"]*fi-color-success/);
-    assert.match(html, /<svg [^>]*class="fi-icon fi-size-lg"/);
-    assert.match(html, /fi-collapsible/);
+    assert.match(html, /nv-color-success[^"]*nv-badge|nv-badge[^"]*nv-color-success/);
+    assert.match(html, /<svg [^>]*class="nv-icon nv-size-lg"/);
+    assert.match(html, /nv-collapsible/);
     assert.match(html, /isCollapsed: true/);
-    assert.match(html, /fi-section-header-after-ctn"><span>after<\/span>/);
+    assert.match(html, /nv-section-header-after-ctn"><span>after<\/span>/);
 });
 
 test('application components from a directory: props, slot, named slots, attribute bag, nesting', () => {
@@ -49,7 +49,7 @@ test('application components from a directory: props, slot, named slots, attribu
     assert.match(html, /data-kind="post"/);
     assert.match(html, /class="card"/);
     assert.match(html, /<h3>A &lt;title&gt;<\/h3>/);
-    assert.match(html, /<small class="hint">Nested <span [^>]*fi-badge/);
+    assert.match(html, /<small class="hint">Nested <span [^>]*nv-badge/);
     assert.match(html, /<footer>By Ada &amp; co<\/footer>/);
 });
 
@@ -80,11 +80,11 @@ test('built-in fixes: modal and pagination ids, checkbox attributes, dropdown it
     assert.match(modal, /aria-labelledby="confirm.heading"/);
     assert.doesNotMatch(modal, /undefined/);
     assert.match(render('<x-checkbox name="agree" value="yes" checked />'), /<input [^>]*name="agree"[^>]*value="yes"|<input [^>]*value="yes"[^>]*name="agree"/);
-    assert.match(render('<x-dropdown-item><%= name %></x-dropdown-item>', { name: 'Tom & Jerry' }), /fi-dropdown-list-item-label">Tom &amp; Jerry</);
+    assert.match(render('<x-dropdown-item><%= name %></x-dropdown-item>', { name: 'Tom & Jerry' }), /nv-dropdown-list-item-label">Tom &amp; Jerry</);
     const section = render(`<x-section heading="A">
     <x-slot name="footer">F</x-slot>
 </x-section>`);
-    assert.doesNotMatch(section, /fi-section-content"/);
+    assert.doesNotMatch(section, /nv-section-content"/);
     // An earlier test overrides <x-badge> with a file: remove it to test the built-in.
     rmSync(path.join(dir, 'components', 'badge.ejs'), { force: true });
     assert.match(render('<x-badge tag="a" href="/orders">Orders</x-badge>'), /<a [^>]*href="\/orders"/);

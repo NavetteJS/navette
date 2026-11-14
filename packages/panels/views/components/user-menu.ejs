@@ -1,16 +1,16 @@
 <%# User menu (sidebar or topbar): items before the theme switcher (negative sort), the switcher, then the other groups (logout last) %>
 <% const topbar = locals.position === 'topbar'; const collapsible = locals.isSidebarCollapsibleOnDesktop === true; const before = locals.listsBefore ?? []; const after = locals.listsAfter ?? []; %>
 <%- renderHook('panels::user-menu.before') %>
-<div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-user-menu">
-    <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
+<div x-data="navetteDropdown({ isMenu: true })" class="nv-dropdown nv-user-menu">
+    <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger">
 <% if (topbar) { %>
-        <button aria-label="<%= t('filament-panels::layout.actions.open_user_menu.label') %>" type="button" class="fi-user-menu-trigger">
-            <img alt="<%= t('filament-panels::layout.avatar.alt', { name: user.name }) %>" class="fi-avatar fi-circular fi-size-md fi-user-avatar" src="<%= avatarUrl %>" loading="lazy" />
+        <button aria-label="<%= t('navette-panels::layout.actions.open_user_menu.label') %>" type="button" class="nv-user-menu-trigger">
+            <img alt="<%= t('navette-panels::layout.avatar.alt', { name: user.name }) %>" class="nv-avatar nv-circular nv-size-md nv-user-avatar" src="<%= avatarUrl %>" loading="lazy" />
         </button>
 <% } else { %>
-        <button aria-label="<%= user.name %>" type="button" class="fi-user-menu-trigger">
-            <img alt="<%= t('filament-panels::layout.avatar.alt', { name: user.name }) %>" class="fi-avatar fi-circular fi-size-md fi-user-avatar" src="<%= avatarUrl %>" loading="lazy" />
-            <span<% if (collapsible) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-user-menu-trigger-text">
+        <button aria-label="<%= user.name %>" type="button" class="nv-user-menu-trigger">
+            <img alt="<%= t('navette-panels::layout.avatar.alt', { name: user.name }) %>" class="nv-avatar nv-circular nv-size-md nv-user-avatar" src="<%= avatarUrl %>" loading="lazy" />
+            <span<% if (collapsible) { %> x-show="$store.sidebar.isOpen"<% } %> class="nv-user-menu-trigger-text">
                 <%= user.name %>
             </span>
             <%- icon('m-chevron-up', collapsible ? { alias: 'panels::user-menu.toggle-button', attributes: attrs({ 'x-show': '$store.sidebar.isOpen' }) } : { alias: 'panels::user-menu.toggle-button' }) %>
@@ -18,10 +18,10 @@
 <% } %>
     </div>
 
-    <div x-cloak x-float.placement.<%= topbar ? 'bottom-end' : 'top-end' %>.flip<% if (topbar) { %>.teleport<% } %>.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel " style="">
+    <div x-cloak x-float.placement.<%= topbar ? 'bottom-end' : 'top-end' %>.flip<% if (topbar) { %>.teleport<% } %>.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="nv-dropdown-panel " style="">
 <% if (locals.profileHeader) { %>
         <%- renderHook('panels::user-menu.profile.before') %>
-        <div class="fi-dropdown-header">
+        <div class="nv-dropdown-header">
             <%- icon(profileHeader.icon ?? 'm-user-circle', { alias: 'panels::user-menu.profile-item' }) %>
             <span>
                 <%= profileHeader.label %>
@@ -29,21 +29,21 @@
         </div>
         <%- renderHook('panels::user-menu.profile.after') %>
 <% } %>
-<% for (const list of before) { %>        <div class="fi-dropdown-list"><%- list.join('') %></div>
+<% for (const list of before) { %>        <div class="nv-dropdown-list"><%- list.join('') %></div>
 <% } %>
-<% if (locals.hasThemeSwitcher !== false) { %>        <div class="fi-dropdown-list">
+<% if (locals.hasThemeSwitcher !== false) { %>        <div class="nv-dropdown-list">
             <div x-data="{ theme: null }" x-init="
                     $watch('theme', () => {
                         $dispatch('theme-changed', theme)
                     })
 
-                    theme = localStorage.getItem('filament:theme:mode') || <%- js(locals.defaultThemeMode ?? 'system') %>    " role="group" aria-label="<%= t('filament-panels::layout.actions.theme_switcher.label') %>" class="fi-theme-switcher">
+                    theme = localStorage.getItem('navette:theme:mode') || <%- js(locals.defaultThemeMode ?? 'system') %>    " role="group" aria-label="<%= t('navette-panels::layout.actions.theme_switcher.label') %>" class="nv-theme-switcher">
                 <% for (const [theme, iconName] of [['light', 'm-sun'], ['dark', 'm-moon'], ['system', 'm-computer-desktop']]) { %>
-                    <% const label = t('filament-panels::layout.actions.theme_switcher.' + theme + '.label') %>
+                    <% const label = t('navette-panels::layout.actions.theme_switcher.' + theme + '.label') %>
                     <button aria-label="<%= label %>" role="menuitemradio" tabindex="-1" type="button" x-on:click="(theme = <%- js(theme) %>) && close()" x-tooltip="{
                             content: <%- js(label) %>,
                             theme: $store.theme,
-                        }" x-bind:aria-checked="theme === <%- js(theme) %> ? 'true' : 'false'" x-bind:class="{ 'fi-active': theme === <%- js(theme) %> }" class="fi-theme-switcher-btn">
+                        }" x-bind:aria-checked="theme === <%- js(theme) %> ? 'true' : 'false'" x-bind:class="{ 'nv-active': theme === <%- js(theme) %> }" class="nv-theme-switcher-btn">
                         <%- icon(iconName, { alias: 'panels::theme-switcher.' + theme + '-button' }) %>
                     </button>
                 <% } %>
@@ -53,11 +53,11 @@
 
         <% if (locals.themes && themes.length > 1) { %>
             <%# Choice of one of the panel's predefined themes (Panel.themes()). %>
-            <div role="group" aria-label="Theme" class="fi-dropdown-list nv-theme-list">
+            <div role="group" aria-label="Theme" class="nv-dropdown-list nv-theme-list">
                 <% for (const theme of themes) { %>
-                    <button role="menuitemradio" aria-checked="<%= theme.id === activeTheme ? 'true' : 'false' %>" tabindex="-1" type="button" wire:click="setTheme(<%= js(theme.id) %>)" data-theme="<%= theme.id %>" class="<%- cls(['fi-dropdown-list-item', theme.id === activeTheme && 'fi-active']) %>">
+                    <button role="menuitemradio" aria-checked="<%= theme.id === activeTheme ? 'true' : 'false' %>" tabindex="-1" type="button" wire:click="setTheme(<%= js(theme.id) %>)" data-theme="<%= theme.id %>" class="<%- cls(['nv-dropdown-list-item', theme.id === activeTheme && 'nv-active']) %>">
                         <span aria-hidden="true" class="nv-theme-swatch" style="display: inline-block; flex-shrink: 0; width: 1.25rem; height: 1.25rem; border-radius: 9999px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1); background-color: <%= theme.swatch %>"></span>
-                        <span class="fi-dropdown-list-item-label">
+                        <span class="nv-dropdown-list-item-label">
                             <%= theme.label %>
                         </span>
                         <% if (theme.id === activeTheme) { %><%- icon('m-check', { alias: 'panels::user-menu.theme-list.active-item' }) %><% } %>
@@ -66,7 +66,7 @@
             </div>
         <% } %>
 
-<% for (const list of after) { %>        <div class="fi-dropdown-list"><%- list.join('') %></div>
+<% for (const list of after) { %>        <div class="nv-dropdown-list"><%- list.join('') %></div>
 <% } %>
     </div>
 </div>

@@ -36,8 +36,8 @@ test('`MorphToSelect`: a fieldset with a type select and a key select, saving `<
     assert.equal(typeSelect.getStatePath(), 'data.commentable_type');
     assert.equal(keySelect.getStatePath(), 'data.commentable_id');
     const html = await schema.toHtml();
-    assert.match(html, /<fieldset[^>]*class="fi-sc-fieldset fi-fieldset"/);
-    assert.match(html, /<legend>Commentable<sup class="fi-fieldset-label-required-mark">\*<\/sup><\/legend>/);
+    assert.match(html, /<fieldset[^>]*class="nv-sc-fieldset nv-fieldset"/);
+    assert.match(html, /<legend>Commentable<sup class="nv-fieldset-label-required-mark">\*<\/sup><\/legend>/);
     assert.match(html, /<option value="Product">Product<\/option>/);
     assert.match(html, /<option value="post">Blog post<\/option>/);
     assert.doesNotMatch(html, /<select id="form.commentable_id"/, 'key select hidden without a type');
@@ -105,6 +105,6 @@ test('`MorphToSelect`: `getOptionLabelFromRecordUsing()`, `modifyKeySelectUsing(
     assert.ok(fields(schema)[1].getActions().some((action: any) => action.getName() === 'createOption'));
     assert.match(html, /Article/);
     assert.match(html, /Kind of record/);
-    assert.match(html, /fi-fieldset-not-contained/);
+    assert.match(html, /nv-fieldset-not-contained/);
     assert.throws(() => MorphToSelect.Type.make(Product).getTitleAttribute(), /must have a \[titleAttribute\(\)\] set/);
 });

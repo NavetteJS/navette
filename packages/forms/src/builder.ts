@@ -9,7 +9,7 @@ import { cloneComponentTree, Field, fillSchema, fillSchemaFromRecord, getSchemaS
 import { applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
 import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 
-const asset = (name: string) => views.render('filament-forms::asset', { path: name }).trim();
+const asset = (name: string) => views.render('navette-forms::asset', { path: name }).trim();
 const ITEM_KEY = /^[A-Za-z0-9_-]{1,64}$/;
 /** Whether an item key is acceptable: keys come from the browser. */
 export const isItemKey = (key: string) => ITEM_KEY.test(key) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype';
@@ -29,11 +29,11 @@ export function iconActionButton(options: { label: string; icon: string; express
     const { tabindex = null, ...extra } = options.attributes ?? {};
     const attributes = new Attributes(options.inHeader ? {
         title: options.label, 'aria-disabled': options.disabled ? 'true' : null, 'aria-label': options.label, disabled: options.disabled ? 'disabled' : null, tabindex, type: 'button',
-        'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'fi-disabled', class: '', ...extra, 'wire:click': options.expression,
+        'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'nv-disabled', class: '', ...extra, 'wire:click': options.expression,
     } : {
         title: options.label, 'aria-disabled': options.disabled ? 'true' : null, 'aria-label': options.label, disabled: options.disabled ? 'disabled' : null, type: 'button',
-        'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'fi-disabled', ...(options.attributes ?? {}), 'wire:click': options.expression,
-    }).class(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': options.disabled === true }, 'fi-size-sm', ...(options.colorClasses ?? [])]);
+        'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'nv-disabled', ...(options.attributes ?? {}), 'wire:click': options.expression,
+    }).class(['nv-ac-icon-btn-action', 'nv-icon-btn', { 'nv-disabled': options.disabled === true }, 'nv-size-sm', ...(options.colorClasses ?? [])]);
     return `<button ${attributes.toHtml()}>${icon(options.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': options.expression }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': options.expression }))}</button>`;
 }
 /** Color manager of the host's panel (pages and widgets expose it through `panel`). */
@@ -109,7 +109,7 @@ export class Block {
 type Item = { type: string; data: Record<string, unknown> };
 type BuilderActionName = 'add' | 'addBetween' | 'clone' | 'delete' | 'edit' | 'moveUp' | 'moveDown' | 'reorder' | 'collapse' | 'expand' | 'collapseAll' | 'expandAll';
 /** Precomputed block picker key hashes for common `width|placement|has blocks|searchable` signatures; others hash the signature itself. */
-const PICKER_HASHES: Record<string, string> = { 'fi-width-md|bottom-start|1|0': '8b2521a32ddb82abb3a5f4fd214c90b1', '||1|0': '9c288f69c73367423cc1eb48b3e9a82b' };
+const PICKER_HASHES: Record<string, string> = { 'nv-width-md|bottom-start|1|0': '8b2521a32ddb82abb3a5f4fd214c90b1', '||1|0': '9c288f69c73367423cc1eb48b3e9a82b' };
 
 export class Builder extends Field {
     private _blocks: Block[] | (() => Block[]) = [];
@@ -243,7 +243,7 @@ export class Builder extends Field {
         for (const block of this.getBlocks()) if (block.getMaxItems() !== null) rules.push({ name: 'max', implicit: true, passes: () => items().filter((item) => item.type === block.name).length <= block.getMaxItems()!, message: (a) => `The ${a} field must not have more than ${block.getMaxItems()} ${block.getLabel()} items.` });
         return [...rules, ...this._rules];
     }
-    /** Class added to the builder's root element, before `fi-fo-builder` (e.g. `fi-fo-builder-not-contained`, without the container border). */
+    /** Class added to the builder's root element, before `nv-fo-builder` (e.g. `nv-fo-builder-not-contained`, without the container border). */
     extraClass(name: string | null): this { this._extraClass = name; return this; }
     /**
      * Key of new items: `null` (default) a random UUID, `false` numeric keys (`0`, `1`…), or a function returning the key
@@ -383,7 +383,7 @@ export class Builder extends Field {
         return block ? block.getComponents({ builder: this, itemKey: 'new', data: {} }) : [];
     }
     private builderAction(name: BuilderActionName): Action {
-        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.builder.actions.${key}`, replace);
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`navette-forms::components.builder.actions.${key}`, replace);
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
             if (!this.canMove()) return;
             const items = this.getItems();
@@ -476,12 +476,12 @@ export class Builder extends Field {
     private blockPickerHtml(trigger: ResolvedAction, afterItem: string | null = null): string {
         const key = this.getKey()!;
         const blocks = this.getBlockPickerBlocks();
-        const tr = (name: string) => t(`filament-forms::components.builder.${name}`);
+        const tr = (name: string) => t(`navette-forms::components.builder.${name}`);
         const between = afterItem !== null;
         const actionName = between ? 'addBetween' : 'add';
         const alignment = between ? null : this._addAlignment;
         const placement = alignment === 'start' ? 'bottom-start' : alignment === 'end' ? 'bottom-end' : null;
-        const widthClass = this._pickerWidth ? `fi-width-${this._pickerWidth}` : null;
+        const widthClass = this._pickerWidth ? `nv-width-${this._pickerWidth}` : null;
         const searchPrompt = this._searchPrompt instanceof HtmlString ? decodeEntities(this._searchPrompt.html.replace(/<[^>]*>/g, '')) : (this._searchPrompt ?? tr('block_picker.search_prompt'));
         const noSearchResults = this._noSearchResultsMessage ?? tr('block_picker.no_search_results_message');
         // Customized search texts change the picker's key, so that a re-render updates it.
@@ -492,22 +492,22 @@ export class Builder extends Field {
             const expression = `mountAction('${actionName}', ${js(between ? { block: block.name, afterItem } : { block: block.name })}, { schemaComponent: ${js(key)} })`;
             const blockIcon = block.getIcon();
             const search = this._searchable ? ` role="button" tabindex="0" wire:key="${e(createHash('md5').update(expression + block.getLabel().toLowerCase()).digest('hex'))}" data-block-label="${e(block.getLabel().toLowerCase())}" x-show="isBlockVisible($el)"` : '';
-            return `<button x-on:click="close" wire:click="${e(expression)}"${search} type="button" wire:loading.attr="disabled" wire:target="${e(expression)}" class="fi-dropdown-list-item">${blockIcon ? icon(blockIcon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expression }) }) + loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression })) : ''}<span class="fi-dropdown-list-item-label">${e(block.getLabel())}</span></button>`;
+            return `<button x-on:click="close" wire:click="${e(expression)}"${search} type="button" wire:loading.attr="disabled" wire:target="${e(expression)}" class="nv-dropdown-list-item">${blockIcon ? icon(blockIcon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expression }) }) + loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expression })) : ''}<span class="nv-dropdown-list-item-label">${e(block.getLabel())}</span></button>`;
         });
-        const grid = this._pickerColumns ? ` class="fi-grid fi-grid-direction-col lg:fi-grid-cols" style="--cols-lg: ${this._pickerColumns}; --cols-default: 1;"` : ' class="fi-grid fi-grid-direction-col" style="--cols-default: 1;"';
+        const grid = this._pickerColumns ? ` class="nv-grid nv-grid-direction-col lg:nv-grid-cols" style="--cols-lg: ${this._pickerColumns}; --cols-default: 1;"` : ' class="nv-grid nv-grid-direction-col" style="--cols-default: 1;"';
         // Grouped blocks: one labelled group per picker group (ungrouped blocks first), the groups laid out in the grid.
         const groups = new Map<string, string[]>();
         blocks.forEach((block, index) => { const group = block.getPickerGroup() ?? ''; groups.set(group, [...(groups.get(group) ?? []), items[index]]); });
         const grouped = [...groups.keys()].some((group) => group !== '');
         const content = grouped
-            ? `<div${grid.replace(/class="([^"]*)"/, 'class="$1 fi-fo-builder-block-picker-groups"')}>${[...groups].map(([group, groupItems]) => `<div class="fi-fo-builder-block-picker-group"${group ? ` role="group" aria-label="${e(group)}"` : ''}>${group ? `<div class="fi-fo-builder-block-picker-group-label">${e(group)}</div>` : ''}${groupItems.join('')}</div>`).join('')}</div>`
+            ? `<div${grid.replace(/class="([^"]*)"/, 'class="$1 nv-fo-builder-block-picker-groups"')}>${[...groups].map(([group, groupItems]) => `<div class="nv-fo-builder-block-picker-group"${group ? ` role="group" aria-label="${e(group)}"` : ''}>${group ? `<div class="nv-fo-builder-block-picker-group-label">${e(group)}</div>` : ''}${groupItems.join('')}</div>`).join('')}</div>`
             : `<div${grid}>${items.join('')}</div>`;
-        const searchInput = this._searchable ? `<div class="fi-fo-builder-block-picker-search-ctn"><div class="fi-input-wrp"><div class="fi-input-wrp-content-ctn"><input type="text" x-ref="searchInput" x-on:keydown.enter.prevent="" aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" x-model.debounce.${this._searchDebounce}="search" class="fi-input" /></div></div></div>` : '';
-        const noResults = this._searchable ? `<div x-cloak x-show="hasNoSearchResults" role="status" aria-live="polite" class="fi-fo-builder-block-picker-no-search-results-message">${e(noSearchResults)}</div>` : '';
-        const list = blocks.length ? `<div${this._searchable ? ' x-data="blockPicker()"' : ''} class="fi-dropdown-list">${searchInput}<div>${content}</div>${noResults}</div>` : '';
+        const searchInput = this._searchable ? `<div class="nv-fo-builder-block-picker-search-ctn"><div class="nv-input-wrp"><div class="nv-input-wrp-content-ctn"><input type="text" x-ref="searchInput" x-on:keydown.enter.prevent="" aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" x-model.debounce.${this._searchDebounce}="search" class="nv-input" /></div></div></div>` : '';
+        const noResults = this._searchable ? `<div x-cloak x-show="hasNoSearchResults" role="status" aria-live="polite" class="nv-fo-builder-block-picker-no-search-results-message">${e(noSearchResults)}</div>` : '';
+        const list = blocks.length ? `<div${this._searchable ? ' x-data="blockPicker()"' : ''} class="nv-dropdown-list">${searchInput}<div>${content}</div>${noResults}</div>` : '';
         const addIcon = trigger.icon ? icon(trigger.icon, { size: 'sm' }) : '';
         const colorClasses = colorClassesOf(colorsOf(this.livewire), 'button', trigger.color, 'gray', []);
-        return `<div x-data="filamentDropdown({ isMenu: ${this._searchable ? 'false' : 'true'} })" wire:key="${e(wireKey)}" class="${cls(['fi-dropdown', 'fi-fo-builder-block-picker', alignment ? `fi-align-${alignment}` : null])}"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-sm', ...colorClasses])}">${addIcon}${e(trigger.label)}</button></div><div x-cloak="x-cloak" x-ref="panel" wire:key="${e(wireKey)}.panel" wire:ignore.self="" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" x-float${placement ? `.placement.${placement}` : ''}.flip.shift.offset="{ offset: 8 }" class="${cls(['fi-dropdown-panel', widthClass])}">${list}</div></div>`;
+        return `<div x-data="navetteDropdown({ isMenu: ${this._searchable ? 'false' : 'true'} })" wire:key="${e(wireKey)}" class="${cls(['nv-dropdown', 'nv-fo-builder-block-picker', alignment ? `nv-align-${alignment}` : null])}"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-btn-action', 'nv-btn', 'nv-size-sm', ...colorClasses])}">${addIcon}${e(trigger.label)}</button></div><div x-cloak="x-cloak" x-ref="panel" wire:key="${e(wireKey)}.panel" wire:ignore.self="" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" x-float${placement ? `.placement.${placement}` : ''}.flip.shift.offset="{ offset: 8 }" class="${cls(['nv-dropdown-panel', widthClass])}">${list}</div></div>`;
     }
 
     private _labelText = '';
@@ -518,7 +518,7 @@ export class Builder extends Field {
         const livewireKey = this.getLivewireKey() ?? '';
         const items = this.getItems();
         const keys = Object.keys(items);
-        const tr = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.builder.${name}`, replace);
+        const tr = (name: string, replace: Record<string, string> = {}) => t(`navette-forms::components.builder.${name}`, replace);
         const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
         const colors = colorsOf(this.livewire);
         const danger = colors?.getComponentClasses('icon-button', 'danger') ?? [];
@@ -543,11 +543,11 @@ export class Builder extends Field {
                     const resolved = await resolve(action, args);
                     if (!resolved.visible) return '';
                     const expression = this.actionExpression(action, args);
-                    return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="fi-sr-only"'}>${iconActionButton({ inHeader: true, label: resolved.label, icon: resolved.icon ?? fallbackIcon, expression, disabled: disabled || resolved.disabled, colorClasses: colorsFor(resolved, 'gray', []), attributes: { tabindex: this._reorderableWithButtons ? null : '-1', 'data-reorder-hidden': 'data-reorder-hidden', 'data-reorder-direction': direction, 'data-reorder-action': expression, 'aria-describedby': descriptionId(itemKey) } })}</li>`;
+                    return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="nv-sr-only"'}>${iconActionButton({ inHeader: true, label: resolved.label, icon: resolved.icon ?? fallbackIcon, expression, disabled: disabled || resolved.disabled, colorClasses: colorsFor(resolved, 'gray', []), attributes: { tabindex: this._reorderableWithButtons ? null : '-1', 'data-reorder-hidden': 'data-reorder-hidden', 'data-reorder-direction': direction, 'data-reorder-action': expression, 'aria-describedby': descriptionId(itemKey) } })}</li>`;
                 };
                 const blockIcon = block.getIcon();
-                const collapseHtml = this._collapsible ? `<li class="fi-fo-builder-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-builder-item-header-collapse-action"><button title="${e(collapse.label)}" aria-label="${e(collapse.label)}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(collapse, 'gray', gray)])}">${icon(collapse.icon ?? fieldActionIcon('builder', 'collapse'))}</button></div><div class="fi-fo-builder-item-header-expand-action"><button title="${e(expand.label)}" aria-label="${e(expand.label)}" type="button" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(expand, 'gray', gray)])}">${icon(expand.icon ?? fieldActionIcon('builder', 'expand'))}</button></div></li>` : '';
-                const reorderHtml = this.canDrag() && reorder.visible ? `<li x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorsFor(reorder, 'gray', [])])}" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? fieldActionIcon('builder', 'reorder'))}</button></li>` : '';
+                const collapseHtml = this._collapsible ? `<li class="nv-fo-builder-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="nv-fo-builder-item-header-collapse-action"><button title="${e(collapse.label)}" aria-label="${e(collapse.label)}" type="button" class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', ...colorsFor(collapse, 'gray', gray)])}">${icon(collapse.icon ?? fieldActionIcon('builder', 'collapse'))}</button></div><div class="nv-fo-builder-item-header-expand-action"><button title="${e(expand.label)}" aria-label="${e(expand.label)}" type="button" class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', ...colorsFor(expand, 'gray', gray)])}">${icon(expand.icon ?? fieldActionIcon('builder', 'expand'))}</button></div></li>` : '';
+                const reorderHtml = this.canDrag() && reorder.visible ? `<li x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-icon-btn-action', 'nv-icon-btn', 'nv-size-sm', ...colorsFor(reorder, 'gray', [])])}" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? fieldActionIcon('builder', 'reorder'))}</button></li>` : '';
                 const moves = this.canMove() ? `${await moveButton('moveUp', fieldActionIcon('builder', 'move-up'), 'up', index === 0)}${await moveButton('moveDown', fieldActionIcon('builder', 'move-down'), 'down', index === keys.length - 1)}` : '';
                 const extra: string[] = [];
                 for (const extraAction of extraItemActions) {
@@ -563,31 +563,31 @@ export class Builder extends Field {
                     collapseHtml,
                 ].join('');
                 const label = block.getLabel({ state: item.data, key: itemKey, index });
-                header = `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="fi-fo-builder-item-header">${reorderHtml || moves ? `<ul class="fi-fo-builder-item-header-start-actions">${reorderHtml}${moves}</ul>` : ''}${this._blockIcons && blockIcon ? icon(blockIcon, { attributes: new Attributes().class(['fi-fo-builder-item-header-icon']) }) : ''}<${this._headingTag} class="fi-fo-builder-item-header-label fi-truncated">${e(label)}${this._blockNumbers ? ` ${index + 1}` : ''}</${this._headingTag}><ul class="fi-fo-builder-item-header-end-actions">${end}</ul></div>`;
+                header = `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="nv-fo-builder-item-header">${reorderHtml || moves ? `<ul class="nv-fo-builder-item-header-start-actions">${reorderHtml}${moves}</ul>` : ''}${this._blockIcons && blockIcon ? icon(blockIcon, { attributes: new Attributes().class(['nv-fo-builder-item-header-icon']) }) : ''}<${this._headingTag} class="nv-fo-builder-item-header-label nv-truncated">${e(label)}${this._blockNumbers ? ` ${index + 1}` : ''}</${this._headingTag}><ul class="nv-fo-builder-item-header-end-actions">${end}</ul></div>`;
             }
             const hasPreview = this._blockPreviews && block.hasPreview();
             const content = hasPreview
-                ? `<div class="${cls(['fi-fo-builder-item-preview', { 'fi-interactive': this._interactivePreviews }])}">${block.renderPreview(item.data)}</div>${showEdit && !this._interactivePreviews ? `<div class="fi-fo-builder-item-preview-edit-overlay" role="button" x-on:click.stop="${e(`editItem(${js(itemKey)})`)}"></div>` : ''}`
+                ? `<div class="${cls(['nv-fo-builder-item-preview', { 'nv-interactive': this._interactivePreviews }])}">${block.renderPreview(item.data)}</div>${showEdit && !this._interactivePreviews ? `<div class="nv-fo-builder-item-preview-edit-overlay" role="button" x-on:click.stop="${e(`editItem(${js(itemKey)})`)}"></div>` : ''}`
                 : await this.itemSchema(itemKey, item).toHtml();
-            rows.push(`<li wire:ignore.self wire:key="${e(livewireKey)}.${e(itemKey)}.data.item" x-data="item(${e(js({ isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `filament:builder:collapsed:${key}-${itemKey}` : null }))})" x-on:builder-expand.window="expandFromEvent" x-on:builder-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['fi-fo-builder-item', { 'fi-fo-builder-item-has-header': this._blockHeaders }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="${cls(['fi-fo-builder-item-content', { 'fi-fo-builder-item-content-has-preview': hasPreview }])}">${content}</div></li>`);
+            rows.push(`<li wire:ignore.self wire:key="${e(livewireKey)}.${e(itemKey)}.data.item" x-data="item(${e(js({ isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `navette:builder:collapsed:${key}-${itemKey}` : null }))})" x-on:builder-expand.window="expandFromEvent" x-on:builder-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['nv-fo-builder-item', { 'nv-fo-builder-item-has-header': this._blockHeaders }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="${cls(['nv-fo-builder-item-content', { 'nv-fo-builder-item-content-has-preview': hasPreview }])}">${content}</div></li>`);
             if (index < keys.length - 1) {
                 const addBetween = await resolve('addBetween', { afterItem: itemKey });
-                if (addBetween.visible && this._addable && this.getBlockPickerBlocks().length && Object.keys(items).length < this._maxItems) rows.push(`<li class="fi-fo-builder-add-between-items-ctn"><div class="fi-fo-builder-add-between-items"><div class="fi-fo-builder-block-picker-ctn">${this.blockPickerHtml(addBetween, itemKey)}</div></div></li>`);
-                else if (this._labelBetweenItems) rows.push(`<li class="fi-fo-builder-label-between-items-ctn"><div class="fi-fo-builder-label-between-items-divider-before"></div><span class="fi-fo-builder-label-between-items">${e(this._labelBetweenItems)}</span><div class="fi-fo-builder-label-between-items-divider-after"></div></li>`);
+                if (addBetween.visible && this._addable && this.getBlockPickerBlocks().length && Object.keys(items).length < this._maxItems) rows.push(`<li class="nv-fo-builder-add-between-items-ctn"><div class="nv-fo-builder-add-between-items"><div class="nv-fo-builder-block-picker-ctn">${this.blockPickerHtml(addBetween, itemKey)}</div></div></li>`);
+                else if (this._labelBetweenItems) rows.push(`<li class="nv-fo-builder-label-between-items-ctn"><div class="nv-fo-builder-label-between-items-divider-before"></div><span class="nv-fo-builder-label-between-items">${e(this._labelBetweenItems)}</span><div class="nv-fo-builder-label-between-items-divider-after"></div></li>`);
             }
         }
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: Boolean(this._actionModifiers.reorder) };
         const descriptions = keys.map((itemKey, index) => {
             const label = this.getBlock(items[itemKey].type)!.getLabel({ state: items[itemKey].data, key: itemKey, index }).trim() || tr('reordering.item');
-            return `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(label)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label, position: String(index + 1), count: String(keys.length) }))}</span>`;
+            return `<span class="nv-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(label)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label, position: String(index + 1), count: String(keys.length) }))}</span>`;
         }).join('');
-        const list = keys.length ? `<ul x-sortable x-ref="reorderItems" data-sortable-animation-duration="300" x-on:end.stop="reorder" class="fi-fo-builder-items">${rows.join('')}</ul>` : '';
-        const link = (resolved: ResolvedAction, click: string) => (resolved.visible ? `<span x-on:click="${click}"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...(colors?.getComponentClasses('link', resolved.color) ?? [])])}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(resolved.label)}</span></button></span>` : '');
+        const list = keys.length ? `<ul x-sortable x-ref="reorderItems" data-sortable-animation-duration="300" x-on:end.stop="reorder" class="nv-fo-builder-items">${rows.join('')}</ul>` : '';
+        const link = (resolved: ResolvedAction, click: string) => (resolved.visible ? `<span x-on:click="${click}"><button type="button" class="${cls(['nv-ac-link-action', 'nv-link', 'nv-size-sm', ...(colors?.getComponentClasses('link', resolved.color) ?? [])])}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="nv-link-label">${e(resolved.label)}</span></button></span>` : '');
         const collapseLinks = this._collapsible ? link(await resolve('collapseAll'), 'collapseAll') + link(await resolve('expandAll'), 'expandAll') : '';
-        const collapseAll = collapseLinks ? `<div class="${cls(['fi-fo-builder-actions', { 'fi-hidden': keys.length < 2 }])}">${collapseLinks}</div>` : '';
+        const collapseAll = collapseLinks ? `<div class="${cls(['nv-fo-builder-actions', { 'nv-hidden': keys.length < 2 }])}">${collapseLinks}</div>` : '';
         const add = await resolve('add');
         const picker = this._addable && add.visible && keys.length < this._maxItems ? this.blockPickerHtml(add) : '';
-        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('builder'))}" x-data="builderFormComponent(${e(js(config))})" class="${cls([this._extraClass, 'fi-fo-builder', { 'fi-collapsible': this._collapsible }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAll}${list}${picker}${descriptions}</div>`;
+        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('builder'))}" x-data="builderFormComponent(${e(js(config))})" class="${cls([this._extraClass, 'nv-fo-builder', { 'nv-collapsible': this._collapsible }])}"><span wire:ignore x-ref="reorderStatus" class="nv-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAll}${list}${picker}${descriptions}</div>`;
         return this.wrap(html, { labelAsDiv: true });
     }
 }

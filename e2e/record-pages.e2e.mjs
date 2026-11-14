@@ -18,7 +18,7 @@ await login(page, BASE, user);
 try {
     await step('the edit form is the first tab, next to the managers with their icon and badge', async () => {
         await page.goto(`${BASE}/projects/${project.id}/edit`);
-        const tabs = page.locator('[id$="relationManagerTabs"] > .fi-tabs .fi-tabs-item');
+        const tabs = page.locator('[id$="relationManagerTabs"] > .nv-tabs .nv-tabs-item');
         await tabs.first().waitFor();
         assert.deepEqual((await tabs.allInnerTexts()).map((text) => text.replace(/\s+/g, ' ').trim()), ['Edit', `Tasks ${openTasks}`, 'Timesheets']);
         assert.equal(await tabs.first().getAttribute('aria-selected'), 'true');
@@ -26,9 +26,9 @@ try {
         await page.locator('[id="form.name"]').waitFor();
     });
     await step('switching to a manager loads its table; back on the form, it saves', async () => {
-        const tabs = page.locator('[id$="relationManagerTabs"] > .fi-tabs .fi-tabs-item');
+        const tabs = page.locator('[id$="relationManagerTabs"] > .nv-tabs .nv-tabs-item');
         await tabs.nth(1).click();
-        await page.locator('[id$="relationManagerTabs"] .fi-ta').first().waitFor({ timeout: 10000 });
+        await page.locator('[id$="relationManagerTabs"] .nv-ta').first().waitFor({ timeout: 10000 });
         await tabs.first().click();
         await page.locator('[id="form.name"]').fill(`${project.name} (edited)`);
         await page.locator('form#form button[type=submit]').first().click();

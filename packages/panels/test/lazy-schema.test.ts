@@ -31,7 +31,7 @@ test('a lazy section renders a loading indicator, then only its schema on demand
     const html = await instance.getSchema('form').toHtml();
     assert.match(html, /wire:partial="schema\.form\.advanced::data::section"/);
     assert.match(html, /isLoadingDeferred: true/);
-    assert.match(html, /fi-sc-loading/);
+    assert.match(html, /nv-sc-loading/);
     assert.doesNotMatch(html, /form\.email|data\.email/);
     await instance.loadDeferredSchema('form.advanced::data::section');
     assert.equal(instance.loadedDeferredSchemas['form.advanced::data::section'], true);

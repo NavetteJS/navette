@@ -1,0 +1,68 @@
+.nv-in-entry {
+    @apply grid gap-y-2;
+
+    &.nv-in-entry-has-inline-label {
+        @apply sm:grid-cols-3 sm:items-start sm:gap-x-4;
+
+        & .nv-in-entry-content-col {
+            @apply sm:col-span-2;
+        }
+    }
+
+    & .nv-in-entry-label-ctn {
+        @apply flex items-start gap-x-3;
+
+        & > .nv-sc:nth-child(1) {
+            @apply grow-0;
+        }
+    }
+
+    & .nv-in-entry-label {
+        @apply text-sm font-medium text-gray-950 dark:text-white;
+    }
+
+    & .nv-in-entry-label-col {
+        @apply grid auto-cols-fr gap-y-2;
+    }
+
+    & .nv-in-entry-content-col {
+        @apply grid auto-cols-fr gap-y-2;
+    }
+
+    & .nv-in-entry-content-slot {
+        @apply contents;
+    }
+
+    & .nv-in-entry-content-ctn {
+        @apply flex w-full items-center gap-x-3;
+    }
+
+    & .nv-in-entry-content {
+        @apply block w-full text-start;
+
+        &.nv-align-center {
+            @apply text-center;
+        }
+
+        &.nv-align-end {
+            @apply text-end;
+        }
+
+        &.nv-align-left {
+            @apply text-left;
+        }
+
+        &.nv-align-right {
+            @apply text-right;
+        }
+
+        &.nv-align-justify,
+        &.nv-align-between {
+            @apply text-justify;
+        }
+    }
+
+    & .nv-in-placeholder {
+        @apply text-sm text-gray-400 dark:text-gray-500;
+    }
+}

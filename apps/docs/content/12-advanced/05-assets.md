@@ -180,10 +180,10 @@ NavetteAsset.registerScriptData({
 });
 ```
 
-Now, you can access that data from any JavaScript file at runtime, using the `window.filamentData` object:
+Now, you can access that data from any JavaScript file at runtime, using the `window.navetteData` object:
 
 ```js
-window.filamentData.support.email // 'help@example.com'
+window.navetteData.support.email // 'help@example.com'
 ```
 
 The data is the same for every user and every request: never put secrets or user data in it.

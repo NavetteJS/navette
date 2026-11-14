@@ -22,38 +22,38 @@ class Post {
 const badge = (color: string) => colors.getComponentClasses('badge', color).join(' ');
 
 test('TextColumn: label, badge color and icon of the enum the model casts to', async () => {
-    assert.equal(await TextColumn.make('status').badge().toHtml(new Post('published')), `<div class="fi-ta-text fi-ta-text-item fi-ta-text-has-badges"><span class="fi-badge fi-size-sm ${badge('success')}">Published</span></div>`);
+    assert.equal(await TextColumn.make('status').badge().toHtml(new Post('published')), `<div class="nv-ta-text nv-ta-text-item nv-ta-text-has-badges"><span class="nv-badge nv-size-sm ${badge('success')}">Published</span></div>`);
     // A case with an icon: the full markup, icon before the label.
     const reviewing = await TextColumn.make('status').badge().toHtml(new Post('reviewing'));
-    assert.match(reviewing, new RegExp(`<span class="fi-badge fi-size-sm ${badge('warning')}"><svg[^>]*class="fi-icon fi-size-sm"[^>]*>[\\s\\S]*</svg>Reviewing</span>`));
+    assert.match(reviewing, new RegExp(`<span class="nv-badge nv-size-sm ${badge('warning')}"><svg[^>]*class="nv-icon nv-size-sm"[^>]*>[\\s\\S]*</svg>Reviewing</span>`));
     // Gray badges have no color classes.
-    assert.match(await TextColumn.make('status').badge().toHtml(new Post('draft')), /<span class="fi-badge fi-size-sm"><svg[^>]*>[\s\S]*<\/svg>Draft<\/span>/);
+    assert.match(await TextColumn.make('status').badge().toHtml(new Post('draft')), /<span class="nv-badge nv-size-sm"><svg[^>]*>[\s\S]*<\/svg>Draft<\/span>/);
     // Without badge: colored text.
-    assert.match(await TextColumn.make('status').toHtml(new Post('published')), new RegExp(`fi-size-sm ${colors.getComponentClasses('text', 'success').join(' ')}">Published`));
+    assert.match(await TextColumn.make('status').toHtml(new Post('published')), new RegExp(`nv-size-sm ${colors.getComponentClasses('text', 'success').join(' ')}">Published`));
     // A value missing from the enum is displayed as is.
-    assert.equal(await TextColumn.make('status').toHtml(new Post('deleted')), '<div class="fi-ta-text fi-ta-text-item fi-size-sm">deleted</div>');
-    assert.equal(await TextColumn.make('status').toHtml(new Post(null)), '<div class="fi-ta-text"></div>');
+    assert.equal(await TextColumn.make('status').toHtml(new Post('deleted')), '<div class="nv-ta-text nv-ta-text-item nv-size-sm">deleted</div>');
+    assert.equal(await TextColumn.make('status').toHtml(new Post(null)), '<div class="nv-ta-text"></div>');
 });
 
 test('TextColumn: explicit options win over the enum; enum() and case states', async () => {
     const html = await TextColumn.make('status').badge().color('danger').icon(null).formatStateUsing(({ state }) => `#${state}`).toHtml(new Post('reviewing'));
-    assert.match(html, new RegExp(`<span class="fi-badge fi-size-sm ${badge('danger')}"><svg[^>]*>[\\s\\S]*</svg>#reviewing</span>`));
+    assert.match(html, new RegExp(`<span class="nv-badge nv-size-sm ${badge('danger')}"><svg[^>]*>[\\s\\S]*</svg>#reviewing</span>`));
     const plain = { status: 'published' };
-    assert.equal(await TextColumn.make('status').toHtml(plain), '<div class="fi-ta-text fi-ta-text-item fi-size-sm">published</div>');
+    assert.equal(await TextColumn.make('status').toHtml(plain), '<div class="nv-ta-text nv-ta-text-item nv-size-sm">published</div>');
     assert.match(await TextColumn.make('status').enum(Status).toHtml(plain), />Published</);
     assert.match(await TextColumn.make('state').getStateUsing(() => Status.from('published')).toHtml(plain), />Published</);
     // Lists: every item through the enum.
     const list = await TextColumn.make('tags').enum(Status).badge().toHtml({ tags: ['published', 'draft'] });
-    assert.match(list, /Published<\/span><\/li><li class="fi-ta-text-item"><span class="fi-badge fi-size-sm"><svg[^>]*>[\s\S]*<\/svg>Draft<\/span>/);
+    assert.match(list, /Published<\/span><\/li><li class="nv-ta-text-item"><span class="nv-badge nv-size-sm"><svg[^>]*>[\s\S]*<\/svg>Draft<\/span>/);
 });
 
 test('IconColumn: icon, color and text alternative from the enum', async () => {
     const html = await IconColumn.make('status').toHtml(new Post('reviewing'));
-    assert.match(html, new RegExp(`<svg[^>]*class="${colors.getComponentClasses('icon-column', 'warning').join(' ')} fi-icon fi-size-lg"`));
-    assert.match(html, /<span class="fi-sr-only">Reviewing<\/span>/);
+    assert.match(html, new RegExp(`<svg[^>]*class="${colors.getComponentClasses('icon-column', 'warning').join(' ')} nv-icon nv-size-lg"`));
+    assert.match(html, /<span class="nv-sr-only">Reviewing<\/span>/);
     // No icon for this case: nothing is rendered.
-    assert.equal(await IconColumn.make('status').toHtml(new Post('published')), '<div class="fi-ta-icon"></div>');
-    assert.match(await IconColumn.make('status').icon('o-star').toHtml(new Post('draft')), /<span class="fi-sr-only">Draft<\/span>/);
+    assert.equal(await IconColumn.make('status').toHtml(new Post('published')), '<div class="nv-ta-icon"></div>');
+    assert.match(await IconColumn.make('status').icon('o-star').toHtml(new Post('draft')), /<span class="nv-sr-only">Draft<\/span>/);
 });
 
 test('SelectColumn, SelectFilter and Group accept enums', async () => {

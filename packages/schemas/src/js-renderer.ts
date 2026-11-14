@@ -152,7 +152,7 @@ export function jsFieldHtml(options: {
                 x-init="updateRendererConfiguration(JSON.parse($el.dataset.rendererConfiguration), JSON.parse($el.dataset.fieldConfiguration))"
             ></span>
             <div wire:ignore x-ref="host"></div>
-            <p x-cloak x-show="hasError" role="alert" class="fi-fo-field-wrp-error-message">
+            <p x-cloak x-show="hasError" role="alert" class="nv-fo-field-wrp-error-message">
                 ${e(options.failedToLoadMessage)}
             </p>
         </div>`;

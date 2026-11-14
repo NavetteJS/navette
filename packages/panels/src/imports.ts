@@ -199,7 +199,7 @@ export class ImportColumn {
     isSensitive(ctx?: Partial<ImportColumnContext>): boolean { return Boolean(evaluate(this._sensitive, this.ctx(ctx))); }
     /** Select of the mapping form: the file's headers as options. */
     getSelect(headers: string[]): Select {
-        const select = Select.make(this.name).label(this.getLabel()).placeholder(t('filament-actions::import.modal.form.columns.placeholder'))
+        const select = Select.make(this.name).label(this.getLabel()).placeholder(t('navette-actions::import.modal.form.columns.placeholder'))
             .options(headers.map((header): [string, string] => [header, header])).required(this.isMappingRequired());
         const helper = this.getHelperText();
         if (helper) select.belowContent(helper);
@@ -403,7 +403,7 @@ export async function importRow(importer: typeof Importer, columns: ImportColumn
         const existingKey = keyOf(adapter, record);
         if (existingKey === null) {
             for (const column of columns) if (!mapped(column) && column.isMappingRequiredForNewRecordsOnly(columnCtx(column))) {
-                (errors[column.name] ??= []).push({ rule: 'required', message: t('filament-actions::import.failure_csv.column_mapping_required_for_new_record', { attribute: column.getLabel(columnCtx(column)) }) });
+                (errors[column.name] ??= []).push({ rule: 'required', message: t('navette-actions::import.failure_csv.column_mapping_required_for_new_record', { attribute: column.getLabel(columnCtx(column)) }) });
             }
             if (Object.keys(errors).length) return { status: 'invalid', record: null, errors, failure: null };
         }
@@ -568,7 +568,7 @@ export abstract class Importer {
     static async afterUpdate(_ctx: ImportRowContext): Promise<void> {}
     /** Custom validation messages: `{ 'name.required': 'The name column must not be empty.' }` (`:attribute` is replaced). */
     static getValidationMessages(): Record<string, string> { return {}; }
-    static getCompletedNotificationTitle(_run: ImportRun): string { return t('filament-actions::import.notifications.completed.title'); }
+    static getCompletedNotificationTitle(_run: ImportRun): string { return t('navette-actions::import.notifications.completed.title'); }
     static getCompletedNotificationBody(imported: number, failed: number, _run?: ImportRun): string {
         return `Your import has completed and ${imported.toLocaleString('en-US')} ${imported === 1 ? 'row' : 'rows'} imported.${failed ? ` ${failed.toLocaleString('en-US')} ${failed === 1 ? 'row' : 'rows'} failed to import.` : ''}`;
     }
@@ -746,7 +746,7 @@ export class ImportAction {
             try { return (readSpreadsheet(file.path, 1, readOptions(livewire))[0] ?? []).map((cell) => cell.trim()); } catch { return null; }
         };
         const headersOf = (livewire: any, state: unknown): string[] => (rawHeadersOf(livewire, state) ?? []).filter((cell, index, all) => cell !== '' && all.indexOf(cell) === index);
-        const example = Action.make('downloadExample').label(t('filament-actions::import.modal.actions.download_example.label')).color('gray').link()
+        const example = Action.make('downloadExample').label(t('navette-actions::import.modal.actions.download_example.label')).color('gray').link()
             .action(async ({ livewire }) => {
                 const columns = columnsOf();
                 const csvDelimiter = lazy(delimiter, livewire) ?? ',';
@@ -755,15 +755,15 @@ export class ImportAction {
                 const lines = [columns.map((column) => column.getExampleHeader()), ...Array.from({ length: count }, (_unused, index) => examples.map((list) => list[index] ?? ''))];
                 const csv = `﻿${lines.map((line) => csvLine(line, csvDelimiter)).join('\r\n')}\r\n`;
                 const panel = livewire._ctx?.panel;
-                const fileName = `${t('filament-actions::import.example_csv.file_name', { importer: kebab(importerOf().name) })}.csv`;
+                const fileName = `${t('navette-actions::import.example_csv.file_name', { importer: kebab(importerOf().name) })}.csv`;
                 livewire.redirect(panel.getDownloadUrl(await panel.getDownloads().put(livewire._ctx.user.id, fileName, 'text/csv; charset=utf-8', csv)));
             });
         const action = Action.make(name).color('gray').icon(icons.resolve('actions::import-action.grouped') ?? 'm-arrow-up-tray')
             // Importing creates or updates records: the resource's `create` ability applies.
             .authorize(async ({ livewire }) => (typeof livewire?.resource?.can === 'function' ? livewire.resource.can('create', livewire._ctx?.user ?? null) : true))
-            .label(({ livewire }) => t('filament-actions::import.label', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
-            .modalHeading(({ livewire }) => t('filament-actions::import.modal.heading', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
-            .modalSubmitActionLabel(t('filament-actions::import.modal.actions.import.label'))
+            .label(({ livewire }) => t('navette-actions::import.label', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
+            .modalHeading(({ livewire }) => t('navette-actions::import.modal.heading', { label: livewire?.resource?.getPluralModelLabel?.() ?? '' }).trim())
+            .modalSubmitActionLabel(t('navette-actions::import.modal.actions.import.label'))
             .modalWidth('md')
             .schema((schema: any) => {
                 const livewire = schema.livewire;
@@ -771,14 +771,14 @@ export class ImportAction {
                 // The columns of the uploaded file, to map them to the importer's columns.
                 const mounted = livewire?.mountedActions?.find?.((candidate: any) => candidate.name === name);
                 const headers = mapping ? headersOf(livewire, mounted?.data?.file) : [];
-                const file = FileUpload.make('file').label(t('filament-actions::import.modal.form.file.label')).placeholder(t('filament-actions::import.modal.form.file.placeholder'))
+                const file = FileUpload.make('file').label(t('navette-actions::import.modal.form.file.label')).placeholder(t('navette-actions::import.modal.form.file.placeholder'))
                     .acceptedFileTypes(['text/csv', 'text/plain', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv', '.xlsx']).maxSize(maxKilobytes).storeFiles(false).required();
                 // Duplicate headers would make the mapping ambiguous: the file is refused (Filament's rule).
                 let duplicates: string[] = [];
                 file.rule({
                     name: 'duplicate_columns',
                     passes: (state) => { const found = rawHeadersOf(livewire, state) ?? []; duplicates = found.filter((header, index) => found.indexOf(header) !== index).filter((header, index, all) => all.indexOf(header) === index); return duplicates.length === 0; },
-                    message: () => { const filled = duplicates.filter((header) => header !== ''); return tc('filament-actions::import.modal.form.file.rules.duplicate_columns', filled.length, { columns: filled.join(', ') }); },
+                    message: () => { const filled = duplicates.filter((header) => header !== ''); return tc('navette-actions::import.modal.form.file.rules.duplicate_columns', filled.length, { columns: filled.join(', ') }); },
                 });
                 for (const rules of fileRules) for (const rule of [lazy(rules, livewire)].flat()) file.rule(importFileRule(rule, () => livewire));
                 if (mapping) file.live().afterStateUpdated(({ state, set }) => {
@@ -789,7 +789,7 @@ export class ImportAction {
                 });
                 return schema.components([
                     file,
-                    ...(mapping && headers.length ? [Fieldset.make(t('filament-actions::import.modal.form.columns.label')).statePath('columnMap').columns(1).schema(columns.map((column) => column.getSelect(headers)))] : []),
+                    ...(mapping && headers.length ? [Fieldset.make(t('navette-actions::import.modal.form.columns.label')).statePath('columnMap').columns(1).schema(columns.map((column) => column.getSelect(headers)))] : []),
                     ...importerOf().getOptionsFormComponents(),
                 ]);
             })
@@ -803,11 +803,11 @@ export class ImportAction {
                 const limit = Math.min(lazy(maxRows, livewire), background ? HARD_MAX_QUEUED_IMPORT_ROWS : HARD_MAX_IMPORT_ROWS);
                 let rows: string[][];
                 try { rows = readSpreadsheet(upload.path, limit + 1, readOptions(livewire)); } catch {
-                    Notification.make().danger().title(t('filament-actions::import.notifications.completed.title')).body('The file could not be read: upload a CSV or XLSX file.').send();
+                    Notification.make().danger().title(t('navette-actions::import.notifications.completed.title')).body('The file could not be read: upload a CSV or XLSX file.').send();
                     return;
                 }
                 const header = (rows.shift() ?? []).map((cell) => cell.trim());
-                if (rows.length > limit) { Notification.make().danger().title(t('filament-actions::import.notifications.max_rows.title')).body(tc('filament-actions::import.notifications.max_rows.body', limit, { count: limit.toLocaleString('en-US') })).send(); return; }
+                if (rows.length > limit) { Notification.make().danger().title(t('navette-actions::import.notifications.max_rows.title')).body(tc('navette-actions::import.notifications.max_rows.body', limit, { count: limit.toLocaleString('en-US') })).send(); return; }
                 const currentImporter = importerOf();
                 const columns = columnsOf();
                 // Chosen columns: only headers of the file are accepted, whatever the browser sends; else automatic matching.
@@ -818,8 +818,8 @@ export class ImportAction {
                 }));
                 const missing = columns.filter((column) => column.isMappingRequired() && columnMap[column.name] === null);
                 if (missing.length) {
-                    Notification.make().danger().title(t('filament-actions::import.notifications.completed.title'))
-                        .body(missing.map((column) => t('filament-actions::import.failure_csv.column_mapping_required_for_new_record', { attribute: column.getLabel() })).join(' ')).send();
+                    Notification.make().danger().title(t('navette-actions::import.notifications.completed.title'))
+                        .body(missing.map((column) => t('navette-actions::import.failure_csv.column_mapping_required_for_new_record', { attribute: column.getLabel() })).join(' ')).send();
                     return;
                 }
                 // The options: the action's, then the values of the options form (declared components only).
@@ -849,7 +849,7 @@ export class ImportAction {
                             let result: RowResult;
                             try { result = await importRow(currentImporter, columns, columnMap, row, adapter, { livewire, options, import: run }); } catch (failure) {
                                 console.error(failure);
-                                await failRow(t('filament-actions::import.failure_csv.system_error'));
+                                await failRow(t('navette-actions::import.failure_csv.system_error'));
                                 run.processedRows++;
                                 continue;
                             }
@@ -864,19 +864,19 @@ export class ImportAction {
                     let notification = Notification.make().title(currentImporter.getCompletedNotificationTitle(run)).body(currentImporter.getCompletedNotificationBody(run.successfulRows, failures.length, run)).persistent();
                     if (failures.length) {
                         const protect = currentImporter.shouldPreventFormulaInjection();
-                        const csv = `﻿${[csvLine([...header, t('filament-actions::import.failure_csv.error_header')], ',', protect), ...failures.map((cells) => csvLine(cells, ',', protect))].join('\r\n')}\r\n`;
+                        const csv = `﻿${[csvLine([...header, t('navette-actions::import.failure_csv.error_header')], ',', protect), ...failures.map((cells) => csvLine(cells, ',', protect))].join('\r\n')}\r\n`;
                         const downloader = currentImporter.getFailedRowsDownloader();
                         let downloaderName: string | null = null;
                         if (downloader !== sendDownload) { downloaderName = `import-failures:${currentImporter.name}`; registerDownloader(downloaderName, downloader); }
-                        const failedName = `${t('filament-actions::import.failure_csv.file_name', { import_id: String(run.id ?? 'new'), csv_name: fileName.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 60) })}.csv`;
+                        const failedName = `${t('navette-actions::import.failure_csv.file_name', { import_id: String(run.id ?? 'new'), csv_name: fileName.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 60) })}.csv`;
                         const token = await panel.getDownloads().put(user.id, failedName, 'text/csv; charset=utf-8', csv, { downloader: downloaderName });
-                        notification.actions([{ label: tc('filament-actions::import.notifications.completed.actions.download_failed_rows_csv.label', failures.length), url: panel.getDownloadUrl(token) }]);
+                        notification.actions([{ label: tc('navette-actions::import.notifications.completed.actions.download_failed_rows_csv.label', failures.length), url: panel.getDownloadUrl(token) }]);
                     }
                     notification = run.successfulRows ? (failures.length ? notification.warning() : notification.success()) : notification.danger();
                     await deliver(currentImporter.modifyCompletedNotification(notification, run), background, panel, user);
                 };
                 if (!background) { await process(); return; }
-                Notification.make().success().title(t('filament-actions::import.notifications.started.title')).body(tc('filament-actions::import.notifications.started.body', rows.length, { count: rows.length.toLocaleString('en-US') })).send();
+                Notification.make().success().title(t('navette-actions::import.notifications.started.title')).body(tc('navette-actions::import.notifications.started.body', rows.length, { count: rows.length.toLocaleString('en-US') })).send();
                 runInBackground(process, { type: 'import', exporter: null, importer: currentImporter, run, queue: currentImporter.getJobQueue(), connection: currentImporter.getJobConnection(), panel: panel?.getId?.() ?? null, userId: user?.id ?? null });
             }) as ImportActionInstance;
         action.importer = (value) => { importer = value; return action; };

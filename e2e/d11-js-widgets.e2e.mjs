@@ -18,7 +18,7 @@ const db = openDatabase(dbFile, { readonly: true });
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
 const ordersWith = (status = null) => db.prepare(`select count(*) as n from orders where deleted_at is null${status ? ' and status = ?' : ''}`).get(...(status ? [status] : [])).n;
 
-const widget = () => page.locator('.fi-wi-js');
+const widget = () => page.locator('.nv-wi-js');
 const host = () => widget().locator('[x-ref="host"]');
 const text = async (selector) => (await widget().locator(selector).innerText()).trim();
 
@@ -39,12 +39,12 @@ try {
     });
 
     await step('a dashboard filter updates the renderer in place, without remounting it', async () => {
-        await page.locator('.fi-page label').filter({ hasText: /^Shipped$/ }).click();
+        await page.locator('.nv-page label').filter({ hasText: /^Shipped$/ }).click();
         await until(async () => (await text('.nv-lab-js-widget-status')) === 'Shipped', 'the filtered configuration');
         assert.equal(await text('.nv-lab-js-widget-orders'), `${ordersWith('shipped')} orders`);
         assert.equal(await host().getAttribute('data-mounts'), '1');
         assert.ok(Number(await host().getAttribute('data-updates')) >= 1);
-        await page.locator('.fi-page label').filter({ hasText: /^Cancelled$/ }).click();
+        await page.locator('.nv-page label').filter({ hasText: /^Cancelled$/ }).click();
         await until(async () => (await text('.nv-lab-js-widget-orders')) === `${ordersWith('cancelled')} orders`, 'the second filter');
         assert.equal(await host().getAttribute('data-mounts'), '1');
     });

@@ -28,9 +28,9 @@ const submit = async (name, method) => {
 };
 /** Picks a record in the searchable key select. */
 const pick = async (search, label) => {
-    await wrapperOf('commentable_id').locator('.fi-select-input-btn').click();
-    await wrapperOf('commentable_id').locator('.fi-select-input input').fill(search);
-    const option = wrapperOf('commentable_id').locator('.fi-select-input-option', { hasText: label }).first();
+    await wrapperOf('commentable_id').locator('.nv-select-input-btn').click();
+    await wrapperOf('commentable_id').locator('.nv-select-input input').fill(search);
+    const option = wrapperOf('commentable_id').locator('.nv-select-input-option', { hasText: label }).first();
     await option.waitFor({ timeout: 8000 });
     await option.click();
 };
@@ -48,9 +48,9 @@ try {
         await page.goto(`${BASE}/lab/comments/${COMMENT.id}/edit`);
         await field('title').waitFor();
         await page.waitForLoadState('networkidle');
-        assert.equal((await page.locator('fieldset.fi-fieldset legend').first().innerText()).replace('*', '').trim(), 'Commented record');
+        assert.equal((await page.locator('fieldset.nv-fieldset legend').first().innerText()).replace('*', '').trim(), 'Commented record');
         assert.equal(await field('commentable_type').inputValue(), PRODUCT_TYPE);
-        assert.match(await wrapperOf('commentable_id').locator('.fi-select-input-btn').innerText(), new RegExp(escape(product.name)));
+        assert.match(await wrapperOf('commentable_id').locator('.nv-select-input-btn').innerText(), new RegExp(escape(product.name)));
     });
 
     await step('changing the type clears the key; a blog post is searched, picked and saved', async () => {
@@ -58,7 +58,7 @@ try {
         // The seed repeats some titles: any post with that title is the one picked.
         const ids = db.prepare('select id from posts where title = ?').all(post.title).map((row) => row.id);
         await chooseType(POST_TYPE);
-        await until(async () => !(await wrapperOf('commentable_id').locator('.fi-select-input-btn').innerText()).includes(String(COMMENT.commentable_id)), 'key cleared');
+        await until(async () => !(await wrapperOf('commentable_id').locator('.nv-select-input-btn').innerText()).includes(String(COMMENT.commentable_id)), 'key cleared');
         await pick(post.title, post.title);
         await submit('Save changes', 'save');
         const saved = comment(COMMENT.id);
@@ -66,7 +66,7 @@ try {
         assert.ok(ids.includes(saved.commentable_id), `saved ${saved.commentable_id}, expected one of ${ids}`);
         await page.reload();
         await page.waitForLoadState('networkidle');
-        assert.match(await wrapperOf('commentable_id').locator('.fi-select-input-btn').innerText(), new RegExp(escape(post.title)));
+        assert.match(await wrapperOf('commentable_id').locator('.nv-select-input-btn').innerText(), new RegExp(escape(post.title)));
     });
 
     await step('create: the type is required; the type and the record are saved', async () => {

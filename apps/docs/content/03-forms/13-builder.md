@@ -750,13 +750,13 @@ undoBuilderFake();
 
 ## Removing the builder's container
 
-`extraClass()` adds a class to the builder's root element. Navette's [query builder](/tables/filters/query-builder) uses `extraClass('fi-fo-builder-not-contained')`, the class of a builder without its container border and padding:
+`extraClass()` adds a class to the builder's root element. Navette's [query builder](/tables/filters/query-builder) uses `extraClass('nv-fo-builder-not-contained')`, the class of a builder without its container border and padding:
 
 ```ts
 import { Builder } from '@navette-js/forms/builder';
 
 Builder.make('content')
-    .extraClass('fi-fo-builder-not-contained')
+    .extraClass('nv-fo-builder-not-contained')
 ```
 
 ## Customizing the builder item actions

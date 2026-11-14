@@ -270,7 +270,7 @@ test('cancelParentActions(), unmountAction(true | name), overlayParentActions() 
     const page = await board();
     await page.mountAction('first');
     assert.equal(page.mountedActions[0].hasUnsavedChangesAlert, true);
-    assert.match(scripts(page), /setUpFilamentUnsavedActionChangesAlert/);
+    assert.match(scripts(page), /setUpNavetteUnsavedActionChangesAlert/);
     await page.mountAction('second', {}, { parentAction: 0 });
     const sync = (page._effects.dispatches as any[]).filter((d) => d.name === 'sync-action-modals').pop();
     assert.equal(sync.params.shouldOverlayParentActions, true);
@@ -309,5 +309,5 @@ test('submit arguments are checked like mount arguments', async () => {
 test('Actions schema component: verticalAlignment()', async () => {
     const host: any = { id: 'h', getActionMountContext: () => ({}) };
     const html = await Schema.make(host).components([Actions.make([Action.make('star').action(() => {})]).verticalAlignment('end')]).toHtml();
-    assert.match(html, /class="fi-sc-actions fi-vertical-align-end"/);
+    assert.match(html, /class="nv-sc-actions nv-vertical-align-end"/);
 });

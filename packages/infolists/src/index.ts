@@ -48,7 +48,7 @@ const escapeAttributes = (attributes: Record<string, unknown>): AttrMap => Objec
 
 const isBlank = (value: unknown) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0);
 const ALIGNMENTS = new Set(['start', 'center', 'end', 'left', 'right', 'justify', 'between']);
-const alignmentClass = (alignment: string | null | undefined) => (alignment && ALIGNMENTS.has(alignment) ? `fi-align-${alignment}` : null);
+const alignmentClass = (alignment: string | null | undefined) => (alignment && ALIGNMENTS.has(alignment) ? `nv-align-${alignment}` : null);
 const safeName = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '');
 // A Heroicons or registered name, an icon of a set (`lucide:house`), or an icon registered for an alias (`@…`, from `icons.resolve()`).
 const ICON_NAME = /^[a-zA-Z0-9][a-zA-Z0-9-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
@@ -81,13 +81,13 @@ const TEXT_SIZES = new Set(['xs', 'sm', 'md', 'lg']);
 const textSize = (size: string | null | undefined) => (size === 'base' ? 'md' : size && TEXT_SIZES.has(size) ? size : size ? safeName(size) || 'sm' : 'sm');
 const FONT_WEIGHTS = new Set(['thin', 'extralight', 'light', 'normal', 'medium', 'semibold', 'bold', 'extrabold', 'black']);
 const FONT_FAMILIES = new Set(['sans', 'serif', 'mono']);
-const fontClass = (value: string | null | undefined, allowed: Set<string>) => (!value ? null : allowed.has(value) ? `fi-font-${value}` : safeName(value) || null);
+const fontClass = (value: string | null | undefined, allowed: Set<string>) => (!value ? null : allowed.has(value) ? `nv-font-${value}` : safeName(value) || null);
 
 /** Text color classes of a text entry item (Filament's `TextEntryComponent\ItemComponent` color map). */
 const itemColorCache = new Map<string, string[]>();
 function itemColorClasses(color: string | null | undefined): string[] {
     if (!color) return [];
-    const base = ['fi-color', `fi-color-${safeName(color)}`];
+    const base = ['nv-color', `nv-color-${safeName(color)}`];
     const palette = colorManager?.getColor(color), gray = colorManager?.getColor('gray');
     if (!palette || !gray) return base;
     const key = `${color}|${Object.values(palette).join(',')}|${gray[800]}`;
@@ -95,7 +95,7 @@ function itemColorClasses(color: string | null | undefined): string[] {
     if (!classes) {
         const text = findShade(palette, 'oklch(1 0 0)') ?? 900;
         const dark = findShade(palette, gray[800], { maxShade: 600, fromDarkest: true }) ?? 200;
-        classes = [...base, `fi-text-color-${text}`, `dark:fi-text-color-${dark}`];
+        classes = [...base, `nv-text-color-${text}`, `dark:nv-text-color-${dark}`];
         itemColorCache.set(key, classes);
     }
     return classes;
@@ -310,7 +310,7 @@ abstract class Entry extends Component {
     protected async getAlignment(): Promise<string | null> { const alignment = await evaluate(this._alignment, this.context()); return alignment && ALIGNMENTS.has(alignment) ? alignment : null; }
     protected getEmptyAttributes(base: ClassList): AttrMap { return mergeAttrs({ 'x-tooltip': tooltipJs(this._emptyTooltip) }, withClass(this.getExtraAttributesMap(), base)); }
     protected emptyHtml(base: ClassList): string {
-        return `<div ${renderAttrs(this.getEmptyAttributes(base))}>${this._placeholder !== null ? `<p class="fi-in-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
+        return `<div ${renderAttrs(this.getEmptyAttributes(base))}>${this._placeholder !== null ? `<p class="nv-in-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
     }
 
     /** Actions placed in the slots, so that they can be mounted (`schemaComponent` = entry key). */
@@ -349,21 +349,21 @@ abstract class Entry extends Component {
         const href = typeof url === 'string' && url.trim() !== '' && isSafeUrl(url) ? url : null;
         const [aboveLabel, belowLabel, beforeLabel, afterLabel, aboveContent, beforeContent, afterContent, belowContent] = await Promise.all(
             (['aboveLabel', 'belowLabel', 'beforeLabel', 'afterLabel', 'aboveContent', 'beforeContent', 'afterContent', 'belowContent'] as SlotName[]).map((name) => this.renderSlot(name)));
-        const attributes = withClass(escapeAttributes(this._extraEntryWrapperAttributes), ['fi-in-entry', { 'fi-in-entry-has-inline-label': hasInlineLabel }]);
+        const attributes = withClass(escapeAttributes(this._extraEntryWrapperAttributes), ['nv-in-entry', { 'nv-in-entry-has-inline-label': hasInlineLabel }]);
         let html = `<div ${renderAttrs(attributes)}>`;
-        if (hasLabel && isLabelHidden) html += `<div class="fi-in-entry-label fi-sr-only" role="term">${e(label)}</div>`;
+        if (hasLabel && isLabelHidden) html += `<div class="nv-in-entry-label nv-sr-only" role="term">${e(label)}</div>`;
         if ((hasLabel && !isLabelHidden) || hasInlineLabel || aboveLabel || belowLabel || beforeLabel || afterLabel) {
-            html += `<div class="fi-in-entry-label-col">${aboveLabel ?? ''}`;
+            html += `<div class="nv-in-entry-label-col">${aboveLabel ?? ''}`;
             if ((hasLabel && !isLabelHidden) || beforeLabel || afterLabel) {
-                html += `<div class="fi-in-entry-label-ctn">${beforeLabel ?? ''}${hasLabel && !isLabelHidden ? `<div class="fi-in-entry-label" role="term">${e(label)}</div>` : ''}${afterLabel ?? ''}</div>`;
+                html += `<div class="nv-in-entry-label-ctn">${beforeLabel ?? ''}${hasLabel && !isLabelHidden ? `<div class="nv-in-entry-label" role="term">${e(label)}</div>` : ''}${afterLabel ?? ''}</div>`;
             }
             html += `${belowLabel ?? ''}</div>`;
         }
-        html += '<div class="fi-in-entry-content-col">';
-        if (aboveContent !== null) html += `<div class="fi-in-entry-content-slot">${aboveContent}</div>`;
-        html += '<div class="fi-in-entry-content-ctn" role="definition">';
-        if (beforeContent !== null) html += `<div class="fi-in-entry-content-slot">${beforeContent}</div>`;
-        const contentClass = cls(['fi-in-entry-content', alignmentClass(alignment)]);
+        html += '<div class="nv-in-entry-content-col">';
+        if (aboveContent !== null) html += `<div class="nv-in-entry-content-slot">${aboveContent}</div>`;
+        html += '<div class="nv-in-entry-content-ctn" role="definition">';
+        if (beforeContent !== null) html += `<div class="nv-in-entry-content-slot">${beforeContent}</div>`;
+        const contentClass = cls(['nv-in-entry-content', alignmentClass(alignment)]);
         html += href !== null
             ? `<a href="${e(href)}"${(await evaluate(this._openUrlInNewTab, ctx)) ? ' target="_blank"' : ''} class="${contentClass}">${content}</a>`
             : `<div class="${contentClass}">${content}</div>`;
@@ -591,7 +591,7 @@ export class TextEntry extends Entry {
     weight(weight: PerItem<string | null>): this { this._weight = weight; return this; }
     /** Font family: `sans`, `serif` or `mono`. */
     fontFamily(family: PerItem<string | null>): this { this._fontFamily = family; return this; }
-    /** Typographic styling of rich content (`fi-prose`); the state is rendered as sanitized HTML. */
+    /** Typographic styling of rich content (`nv-prose`); the state is rendered as sanitized HTML. */
     prose(condition = true): this { this._prose = condition; return this; }
     /** Renders Markdown as HTML. HTML in the state (from a rich editor) is sanitized instead. */
     markdown(condition = true): this { this._markdown = condition; return this; }
@@ -652,8 +652,8 @@ export class TextEntry extends Entry {
         const isNumeric = this._isMoney || this._isNumeric;
         if (isBlank(state)) {
             // Without placeholder, Filament renders an empty item, except for money, date and badge entries reading the record.
-            if (this._placeholder === null && (this._state !== null || (!this._isMoney && !this._isDate && !this._badge))) return this.wrapEmbeddedHtml(this.emptyHtml(['fi-in-text-item', 'fi-size-sm', 'fi-in-text', { 'fi-wrapped': this._wrap }]));
-            return this.wrapEmbeddedHtml(this.emptyHtml(['fi-in-text', { 'fi-numeric': isNumeric }]));
+            if (this._placeholder === null && (this._state !== null || (!this._isMoney && !this._isDate && !this._badge))) return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-text-item', 'nv-size-sm', 'nv-in-text', { 'nv-wrapped': this._wrap }]));
+            return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-text', { 'nv-numeric': isNumeric }]));
         }
         let items = Array.isArray(state) ? state : [state];
         const stateCount = items.length;
@@ -670,19 +670,19 @@ export class TextEntry extends Entry {
             count = 1;
         }
         const alignment = await this.getAlignment();
-        const tr = (key: string, params?: Record<string, string>) => t(`filament::components/copyable.${key}`, params);
+        const tr = (key: string, params?: Record<string, string>) => t(`navette::components/copyable.${key}`, params);
         const itemData = (item: unknown) => {
             const formatted = collapsed !== null ? { text: collapsed, isHtml: true } : this.formatItem(item, record);
             const plain = formatted.isHtml ? stripTags(formatted.text) : formatted.text;
             const color = resolveItem(this._color, record, item) ?? this.enumCaseOf(record, item)?.getColor() ?? (this._badge ? 'primary' : null);
             const size = textSize(resolveItem(this._size, record, item));
             const iconColor = resolveItem(this._iconColor, record, item);
-            const iconHtml = renderIcon(resolveItem(this._icon, record, item) ?? this.enumCaseOf(record, item)?.getIcon() ?? null, { size: size === 'md' || size === 'lg' ? size : 'sm', attributes: new Attributes().class(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${safeName(iconColor)}`] : []) });
+            const iconHtml = renderIcon(resolveItem(this._icon, record, item) ?? this.enumCaseOf(record, item)?.getIcon() ?? null, { size: size === 'md' || size === 'lg' ? size : 'sm', attributes: new Attributes().class(iconColor && iconColor !== 'gray' ? ['nv-color', `nv-color-${safeName(iconColor)}`] : []) });
             const isCopyable = Boolean(resolveItem(this._copyable, record, item));
             const tooltip = resolveItem(this._tooltip, record, item);
-            let attributes: AttrMap = { class: cls(['fi-in-text-item', { 'fi-prose': this._prose || this._markdown || richContent !== null }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
+            let attributes: AttrMap = { class: cls(['nv-in-text-item', { 'nv-prose': this._prose || this._markdown || richContent !== null }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
             if (!this._badge) {
-                attributes = withClass(attributes, [`fi-size-${size}`, fontClass(resolveItem(this._weight, record, item), FONT_WEIGHTS)]);
+                attributes = withClass(attributes, [`nv-size-${size}`, fontClass(resolveItem(this._weight, record, item), FONT_WEIGHTS)]);
                 if (this._lineClamp) attributes = withStyle(attributes, [`--line-clamp: ${this._lineClamp}`]);
                 attributes = withClass(attributes, itemColorClasses(color));
             }
@@ -695,24 +695,24 @@ export class TextEntry extends Entry {
                     click = `if (isStandalone) {\n    copy(${copied}, ${message}, ${this._copyMessageDuration}, ${js(tr('messages.failed'))})\n} else {\n    window.navigator.clipboard.writeText(${copied})\n    $tooltip(${message}, {\n        theme: $store.theme,\n        timeout: ${this._copyMessageDuration},\n    })\n}`;
                     label = `isStandalone ? ${js(tr('label', { label: plain }))} : null`;
                 }
-                content = mergeAttrs({ 'x-data': isCopyable ? 'filamentCopyable' : null, 'x-bind': isCopyable ? 'bindings' : null, 'x-bind:aria-label': label, 'x-on:click': click, 'x-tooltip': tooltipJs(tooltip) }, {});
-                content = withClass(content, [{ 'fi-copyable': isCopyable }]);
-                if (this._badge) content = withClass(content, ['fi-badge', `fi-size-${size}`, ...badgeColorClasses(color)]);
+                content = mergeAttrs({ 'x-data': isCopyable ? 'navetteCopyable' : null, 'x-bind': isCopyable ? 'bindings' : null, 'x-bind:aria-label': label, 'x-on:click': click, 'x-tooltip': tooltipJs(tooltip) }, {});
+                content = withClass(content, [{ 'nv-copyable': isCopyable }]);
+                if (this._badge) content = withClass(content, ['nv-badge', `nv-size-${size}`, ...badgeColorClasses(color)]);
             }
             const html = formatted.isHtml ? formatted.text : e(formatted.text);
             const inner = `${content ? `<span ${renderAttrs(content)}>` : ''}${this._iconPosition === 'before' ? iconHtml : ''}${html}${this._iconPosition === 'after' ? iconHtml : ''}${content ? '</span>' : ''}`;
             return { attributes, inner };
         };
 
-        let container = withClass(this.getExtraAttributesMap(), ['fi-in-text', { 'fi-numeric': isNumeric }]);
-        container = withClass(container, [{ 'fi-in-text-has-badges': this._badge }, { 'fi-wrapped': this._wrap }, alignmentClass(alignment)]);
+        let container = withClass(this.getExtraAttributesMap(), ['nv-in-text', { 'nv-numeric': isNumeric }]);
+        container = withClass(container, [{ 'nv-in-text-has-badges': this._badge }, { 'nv-wrapped': this._wrap }, alignmentClass(alignment)]);
         // Prefix and suffix actions (icon buttons by default), mounted with this entry's key.
         const ctx = this.context();
         const mountContext = { ...((this.livewire as any)?.getActionMountContext?.() ?? {}), schemaComponent: this.getKey() };
         const affixHtml = async (actions: Renderable[]) => {
             const html: string[] = [];
             for (const action of actions) if (await action.isVisible(ctx)) html.push(await (action as any).toHtml(ctx, mountContext));
-            return html.length ? `<div class="fi-in-text-affix">${html.join('')}</div>` : '';
+            return html.length ? `<div class="nv-in-text-affix">${html.join('')}</div>` : '';
         };
         const prefixHtml = await affixHtml(this.getPrefixActions()), suffixHtml = await affixHtml(this.getSuffixActions());
         const hasAffixActions = prefixHtml !== '' || suffixHtml !== '';
@@ -720,20 +720,20 @@ export class TextEntry extends Entry {
             const { attributes, inner } = itemData(items[0]);
             return this.wrapEmbeddedHtml(`<div ${renderAttrs(mergeAttrs(attributes, container))}>${inner}</div>`);
         }
-        container = withClass(container, [{ 'fi-bulleted': this._bulleted }, { 'fi-in-text-has-line-breaks': hasLineBreaks }]);
+        container = withClass(container, [{ 'nv-bulleted': this._bulleted }, { 'nv-in-text-has-line-breaks': hasLineBreaks }]);
         if (overLimit || hasAffixActions) {
             const expandable = hasLineBreaks && this._expandableLimitedList;
-            container = withClass(mergeAttrs({ 'x-data': expandable && overLimit ? '{ isLimited: true }' : null }, container), [{ 'fi-in-text-affixed': hasAffixActions, 'fi-in-text-list-limited': overLimit > 0 }]);
+            container = withClass(mergeAttrs({ 'x-data': expandable && overLimit ? '{ isLimited: true }' : null }, container), [{ 'nv-in-text-affixed': hasAffixActions, 'nv-in-text-list-limited': overLimit > 0 }]);
             const listItems = items.map((item, index) => {
                 const { attributes, inner } = itemData(item);
                 return `<li ${index >= listLimit ? 'x-show="! isLimited" x-cloak x-transition ' : ''}${renderAttrs(attributes)}>${inner}</li>`;
             }).join('');
             const message = expandable
-                ? `<div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = false" x-show="isLimited" class="fi-link fi-size-xs">${e(tc('filament-infolists::components.entries.text.actions.expand_list', overLimit))}</div><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = true" x-cloak x-show="! isLimited" class="fi-link fi-size-xs">${e(tc('filament-infolists::components.entries.text.actions.collapse_list', overLimit))}</div>`
-                : e(tc('filament-infolists::components.entries.text.more_list_items', overLimit));
-            const limitedMessage = overLimit ? `<div class="fi-in-text-list-limited-message">${message}</div>` : '';
+                ? `<div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = false" x-show="isLimited" class="nv-link nv-size-xs">${e(tc('navette-infolists::components.entries.text.actions.expand_list', overLimit))}</div><div role="button" x-bind:aria-expanded="(! isLimited).toString()" x-on:click.prevent.stop="isLimited = true" x-cloak x-show="! isLimited" class="nv-link nv-size-xs">${e(tc('navette-infolists::components.entries.text.actions.collapse_list', overLimit))}</div>`
+                : e(tc('navette-infolists::components.entries.text.more_list_items', overLimit));
+            const limitedMessage = overLimit ? `<div class="nv-in-text-list-limited-message">${message}</div>` : '';
             const body = `<ul>${listItems}</ul>${limitedMessage}`;
-            return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}>${prefixHtml}${hasAffixActions ? `<div class="fi-in-text-affixed-content">${body}</div>` : body}${suffixHtml}</div>`);
+            return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}>${prefixHtml}${hasAffixActions ? `<div class="nv-in-text-affixed-content">${body}</div>` : body}${suffixHtml}</div>`);
         }
         const listItems = items.map((item) => { const { attributes, inner } = itemData(item); return `<li ${renderAttrs(attributes)}>${inner}</li>`; }).join('');
         return this.wrapEmbeddedHtml(`<ul ${renderAttrs(container)}>${listItems}</ul>`);
@@ -763,10 +763,10 @@ export class ColorEntry extends Entry {
         const colors = (Array.isArray(state) ? state : [state]).map(sanitizeCssColor).filter((color): color is string => color !== null);
         if (!colors.length) {
             // An empty or unsupported value: the wrapping container, with the placeholder if any.
-            return this.wrapEmbeddedHtml(this.emptyHtml(['fi-in-color', { 'fi-wrapped': this._wrap }]));
+            return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-color', { 'nv-wrapped': this._wrap }]));
         }
         const alignment = await this.getAlignment();
-        const tr = (key: string, params?: Record<string, string>) => t(`filament::components/copyable.${key}`, params);
+        const tr = (key: string, params?: Record<string, string>) => t(`navette::components/copyable.${key}`, params);
         const swatches = colors.map((color) => {
             const isCopyable = Boolean(resolveItem(this._copyable, record, color));
             const tooltip = resolveItem(this._tooltip, record, color);
@@ -776,15 +776,15 @@ export class ColorEntry extends Entry {
             const attributes = withStyle(withClass(mergeAttrs({
                 role: label !== null ? 'img' : null,
                 'aria-label': label !== null ? e(label) : null,
-                'x-data': isCopyable ? 'filamentCopyable' : null,
+                'x-data': isCopyable ? 'navetteCopyable' : null,
                 'x-bind': isCopyable ? 'bindings' : null,
                 'x-bind:aria-label': isCopyable ? `isStandalone ? ${js(tr('label', { label: color }))} : null` : null,
                 'x-on:click': isCopyable ? `if (isStandalone) {\n    copy(${copied}, ${message}, ${this._copyMessageDuration}, ${js(tr('messages.failed'))})\n} else {\n    window.navigator.clipboard.writeText(${copied})\n    $tooltip(${message}, {\n        theme: $store.theme,\n        timeout: ${this._copyMessageDuration},\n    })\n}` : null,
                 'x-tooltip': tooltipJs(tooltip),
-            }, {}), ['fi-in-color-item', { 'fi-copyable': isCopyable }]), [`background-color: ${color}`]);
+            }, {}), ['nv-in-color-item', { 'nv-copyable': isCopyable }]), [`background-color: ${color}`]);
             return `<div ${renderAttrs(attributes)}></div>`;
         }).join('');
-        const container = withClass(this.getExtraAttributesMap(), ['fi-in-color', { 'fi-wrapped': this._wrap }, alignmentClass(alignment)]);
+        const container = withClass(this.getExtraAttributesMap(), ['nv-in-color', { 'nv-wrapped': this._wrap }, alignmentClass(alignment)]);
         return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}>${swatches}</div>`);
     }
 }
@@ -873,7 +873,7 @@ export class ImageEntry extends Entry {
         const defaultUrl = isImageUrl(fallback) ? fallback.trim() : null;
         const items = isBlank(state) ? (defaultUrl ? [defaultUrl] : []) : Array.isArray(state) ? state : [state];
         let sources = (await Promise.all(items.map(async (item) => ({ item, src: (await this.getImageUrl(item)) ?? defaultUrl })))).filter((source): source is { item: unknown; src: string } => source.src !== null);
-        if (!sources.length) return this.wrapEmbeddedHtml(this._placeholder !== null || this._emptyTooltip !== null ? this.emptyHtml(['fi-in-image']) : this.emptyHtml(['fi-in-image', { 'fi-wrapped': this._wrap }]));
+        if (!sources.length) return this.wrapEmbeddedHtml(this._placeholder !== null || this._emptyTooltip !== null ? this.emptyHtml(['nv-in-image']) : this.emptyHtml(['nv-in-image', { 'nv-wrapped': this._wrap }]));
         const count = sources.length;
         const overLimit = this._limit && count > this._limit ? count - this._limit : 0;
         if (overLimit) sources = sources.slice(0, this._limit!);
@@ -888,12 +888,12 @@ export class ImageEntry extends Entry {
             return `<img ${renderAttrs(withStyle(mergeAttrs({ alt: e(alt ?? ''), src: e(src), 'x-tooltip': tooltipJs(resolveItem(this._tooltip, ctx.record, item)) }, extraImg), size))} />`;
         }).join('');
         const remaining = overLimit && this._limitedRemainingText
-            ? `<div ${renderAttrs(withStyle({ class: cls(['fi-in-image-limited-remaining-text', this._limitedRemainingTextSize ? `fi-size-${textSize(this._limitedRemainingTextSize)}` : null]) }, size))}>+${overLimit}</div>`
+            ? `<div ${renderAttrs(withStyle({ class: cls(['nv-in-image-limited-remaining-text', this._limitedRemainingTextSize ? `nv-size-${textSize(this._limitedRemainingTextSize)}` : null]) }, size))}>+${overLimit}</div>`
             : '';
         const container = withClass(this.getExtraAttributesMap(), [
-            'fi-in-image', { 'fi-circular': this._circular, 'fi-wrapped': this._wrap, 'fi-stacked': this._stacked },
-            this._stacked && this._ring !== null ? `fi-in-image-ring fi-in-image-ring-${this._ring}` : null,
-            this._stacked && (this._overlap ?? 2) ? `fi-in-image-overlap-${this._overlap ?? 2}` : null,
+            'nv-in-image', { 'nv-circular': this._circular, 'nv-wrapped': this._wrap, 'nv-stacked': this._stacked },
+            this._stacked && this._ring !== null ? `nv-in-image-ring nv-in-image-ring-${this._ring}` : null,
+            this._stacked && (this._overlap ?? 2) ? `nv-in-image-overlap-${this._overlap ?? 2}` : null,
             alignmentClass(alignment),
         ]);
         return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}>${images}${remaining}</div>`);
@@ -936,7 +936,7 @@ export class IconEntry extends Entry {
     async toHtml(): Promise<string> {
         const record = this.context().record;
         const state = await this.getState();
-        if (isBlank(state)) return this.wrapEmbeddedHtml(this._placeholder !== null || this._emptyTooltip !== null ? this.emptyHtml(['fi-in-icon']) : this.emptyHtml(['fi-in-icon', { 'fi-wrapped': this._wrap }]));
+        if (isBlank(state)) return this.wrapEmbeddedHtml(this._placeholder !== null || this._emptyTooltip !== null ? this.emptyHtml(['nv-in-icon']) : this.emptyHtml(['nv-in-icon', { 'nv-wrapped': this._wrap }]));
         const alignment = await this.getAlignment();
         const items = (Array.isArray(state) ? state : [state]).map((item) => {
             const on = item === true || item === 1 || item === '1';
@@ -949,10 +949,10 @@ export class IconEntry extends Entry {
             const size = resolveItem(this._size, record, item);
             const tooltip = resolveItem(this._tooltip, record, item);
             const attributes = new Attributes().merge({ 'x-tooltip': tooltipJs(tooltip) }).class(iconColorClasses(color));
-            const text = !isBlank(tooltip) ? String(tooltip) : enumCase ? enumCase.getLabel() : this._boolean ? t(on ? 'filament-infolists::components.entries.icon.true' : 'filament-infolists::components.entries.icon.false') : ['string', 'number', 'boolean'].includes(typeof item) ? String(item) : '';
-            return `${renderIcon(name, { size: size && ICON_SIZES.has(size) ? size : 'lg', attributes })}${text !== '' ? `<span class="fi-sr-only">${e(text)}</span>` : ''}`;
+            const text = !isBlank(tooltip) ? String(tooltip) : enumCase ? enumCase.getLabel() : this._boolean ? t(on ? 'navette-infolists::components.entries.icon.true' : 'navette-infolists::components.entries.icon.false') : ['string', 'number', 'boolean'].includes(typeof item) ? String(item) : '';
+            return `${renderIcon(name, { size: size && ICON_SIZES.has(size) ? size : 'lg', attributes })}${text !== '' ? `<span class="nv-sr-only">${e(text)}</span>` : ''}`;
         }).join('');
-        const container = withClass(this.getExtraAttributesMap(), ['fi-in-icon', { 'fi-in-icon-has-line-breaks': this._listWithLineBreaks, 'fi-wrapped': this._wrap }, alignmentClass(alignment)]);
+        const container = withClass(this.getExtraAttributesMap(), ['nv-in-icon', { 'nv-in-icon-has-line-breaks': this._listWithLineBreaks, 'nv-wrapped': this._wrap }, alignmentClass(alignment)]);
         return this.wrapEmbeddedHtml(`<div ${renderAttrs(container)}>${items}</div>`);
     }
 }
@@ -970,11 +970,11 @@ export class KeyValueEntry extends Entry {
         let state = await this.getState();
         if (typeof state === 'string') { try { state = JSON.parse(state); } catch { state = null; } }
         const entries = state && typeof state === 'object' ? (state instanceof Map ? [...state.entries()] : Object.entries(state as object)) : [];
-        const tr = (key: string) => t(`filament-infolists::components.entries.key_value.${key}`);
+        const tr = (key: string) => t(`navette-infolists::components.entries.key_value.${key}`);
         const show = (value: unknown) => (value === null || value === undefined || ['string', 'number', 'boolean'].includes(typeof value) ? (value === true ? '1' : value === false ? '' : String(value ?? '')) : JSON.stringify(value));
         const rows = entries.map(([key, value]) => `<tr><th scope="row">${e(key)}</th><td>${e(show(value))}</td></tr>`).join('');
-        const empty = entries.length ? '' : `<tr><td colspan="2" class="fi-in-placeholder">${e(this._placeholder ?? tr('placeholder'))}</td></tr>`;
-        return this.wrapEmbeddedHtml(`<table ${renderAttrs(withClass(this.getExtraAttributesMap(), ['fi-in-key-value']))}><thead><tr><th scope="col">${e(this._keyLabel ?? tr('columns.key.label'))}</th><th scope="col">${e(this._valueLabel ?? tr('columns.value.label'))}</th></tr></thead><tbody>${rows}${empty}</tbody></table>`);
+        const empty = entries.length ? '' : `<tr><td colspan="2" class="nv-in-placeholder">${e(this._placeholder ?? tr('placeholder'))}</td></tr>`;
+        return this.wrapEmbeddedHtml(`<table ${renderAttrs(withClass(this.getExtraAttributesMap(), ['nv-in-key-value']))}><thead><tr><th scope="col">${e(this._keyLabel ?? tr('columns.key.label'))}</th><th scope="col">${e(this._valueLabel ?? tr('columns.value.label'))}</th></tr></thead><tbody>${rows}${empty}</tbody></table>`);
     }
 }
 
@@ -1012,7 +1012,7 @@ export class CodeEntry extends Entry {
     async toHtml(): Promise<string> {
         let state = await this.getState();
         if (state === null || state === undefined || (typeof state === 'string' && state.trim() === '') || (Array.isArray(state) && !state.length)) {
-            return this.wrapEmbeddedHtml(`<div class="fi-in-code">${this._placeholder !== null ? `<p class="fi-in-placeholder">${e(this._placeholder)}</p>` : ''}</div>`);
+            return this.wrapEmbeddedHtml(`<div class="nv-in-code">${this._placeholder !== null ? `<p class="nv-in-placeholder">${e(this._placeholder)}</p>` : ''}</div>`);
         }
         let grammar = this._grammar;
         if (typeof state === 'object') { state = encodeJson(state, await this.getJsonFlags()); grammar ??= 'json'; }
@@ -1025,15 +1025,15 @@ export class CodeEntry extends Entry {
         const lines = code.split('\n');
         const linesHtml = highlighted ? highlightedLinesHtml(highlighted) : lines.map((line, index) => `<span class="line">${line === '' ? '' : `<span class="token">${e(line)}</span>`}${index < lines.length - 1 ? '<span class="token">\n</span>' : ''}</span>`).filter((html, index) => !(index === lines.length - 1 && lines[index] === '' && lines.length > 1)).join('');
         const pre = `<pre class="phiki language-${language} ${light} phiki-themes ${dark}" data-language="${language}"${style}><code>${linesHtml}</code></pre>`;
-        if (!this._copyable) return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['fi-in-code']))}>${pre}</div>`);
-        const tr = (key: string, params?: Record<string, string>) => t(`filament::components/copyable.${key}`, params);
+        if (!this._copyable) return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['nv-in-code']))}>${pre}</div>`);
+        const tr = (key: string, params?: Record<string, string>) => t(`navette::components/copyable.${key}`, params);
         const message = js(this._copyMessage ?? tr('messages.copied'));
         const click = `if (isStandalone) {\n    copy(${js(code)}, ${message}, ${this._copyMessageDuration}, ${js(tr('messages.failed'))})\n} else {\n    window.navigator.clipboard.writeText(${js(code)})\n    $tooltip(${message}, {\n        theme: $store.theme,\n        timeout: ${this._copyMessageDuration},\n    })\n}`;
         const attributes = new Attributes(this.getExtraAttributesMap()).merge({
-            'x-data': 'filamentCopyable', 'x-bind': 'bindings', 'x-id': "['copyable-code']",
+            'x-data': 'navetteCopyable', 'x-bind': 'bindings', 'x-id': "['copyable-code']",
             'x-bind:aria-label': `isStandalone ? ${js(tr('label', { label: await this.getLabel() }))} : null`,
             'x-bind:aria-describedby': "isStandalone ? $id('copyable-code') : null", 'x-on:click': click,
-        }).class(['fi-in-code', 'fi-copyable']);
+        }).class(['nv-in-code', 'nv-copyable']);
         return this.wrapEmbeddedHtml(`<div ${attributes.toHtml()}><div x-bind:id="$id('copyable-code')">${pre}</div></div>`);
     }
 }
@@ -1133,34 +1133,34 @@ export class RepeatableEntry extends Entry {
         this.assertItemsForProcessing(items.length);
         const columns = this._tableColumns ?? [];
         if (!columns.length) {
-            if (!items.length) return this.wrapEmbeddedHtml(this.emptyHtml(['fi-in-repeatable', { 'fi-contained': this._contained }]));
-            const list = new Attributes(this.getExtraAttributesMap()).class(['fi-in-repeatable', { 'fi-contained': this._contained }]).grid(this._grid);
+            if (!items.length) return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-repeatable', { 'nv-contained': this._contained }]));
+            const list = new Attributes(this.getExtraAttributesMap()).class(['nv-in-repeatable', { 'nv-contained': this._contained }]).grid(this._grid);
             const cards: string[] = [];
             for (const [index, item] of items.entries()) {
                 const { schema } = this.itemSchema(index, item);
-                cards.push(`<li class="fi-in-repeatable-item">${await schema.columns(this._itemColumns ?? {}).toHtml()}</li>`);
+                cards.push(`<li class="nv-in-repeatable-item">${await schema.columns(this._itemColumns ?? {}).toHtml()}</li>`);
             }
             return this.wrapEmbeddedHtml(`<ul ${list.toHtml()}>${cards.join('')}</ul>`);
         }
-        if (!items.length) return this.wrapEmbeddedHtml(this.emptyHtml(['fi-in-table-repeatable']));
+        if (!items.length) return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-table-repeatable']));
         const rows: string[] = [];
         for (const [index, item] of items.entries()) {
             const { components } = this.itemSchema(index, item);
             const cells: string[] = [];
             for (const component of components.slice(0, columns.length)) {
                 cells.push(await component.isVisible()
-                    ? `<td wire:key="${e(component.getLivewireKey() ?? '')}" x-data="filamentSchemaComponent(${e(js(component.getAlpineScopeConfiguration()))})">${await component.toHtml()}</td>`
-                    : '<td class="fi-hidden"></td>');
+                    ? `<td wire:key="${e(component.getLivewireKey() ?? '')}" x-data="navetteSchemaComponent(${e(js(component.getAlpineScopeConfiguration()))})">${await component.toHtml()}</td>`
+                    : '<td class="nv-hidden"></td>');
             }
             rows.push(`<tr>${cells.join('')}</tr>`);
         }
         const head = columns.map((column) => {
             const width = cssLength(column.getWidth());
-            const classes = cls([{ 'fi-wrapped': column.canHeaderWrap?.() ?? false }, alignmentClass(column.getAlignment?.() ?? null)]);
-            const label = column.isHeaderLabelHidden?.() ? `<span class="fi-sr-only">${e(column.label)}</span>` : e(column.label);
+            const classes = cls([{ 'nv-wrapped': column.canHeaderWrap?.() ?? false }, alignmentClass(column.getAlignment?.() ?? null)]);
+            const label = column.isHeaderLabelHidden?.() ? `<span class="nv-sr-only">${e(column.label)}</span>` : e(column.label);
             return `<th scope="col" class="${classes}"${width ? ` style="width: ${e(width)}"` : ''}>${label}</th>`;
         }).join('');
-        return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['fi-in-table-repeatable']))}><table><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
+        return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['nv-in-table-repeatable']))}><table><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
     }
 }
 

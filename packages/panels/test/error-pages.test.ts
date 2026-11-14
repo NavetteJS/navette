@@ -34,7 +34,7 @@ test('every status has an illustrated scene, the cable car with the code painted
     assert.equal(errorPageScene(404), 404);
     assert.equal(errorPageScene(410), 404, 'other client errors: lost');
     assert.equal(errorPageScene(502), 500, 'other server errors: snapped cable');
-    for (const status of [401, 403, 404, 419, 500, 503]) assert.match(errorIllustration(status, 'Error'), new RegExp(`class="fi-error-cabin-code">${status}<`));
+    for (const status of [401, 403, 404, 419, 500, 503]) assert.match(errorIllustration(status, 'Error'), new RegExp(`class="nv-error-cabin-code">${status}<`));
     assert.match(errorIllustration(429, 'Error'), />4<[\s\S]*>2<[\s\S]*>9</, 'one cabin per digit');
     assert.match(errorIllustration(404, 'Error <404>'), /aria-label="Error &#60;404&#62;"/);
 });
@@ -49,8 +49,8 @@ test('the panel answers its errors with its error pages: unknown URLs, forbidden
             assert.equal(missing.status, 404);
             const html = await missing.text();
             assert.match(html, /<title>\s*Lost in the clouds\s*-\s*Navette Demo\s*<\/title>/);
-            assert.match(html, /class="fi-error-cabin-code">404</);
-            assert.match(html, /<a href="\/admin"[^>]*fi-btn/, 'back to the panel');
+            assert.match(html, /class="nv-error-cabin-code">404</);
+            assert.match(html, /<a href="\/admin"[^>]*nv-btn/, 'back to the panel');
 
             const forbidden = await get('/admin/secret');
             assert.equal(forbidden.status, 403);
@@ -72,7 +72,7 @@ test('the panel answers its errors with its error pages: unknown URLs, forbidden
         });
         const environment = process.env.NODE_ENV;
         process.env.NODE_ENV = 'development';
-        await serve(panel, async (get) => assert.match(await (await get('/admin/broken')).text(), /<details class="fi-error-details">[\s\S]*Database unreachable/));
+        await serve(panel, async (get) => assert.match(await (await get('/admin/broken')).text(), /<details class="nv-error-details">[\s\S]*Database unreachable/));
         process.env.NODE_ENV = environment;
     } finally { console.error = logged; setLocale('en'); }
 });

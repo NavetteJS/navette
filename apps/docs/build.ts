@@ -189,9 +189,9 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
     const assets = path.join(dist, 'assets');
     cpSync(path.join(here, 'assets'), assets, { recursive: true });
     for (const name of ['navette-light.svg', 'navette-dark.svg', 'navette-icon.svg']) cpSync(path.join(navette, 'apps/demo/public/images/logo', name), path.join(assets, name));
-    cpSync(path.join(navette, 'packages/panels/dist/filament/fonts/filament/filament/inter'), path.join(assets, 'fonts/inter'), { recursive: true });
+    cpSync(path.join(navette, 'packages/panels/dist/navette/fonts/navette/navette/inter'), path.join(assets, 'fonts/inter'), { recursive: true });
     // Panel CSS and JavaScript, used by the previews.
-    cpSync(path.join(navette, 'packages/panels/dist/filament'), path.join(assets, 'filament'), { recursive: true });
+    cpSync(path.join(navette, 'packages/panels/dist/navette'), path.join(assets, 'navette'), { recursive: true });
     return { pages, previewErrors };
 }
 

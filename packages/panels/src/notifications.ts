@@ -71,7 +71,7 @@ export class Notification {
     }
     static make(id?: string): Notification { return new Notification(id); }
     /**
-     * A notification in Filament's array format (`Notification::toArray()`, `FilamentNotification.toJSON()`), e.g. sent from the
+     * A notification in Filament's array format (`Notification::toArray()`, `NavetteNotification.toJSON()`), e.g. sent from the
      * browser. The data is untrusted: unknown values are dropped and the id is replaced when it is not a safe one.
      */
     static fromArray(raw: unknown): Notification {
@@ -133,9 +133,9 @@ export class Notification {
         return this;
     }
     /** The notification as sent to the browser by `broadcast()`: its actions in Filament's array format, read back by `fromArray()`. */
-    getBroadcastMessage(): Omit<NotificationData, 'actions'> & { actions?: Record<string, unknown>[]; format: 'filament' } {
+    getBroadcastMessage(): Omit<NotificationData, 'actions'> & { actions?: Record<string, unknown>[]; format: 'navette' } {
         const { actions, ...data } = this.data;
-        return { ...data, ...(actions ? { actions: actions.map(notificationActionToArray) } : {}), format: 'filament' };
+        return { ...data, ...(actions ? { actions: actions.map(notificationActionToArray) } : {}), format: 'navette' };
     }
     /**
      * Shows the notification live on the open pages of these users (a user object or id), wherever it is sent from: a request of
@@ -160,21 +160,21 @@ export class Notification {
 }
 
 /** Classes of a notification's background color (none for gray, the default). */
-export const notificationColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' && COLOR.test(color) ? ['fi-color', `fi-color-${color}`] : []);
+export const notificationColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' && COLOR.test(color) ? ['nv-color', `nv-color-${color}`] : []);
 
 /** Renders a flash notification (no date or inline mode). Title and body are sanitized HTML (like Filament's `sanitizeHtml()`); action labels are escaped. */
 export function renderNotification(n: NotificationData): string {
-    const closeLabel = t('filament-notifications::notification.actions.close.label');
+    const closeLabel = t('navette-notifications::notification.actions.close.label');
     const attributes = new Attributes()
         .merge({ role: n.status === 'danger' ? 'alert' : null, 'wire:key': `${n.id}.notifications.${n.id}`, 'x-on:close-notification.window': `if ($event.detail.id == ${js(n.id)}) close()` })
-        .class([...notificationColorClasses(n.color), 'fi-no-notification', n.status ? `fi-status-${n.status}` : null]);
+        .class([...notificationColorClasses(n.color), 'nv-no-notification', n.status ? `nv-status-${n.status}` : null]);
     const iconName = n.icon ?? (n.status && Object.hasOwn(STATUS_ICON, n.status) ? icons.resolve(`notifications::notification.${n.status}`) ?? STATUS_ICON[n.status] : null);
     const iconColor = n.iconColor ?? n.status;
-    const iconClasses = [...(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${iconColor}`] : []), 'fi-no-notification-icon'];
+    const iconClasses = [...(iconColor && iconColor !== 'gray' ? ['nv-color', `nv-color-${iconColor}`] : []), 'nv-no-notification-icon'];
     // An icon that does not exist (a name sent from the browser) is left out instead of failing the whole render.
     let iconHtml = '';
     try { iconHtml = iconName ? icon(iconName, { size: 'lg', attributes: new Attributes().class(iconClasses) }) : ''; } catch { iconHtml = ''; }
-    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${sanitizeHtml(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${sanitizeHtml(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n.actions)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
+    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="nv-transition-enter-start" x-transition:enter-end="nv-transition-enter-end" x-transition:leave-start="nv-transition-leave-start" x-transition:leave-end="nv-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="nv-no-notification-main">${n.title !== null || n.body !== null ? `<div class="nv-no-notification-text">${n.title !== null ? `<h3 class="nv-no-notification-title">${sanitizeHtml(n.title)}</h3>` : ''}${n.body !== null ? `<div class="nv-no-notification-body">${sanitizeHtml(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n.actions)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="nv-icon-btn nv-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
 export type NotificationsAlignment = 'start' | 'center' | 'end' | 'left' | 'right';
@@ -185,10 +185,10 @@ const MAX_NOTIFICATIONS = 20;
 /** Container component for flash notifications. */
 export class Notifications extends Component {
     static callable = ['pullNotifications', 'pushNotificationFromEvent', 'removeNotification', 'handleBroadcastNotification'];
-    isFilamentNotificationsComponent = true;
+    isNavetteNotificationsComponent = true;
     notifications: Record<string, NotificationData> = {};
     hasPulledNotificationsOnMount = false;
-    static locked = ['isFilamentNotificationsComponent', 'notifications', 'hasPulledNotificationsOnMount'];
+    static locked = ['isNavetteNotificationsComponent', 'notifications', 'hasPulledNotificationsOnMount'];
     static listeners = { notificationsSent: 'pullNotifications', notificationSent: 'pushNotificationFromEvent', notificationClosed: 'removeNotification' };
     private static _alignment: NotificationsAlignment = 'right';
     private static _verticalAlignment: NotificationsVerticalAlignment = 'start';
@@ -219,7 +219,7 @@ export class Notifications extends Component {
         for (const n of pull(this.mailbox, batches as string[])) this.pushNotification(n);
     }
     pullNotificationsFromSession(batches: unknown = []): void { this.pullNotifications(batches); }
-    /** A notification sent from JavaScript (`new FilamentNotification().title('Saved').send()`): its data comes from the browser and is checked. */
+    /** A notification sent from JavaScript (`new NavetteNotification().title('Saved').send()`): its data comes from the browser and is checked. */
     pushNotificationFromEvent(notification: unknown): void {
         if (!notification || typeof notification !== 'object' || Array.isArray(notification)) return;
         this.pushNotification(Notification.fromArray(notification).getData());
@@ -233,7 +233,7 @@ export class Notifications extends Component {
     }
     /** A notification received live (`Notification.broadcast()`). It comes from the browser: it is rebuilt from checked values. */
     handleBroadcastNotification(notification: unknown = {}): void {
-        if (!notification || typeof notification !== 'object' || (notification as Record<string, unknown>).format !== 'filament') return;
+        if (!notification || typeof notification !== 'object' || (notification as Record<string, unknown>).format !== 'navette') return;
         const data = Notification.fromArray(notification).getData();
         // An icon name that is not a known icon is dropped rather than failing the update.
         try { renderNotification(data); } catch { data.icon = null; }
@@ -243,10 +243,10 @@ export class Notifications extends Component {
     protected registerBroadcastListener(): void {
         const { panel, user } = (this._ctx ?? {}) as any;
         if (!user || typeof panel?.hasBroadcasting !== 'function' || !panel.hasBroadcasting()) return;
-        this.addScript('broadcast-notifications', `setUpFilamentBroadcastNotifications({ $wire, broadcastChannel: ${js(panel.getBroadcastChannel(user))}, event: ${js('.' + NOTIFICATION_BROADCAST_EVENT)}, onNotification: (notification) => $wire.handleBroadcastNotification(notification), })`);
+        this.addScript('broadcast-notifications', `setUpNavetteBroadcastNotifications({ $wire, broadcastChannel: ${js(panel.getBroadcastChannel(user))}, event: ${js('.' + NOTIFICATION_BROADCAST_EVENT)}, onNotification: (notification) => $wire.handleBroadcastNotification(notification), })`);
     }
     render(): string {
         this.registerBroadcastListener();
-        return `<div x-data="notificationsComponent()" data-filament-notifications="${this.hasPulledNotificationsOnMount ? 'mounted' : 'pending'}"><div class="fi-no fi-align-${Notifications._alignment} fi-vertical-align-${Notifications._verticalAlignment}" role="status" aria-atomic="false">${Object.values(this.notifications).map(renderNotification).join('')}</div></div>`;
+        return `<div x-data="notificationsComponent()" data-navette-notifications="${this.hasPulledNotificationsOnMount ? 'mounted' : 'pending'}"><div class="nv-no nv-align-${Notifications._alignment} nv-vertical-align-${Notifications._verticalAlignment}" role="status" aria-atomic="false">${Object.values(this.notifications).map(renderNotification).join('')}</div></div>`;
     }
 }

@@ -14,7 +14,7 @@ let db: Knex;
 const adapter = new ObjectionAdapter(Post);
 const host = (over: Partial<TableHost> = {}): TableHost => ({ id: 'H', tableSearch: '', tableSort: null, tableColumnSearches: {}, tableRecordsPerPage: 5, paginators: { page: 1 }, tableGrouping: null, ...over });
 const clean = (html: string) => html.replace(/>\s+</g, '><').replace(/\s+/g, ' ');
-const records = (html: string) => { const start = html.indexOf('<tbody class="fi-ta-records"'); return html.slice(start, html.indexOf('</tbody>', start)); };
+const records = (html: string) => { const start = html.indexOf('<tbody class="nv-ta-records"'); return html.slice(start, html.indexOf('</tbody>', start)); };
 const columns = () => [TextColumn.make('title'), TextColumn.make('rating').summarize(Average.make()), TextColumn.make('status')];
 
 before(async () => {
@@ -49,47 +49,47 @@ test('default grouping: forced outside the selector, preselected inside it; forg
 test('render: group headers, summary of each group, and of the last one only when it is complete on the page', async () => {
     const table = new Table().pluralModelLabel('posts').columns(columns()).defaultGroup('status');
     const page1 = records(clean(await renderTable(table, host(), adapter)));
-    assert.deepEqual([...page1.matchAll(/<h3 class="fi-ta-group-heading">([^<]+)<\/h3>/g)].map((m) => m[1]), ['Status: draft', 'Status: published', 'Status: reviewing']);
+    assert.deepEqual([...page1.matchAll(/<h3 class="nv-ta-group-heading">([^<]+)<\/h3>/g)].map((m) => m[1]), ['Status: draft', 'Status: published', 'Status: reviewing']);
     assert.deepEqual([...page1.matchAll(/heading-cell ">([^<]+)<\/th>/g)].map((m) => m[1]), ['draft summary', 'published summary', 'This page', 'All posts']);
-    assert.match(page1, /draft summary<\/th><td class="fi-ta-cell fi-align-start "><div class="fi-ta-text-summary"><span class="fi-ta-text-summary-label">Average<\/span><span>9\.7<\/span><\/div><\/td><td class="fi-ta-cell fi-align-start "><\/td><\/tr>/);
+    assert.match(page1, /draft summary<\/th><td class="nv-ta-cell nv-align-start "><div class="nv-ta-text-summary"><span class="nv-ta-text-summary-label">Average<\/span><span>9\.7<\/span><\/div><\/td><td class="nv-ta-cell nv-align-start "><\/td><\/tr>/);
     // The "reviewing" group continues on page 2: its summary (over the whole group) only appears at its end.
     const page2 = records(clean(await renderTable(table, host({ paginators: { page: 2 } }), adapter)));
-    assert.match(page2, /reviewing summary<\/th><td class="fi-ta-cell fi-align-start "><div class="fi-ta-text-summary"><span class="fi-ta-text-summary-label">Average<\/span><span>7\.467<\/span>/);
+    assert.match(page2, /reviewing summary<\/th><td class="nv-ta-cell nv-align-start "><div class="nv-ta-text-summary"><span class="nv-ta-text-summary-label">Average<\/span><span>7\.467<\/span>/);
     // Single page: one striped "Summary" row, without a summary header.
     const single = records(clean(await renderTable(table, host({ tableRecordsPerPage: 10 }), adapter)));
-    assert.ok(!single.includes('fi-ta-summary-header-row'));
-    assert.match(single, /<tr class="fi-ta-row fi-ta-summary-row fi-striped"><th scope="row" class="fi-ta-cell fi-align-start fi-ta-summary-row-heading-cell ">Summary<\/th>/);
+    assert.ok(!single.includes('nv-ta-summary-header-row'));
+    assert.match(single, /<tr class="nv-ta-row nv-ta-summary-row nv-striped"><th scope="row" class="nv-ta-cell nv-align-start nv-ta-summary-row-heading-cell ">Summary<\/th>/);
 });
 
 test('groups only: no rows or pagination, one summary row per group without the grouped column', async () => {
     const table = new Table().pluralModelLabel('posts').columns(columns()).defaultGroup('status').groupsOnly();
     const html = clean(await renderTable(table, host(), adapter));
     const body = records(html);
-    assert.ok(!body.includes('fi-ta-group-header-row') && !body.includes('table.records.'));
-    assert.ok(!html.includes('fi-pagination'));
-    assert.equal(body, '<tbody class="fi-ta-records"><tr class="fi-ta-row fi-ta-summary-row"><th scope="row" class="fi-ta-cell fi-ta-summary-row-heading-cell fi-align-start">draft</th><td class="fi-ta-cell fi-align-start "></td><td class="fi-ta-cell fi-align-start "><div class="fi-ta-text-summary"><span class="fi-ta-text-summary-label">Average</span><span>9.7</span></div></td></tr>'
-        + '<tr class="fi-ta-row fi-ta-summary-row"><th scope="row" class="fi-ta-cell fi-ta-summary-row-heading-cell fi-align-start">published</th><td class="fi-ta-cell fi-align-start "></td><td class="fi-ta-cell fi-align-start "><div class="fi-ta-text-summary"><span class="fi-ta-text-summary-label">Average</span><span>8.25</span></div></td></tr>'
-        + '<tr class="fi-ta-row fi-ta-summary-row"><th scope="row" class="fi-ta-cell fi-ta-summary-row-heading-cell fi-align-start">reviewing</th><td class="fi-ta-cell fi-align-start "></td><td class="fi-ta-cell fi-align-start "><div class="fi-ta-text-summary"><span class="fi-ta-text-summary-label">Average</span><span>7.467</span></div></td></tr>'
-        + '<tr class="fi-ta-row fi-ta-summary-row fi-striped"><th scope="row" class="fi-ta-cell fi-ta-summary-row-heading-cell fi-align-start">Summary</th><td class="fi-ta-cell fi-align-start "></td><td class="fi-ta-cell fi-align-start "><div class="fi-ta-text-summary"><span class="fi-ta-text-summary-label">Average</span><span>8.1</span></div></td></tr>');
+    assert.ok(!body.includes('nv-ta-group-header-row') && !body.includes('table.records.'));
+    assert.ok(!html.includes('nv-pagination'));
+    assert.equal(body, '<tbody class="nv-ta-records"><tr class="nv-ta-row nv-ta-summary-row"><th scope="row" class="nv-ta-cell nv-ta-summary-row-heading-cell nv-align-start">draft</th><td class="nv-ta-cell nv-align-start "></td><td class="nv-ta-cell nv-align-start "><div class="nv-ta-text-summary"><span class="nv-ta-text-summary-label">Average</span><span>9.7</span></div></td></tr>'
+        + '<tr class="nv-ta-row nv-ta-summary-row"><th scope="row" class="nv-ta-cell nv-ta-summary-row-heading-cell nv-align-start">published</th><td class="nv-ta-cell nv-align-start "></td><td class="nv-ta-cell nv-align-start "><div class="nv-ta-text-summary"><span class="nv-ta-text-summary-label">Average</span><span>8.25</span></div></td></tr>'
+        + '<tr class="nv-ta-row nv-ta-summary-row"><th scope="row" class="nv-ta-cell nv-ta-summary-row-heading-cell nv-align-start">reviewing</th><td class="nv-ta-cell nv-align-start "></td><td class="nv-ta-cell nv-align-start "><div class="nv-ta-text-summary"><span class="nv-ta-text-summary-label">Average</span><span>7.467</span></div></td></tr>'
+        + '<tr class="nv-ta-row nv-ta-summary-row nv-striped"><th scope="row" class="nv-ta-cell nv-ta-summary-row-heading-cell nv-align-start">Summary</th><td class="nv-ta-cell nv-align-start "></td><td class="nv-ta-cell nv-align-start "><div class="nv-ta-text-summary"><span class="nv-ta-text-summary-label">Average</span><span>8.1</span></div></td></tr>');
 });
 
 test('grouping selector: hidden, without direction, in a dropdown on desktop; groups collapsed by default', async () => {
     const base = () => new Table().pluralModelLabel('posts').columns(columns()).groups(['status']);
     const plain = clean(await renderTable(base(), host(), adapter));
     assert.equal((plain.match(/x-model="direction"/g) ?? []).length, 2);
-    assert.match(plain, /class="fi-dropdown sm:fi-hidden" wire:key="H\.table\.grouping"/);
+    assert.match(plain, /class="nv-dropdown sm:nv-hidden" wire:key="H\.table\.grouping"/);
     assert.match(plain, /areGroupsCollapsedByDefault: false,/);
-    assert.ok(!clean(await renderTable(base().groupingSettingsHidden(), host(), adapter)).includes('fi-ta-grouping-settings'));
+    assert.ok(!clean(await renderTable(base().groupingSettingsHidden(), host(), adapter)).includes('nv-ta-grouping-settings'));
     assert.ok(!clean(await renderTable(base().groupingDirectionSettingHidden(), host(), adapter)).includes('x-model="direction"'));
     const dropdown = clean(await renderTable(base().groupingSettingsInDropdownOnDesktop(), host(), adapter));
-    assert.match(dropdown, /class="fi-dropdown" wire:key="H\.table\.grouping"/);
+    assert.match(dropdown, /class="nv-dropdown" wire:key="H\.table\.grouping"/);
     assert.equal((dropdown.match(/x-model="group"/g) ?? []).length, 1);
     const collapsed = clean(await renderTable(new Table().columns(columns()).defaultGroup(Group.make('status').collapsible()).collapsedGroupsByDefault(), host(), adapter));
     assert.match(collapsed, /areGroupsCollapsedByDefault: true,/);
     assert.match(collapsed, /x-on:click="toggleCollapseGroup\(&#39;draft&#39;\)"/);
     // Group without title or label: header hidden from assistive technologies.
     const silent = clean(await renderTable(new Table().columns(columns()).defaultGroup(Group.make('status').titlePrefixedWithLabel(false).getTitleFromRecordUsing((r: any) => (r.status === 'draft' ? 'Brouillons' : ''))), host(), adapter));
-    assert.match(silent, /<tr aria-hidden="true" class="fi-ta-row fi-ta-group-header-row">/);
+    assert.match(silent, /<tr aria-hidden="true" class="nv-ta-row nv-ta-group-header-row">/);
 });
 
 test('custom group key, scope and order', async () => {
@@ -100,9 +100,9 @@ test('custom group key, scope and order', async () => {
         .orderQueryUsing((query, direction) => query.orderByRaw(`case status when 'reviewing' then 0 when 'draft' then 1 else 2 end ${direction}`));
     const table = new Table().columns(columns()).groups([group]);
     const html = clean(await renderTable(table, host({ tableGrouping: 'status:asc', tableRecordsPerPage: 10 } as any), adapter));
-    const titles = [...records(html).matchAll(/<div class="fi-ta-text fi-ta-text-item fi-size-sm">(T\d)<\/div>/g)].map((match) => match[1]);
+    const titles = [...records(html).matchAll(/<div class="nv-ta-text nv-ta-text-item nv-size-sm">(T\d)<\/div>/g)].map((match) => match[1]);
     assert.deepEqual(titles, ['T4', 'T5', 'T6', 'T1', 'T2', 'T3'], 'custom order: reviewing, draft, published');
-    assert.equal((html.match(/class="fi-ta-group-heading"/g) ?? []).length, 2, 'two groups: not live, live');
+    assert.equal((html.match(/class="nv-ta-group-heading"/g) ?? []).length, 2, 'two groups: not live, live');
     assert.match(html, /Not live summary/);
 });
 
@@ -115,10 +115,10 @@ test('summarizer `query()`: scoped on all records, on the page and on each group
     ]);
     const html = clean(await renderTable(table, host({ tableRecordsPerPage: 5 } as any), adapter));
     // 6 posts, 5 per page: the page (T1-T5) has one rating below 8 (7), all records two (7 and 6).
-    const highs = [...html.matchAll(/<span class="fi-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
+    const highs = [...html.matchAll(/<span class="nv-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
     assert.deepEqual(highs, ['1', '2']);
     const grouped = clean(await renderTable(table.groups([Group.make('status')]), host({ tableGrouping: 'status:asc', tableRecordsPerPage: 10 } as any), adapter));
-    const groupHighs = [...grouped.matchAll(/<span class="fi-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
+    const groupHighs = [...grouped.matchAll(/<span class="nv-ta-text-summary-label">Low<\/span><span>(\d+)<\/span>/g)].map((match) => match[1]);
     assert.deepEqual(groupHighs, ['0', '0', '2', '2'], 'draft, published, reviewing (7 and 6), then all records');
 });
 
@@ -127,5 +127,5 @@ test('summaries(): the "this page" and "all" rows can be hidden, group summaries
     assert.deepEqual(await headings(new Table().pluralModelLabel('posts').columns(columns()).defaultGroup('status').summaries(false, true)), ['draft summary', 'published summary', 'All posts']);
     assert.deepEqual(await headings(new Table().pluralModelLabel('posts').columns(columns()).defaultGroup('status').summaries(false, false)), ['draft summary', 'published summary']);
     const single = records(clean(await renderTable(new Table().pluralModelLabel('posts').columns(columns()).summaries(false, false), host({ tableRecordsPerPage: 10 }), adapter)));
-    assert.ok(!single.includes('fi-ta-summary-row'));
+    assert.ok(!single.includes('nv-ta-summary-row'));
 });

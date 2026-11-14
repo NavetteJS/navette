@@ -1,0 +1,234 @@
+.nv-section {
+    &:not(.nv-section-not-contained) {
+        &:not(.nv-divided) {
+            & > .nv-section-content-ctn > .nv-section-content {
+                @apply p-6;
+            }
+        }
+
+        &.nv-divided {
+            & > .nv-section-content-ctn > .nv-section-content {
+                & > * {
+                    @apply p-6;
+                }
+            }
+        }
+
+        & > .nv-section-content-ctn > .nv-section-footer {
+            @apply border-t border-gray-200 px-6 py-4 dark:border-white/10;
+        }
+
+        &:not(.nv-aside) {
+            @apply rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10;
+
+            &.nv-compact {
+                @apply rounded-lg;
+            }
+
+            &.nv-secondary {
+                @apply bg-gray-50 dark:bg-white/5;
+            }
+
+            & > .nv-section-header {
+                @apply px-6 py-4;
+            }
+
+            &.nv-section-has-header:not(.nv-collapsed) {
+                & > .nv-section-content-ctn {
+                    @apply border-t border-gray-200 dark:border-white/10;
+                }
+            }
+        }
+
+        &.nv-aside {
+            & > .nv-section-content-ctn {
+                @apply rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 md:col-span-2 dark:bg-gray-900 dark:ring-white/10;
+            }
+
+            &.nv-compact {
+                & > .nv-section-content-ctn {
+                    @apply rounded-lg;
+                }
+            }
+
+            &.nv-secondary {
+                & > .nv-section-content-ctn {
+                    @apply bg-gray-50 dark:bg-white/5;
+                }
+            }
+        }
+
+        &.nv-compact {
+            &:not(.nv-aside) {
+                & > .nv-section-header {
+                    @apply px-4 py-2.5;
+                }
+            }
+
+            &:not(.nv-divided) {
+                & > .nv-section-content-ctn > .nv-section-content {
+                    @apply p-4;
+                }
+            }
+
+            &.nv-divided {
+                & > .nv-section-content-ctn > .nv-section-content {
+                    & > * {
+                        @apply p-4;
+                    }
+                }
+            }
+
+            & > .nv-section-footer {
+                @apply px-4 py-2.5;
+            }
+        }
+    }
+
+    &.nv-section-not-contained {
+        &.nv-aside {
+            & > .nv-section-content-ctn {
+                @apply md:col-span-2;
+            }
+        }
+
+        &:not(.nv-aside) {
+            @apply grid gap-y-4;
+
+            &:not(.nv-collapsed) {
+                & > .nv-section-content-ctn {
+                    @apply grid gap-y-4;
+                }
+            }
+
+            &.nv-divided {
+                & > .nv-section-content-ctn > .nv-section-content {
+                    & > * {
+                        @apply py-6;
+                    }
+                }
+            }
+
+            &.nv-compact {
+                @apply gap-y-2.5;
+
+                & > .nv-section-content-ctn {
+                    @apply gap-y-2.5;
+                }
+
+                &.nv-divided {
+                    & > .nv-section-content-ctn > .nv-section-content {
+                        & > * {
+                            @apply py-4;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    &.nv-divided {
+        & > .nv-section-content-ctn > .nv-section-content {
+            @apply gap-0 divide-y divide-gray-200 dark:divide-white/10;
+        }
+    }
+
+    &.nv-aside {
+        @apply grid grid-cols-1 items-start gap-x-6 gap-y-4 md:grid-cols-3;
+    }
+
+    &.nv-collapsible {
+        & > .nv-section-header {
+            @apply cursor-pointer;
+        }
+    }
+
+    &.nv-collapsed {
+        & > .nv-section-header > .nv-section-collapse-btn {
+            @apply rotate-180;
+        }
+
+        & > .nv-section-content-ctn {
+            @apply hidden;
+        }
+    }
+
+    &.nv-section-has-content-before {
+        & > .nv-section-content-ctn {
+            @apply md:order-first;
+        }
+    }
+
+    & > .nv-section-header {
+        @apply flex items-start gap-3;
+
+        & > .nv-icon {
+            @apply shrink-0 text-gray-400 dark:text-gray-500;
+
+            &.nv-color {
+                @apply text-color-500 dark:text-color-400;
+            }
+
+            &.nv-size-sm {
+                @apply mt-1;
+            }
+
+            &.nv-size-md {
+                @apply mt-0.5;
+            }
+        }
+
+        & > .nv-section-header-content > .nv-section-header-after-ctn {
+            @apply max-w-full shrink-0 self-center;
+
+            & .nv-link:not(.nv-section-header-after-ctn .nv-dropdown-panel *) {
+                @apply leading-6;
+            }
+
+            /* The negative margins let the buttons overhang the header's vertical padding, so a header with actions matches the height of one without them. They are applied to the container instead of the buttons so wrapped rows of actions keep their gap, laddered so the largest button size present wins. */
+            &:has(.nv-btn.nv-size-xs:not(.nv-dropdown-panel *)) {
+                @apply -my-0.5;
+            }
+
+            &:has(.nv-btn.nv-size-sm:not(.nv-dropdown-panel *)) {
+                @apply -my-1;
+            }
+
+            &:has(.nv-btn.nv-size-md:not(.nv-dropdown-panel *)) {
+                @apply -my-1.5;
+            }
+
+            &:has(.nv-btn.nv-size-lg:not(.nv-dropdown-panel *)) {
+                @apply -my-2;
+            }
+
+            &:has(.nv-btn.nv-size-xl:not(.nv-dropdown-panel *)) {
+                @apply -my-2.5;
+            }
+        }
+
+        & > .nv-section-collapse-btn {
+            @apply -my-1.5 shrink-0;
+        }
+    }
+
+    & .nv-section-header-content {
+        @apply flex min-w-0 flex-wrap items-start gap-3;
+
+        &.nv-section-header-content-has-heading {
+            @apply flex-1;
+        }
+    }
+
+    & .nv-section-header-text-ctn {
+        @apply grid w-max max-w-full flex-auto gap-y-1;
+    }
+
+    & .nv-section-header-heading {
+        @apply text-base leading-6 font-semibold text-gray-950 dark:text-white;
+    }
+
+    & .nv-section-header-description {
+        @apply overflow-hidden text-sm break-words text-gray-500 dark:text-gray-400;
+    }
+}

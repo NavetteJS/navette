@@ -367,19 +367,19 @@ Notification actions are kept in Filament's array format, so that the notificati
 
 ## Sending notifications from JavaScript
 
-Notifications can also be sent from the browser, without a request to the server. The `FilamentNotification` and `FilamentNotificationAction` classes are available on `window` in every panel page, with the same methods as the server-side builder:
+Notifications can also be sent from the browser, without a request to the server. The `NavetteNotification` and `NavetteNotificationAction` classes are available on `window` in every panel page, with the same methods as the server-side builder:
 
 ```js
-new FilamentNotification()
+new NavetteNotification()
     .title('Saved successfully')
     .success()
     .body('Changes to the post have been saved.')
     .actions([
-        new FilamentNotificationAction('view')
+        new NavetteNotificationAction('view')
             .button()
             .url('/posts/5')
             .openUrlInNewTab(),
-        new FilamentNotificationAction('undo')
+        new NavetteNotificationAction('undo')
             .color('gray')
             .dispatch('undoEditingPost', { id: 5 })
             .close(),
@@ -387,7 +387,7 @@ new FilamentNotification()
     .send()
 ```
 
-The other methods are `status()`, `danger()`, `info()`, `warning()`, `color()`, `icon()`, `iconColor()`, `duration()`, `seconds()` and `persistent()`. An action's label defaults to its name in words (`'undoEdit'` becomes "Undo edit"); `label()` sets another one. Actions also support `dispatchSelf()`, `dispatchTo(component, event, data)`, `outlined()`, `icon()`, `iconPosition()`, `size()`, `tooltip()`, `extraAttributes()` and `disabled()`, and `FilamentNotificationActionGroup` groups them.
+The other methods are `status()`, `danger()`, `info()`, `warning()`, `color()`, `icon()`, `iconColor()`, `duration()`, `seconds()` and `persistent()`. An action's label defaults to its name in words (`'undoEdit'` becomes "Undo edit"); `label()` sets another one. Actions also support `dispatchSelf()`, `dispatchTo(component, event, data)`, `outlined()`, `icon()`, `iconPosition()`, `size()`, `tooltip()`, `extraAttributes()` and `disabled()`, and `NavetteNotificationActionGroup` groups them.
 
 `send()` dispatches a `notificationSent` browser event, which the notifications component of the page receives and displays. The notification travels through the server like any other request data: as on the server, the title and body are sanitized, only relative paths and `http(s)` addresses become links, and unknown statuses, colors, icons and event names are left out.
 
@@ -437,7 +437,7 @@ Notification.make('greeting')
 </button>
 ```
 
-In JavaScript, `new FilamentNotification().id('greeting')` sets the ID. If you send several notifications with the same ID, the last one replaces the others.
+In JavaScript, `new NavetteNotification().id('greeting')` sets the ID. If you send several notifications with the same ID, the last one replaces the others.
 
 ## Positioning notifications
 
@@ -454,12 +454,12 @@ The position applies to every panel of the Node.js process.
 
 ## Notifications as arrays
 
-`Notification.fromArray(data)` builds a notification from Filament's array format (`Notification::toArray()`, the JSON of `FilamentNotification`), with its actions and action groups. The data is treated as untrusted: unknown statuses, colors, icons and event names are dropped, an unsafe id is replaced by a random one, and durations are bounded. `getData()` returns the notification's data, and `getBroadcastMessage()` the message that [`broadcast()`](broadcast-notifications) sends to the browser (the same data, with its actions in the array format and `format: 'filament'`; the page sends it back to the server, which reads it with `fromArray()`):
+`Notification.fromArray(data)` builds a notification from Filament's array format (`Notification::toArray()`, the JSON of `NavetteNotification`), with its actions and action groups. The data is treated as untrusted: unknown statuses, colors, icons and event names are dropped, an unsafe id is replaced by a random one, and durations are bounded. `getData()` returns the notification's data, and `getBroadcastMessage()` the message that [`broadcast()`](broadcast-notifications) sends to the browser (the same data, with its actions in the array format and `format: 'navette'`; the page sends it back to the server, which reads it with `fromArray()`):
 
 ```ts
 import { Notification } from '@navette-js/panels';
 
 const notification = Notification.fromArray(JSON.parse(job.payload));
 
-notification.getBroadcastMessage(); // { id, title, body, status, actions, …, format: 'filament' }
+notification.getBroadcastMessage(); // { id, title, body, status, actions, …, format: 'navette' }
 ```

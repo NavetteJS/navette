@@ -19,7 +19,7 @@ const COLORS: Record<string, { gradient: string; bg: string; text: string; ring:
     gray: { gradient: 'from-gray-500 to-slate-600', bg: 'bg-gray-100 dark:bg-gray-500/10', text: 'text-gray-600 dark:text-gray-400', ring: 'ring-gray-200/80 dark:ring-gray-500/20', dot: 'bg-gray-500' },
 };
 // The icon's own classes come first, then the caller's.
-const svg = (name: string, classes: string) => icon(name).replace('class="fi-icon fi-size-md"', `class="fi-icon fi-size-md ${classes}"`);
+const svg = (name: string, classes: string) => icon(name).replace('class="nv-icon nv-size-md"', `class="nv-icon nv-size-md ${classes}"`);
 
 export class FeaturesOverview extends Widget {
     static columnSpan = 'full' as const;

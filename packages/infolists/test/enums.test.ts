@@ -22,13 +22,13 @@ class Post {
 
 test('TextEntry: label, badge color and icon of the enum the model casts to', async () => {
     const html = await render(new Post('reviewing'), [TextEntry.make('status').badge()]);
-    assert.match(html, /<span class="fi-badge fi-size-sm fi-color fi-color-warning[^"]*"><svg[^>]*fi-icon[^>]*>[\s\S]*<\/svg>Reviewing<\/span>/);
+    assert.match(html, /<span class="nv-badge nv-size-sm nv-color nv-color-warning[^"]*"><svg[^>]*nv-icon[^>]*>[\s\S]*<\/svg>Reviewing<\/span>/);
     assert.doesNotMatch(html, />reviewing</);
     const published = await render(new Post('published'), [TextEntry.make('status')]);
-    assert.match(published, /fi-color-success[^>]*>Published</);
+    assert.match(published, /nv-color-success[^>]*>Published</);
     // Explicit options win.
     const custom = await render(new Post('published'), [TextEntry.make('status').formatStateUsing(({ state }) => `[${state}]`).color('danger')]);
-    assert.match(custom, /fi-color-danger[^>]*>\[published\]</);
+    assert.match(custom, /nv-color-danger[^>]*>\[published\]</);
     // enum() on a plain record, and a state that is already a case.
     assert.match(await render({ status: 'draft' }, [TextEntry.make('status').enum(Status)]), />Draft</);
     assert.match(await render({}, [TextEntry.make('status').state(() => Status.from('published'))]), />Published</);
@@ -37,7 +37,7 @@ test('TextEntry: label, badge color and icon of the enum the model casts to', as
 
 test('IconEntry: icon, color and text alternative from the enum', async () => {
     const html = await render(new Post('reviewing'), [IconEntry.make('status')]);
-    assert.match(html, /<svg[^>]*fi-color-warning[^>]*>[\s\S]*<\/svg><span class="fi-sr-only">Reviewing<\/span>/);
+    assert.match(html, /<svg[^>]*nv-color-warning[^>]*>[\s\S]*<\/svg><span class="nv-sr-only">Reviewing<\/span>/);
     const none = await render(new Post('published'), [IconEntry.make('status')]);
     assert.doesNotMatch(none, /<svg/);
 });

@@ -21,10 +21,10 @@ const attribute = (html: string, name: string) => { const match = html.match(new
 
 test('JsField: Filament markup, entangled state, renderer URL and Alpine component', async () => {
     const html = await form(host({ location: { latitude: 51.5, longitude: -0.12 } }), [JsField.make('location').renderer('/js/fields/location-picker.js')]).toHtml();
-    assert.match(html, /<label for="form\.location" class="fi-fo-field-label">/);
+    assert.match(html, /<label for="form\.location" class="nv-fo-field-label">/);
     // The key changes with the renderer and the state binding (which remount it), not with the configuration.
     assert.ok(html.includes(`wire:key="lw.form.location.${md5('{"isLive":false,"isLiveOnBlur":false,"debounce":null}/js/fields/location-picker.js')}"`));
-    assert.ok(html.includes('x-load-src="/js/filament/forms/components/js-field.js"'));
+    assert.ok(html.includes('x-load-src="/js/navette/forms/components/js-field.js"'));
     assert.ok(html.includes('x-data="jsFieldFormComponent({'));
     assert.ok(html.includes('state: $wire.$entangle(&#039;data.location&#039;),'));
     assert.ok(html.includes('renderer: &#039;\\/js\\/fields\\/location-picker.js&#039;,'));
@@ -34,7 +34,7 @@ test('JsField: Filament markup, entangled state, renderer URL and Alpine compone
     assert.ok(html.includes(`wire:key="lw.form.location.renderer-configuration.${md5('[[],{"id":"form.location","ariaDescribedBy":"","isDisabled":false,"isReadOnly":false,"isRequired":false,"isInvalid":false}]')}"`));
     assert.ok(html.includes('x-init="updateRendererConfiguration(JSON.parse($el.dataset.rendererConfiguration), JSON.parse($el.dataset.fieldConfiguration))"'));
     assert.ok(html.includes('<div wire:ignore x-ref="host"></div>'));
-    assert.match(html, /<p x-cloak x-show="hasError" role="alert" class="fi-fo-field-wrp-error-message">\s*This field could not be loaded\. Please reload the page to try again\.\s*<\/p>/);
+    assert.match(html, /<p x-cloak x-show="hasError" role="alert" class="nv-fo-field-wrp-error-message">\s*This field could not be loaded\. Please reload the page to try again\.\s*<\/p>/);
 });
 
 test('JsField: input settings, accessibility and validation errors reach the props', async () => {
@@ -43,7 +43,7 @@ test('JsField: input settings, accessibility and validation errors reach the pro
     assert.deepEqual(JSON.parse(attribute(html, 'data-field-configuration')), {
         id: 'form.location', ariaDescribedBy: 'form.location-helper-text form.location-error', isDisabled: true, isReadOnly: true, isRequired: true, isInvalid: true,
     });
-    assert.match(html, /<p id="form\.location-error" data-validation-error class="fi-fo-field-wrp-error-message">\s*The location field is required\./);
+    assert.match(html, /<p id="form\.location-error" data-validation-error class="nv-fo-field-wrp-error-message">\s*The location field is required\./);
     assert.ok(html.includes('id="form.location-helper-text"'));
 });
 

@@ -1,0 +1,107 @@
+.nv-input-wrp {
+    @apply flex rounded-lg bg-white shadow-sm ring-1 ring-gray-950/10 transition duration-75 dark:bg-white/5 dark:ring-white/20;
+
+    &:not(.nv-disabled):not(:has(.nv-input-wrp-actions :focus)) {
+        @apply focus-within:ring-primary-600 dark:focus-within:ring-primary-500 focus-within:ring-2;
+
+        &.nv-invalid {
+            @apply focus-within:ring-danger-600 dark:focus-within:ring-danger-500;
+        }
+    }
+
+    &.nv-disabled {
+        @apply bg-gray-50 dark:bg-transparent;
+
+        &:not(.nv-invalid) {
+            @apply dark:ring-white/10;
+        }
+    }
+
+    &.nv-invalid {
+        @apply ring-danger-600 dark:ring-danger-500;
+    }
+
+    & .nv-input-wrp-prefix {
+        @apply hidden items-center gap-x-3 ps-3;
+
+        &.nv-input-wrp-prefix-has-content {
+            @apply flex;
+        }
+
+        &.nv-inline {
+            @apply pe-2;
+
+            &.nv-input-wrp-prefix-has-label {
+                @apply pe-1;
+            }
+        }
+
+        &:not(.nv-inline) {
+            @apply border-e border-gray-200 ps-3 pe-3 dark:border-white/10;
+        }
+    }
+
+    & .nv-input-wrp-content-ctn,
+    &:not(:has(.nv-input-wrp-content-ctn)) > * {
+        @apply min-w-0 flex-1;
+
+        &.nv-input-wrp-content-ctn-ps {
+            @apply ps-3;
+        }
+    }
+
+    & .nv-input-wrp-suffix {
+        @apply flex items-center gap-x-3 pe-3;
+
+        &.nv-inline {
+            @apply ps-2;
+
+            &.nv-input-wrp-suffix-has-label {
+                @apply ps-1;
+            }
+        }
+
+        &:not(.nv-inline) {
+            @apply border-s border-gray-200 ps-3 dark:border-white/10;
+        }
+    }
+
+    & .nv-input-wrp-actions {
+        @apply flex items-center gap-3;
+
+        & .nv-btn.nv-size-sm {
+            @apply px-2 py-1;
+        }
+
+        & .nv-icon-btn.nv-size-sm {
+            @apply size-7;
+
+            &:has(.nv-icon.nv-size-sm) {
+                @apply -m-1.5;
+            }
+
+            &:has(.nv-icon.nv-size-md) {
+                @apply -m-1;
+            }
+
+            &:has(.nv-icon.nv-size-lg) {
+                @apply -m-0.5;
+            }
+        }
+    }
+
+    & .nv-input-wrp-label {
+        @apply text-sm whitespace-nowrap text-gray-500 dark:text-gray-400;
+    }
+
+    & .nv-input-wrp-prefix,
+    & .nv-input-wrp-suffix {
+        & > .nv-icon {
+            @apply text-gray-400 dark:text-gray-500;
+
+            &.nv-color {
+                @apply text-color-500;
+            }
+        }
+    }
+}

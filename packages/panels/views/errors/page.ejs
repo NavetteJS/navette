@@ -13,11 +13,11 @@
             <%= brandName %>
         </title>
 
-        <link href="<%- assetUrl('fonts/filament/filament/inter/index.css') %>" rel="stylesheet" />
+        <link href="<%- assetUrl('fonts/navette/navette/inter/index.css') %>" rel="stylesheet" />
 
         <%- colorVariables %>
 
-        <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/filament/filament/app.css') %>" />
+        <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/navette/navette/app.css') %>" />
 
         <% if (font.url) { %><link href="<%= font.url %>" rel="stylesheet" /><% } %>
 
@@ -37,7 +37,7 @@
         </script>
         <% } else { %>
         <script<%- cspNonceAttribute() %>>
-            const theme = localStorage.getItem('filament:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
+            const theme = localStorage.getItem('navette:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
 
             if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark')
@@ -48,35 +48,35 @@
         <% if (locals.themeCss) { %><style<%- cspNonceAttribute() %> data-navette-theme><%- themeCss %></style><% } %>
     </head>
 
-    <body class="<%- cls(['fi-body', 'fi-panel-' + panelId, 'fi-error-body', 'fi-error-' + status]) %>">
-        <div class="fi-simple-layout">
-            <div class="fi-simple-main-ctn">
-                <main id="fi-main-content" class="fi-simple-main fi-width-lg fi-error-page">
-                    <div class="fi-error-illustration">
+    <body class="<%- cls(['nv-body', 'nv-panel-' + panelId, 'nv-error-body', 'nv-error-' + status]) %>">
+        <div class="nv-simple-layout">
+            <div class="nv-simple-main-ctn">
+                <main id="nv-main-content" class="nv-simple-main nv-width-lg nv-error-page">
+                    <div class="nv-error-illustration">
                         <%- illustration %>
                     </div>
 
-                    <div class="fi-error-badge-ctn">
+                    <div class="nv-error-badge-ctn">
                         <%- badge %>
                     </div>
 
-                    <header class="fi-simple-header">
-                        <h1 class="fi-simple-header-heading">
+                    <header class="nv-simple-header">
+                        <h1 class="nv-simple-header-heading">
                             <%= heading %>
                         </h1>
 
-                        <p class="fi-simple-header-subheading">
+                        <p class="nv-simple-header-subheading">
                             <%= description %>
                         </p>
                     </header>
 
-                    <div class="fi-error-actions">
+                    <div class="nv-error-actions">
                         <%- actions.join('') %>
                     </div>
 
                     <% if (locals.details) { %>
-                        <details class="fi-error-details">
-                            <summary><%= t('filament-panels::errors.details') %></summary>
+                        <details class="nv-error-details">
+                            <summary><%= t('navette-panels::errors.details') %></summary>
                             <pre><%= details %></pre>
                         </details>
                     <% } %>

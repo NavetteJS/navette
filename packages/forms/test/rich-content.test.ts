@@ -77,9 +77,9 @@ test('RichEditor: tools from definitions and your own, colors, merge tags, menti
     assert.match(html, /hasResizableImages: true,/);
     assert.match(html, /hasStickyToolbar: true,/);
     assert.match(html, /extensions: JSON\.parse\(.*my-extension\.js/);
-    assert.match(html, /fi-fo-rich-editor-custom-blocks-group-header">Marketing<\/h4>/);
+    assert.match(html, /nv-fo-rich-editor-custom-blocks-group-header">Marketing<\/h4>/);
     assert.match(html, /data-block-id="hero"/);
-    assert.match(html, /fi-fo-rich-editor-custom-blocks-search-input/);
+    assert.match(html, /nv-fo-rich-editor-custom-blocks-search-input/);
     assert.match(html, /<span data-type="mergeTag" data-id="today">Today<\/span>/);
     assert.deepEqual(await editor.getMentionSearchResultsForJs('gr', '@'), [{ id: '2', label: 'Grace' }]);
     assert.deepEqual(await editor.getMentionSearchResultsForJs('nav', '#'), [{ id: 'nav', label: '#nav' }]);

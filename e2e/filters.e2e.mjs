@@ -21,11 +21,11 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 const { step, exitCode } = reporter();
-const overview = page.locator('.fi-pagination-overview');
-const filters = page.locator('.fi-ta-filters');
-const badge = page.locator('.fi-ta-filters-dropdown .fi-icon-btn-badge-ctn');
+const overview = page.locator('.nv-pagination-overview');
+const filters = page.locator('.nv-ta-filters');
+const badge = page.locator('.nv-ta-filters-dropdown .nv-icon-btn-badge-ctn');
 // The pause lets the dropdown transition and the re-render finish.
-const openFilters = async () => { await page.waitForTimeout(500); if (!(await filters.isVisible())) await page.locator('.fi-ta-filters-dropdown .fi-dropdown-trigger button').click(); await filters.waitFor({ state: 'visible', timeout: 3000 }); };
+const openFilters = async () => { await page.waitForTimeout(500); if (!(await filters.isVisible())) await page.locator('.nv-ta-filters-dropdown .nv-dropdown-trigger button').click(); await filters.waitFor({ state: 'visible', timeout: 3000 }); };
 const applyTrashed = async (label) => { await openFilters(); await filters.locator('select').selectOption({ label }); await page.waitForTimeout(200); await filters.locator('button', { hasText: 'Apply filters' }).click(); };
 
 await login(page, BASE, user);
@@ -44,7 +44,7 @@ await step('choosing a filter without applying it leaves the list unchanged (def
 await step('"Only deleted records" applied: only deleted customers, badge at 1', async () => {
     await applyTrashed('Only deleted records');
     await overview.getByText(shown(trashedCount)).waitFor({ timeout: 10000 });
-    assert.ok((await page.locator('.fi-ta-cell-name .fi-ta-text').allInnerTexts()).map((x) => x.trim()).includes('Navette Trashed'));
+    assert.ok((await page.locator('.nv-ta-cell-name .nv-ta-text').allInnerTexts()).map((x) => x.trim()).includes('Navette Trashed'));
     assert.equal((await badge.innerText()).trim(), '1');
 });
 await step('"With deleted records": the default list plus deleted customers', async () => {
@@ -59,34 +59,34 @@ await step('"Reset": back to the default list, badge at 0', async () => {
     await page.keyboard.press('Escape');
 });
 await step('column manager: hide "Phone" then "Apply columns"', async () => {
-    await page.locator('.fi-ta-col-manager-dropdown .fi-dropdown-trigger button').click();
-    const manager = page.locator('.fi-ta-col-manager');
+    await page.locator('.nv-ta-col-manager-dropdown .nv-dropdown-trigger button').click();
+    const manager = page.locator('.nv-ta-col-manager');
     await manager.waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await manager.locator('label', { hasText: 'Name' }).locator('input').isDisabled(), true);
     await manager.locator('label', { hasText: 'Phone' }).locator('input').uncheck();
     await page.waitForTimeout(500);
-    assert.equal(await page.locator('th.fi-ta-header-cell-phone').count(), 1);
+    assert.equal(await page.locator('th.nv-ta-header-cell-phone').count(), 1);
     await manager.locator('button', { hasText: 'Apply columns' }).click();
-    await page.locator('th.fi-ta-header-cell-phone').waitFor({ state: 'detached', timeout: 5000 });
-    assert.equal(await page.locator('th.fi-ta-header-cell-country').count(), 1);
-    assert.equal(await page.locator('td.fi-ta-cell-phone').count(), 0);
+    await page.locator('th.nv-ta-header-cell-phone').waitFor({ state: 'detached', timeout: 5000 });
+    assert.equal(await page.locator('th.nv-ta-header-cell-country').count(), 1);
+    assert.equal(await page.locator('td.nv-ta-cell-phone').count(), 0);
 });
 await step('column manager: "Reset" brings the column back', async () => {
-    const manager = page.locator('.fi-ta-col-manager');
+    const manager = page.locator('.nv-ta-col-manager');
     // "Apply columns" re-renders the table: let the dropdown settle before checking whether it is open.
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(400);
     if (!(await manager.isVisible())) {
-        await page.locator('.fi-ta-col-manager-dropdown .fi-dropdown-trigger button').click();
+        await page.locator('.nv-ta-col-manager-dropdown .nv-dropdown-trigger button').click();
         await manager.waitFor({ state: 'visible', timeout: 3000 });
     }
     await manager.locator('button', { hasText: 'Reset' }).click();
-    await page.locator('th.fi-ta-header-cell-phone').waitFor({ state: 'attached', timeout: 5000 });
+    await page.locator('th.nv-ta-header-cell-phone').waitFor({ state: 'attached', timeout: 5000 });
 });
 await step('deleting from the edit page is a soft delete (the record stays in the database, timestamped)', async () => {
     await page.goto(`${BASE}/shop/customers/${kept}/edit`);
-    await page.locator('.fi-header-actions-ctn button', { hasText: 'Delete' }).click();
-    await page.locator('.fi-modal-window .fi-modal-footer button[type=submit]').click();
+    await page.locator('.nv-header-actions-ctn button', { hasText: 'Delete' }).click();
+    await page.locator('.nv-modal-window .nv-modal-footer button[type=submit]').click();
     await page.waitForURL('**/shop/customers');
     const row = db.prepare('select deleted_at from customers where id = ?').get(kept);
     assert.ok(row && row.deleted_at, 'deleted_at must be set');

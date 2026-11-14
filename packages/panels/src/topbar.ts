@@ -35,25 +35,25 @@ export class GlobalSearch extends Component {
 
     async render(): Promise<string> {
         const { panel, user, req } = (this._ctx ?? {}) as any;
-        if (!user || !panel) return '<div class="fi-global-search-ctn"></div>';
+        if (!user || !panel) return '<div class="nv-global-search-ctn"></div>';
         const search = (typeof this.search === 'string' ? this.search : '').slice(0, 1000).trim();
         this.search = typeof this.search === 'string' ? this.search.slice(0, 1000) : '';
         const categories: GlobalSearchCategory[] | null = search === '' ? null : await panel.getGlobalSearchResults(search, user);
         if (categories !== null) this.dispatch('open-global-search-results');
         const count = categories?.reduce((total, category) => total + category.results.length, 0) ?? 0;
-        const [one, many] = t('filament-panels::global-search.results_count').split('|');
-        const message = count ? (count === 1 ? one : (many ?? one)).replace(':count', String(count)) : t('filament-panels::global-search.no_results_message');
+        const [one, many] = t('navette-panels::global-search.results_count').split('|');
+        const message = count ? (count === 1 ? one : (many ?? one)).replace(':count', String(count)) : t('navette-panels::global-search.no_results_message');
         const id = `global-search-${this.id}`;
         const bindings: string[] = panel.getGlobalSearchKeyBindings();
         const suffix: string | null = panel.getGlobalSearchFieldSuffix(String(req?.headers?.['user-agent'] ?? ''));
 
         const input = `<input ${new Attributes({
-            autocomplete: 'off', maxlength: '1000', placeholder: t('filament-panels::global-search.field.placeholder'), type: 'search', 'wire:key': 'global-search.field.input', id: `${id}-input`,
+            autocomplete: 'off', maxlength: '1000', placeholder: t('navette-panels::global-search.field.placeholder'), type: 'search', 'wire:key': 'global-search.field.input', id: `${id}-input`,
             'aria-controls': `${id}-results`, 'aria-describedby': `${id}-instructions`, 'x-ref': 'input', [`wire:model.live.debounce.${panel.getGlobalSearchDebounce()}`]: 'search',
             ...(bindings.length ? { [`x-mousetrap.global.${bindings.map((binding) => binding.replace(/\+/g, '-')).join('.')}`]: '$refs.input?.focus()' } : {}),
-        }).class(['fi-input', 'fi-input-has-inline-prefix']).toHtml()} />`;
-        const focus = "if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')";
-        const field = `<div class="fi-input-wrp"><div x-on:click="${e(focus)}" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass', { alias: 'panels::global-search.field', attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'search' }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': 'search' }))}</div><div class="fi-input-wrp-content-ctn">${input}</div>${suffix ? `<div x-on:click="${e(focus)}" class="fi-input-wrp-suffix fi-inline fi-input-wrp-suffix-has-label"><span class="fi-input-wrp-label">${e(suffix)}</span></div>` : ''}</div>`;
+        }).class(['nv-input', 'nv-input-has-inline-prefix']).toHtml()} />`;
+        const focus = "if (! $event.target.closest('.nv-input-wrp-actions')) $dispatch('focus-input')";
+        const field = `<div class="nv-input-wrp"><div x-on:click="${e(focus)}" class="nv-input-wrp-prefix nv-input-wrp-prefix-has-content nv-inline">${icon('m-magnifying-glass', { alias: 'panels::global-search.field', attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'search' }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': 'search' }))}</div><div class="nv-input-wrp-content-ctn">${input}</div>${suffix ? `<div x-on:click="${e(focus)}" class="nv-input-wrp-suffix nv-inline nv-input-wrp-suffix-has-label"><span class="nv-input-wrp-label">${e(suffix)}</span></div>` : ''}</div>`;
 
         // Actions of each result: rendered first (async), then placed under the result's link.
         const actionsHtml = new Map<GlobalSearchResult, string[]>();
@@ -72,30 +72,30 @@ export class GlobalSearch extends Component {
         let results = '';
         if (categories !== null) {
             results = categories.length === 0
-                ? `<p class="fi-global-search-no-results-message">${e(t('filament-panels::global-search.no_results_message'))}</p>`
-                : `<ul class="fi-global-search-results">${categories.map((category, groupIndex) => {
+                ? `<p class="nv-global-search-no-results-message">${e(t('navette-panels::global-search.no_results_message'))}</p>`
+                : `<ul class="nv-global-search-results">${categories.map((category, groupIndex) => {
                     const groupId = `${id}-group-${groupIndex}`;
-                    return `<li class="fi-global-search-result-group"><h3 id="${e(groupId)}" class="fi-global-search-result-group-header">${e(category.label)}</h3><ul class="fi-global-search-result-group-results">${category.results.map((result, index) => {
+                    return `<li class="nv-global-search-result-group"><h3 id="${e(groupId)}" class="nv-global-search-result-group-header">${e(category.label)}</h3><ul class="nv-global-search-result-group-results">${category.results.map((result, index) => {
                         const details = Object.entries(result.details);
                         const actions = actionsHtml.get(result);
-                        return `<li class="${actions ? 'fi-global-search-result fi-global-search-result-has-actions' : 'fi-global-search-result'}"><a href="${e(result.url)}" wire:navigate class="fi-global-search-result-link"><h4 id="${e(`${groupId}-result-${index}`)}" class="fi-global-search-result-heading">${e(result.title)}</h4>${details.length ? `<dl class="fi-global-search-result-details">${details.map(([label, value]) => `<div class="fi-global-search-result-detail"><dt class="fi-global-search-result-detail-label">${e(label)}:</dt><dd class="fi-global-search-result-detail-value">${e(value)}</dd></div>`).join('')}</dl>` : ''}</a>${actions ? `<div class="fi-global-search-result-actions">${actions.join('')}</div>` : ''}</li>`;
+                        return `<li class="${actions ? 'nv-global-search-result nv-global-search-result-has-actions' : 'nv-global-search-result'}"><a href="${e(result.url)}" wire:navigate class="nv-global-search-result-link"><h4 id="${e(`${groupId}-result-${index}`)}" class="nv-global-search-result-heading">${e(result.title)}</h4>${details.length ? `<dl class="nv-global-search-result-details">${details.map(([label, value]) => `<div class="nv-global-search-result-detail"><dt class="nv-global-search-result-detail-label">${e(label)}:</dt><dd class="nv-global-search-result-detail-value">${e(value)}</dd></div>`).join('')}</dl>` : ''}</a>${actions ? `<div class="nv-global-search-result-actions">${actions.join('')}</div>` : ''}</li>`;
                     }).join('')}</ul></li>`;
                 }).join('')}</ul>`;
         }
 
         const root = new Attributes({
-            'x-data': `filamentGlobalSearch({ loadingMessage: ${js(t('filament-panels::global-search.loading_message'))}, failureMessage: ${js(t('filament-panels::global-search.failure_message'))}, })`,
+            'x-data': `navetteGlobalSearch({ loadingMessage: ${js(t('navette-panels::global-search.loading_message'))}, failureMessage: ${js(t('navette-panels::global-search.failure_message'))}, })`,
             'x-on:input': 'if ($event.target === $refs.input) inputChanged($event.target.value)', 'x-on:focusin': 'if ($event.target === $refs.input) reopen()', 'x-on:focusout': 'focusLeft($event)',
             'x-on:keydown': 'keydown($event)', 'x-on:click.outside': 'dismiss()',
             'x-on:open-modal.window.capture': 'if ($refs.results.contains(document.activeElement)) {\n dismiss()\n restoreFocus()\n }',
             'x-on:livewire:navigate.window': 'navigationStarted($event)', 'x-on:livewire:navigated.window': 'navigationCompleted()',
-        }).class(['fi-global-search']);
+        }).class(['nv-global-search']);
         const region = new Attributes({
-            id: `${id}-results`, role: 'region', 'aria-label': t('filament-panels::global-search.results_label'), 'data-query': search, 'data-has-results': categories !== null ? 'true' : 'false', 'data-message': message,
+            id: `${id}-results`, role: 'region', 'aria-label': t('navette-panels::global-search.results_label'), 'data-query': search, 'data-has-results': categories !== null ? 'true' : 'false', 'data-message': message,
             'x-ref': 'results', 'x-show': 'isOpen', 'x-bind:inert': '! isOpen', 'x-bind:aria-hidden': '! isOpen', 'x-cloak': '', 'x-on:mousedown.self.prevent': '', 'x-on:click': 'linkActivated($event)',
-            'x-transition:enter-start': 'fi-transition-enter-start', 'x-transition:leave-end': 'fi-transition-leave-end',
-        }).class(['fi-global-search-results-ctn']);
-        return `<div class="fi-global-search-ctn">${renderHook('panels::global-search.start')}<div ${root.toHtml()}><div class="fi-global-search-field"><label for="${e(id)}-input" class="fi-sr-only">${e(t('filament-panels::global-search.field.label'))}</label>${field}</div><p id="${e(id)}-instructions" class="fi-sr-only">${e(t('filament-panels::global-search.field.instructions'))}</p><p wire:ignore role="status" aria-atomic="true" x-text="status" class="fi-sr-only"></p><div ${region.toHtml()}>${results}</div></div>${renderHook('panels::global-search.end')}</div>`;
+            'x-transition:enter-start': 'nv-transition-enter-start', 'x-transition:leave-end': 'nv-transition-leave-end',
+        }).class(['nv-global-search-results-ctn']);
+        return `<div class="nv-global-search-ctn">${renderHook('panels::global-search.start')}<div ${root.toHtml()}><div class="nv-global-search-field"><label for="${e(id)}-input" class="nv-sr-only">${e(t('navette-panels::global-search.field.label'))}</label>${field}</div><p id="${e(id)}-instructions" class="nv-sr-only">${e(t('navette-panels::global-search.field.instructions'))}</p><p wire:ignore role="status" aria-atomic="true" x-text="status" class="nv-sr-only"></p><div ${region.toHtml()}>${results}</div></div>${renderHook('panels::global-search.end')}</div>`;
     }
 }
 
@@ -118,13 +118,13 @@ export interface DatabaseNotificationStore {
 
 const stamp = (date: Date) => date.toISOString().slice(0, 19).replace('T', ' ');
 /**
- * Store backed by a `notifications` table (polymorphic `notifiable_type`/`notifiable_id`, JSON `data` with `format: 'filament'`).
+ * Store backed by a `notifications` table (polymorphic `notifiable_type`/`notifiable_id`, JSON `data` with `format: 'navette'`).
  * Existing rows in that format are read as-is. `mapUrl` rewrites action URLs read from the table.
  */
 export function knexNotificationStore(knex: any, options: { table?: string; notifiableType?: string; mapUrl?: (url: string) => string } = {}): DatabaseNotificationStore {
     const table = options.table ?? 'notifications';
     const notifiableType = options.notifiableType ?? 'App\\Models\\User';
-    const scope = (user: string | number) => knex(table).where({ notifiable_type: notifiableType, notifiable_id: user }).whereRaw("json_extract(data, '$.format') = ?", ['filament']);
+    const scope = (user: string | number) => knex(table).where({ notifiable_type: notifiableType, notifiable_id: user }).whereRaw("json_extract(data, '$.format') = ?", ['navette']);
     const text = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null);
     return {
         async list(user, limit, offset = 0) {
@@ -146,9 +146,9 @@ export function knexNotificationStore(knex: any, options: { table?: string; noti
             const at = stamp(new Date());
             const data = {
                 actions: (notification.actions ?? []).map(notificationActionToArray),
-                body: notification.body, color: notification.color ?? null, duration: 'persistent', icon: notification.icon ? `heroicon-${notification.icon}` : null, iconColor: notification.iconColor, status: notification.status, title: notification.title, view: null, viewData: [], format: 'filament',
+                body: notification.body, color: notification.color ?? null, duration: 'persistent', icon: notification.icon ? `heroicon-${notification.icon}` : null, iconColor: notification.iconColor, status: notification.status, title: notification.title, view: null, viewData: [], format: 'navette',
             };
-            await knex(table).insert({ id: notification.id, type: 'Filament\\Notifications\\DatabaseNotification', notifiable_type: notifiableType, notifiable_id: user, data: JSON.stringify(data), read_at: null, created_at: at, updated_at: at });
+            await knex(table).insert({ id: notification.id, type: 'Navette\\Notifications\\DatabaseNotification', notifiable_type: notifiableType, notifiable_id: user, data: JSON.stringify(data), read_at: null, created_at: at, updated_at: at });
         },
         async delete(user, id) { await scope(user).where({ id }).delete(); },
         async markAsRead(user, id, read) { await scope(user).where({ id }).update({ read_at: read ? stamp(new Date()) : null }); },
@@ -171,18 +171,18 @@ export function timeAgo(date: Date, now = new Date()): string {
 function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
     const color = n.iconColor ?? n.status;
     const status = n.status && Object.hasOwn(STATUS_ICONS, n.status) ? n.status : null;
-    const iconHtml = safeIcon(n.icon ?? (status ? STATUS_ICONS[status] : null), 'md', [...(color && color !== 'gray' && /^[a-z]+$/.test(color) ? ['fi-color', `fi-color-${color}`] : []), 'fi-no-notification-icon'], !n.icon && status ? `notifications::notification.${status}` : undefined);
-    const closeLabel = t('filament-notifications::notification.actions.close.label');
+    const iconHtml = safeIcon(n.icon ?? (status ? STATUS_ICONS[status] : null), 'md', [...(color && color !== 'gray' && /^[a-z]+$/.test(color) ? ['nv-color', `nv-color-${color}`] : []), 'nv-no-notification-icon'], !n.icon && status ? `notifications::notification.${status}` : undefined);
+    const closeLabel = t('navette-notifications::notification.actions.close.label');
     const attributes = new Attributes({
         'x-data': `notificationComponent({ notification: ${js({ id: n.id, duration: 'persistent' })} })`,
-        'x-transition:enter-start': 'fi-transition-enter-start', 'x-transition:enter-end': 'fi-transition-enter-end', 'x-transition:leave-start': 'fi-transition-leave-start', 'x-transition:leave-end': 'fi-transition-leave-end',
+        'x-transition:enter-start': 'nv-transition-enter-start', 'x-transition:enter-end': 'nv-transition-enter-end', 'x-transition:leave-start': 'nv-transition-leave-start', 'x-transition:leave-end': 'nv-transition-leave-end',
         'wire:key': `${n.id}.notifications.${n.id}`, 'x-on:close-notification.window': `if ($event.detail.id == ${js(n.id)}) close()`,
-    }).class([...notificationColorClasses(n.color), 'fi-no-notification', n.status && /^[a-z]+$/.test(n.status) ? `fi-status-${n.status}` : null, 'fi-inline']);
-    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${sanitizeHtml(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${notificationActionsHtml(n.actions, { navigate: true })}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
+    }).class([...notificationColorClasses(n.color), 'nv-no-notification', n.status && /^[a-z]+$/.test(n.status) ? `nv-status-${n.status}` : null, 'nv-inline']);
+    return `<div ${attributes.toHtml()}>${iconHtml}<div class="nv-no-notification-main"><div class="nv-no-notification-text">${n.title ? `<h3 class="nv-no-notification-title">${sanitizeHtml(n.title)}</h3>` : ''}${n.createdAt ? `<time class="nv-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="nv-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${notificationActionsHtml(n.actions, { navigate: true })}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="nv-icon-btn nv-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
-const BADGE = 'fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-200 fi-badge';
-const linkAction = (label: string, method: string, color: string, extra = '') => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-link-action fi-link fi-size-md fi-color fi-color-${color} fi-text-color-600 dark:fi-text-color-300" wire:click="${method}"${extra}>${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': method }))}<span class="fi-link-label">${e(label)}</span></button>`;
+const BADGE = 'nv-color nv-color-primary nv-text-color-600 dark:nv-text-color-200 nv-badge';
+const linkAction = (label: string, method: string, color: string, extra = '') => `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="nv-ac-link-action nv-link nv-size-md nv-color nv-color-${color} nv-text-color-600 dark:nv-text-color-300" wire:click="${method}"${extra}>${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': method }))}<span class="nv-link-label">${e(label)}</span></button>`;
 
 /** Bell and slide-over listing the signed-in user's database notifications. */
 export class DatabaseNotifications extends Component {
@@ -213,7 +213,7 @@ export class DatabaseNotifications extends Component {
     async markAllNotificationsAsRead(): Promise<void> { await this.scope.store.markAllAsRead(this.scope.user); }
 
     private trigger(unread: number): string {
-        return `<button class="fi-sidebar-database-notifications-btn">${icon('o-bell', { size: 'lg', alias: 'panels::sidebar.open-database-notifications-button' })}<span class="fi-sidebar-database-notifications-btn-label">${e(t('filament-panels::layout.actions.open_database_notifications.label'))}</span>${unread ? `<span class="fi-sidebar-database-notifications-btn-badge-ctn"><span class="${BADGE} fi-size-md"><span class="fi-badge-label-ctn"><span class="fi-badge-label">${unread}</span></span></span></span>` : ''}</button>`;
+        return `<button class="nv-sidebar-database-notifications-btn">${icon('o-bell', { size: 'lg', alias: 'panels::sidebar.open-database-notifications-button' })}<span class="nv-sidebar-database-notifications-btn-label">${e(t('navette-panels::layout.actions.open_database_notifications.label'))}</span>${unread ? `<span class="nv-sidebar-database-notifications-btn-badge-ctn"><span class="${BADGE} nv-size-md"><span class="nv-badge-label-ctn"><span class="nv-badge-label">${unread}</span></span></span></span>` : ''}</button>`;
     }
     async placeholder(): Promise<string> {
         const { panel, user } = (this._ctx ?? {}) as any;
@@ -234,40 +234,40 @@ export class DatabaseNotifications extends Component {
         const id = 'database-notifications';
         const close = `$dispatch('close-modal', { id: ${js(id)} })`;
         const key = (part: string) => `${this.id}.modal.${id}.${part}`;
-        const closeLabel = t('filament::components/modal.actions.close.label');
-        const closeButton = `<button class="fi-icon-btn fi-size-md fi-modal-close-btn" title="${e(closeLabel)}" aria-label="${e(closeLabel)}" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="${e(close)}">${icon('o-x-mark', { size: 'lg', alias: 'modal.close-button' })}</button>`;
-        const heading = t('filament-notifications::database.modal.heading');
+        const closeLabel = t('navette::components/modal.actions.close.label');
+        const closeButton = `<button class="nv-icon-btn nv-size-md nv-modal-close-btn" title="${e(closeLabel)}" aria-label="${e(closeLabel)}" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" x-on:click="${e(close)}">${icon('o-x-mark', { size: 'lg', alias: 'modal.close-button' })}</button>`;
+        const heading = t('navette-notifications::database.modal.heading');
 
         let header: string;
         let content = '';
         if (has) {
-            header = `<div wire:key="${e(key('header'))}" class="fi-modal-header">${closeButton}<div><h2 id="${id}.heading" class="fi-modal-heading">${e(heading)}${unread ? ` <span class="${BADGE} fi-size-xs">${unread}</span>` : ''}</h2><div class="fi-ac">${unread ? linkAction(t('filament-notifications::database.modal.actions.mark_all_as_read.label'), 'markAllNotificationsAsRead', 'primary') : ''}${linkAction(t('filament-notifications::database.modal.actions.clear.label'), 'clearNotifications', 'danger', ' x-on:click="close()"')}</div></div></div>`;
+            header = `<div wire:key="${e(key('header'))}" class="nv-modal-header">${closeButton}<div><h2 id="${id}.heading" class="nv-modal-heading">${e(heading)}${unread ? ` <span class="${BADGE} nv-size-xs">${unread}</span>` : ''}</h2><div class="nv-ac">${unread ? linkAction(t('navette-notifications::database.modal.actions.mark_all_as_read.label'), 'markAllNotificationsAsRead', 'primary') : ''}${linkAction(t('navette-notifications::database.modal.actions.clear.label'), 'clearNotifications', 'danger', ' x-on:click="close()"')}</div></div></div>`;
             const body = notifications
-                ? `<div aria-label="${e(heading)}" role="list" class="fi-no-notifications">${notifications.map((n) => `<div role="listitem" wire:key="${e(n.id)}.database-notifications.ctn" class="${n.unread ? 'fi-no-notification-unread-ctn' : 'fi-no-notification-read-ctn'}">${n.unread ? `<span class="fi-sr-only">${e(t('filament-notifications::database.modal.unread_label'))}</span>` : ''}${renderDatabaseNotification(n)}</div>`).join('')}</div>`
-                : `<div role="status" aria-busy="true" class="fi-no-notifications-loading-ctn">${loadingIndicator()}<span class="fi-sr-only">${e(t('filament::components/loading-section.label'))}</span></div>`;
-            content = `<div wire:key="${e(key('content'))}" class="fi-modal-content">${body}</div>`;
-            if (notifications && (page > 1 || hasMore)) content += `<div wire:key="${e(key('footer'))}" class="fi-modal-footer fi-align-start">${pagination({ id: this.id, page, perPage: limit, hasMore })}</div>`;
+                ? `<div aria-label="${e(heading)}" role="list" class="nv-no-notifications">${notifications.map((n) => `<div role="listitem" wire:key="${e(n.id)}.database-notifications.ctn" class="${n.unread ? 'nv-no-notification-unread-ctn' : 'nv-no-notification-read-ctn'}">${n.unread ? `<span class="nv-sr-only">${e(t('navette-notifications::database.modal.unread_label'))}</span>` : ''}${renderDatabaseNotification(n)}</div>`).join('')}</div>`
+                : `<div role="status" aria-busy="true" class="nv-no-notifications-loading-ctn">${loadingIndicator()}<span class="nv-sr-only">${e(t('navette::components/loading-section.label'))}</span></div>`;
+            content = `<div wire:key="${e(key('content'))}" class="nv-modal-content">${body}</div>`;
+            if (notifications && (page > 1 || hasMore)) content += `<div wire:key="${e(key('footer'))}" class="nv-modal-footer nv-align-start">${pagination({ id: this.id, page, perPage: limit, hasMore })}</div>`;
         } else {
-            header = `<div wire:key="${e(key('header'))}" class="fi-modal-header">${closeButton}<div class="fi-modal-icon-ctn"><div class="fi-modal-icon-bg">${icon('o-bell-slash', { size: 'lg', alias: 'notifications::database.modal.empty-state' })}</div></div><div><h2 id="${id}.heading" class="fi-modal-heading">${e(t('filament-notifications::database.modal.empty.heading'))}</h2><p id="${id}.description" class="fi-modal-description">${e(t('filament-notifications::database.modal.empty.description'))}</p></div></div>`;
+            header = `<div wire:key="${e(key('header'))}" class="nv-modal-header">${closeButton}<div class="nv-modal-icon-ctn"><div class="nv-modal-icon-bg">${icon('o-bell-slash', { size: 'lg', alias: 'notifications::database.modal.empty-state' })}</div></div><div><h2 id="${id}.heading" class="nv-modal-heading">${e(t('navette-notifications::database.modal.empty.heading'))}</h2><p id="${id}.description" class="nv-modal-description">${e(t('navette-notifications::database.modal.empty.description'))}</p></div></div>`;
         }
 
         const modal = new Attributes({
             'aria-labelledby': `${id}.heading`, 'aria-modal': 'true', id, role: 'dialog', tabindex: '-1',
-            'x-data': `filamentModal({ id: ${js(id)}, isScrollLocked: true, shouldRestoreFocus: true, })`, 'data-fi-modal-id': id,
+            'x-data': `navetteModal({ id: ${js(id)}, isScrollLocked: true, shouldRestoreFocus: true, })`, 'data-nv-modal-id': id,
             'x-on:close-modal.window': `if (($event.detail.id === ${js(id)}) && isOpen) close()`, 'x-on:close-modal-quietly.window': `if (($event.detail.id === ${js(id)}) && isOpen) closeQuietly()`,
-            'x-on:open-modal.window': `if (($event.detail.id === ${js(id)}) && (! isOpen)) open()`, 'x-bind:class': "{ 'fi-modal-open': isOpen, }", 'x-cloak': '', 'x-show': 'isOpen',
-        }).class(['fi-modal', 'fi-absolute-positioning-context', 'fi-modal-slide-over', 'fi-modal-slide-over-from-end', has ? 'fi-modal-has-sticky-header' : null, 'fi-no-database']);
+            'x-on:open-modal.window': `if (($event.detail.id === ${js(id)}) && (! isOpen)) open()`, 'x-bind:class': "{ 'nv-modal-open': isOpen, }", 'x-cloak': '', 'x-show': 'isOpen',
+        }).class(['nv-modal', 'nv-absolute-positioning-context', 'nv-modal-slide-over', 'nv-modal-slide-over-from-end', has ? 'nv-modal-has-sticky-header' : null, 'nv-no-database']);
         // With broadcasting, new notifications are announced by the stream; the polling interval only applies while it is down.
         const { panel, user: signedIn } = (this._ctx ?? {}) as any;
         const live = typeof panel?.hasBroadcasting === 'function' && panel.hasBroadcasting();
         if (live) this.addScript('database-notifications-broadcast', databaseNotificationsBroadcastScript(panel.getBroadcastChannel(signedIn), interval));
         const poll = !live && interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}=""` : '';
-        const windowClasses = ['fi-modal-window', 'fi-modal-window-has-close-btn', has ? 'fi-modal-window-has-content' : 'fi-modal-window-has-icon', `fi-align-${has ? 'start' : 'center'}`, 'fi-width-md'].join(' ');
-        const transitions = 'x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end"';
+        const windowClasses = ['nv-modal-window', 'nv-modal-window-has-close-btn', has ? 'nv-modal-window-has-content' : 'nv-modal-window-has-icon', `nv-align-${has ? 'start' : 'center'}`, 'nv-width-md'].join(' ');
+        const transitions = 'x-transition:enter="nv-transition-enter" x-transition:leave="nv-transition-leave" x-transition:enter-start="nv-transition-enter-start" x-transition:enter-end="nv-transition-enter-end" x-transition:leave-start="nv-transition-leave-start" x-transition:leave-end="nv-transition-leave-end"';
         // The window has `autofocus` so the focus trap lands on it, not on "Mark all as read", which Enter would trigger at once.
-        const dialog = `<div ${modal.toHtml()}${poll}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div><div tabindex="-1" x-on:click.self="${e(close)}" x-trap.noreturn="isTrapActive" class="fi-modal-window-ctn fi-clickable"><div x-on:keydown.window.escape="if (isTopmost()) ${e(close)}" x-show="isWindowVisible" ${transitions} wire:key="${e(key('window'))}" tabindex="-1" autofocus="autofocus" class="${windowClasses}">${header}${content}</div></div></div>`;
+        const dialog = `<div ${modal.toHtml()}${poll}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="nv-modal-close-overlay"></div><div tabindex="-1" x-on:click.self="${e(close)}" x-trap.noreturn="isTrapActive" class="nv-modal-window-ctn nv-clickable"><div x-on:keydown.window.escape="if (isTopmost()) ${e(close)}" x-show="isWindowVisible" ${transitions} wire:key="${e(key('window'))}" tabindex="-1" autofocus="autofocus" class="${windowClasses}">${header}${content}</div></div></div>`;
         const opened = "if ($event.detail.id === 'database-notifications' && ! $wire.isOpen) $wire.set('isOpen', true)";
         const closed = "if ($event.detail.id === 'database-notifications') $wire.set('isOpen', false, false)";
-        return `<div x-data x-on:x-modal-opened.window="${e(opened)}" x-on:modal-closed.window="${e(closed)}" class="fi-no-database"><div><div x-on:click="$dispatch('open-modal', { id: 'database-notifications' })" class="fi-modal-trigger">${this.trigger(unread)}</div><template x-teleport="body">${dialog}</template></div></div>`;
+        return `<div x-data x-on:x-modal-opened.window="${e(opened)}" x-on:modal-closed.window="${e(closed)}" class="nv-no-database"><div><div x-on:click="$dispatch('open-modal', { id: 'database-notifications' })" class="nv-modal-trigger">${this.trigger(unread)}</div><template x-teleport="body">${dialog}</template></div></div>`;
     }
 }

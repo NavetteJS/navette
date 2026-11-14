@@ -62,7 +62,7 @@ test('`InteractsWithRichContent`: registered attributes, `renderRichContent()`, 
 test('`TextEntry` and `TextColumn` render a registered rich content attribute', async () => {
     const post = Object.assign(new Post(), { content: CONTENT });
     const entry = await Schema.make(host({})).key('infolist').record(post).components([TextEntry.make('content')]).toHtml();
-    assert.match(entry, /class="fi-in-text-item fi-prose[^"]*">\s*<p>By Ada<\/p>/);
+    assert.match(entry, /class="nv-in-text-item nv-prose[^"]*">\s*<p>By Ada<\/p>/);
     // Sanitized like any HTML state (as Filament's `Str::sanitizeHtml()`): the block's markup keeps its content.
     assert.match(entry, /<p>By Ada<\/p><p>Hello<\/p>/);
     const cell = await TextColumn.make('content').toHtml(post);

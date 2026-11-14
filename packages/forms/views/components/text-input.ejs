@@ -1,38 +1,38 @@
 <%# Text input with its prefix/suffix wrapper: labels, icons and actions. %>
 <div <%- wrapper %>>
     <% if (hasPrefix) { %>
-        <div<% if (prefix !== null || prefixIcon) { %> x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')"<% } %> class="<%- cls(['fi-input-wrp-prefix', 'fi-input-wrp-prefix-has-content', { 'fi-inline': prefixInline, 'fi-input-wrp-prefix-has-label': prefix !== null }]) %>">
-            <% if (prefixActions.length) { %><div class="fi-input-wrp-actions"><%- prefixActions.join('') %></div><% } %>
+        <div<% if (prefix !== null || prefixIcon) { %> x-on:click="if (! $event.target.closest('.nv-input-wrp-actions')) $dispatch('focus-input')"<% } %> class="<%- cls(['nv-input-wrp-prefix', 'nv-input-wrp-prefix-has-content', { 'nv-inline': prefixInline, 'nv-input-wrp-prefix-has-label': prefix !== null }]) %>">
+            <% if (prefixActions.length) { %><div class="nv-input-wrp-actions"><%- prefixActions.join('') %></div><% } %>
             <%- prefixIcon %>
             <% if (prefix !== null) { %>
-            <span class="fi-input-wrp-label">
+            <span class="nv-input-wrp-label">
                 <%= prefix %>
             </span>
             <% } %>
         </div>
     <% } %>
-    <div class="fi-input-wrp-content-ctn">
+    <div class="nv-input-wrp-content-ctn">
         <input <%- input %> />
         <% if (datalist) { %><datalist id="<%= datalist.id %>"><% for (const option of datalist.options) { %><option value="<%= option %>"></option><% } %></datalist><% } %>
     </div>
     <% if (hasSuffix) { %>
-        <div<% if (suffix !== null || suffixIcon) { %> x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')"<% } %> class="<%- cls(['fi-input-wrp-suffix', { 'fi-inline': suffixInline, 'fi-input-wrp-suffix-has-label': suffix !== null }]) %>">
+        <div<% if (suffix !== null || suffixIcon) { %> x-on:click="if (! $event.target.closest('.nv-input-wrp-actions')) $dispatch('focus-input')"<% } %> class="<%- cls(['nv-input-wrp-suffix', { 'nv-inline': suffixInline, 'nv-input-wrp-suffix-has-label': suffix !== null }]) %>">
             <% if (suffix !== null) { %>
-            <span class="fi-input-wrp-label">
+            <span class="nv-input-wrp-label">
                 <%= suffix %>
             </span>
             <% } %>
             <%- suffixIcon %>
-            <% if (suffixActions.length) { %><div class="fi-input-wrp-actions"><%- suffixActions.join('') %></div><% } %>
+            <% if (suffixActions.length) { %><div class="nv-input-wrp-actions"><%- suffixActions.join('') %></div><% } %>
         </div>
     <% } %>
     <% if (revealable) { %>
-        <div class="fi-input-wrp-suffix">
-            <div class="fi-input-wrp-actions">
-                <button title="<%= showLabel %>" aria-label="<%= showLabel %>" type="button" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-ref="showPasswordAction" x-show="! isPasswordRevealed" x-on:click="setPasswordRevealed(true)">
+        <div class="nv-input-wrp-suffix">
+            <div class="nv-input-wrp-actions">
+                <button title="<%= showLabel %>" aria-label="<%= showLabel %>" type="button" wire:loading.class="nv-disabled" class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm" x-ref="showPasswordAction" x-show="! isPasswordRevealed" x-on:click="setPasswordRevealed(true)">
                     <%- icon('m-eye', { alias: 'forms::components.text-input.actions.show-password' }) %>
                 </button>
-                <button title="<%= hideLabel %>" aria-label="<%= hideLabel %>" type="button" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-cloak="x-cloak" x-ref="hidePasswordAction" x-show="isPasswordRevealed" x-on:click="setPasswordRevealed(false)">
+                <button title="<%= hideLabel %>" aria-label="<%= hideLabel %>" type="button" wire:loading.class="nv-disabled" class="nv-ac-icon-btn-action nv-icon-btn nv-size-sm" x-cloak="x-cloak" x-ref="hidePasswordAction" x-show="isPasswordRevealed" x-on:click="setPasswordRevealed(false)">
                     <%- icon('m-eye-slash', { alias: 'forms::components.text-input.actions.hide-password' }) %>
                 </button>
             </div>

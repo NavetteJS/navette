@@ -224,14 +224,14 @@ import { raw } from '@navette-js/support';
 
 TextInput.make('password')
     .password()
-    .hint(raw('<a href="/password-reset" class="fi-link">Forgot password?</a>'))
+    .hint(raw('<a href="/password-reset" class="nv-link">Forgot password?</a>'))
 ```
 
 ```preview
 // state: {"password": "correct-horse-battery"}
 TextInput.make('password')
     .password()
-    .hint(raw('<a href="/password-reset" class="fi-link">Forgot password?</a>'))
+    .hint(raw('<a href="/password-reset" class="nv-link">Forgot password?</a>'))
 ```
 
 You may change the color of the hint with `hintColor()`, and add an icon with `hintIcon()`. The second argument of `hintIcon()` is a tooltip, which is also used as the icon's accessible name:

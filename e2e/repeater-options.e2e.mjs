@@ -21,26 +21,26 @@ const NOTES = notes();
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
 const livewireDone = () => page.waitForLoadState('networkidle');
 
-const table = () => page.locator('.fi-fo-table-repeater');
+const table = () => page.locator('.nv-fo-table-repeater');
 const rows = () => table().locator('tbody > tr');
-const reviewers = () => page.locator('.fi-fo-repeater').filter({ has: page.locator('.fi-fo-repeater-item-header-label', { hasText: 'Ada' }) });
-const reviewer = (name) => reviewers().locator('.fi-fo-repeater-item').filter({ has: page.locator('.fi-fo-repeater-item-header-label', { hasText: name }) });
-const expand = async (name) => { await reviewer(name).locator('.fi-fo-repeater-item-header').click(); await until(async () => (await reviewer(name).locator('input[type="text"]').count()) === 1, `the lazy content of ${name}`); };
+const reviewers = () => page.locator('.nv-fo-repeater').filter({ has: page.locator('.nv-fo-repeater-item-header-label', { hasText: 'Ada' }) });
+const reviewer = (name) => reviewers().locator('.nv-fo-repeater-item').filter({ has: page.locator('.nv-fo-repeater-item-header-label', { hasText: name }) });
+const expand = async (name) => { await reviewer(name).locator('.nv-fo-repeater-item-header').click(); await until(async () => (await reviewer(name).locator('input[type="text"]').count()) === 1, `the lazy content of ${name}`); };
 
 await login(page, BASE, user);
 try {
     await step('the table repeater shows its header options: required mark, wrapped and aligned header, hidden label, compact cells', async () => {
         await page.goto(`${BASE}/lab/repeater-options/${ORDER.id}/edit`);
         await table().waitFor();
-        assert.match(await table().getAttribute('class'), /\bfi-compact\b/);
+        assert.match(await table().getAttribute('class'), /\bnv-compact\b/);
         const headers = table().locator('thead th');
         const product = headers.filter({ hasText: 'Product' });
-        assert.equal(await product.locator('sup.fi-fo-table-repeater-header-required-mark').innerText(), '*');
+        assert.equal(await product.locator('sup.nv-fo-table-repeater-header-required-mark').innerText(), '*');
         const quantity = headers.filter({ hasText: 'Quantity of this product' });
-        assert.match(await quantity.getAttribute('class'), /fi-wrapped fi-align-end/);
+        assert.match(await quantity.getAttribute('class'), /nv-wrapped nv-align-end/);
         assert.equal(await quantity.getAttribute('style'), 'width: 140px;');
         const price = headers.filter({ hasText: 'Unit price' });
-        assert.equal(await price.locator('span.fi-sr-only').innerText(), 'Unit price');
+        assert.equal(await price.locator('span.nv-sr-only').innerText(), 'Unit price');
         assert.equal(await rows().count(), LINES.length);
         // The fill hook formats the price.
         assert.equal(await rows().first().locator('input[type="number"]').last().inputValue(), Number(LINES[0].unit_price).toFixed(2));
@@ -102,12 +102,12 @@ try {
         // Alpine binds the item headers once the page has settled: a click before that would be lost.
         await livewireDone();
         assert.equal(await reviewer('Bob').locator('input[type="text"]').count(), 0);
-        assert.equal(await reviewer('Bob').locator('.fi-sc-loading').count(), 1);
+        assert.equal(await reviewer('Bob').locator('.nv-sc-loading').count(), 1);
         await expand('Ada');
         assert.equal(await reviewer('Ada').locator('input[type="text"]').inputValue(), 'Ada');
         assert.equal(await reviewer('Bob').locator('input[type="text"]').count(), 0, 'the other items are not loaded yet');
         // The lazy builder block loads when it enters the viewport.
-        const block = page.locator('.fi-fo-builder-item');
+        const block = page.locator('.nv-fo-builder-item');
         await block.scrollIntoViewIfNeeded();
         await until(async () => (await block.locator('input[type="text"]').count()) === 1, 'the lazy builder block');
         assert.equal(await block.locator('input[type="text"]').inputValue(), 'Lazy block');

@@ -24,7 +24,7 @@ test('a page renders its own EJS view with its data and component tags', async (
     const page = new Report() as any;
     page._ctx = { panel: Panel.make().id('admin'), user: { id: 1, name: 'A', email: 'a@example.com' } };
     const html: string = await page.renderContent();
-    assert.match(html, /<h2 class="fi-section-header-heading">Report for Sales<\/h2>/);
+    assert.match(html, /<h2 class="nv-section-header-heading">Report for Sales<\/h2>/);
     assert.match(html, /<p>3 orders<\/p>/);
     assert.match(html, /<button [^>]*wire:click="refresh"/);
 });

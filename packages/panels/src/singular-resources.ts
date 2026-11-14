@@ -59,7 +59,7 @@ export function buildSingularResourcePages(resource: typeof Resource, bases: { E
         getHeaderActions(): any[] { return [...((resource as any).editHeaderActions?.() ?? [])]; }
         /** "Save" only: there is no list to go back to. */
         getFormActions(): any[] { return super.getFormActions().filter((action: any) => action.getName() !== 'cancel'); }
-        getPageClasses(): string[] { return ['fi-resource-edit-record-page', `fi-resource-${resource.slug.replace(/\//g, '-')}`]; }
+        getPageClasses(): string[] { return ['nv-resource-edit-record-page', `nv-resource-${resource.slug.replace(/\//g, '-')}`]; }
     };
     Object.assign(Edit, navigationStatics(resource));
     if (!resource.hasViewPage) return { edit: Edit as unknown as typeof Page };
@@ -77,7 +77,7 @@ export function buildSingularResourcePages(resource: typeof Resource, bases: { E
         }
         getTitle(): string { return (this.constructor as typeof Page).getTitle(); }
         getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
-        getPageClasses(): string[] { return ['fi-resource-view-record-page', `fi-resource-${resource.slug.replace(/\//g, '-')}`]; }
+        getPageClasses(): string[] { return ['nv-resource-view-record-page', `nv-resource-${resource.slug.replace(/\//g, '-')}`]; }
     };
     Object.assign(View, navigationStatics(resource));
     return { edit: Edit as unknown as typeof Page, view: View as unknown as typeof Page };

@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import type { FilterIndicator, FilterState, TableFilter, TableHost } from './index.ts';
 import { loadRelatedRecordOptions, type RelatedOptionsRequest } from './relationship-options.ts';
 
-const tr = (key: string, replace: Record<string, string | number> = {}) => t(`filament-query-builder::query-builder.${key}`, replace);
+const tr = (key: string, replace: Record<string, string | number> = {}) => t(`navette-query-builder::query-builder.${key}`, replace);
 const headline = (s: string) => s.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
 const scalar = (value: unknown): string | number | boolean | null =>
     typeof value === 'string' ? value.slice(0, 1000) : typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? value : null;
@@ -250,7 +250,7 @@ const OPERATORS: Record<'text' | 'number' | 'boolean' | 'date', Operator[]> = {
         },
         {
             name: 'isMonth', label: label('date', 'is_month'), defaults: () => ({ month: null }),
-            fields: () => [Select.make('month').label(tr('operators.date.form.month.label')).placeholder(t('filament-forms::components.select.placeholder')).options(MONTHS.map((name, i): [string, string] => [String(i + 1), name])).required()],
+            fields: () => [Select.make('month').label(tr('operators.date.form.month.label')).placeholder(t('navette-forms::components.select.placeholder')).options(MONTHS.map((name, i): [string, string] => [String(i + 1), name])).required()],
             resolve: (settings, inverse, constraint) => {
                 const month = typeof settings.month === 'string' || typeof settings.month === 'number' ? Math.floor(Number(settings.month)) : NaN;
                 return !(month >= 1 && month <= 12) ? null : { condition: { kind: 'month', column: constraint.getColumn(), operator: inverse ? '!=' : '=', value: month }, summary: summary('date', 'is_month', inverse, { attribute: constraint.getAttributeLabel(), month: MONTHS[month - 1] }) };
@@ -930,7 +930,7 @@ function qualify(node: ConditionNode, table: string): ConditionNode {
 // ------------------------------------------------------------------ form
 const CONTAINER_GRID = { '@md': 2, '@xl': 3, '!@sm': 2, '!@md': 3 };
 const SETTINGS_GRID = { '@xl': 2, '!@md': 2 };
-const anonymousScope = (path: string) => `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path, containerPath: path }))})"`;
+const anonymousScope = (path: string) => `x-data="navetteSchemaComponent(${e(js({ key: null, exposedMethods: [], path, containerPath: path }))})"`;
 
 /** Operator settings: a stateful `settings` group, hidden when the operator has no form. */
 class SettingsGroup extends Component {
@@ -952,9 +952,9 @@ class SettingsGroup extends Component {
 
 /** "Clone" and "delete" buttons of an item; the actions belong to the parent Builder. */
 function itemActions(builder: Builder, itemKey: string, path: string, cloneDisabled: boolean): string {
-    const label = (name: string) => t(`filament-forms::components.builder.actions.${name}.label`);
+    const label = (name: string) => t(`navette-forms::components.builder.actions.${name}.label`);
     const danger = colorsOf(builder.livewire)?.getComponentClasses('icon-button', 'danger') ?? [];
-    return `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: label('clone'), icon: icons.resolve('forms::components.builder.actions.clone') ?? 'm-square-2-stack', expression: builder.actionExpression('clone', { item: itemKey }), disabled: cloneDisabled })}${iconActionButton({ label: label('delete'), icon: icons.resolve('forms::components.builder.actions.delete') ?? 'm-trash', expression: builder.actionExpression('delete', { item: itemKey }), colorClasses: danger })}</div></div></div>`;
+    return `<div wire:key="" ${anonymousScope(path)}><div class="nv-sc-actions"><div class="nv-ac">${iconActionButton({ label: label('clone'), icon: icons.resolve('forms::components.builder.actions.clone') ?? 'm-square-2-stack', expression: builder.actionExpression('clone', { item: itemKey }), disabled: cloneDisabled })}${iconActionButton({ label: label('delete'), icon: icons.resolve('forms::components.builder.actions.delete') ?? 'm-trash', expression: builder.actionExpression('delete', { item: itemKey }), colorClasses: danger })}</div></div></div>`;
 }
 
 /** Rule row: operator select, settings, actions. */
@@ -968,7 +968,7 @@ class RuleRow extends Component {
         const c = this.container;
         const constraint = this.constraint;
         const parsed = constraint.parseOperator(this.data.operator);
-        const operator = Select.make('operator').label(constraint.getLabel()).placeholder(t('filament-forms::components.select.placeholder')).options(constraint.getOperatorOptions()).live()
+        const operator = Select.make('operator').label(constraint.getLabel()).placeholder(t('navette-forms::components.select.placeholder')).options(constraint.getOperatorOptions()).live()
             // On operator change, its default settings fill in the gaps without overwriting existing settings.
             .afterStateUpdated(({ state, get, set }) => {
                 const next = constraint.parseOperator(state)?.operator.defaults() ?? null;
@@ -978,11 +978,11 @@ class RuleRow extends Component {
         return [new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).columns(CONTAINER_GRID).dense()
             .components([operator, new SettingsGroup(parsed ? parsed.operator.fields() : [])])];
     }
-    /** The row is a CSS container (`fi-grid-ctn`), which the `@md` / `@xl` columns depend on. */
-    async toSchemaHtml(isVisible: boolean): Promise<string> { return (await super.toSchemaHtml(isVisible)).replace('class="fi-sc-component"', 'class="fi-sc-component fi-grid-ctn"'); }
+    /** The row is a CSS container (`nv-grid-ctn`), which the `@md` / `@xl` columns depend on. */
+    async toSchemaHtml(isVisible: boolean): Promise<string> { return (await super.toSchemaHtml(isVisible)).replace('class="nv-sc-component"', 'class="nv-sc-component nv-grid-ctn"'); }
     async toHtml(): Promise<string> {
         const path = this.container.getStatePath();
-        return `<div role="group" aria-label="${e(this.constraint.getLabel())}" class="fi-sc-flex fi-from-default"><div wire:key="" ${anonymousScope(path)} class="fi-growable"><div>${await this.getChildSchemas()[0].toHtml()}</div></div>${itemActions(this.builder, this.itemKey, path, this.builder.isAtRuleLimit())}</div>`;
+        return `<div role="group" aria-label="${e(this.constraint.getLabel())}" class="nv-sc-flex nv-from-default"><div wire:key="" ${anonymousScope(path)} class="nv-growable"><div>${await this.getChildSchemas()[0].toHtml()}</div></div>${itemActions(this.builder, this.itemKey, path, this.builder.isAtRuleLimit())}</div>`;
     }
 }
 
@@ -1021,24 +1021,24 @@ class OrGroups extends Field {
         const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: key };
         const expression = (action: string, args: Record<string, unknown> | null) => `mountAction(${js(action)}, ${args ? js(args) : '{}'}, ${js(context)})`;
         const danger = colorsOf(this.livewire)?.getComponentClasses('icon-button', 'danger') ?? [];
-        const tf = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.${name}`, replace);
+        const tf = (name: string, replace: Record<string, string> = {}) => t(`navette-forms::components.repeater.${name}`, replace);
         const descriptionId = (groupKey: string) => `${id}-item-${createHash('md5').update(groupKey).digest('hex')}`;
         const rows: string[] = [];
         for (const [index, groupKey] of groups.entries()) {
             const path = `${this.getStatePath()}.${groupKey}`;
             const [builder] = schemas[index].getComponents() as RuleBuilder[];
-            const remove = this.canDeleteGroup(groupKey) ? `<div wire:key="" ${anonymousScope(path)}><div class="fi-sc-actions"><div class="fi-ac">${iconActionButton({ label: tf('actions.delete.label'), icon: icons.resolve('forms::components.repeater.actions.delete') ?? 'm-trash', expression: expression('delete', { item: groupKey }), colorClasses: danger })}</div></div></div>` : '';
-            const content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymousScope(path)} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component"><div role="group" aria-label="${e(tr('form.or_groups.group.label'))}" class="fi-sc-flex fi-from-default fi-vertical-align-center"><div wire:key="${e(builder.getLivewireKey() ?? '')}" x-data="filamentSchemaComponent(${e(js(builder.getAlpineScopeConfiguration()))})" class="fi-growable">${await builder.toHtml()}</div>${remove}</div></div></div></div>`;
-            rows.push(`<li wire:ignore.self wire:key="${e(livewireKey)}.${e(groupKey)}.item" x-data="item(${e(js({ isCollapsed: false, collapseKey: null }))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(groupKey)}" class="fi-fo-repeater-item" x-bind:class="itemClasses"><div x-show="! isCollapsed" class="fi-fo-repeater-item-content">${content}</div></li>`);
-            if (index < groups.length - 1) rows.push(`<li class="fi-fo-repeater-label-between-items-ctn"><div class="fi-fo-repeater-label-between-items-divider-before"></div><span class="fi-fo-repeater-label-between-items">${e(tr('item_separators.or'))}</span><div class="fi-fo-repeater-label-between-items-divider-after"></div></li>`);
+            const remove = this.canDeleteGroup(groupKey) ? `<div wire:key="" ${anonymousScope(path)}><div class="nv-sc-actions"><div class="nv-ac">${iconActionButton({ label: tf('actions.delete.label'), icon: icons.resolve('forms::components.repeater.actions.delete') ?? 'm-trash', expression: expression('delete', { item: groupKey }), colorClasses: danger })}</div></div></div>` : '';
+            const content = `<div class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymousScope(path)} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component"><div role="group" aria-label="${e(tr('form.or_groups.group.label'))}" class="nv-sc-flex nv-from-default nv-vertical-align-center"><div wire:key="${e(builder.getLivewireKey() ?? '')}" x-data="navetteSchemaComponent(${e(js(builder.getAlpineScopeConfiguration()))})" class="nv-growable">${await builder.toHtml()}</div>${remove}</div></div></div></div>`;
+            rows.push(`<li wire:ignore.self wire:key="${e(livewireKey)}.${e(groupKey)}.item" x-data="item(${e(js({ isCollapsed: false, collapseKey: null }))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(groupKey)}" class="nv-fo-repeater-item" x-bind:class="itemClasses"><div x-show="! isCollapsed" class="nv-fo-repeater-item-content">${content}</div></li>`);
+            if (index < groups.length - 1) rows.push(`<li class="nv-fo-repeater-label-between-items-ctn"><div class="nv-fo-repeater-label-between-items-divider-before"></div><span class="nv-fo-repeater-label-between-items">${e(tr('item_separators.or'))}</span><div class="nv-fo-repeater-label-between-items-divider-after"></div></li>`);
         }
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tf('reordering.moved'), hasCustomReorderAction: false };
         const addExpression = expression('add', null);
-        const add = this.canAddGroup() ? `<div class="fi-fo-repeater-add fi-align-end"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpression)}">${e(tr('actions.add_rule_group.label'))}</button></div>` : '';
-        const descriptions = groups.map((groupKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(groupKey)}" data-reorder-label="${e(tf('reordering.item'))}" id="${e(descriptionId(groupKey))}">${e(tf('reordering.position', { label: tf('reordering.item'), position: String(index + 1), count: String(groups.length) }))}</span>`).join('');
-        const repeater = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(groups))}" x-load="x-load" x-load-src="${e(views.render('filament-forms::asset', { path: 'repeater' }).trim())}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><ul x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems" class="fi-grid fi-fo-repeater-items" style="--cols-default: repeat(1, minmax(0, 1fr));">${rows.join('')}</ul>${add}${descriptions}</div>`;
+        const add = this.canAddGroup() ? `<div class="nv-fo-repeater-add nv-align-end"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="nv-ac-btn-action nv-btn nv-size-sm" wire:click="${e(addExpression)}">${e(tr('actions.add_rule_group.label'))}</button></div>` : '';
+        const descriptions = groups.map((groupKey, index) => `<span class="nv-sr-only" data-reorder-description="${e(groupKey)}" data-reorder-label="${e(tf('reordering.item'))}" id="${e(descriptionId(groupKey))}">${e(tf('reordering.position', { label: tf('reordering.item'), position: String(index + 1), count: String(groups.length) }))}</span>`).join('');
+        const repeater = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(groups))}" x-load="x-load" x-load-src="${e(views.render('navette-forms::asset', { path: 'repeater' }).trim())}" x-data="repeaterFormComponent(${e(js(config))})" class="nv-fo-repeater"><span wire:ignore x-ref="reorderStatus" class="nv-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><ul x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems" class="nv-grid nv-fo-repeater-items" style="--cols-default: repeat(1, minmax(0, 1fr));">${rows.join('')}</ul>${add}${descriptions}</div>`;
         const path = this.container.getStatePath();
-        return `<div role="group" aria-label="${e(tr('form.or_groups.block.label'))}" class="fi-sc-flex fi-from-default"><div wire:key="${e(livewireKey)}" ${anonymousScope(path)} class="fi-growable">${await this.wrap(repeater, { labelAsDiv: true })}</div>${itemActions(this.builder, this.itemKey, path, this.builder.isAtRuleLimit())}</div>`;
+        return `<div role="group" aria-label="${e(tr('form.or_groups.block.label'))}" class="nv-sc-flex nv-from-default"><div wire:key="${e(livewireKey)}" ${anonymousScope(path)} class="nv-growable">${await this.wrap(repeater, { labelAsDiv: true })}</div>${itemActions(this.builder, this.itemKey, path, this.builder.isAtRuleLimit())}</div>`;
     }
 }
 
@@ -1063,7 +1063,7 @@ export class RuleBuilder extends Builder {
             .addActionLabel(tr('actions.add_rule.label')).addActionIcon(icons.resolve('query-builder::add-rule-action') ?? 'c-plus').addActionAlignment('start')
             .labelBetweenItems(tr('item_separators.and')).blockHeaders(false).addBetweenAction(false).storedAsList(false).cloneable().generateUuidUsing(shortKey)
             .blockPickerColumns(columns).blockPickerWidth(filter.getConstraintPickerWidth() ?? (columns === 2 ? 'md' : columns === 3 ? '2xl' : null))
-            .extraClass('fi-fo-builder-not-contained').maxItems(filter.getMaxRules());
+            .extraClass('nv-fo-builder-not-contained').maxItems(filter.getMaxRules());
     }
     /** The "OR" block is neither offered nor accepted beyond the maximum depth; nothing is offered once the rule limit is reached. */
     getBlockPickerBlocks(): Block[] {

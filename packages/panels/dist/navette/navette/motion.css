@@ -16,39 +16,39 @@
     /* --- page arrival: the content rises a few pixels as it appears */
     @keyframes nv-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     /* `backwards`, not `both`: a `transform` animation still applied after its end makes the element the containing block of its `position: fixed` descendants; the backdrop of a modal then only covered the page, not the window. */
-    .fi-page { animation: nv-rise 0.42s var(--nv-spring) backwards; }
-    .fi-simple-main { animation: nv-rise 0.5s var(--nv-spring) backwards; }
+    .nv-page { animation: nv-rise 0.42s var(--nv-spring) backwards; }
+    .nv-simple-main { animation: nv-rise 0.5s var(--nv-spring) backwards; }
 
     /* --- press: buttons, action links, navigation items */
-    .fi-btn, .fi-icon-btn, .fi-link, .fi-tabs-item, .fi-sidebar-item-btn, .fi-dropdown-list-item, .fi-pagination-item-btn {
+    .nv-btn, .nv-icon-btn, .nv-link, .nv-tabs-item, .nv-sidebar-item-btn, .nv-dropdown-list-item, .nv-pagination-item-btn {
         transition: transform 0.18s var(--nv-spring), background-color 0.2s var(--nv-out), color 0.2s var(--nv-out), box-shadow 0.2s var(--nv-out), opacity 0.2s var(--nv-out);
     }
-    .fi-btn:active:not(.fi-disabled, [disabled]), .fi-icon-btn:active:not(.fi-disabled, [disabled]) { transform: scale(0.96); }
-    .fi-link:active, .fi-tabs-item:active, .fi-sidebar-item-btn:active, .fi-dropdown-list-item:active:not(.fi-disabled), .fi-pagination-item-btn:active { transform: scale(0.97); }
+    .nv-btn:active:not(.nv-disabled, [disabled]), .nv-icon-btn:active:not(.nv-disabled, [disabled]) { transform: scale(0.96); }
+    .nv-link:active, .nv-tabs-item:active, .nv-sidebar-item-btn:active, .nv-dropdown-list-item:active:not(.nv-disabled), .nv-pagination-item-btn:active { transform: scale(0.97); }
 
     /* --- modals: the window arrives with a spring; the backdrop stays Filament's (dark veil, no blur) */
-    .fi-modal-window { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.42s !important; }
-    .fi-modal-window.fi-transition-leave { transition-timing-function: var(--nv-out) !important; transition-duration: 0.2s !important; }
+    .nv-modal-window { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.42s !important; }
+    .nv-modal-window.nv-transition-leave { transition-timing-function: var(--nv-out) !important; transition-duration: 0.2s !important; }
 
     /* --- dropdowns: they open from their trigger */
     @keyframes nv-pop { from { opacity: 0; transform: scale(0.94) translateY(-4px); } to { opacity: 1; transform: none; } }
-    .fi-dropdown-panel:not([style*="display: none"]) { animation: nv-pop 0.26s var(--nv-bounce); transform-origin: top; }
+    .nv-dropdown-panel:not([style*="display: none"]) { animation: nv-pop 0.26s var(--nv-bounce); transform-origin: top; }
 
     /* --- notifications: damped side entrance */
-    .fi-no-notification { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.45s !important; }
+    .nv-no-notification { transition-timing-function: var(--nv-spring) !important; transition-duration: 0.45s !important; }
 
     /* --- surfaces et champs */
-    .fi-ta-row { transition: background-color 0.2s var(--nv-out); }
-    .fi-input-wrp { transition: box-shadow 0.2s var(--nv-out), background-color 0.2s var(--nv-out); }
-    .fi-toggle > :first-child { transition-timing-function: var(--nv-bounce) !important; transition-duration: 0.3s !important; }
-    .fi-badge { transition: background-color 0.2s var(--nv-out), color 0.2s var(--nv-out); }
-    .fi-sidebar-group-items { transition: opacity 0.25s var(--nv-out); }
+    .nv-ta-row { transition: background-color 0.2s var(--nv-out); }
+    .nv-input-wrp { transition: box-shadow 0.2s var(--nv-out), background-color 0.2s var(--nv-out); }
+    .nv-toggle > :first-child { transition-timing-function: var(--nv-bounce) !important; transition-duration: 0.3s !important; }
+    .nv-badge { transition: background-color 0.2s var(--nv-out), color 0.2s var(--nv-out); }
+    .nv-sidebar-group-items { transition: opacity 0.25s var(--nv-out); }
 
     /* --- loading indicator of deferred areas: a spinner, instead of an empty frame */
     @keyframes nv-spin { to { transform: rotate(360deg); } }
     @keyframes nv-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-    .fi-loading-section { position: relative; animation: nv-breathe 1.6s ease-in-out infinite; }
-    .fi-loading-section::after {
+    .nv-loading-section { position: relative; animation: nv-breathe 1.6s ease-in-out infinite; }
+    .nv-loading-section::after {
         content: ''; position: absolute; inset: 0; margin: auto; width: 1.5rem; height: 1.5rem; border-radius: 9999px;
         border: 2.5px solid color-mix(in oklab, currentColor 18%, transparent); border-top-color: var(--primary-500, currentColor);
         animation: nv-spin 0.7s linear infinite;
@@ -61,22 +61,22 @@
         60% { opacity: 1; }
         to { opacity: 1; max-width: 6rem; transform: none; }
     }
-    .fi-tabs-item > .fi-badge { overflow: hidden; white-space: nowrap; transform-origin: left center; animation: nv-expand 0.5s var(--nv-spring) both; }
+    .nv-tabs-item > .nv-badge { overflow: hidden; white-space: nowrap; transform-origin: left center; animation: nv-expand 0.5s var(--nv-spring) both; }
     /* roue d'attente du compteur : elle s'efface en douceur */
-    .fi-tabs-item-badge-placeholder { transition: opacity 0.2s var(--nv-out); }
+    .nv-tabs-item-badge-placeholder { transition: opacity 0.2s var(--nv-out); }
     /* area loaded on demand (relation manager, widget): its content rises into place when it replaces the spinner */
-    .fi-resource-relation-manager, .fi-wi-widget { animation: nv-rise 0.45s var(--nv-spring) backwards; }
+    .nv-resource-relation-manager, .nv-wi-widget { animation: nv-rise 0.45s var(--nv-spring) backwards; }
     /* rows of a table that was just reloaded, validation errors, items added to a Repeater */
     @keyframes nv-fade-in { from { opacity: 0; } to { opacity: 1; } }
     @keyframes nv-unfold { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-    .fi-fo-field-wrp-error-message { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
+    .nv-fo-field-wrp-error-message { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
     /* `backwards`, not `both`: an opacity animation still applied keeps the row a stacking context; the list of a select in the row then went under the Repeater's add button. */
-    .fi-fo-table-repeater tbody tr { animation: nv-fade-in 0.3s var(--nv-out) backwards; }
-    .fi-ta-summary-row, .fi-ta-summary-header-row { animation: nv-fade-in 0.35s var(--nv-out) backwards; }
+    .nv-fo-table-repeater tbody tr { animation: nv-fade-in 0.3s var(--nv-out) backwards; }
+    .nv-ta-summary-row, .nv-ta-summary-header-row { animation: nv-fade-in 0.35s var(--nv-out) backwards; }
 
     /* --- content being reloaded: it fades slightly during the request */
-    .fi-ta-content-ctn { transition: opacity 0.2s var(--nv-out); }
-    html[data-nv-busy] .fi-ta-content-ctn { opacity: 0.6; }
+    .nv-ta-content-ctn { transition: opacity 0.2s var(--nv-out); }
+    html[data-nv-busy] .nv-ta-content-ctn { opacity: 0.6; }
 }
 
 /* --- activity pill: visible while a request takes a while (added by motion.js) */

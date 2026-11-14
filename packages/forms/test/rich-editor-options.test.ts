@@ -45,8 +45,8 @@ test('toolbar: dropdown groups (icon, textual buttons), enabled and disabled but
     ]).disableToolbarButtons(['italic', 'alignCenter']).enableToolbarButtons([['undo', 'redo', 'bold']]);
     const html = await form(host({ body: '' }), [editor]).toHtml();
     const toolbar = html.slice(html.indexOf('data-rich-editor-toolbar="main"'), html.indexOf('x-show="isUploadingFile"'));
-    assert.equal(toolbar.split('fi-fo-rich-editor-toolbar-group').length - 1, 4);
-    assert.match(toolbar, /class="fi-dropdown fi-fo-rich-editor-dropdown-tool fi-fo-rich-editor-dropdown-tool-textual"/);
+    assert.equal(toolbar.split('nv-fo-rich-editor-toolbar-group').length - 1, 4);
+    assert.match(toolbar, /class="nv-dropdown nv-fo-rich-editor-dropdown-tool nv-fo-rich-editor-dropdown-tool-textual"/);
     assert.match(toolbar, /data-rich-editor-tool="Heading" aria-label="Heading"/);
     assert.match(toolbar, /role="menuitemcheckbox" aria-label="Title"/);
     assert.match(toolbar, /<span>Title<\/span>/);
@@ -70,9 +70,9 @@ test('floating toolbars: default table and grid ones, your own per node, none wh
     assert.match(html, /x-ref="floatingToolbar::table"/);
     assert.ok(html.includes(`floatingToolbars: ${js({ grid: ['gridAddColumnBefore', 'gridAddColumnAfter', 'gridDeleteColumn', 'gridDelete'] }).slice(0, 40)}`));
     const custom = await form(host({ body: '' }), [RichEditor.make('body').floatingToolbars({ paragraph: ['bold', 'italic'], heading: [ToolbarButtonGroup.make('Heading', ['h1', 'h2'])] })]).toHtml();
-    const content = custom.slice(custom.indexOf('fi-fo-rich-editor-content'), custom.indexOf('x-show="isPanelActive()"'));
-    assert.match(content, /x-ref="floatingToolbar::paragraph" class="fi-fo-rich-editor-floating-toolbar fi-not-prose" data-rich-editor-toolbar role="toolbar" aria-label="Editor toolbar"><button data-rich-editor-tool="bold"/);
-    assert.match(content, /x-ref="floatingToolbar::heading"[^>]*><div x-data="[^"]*filamentDropdown/);
+    const content = custom.slice(custom.indexOf('nv-fo-rich-editor-content'), custom.indexOf('x-show="isPanelActive()"'));
+    assert.match(content, /x-ref="floatingToolbar::paragraph" class="nv-fo-rich-editor-floating-toolbar nv-not-prose" data-rich-editor-toolbar role="toolbar" aria-label="Editor toolbar"><button data-rich-editor-tool="bold"/);
+    assert.match(content, /x-ref="floatingToolbar::heading"[^>]*><div x-data="[^"]*navetteDropdown/);
     assert.equal(content.includes('floatingToolbar::table'), false);
     assert.ok(custom.includes(`floatingToolbars: ${js({ paragraph: ['bold', 'italic'], heading: ['h1', 'h2'] })},`));
     const disabled = await form(host({ body: '' }), [RichEditor.make('body').disabled()]).toHtml();
@@ -82,11 +82,11 @@ test('floating toolbars: default table and grid ones, your own per node, none wh
 
 test('height, sticky panels and sticky offset', async () => {
     const plain = await form(host({ body: '' }), [RichEditor.make('body')]).toHtml();
-    assert.match(plain, /style="--min-height: 10rem;" class="fi-fo-rich-editor/);
-    assert.match(plain, /class="fi-fo-rich-editor-panels "/);
+    assert.match(plain, /style="--min-height: 10rem;" class="nv-fo-rich-editor/);
+    assert.match(plain, /class="nv-fo-rich-editor-panels "/);
     const html = await form(host({ body: '' }), [RichEditor.make('body').minHeight('12rem').maxHeight(() => '24rem').stickyToolbar().stickyPanels().stickyOffset('5rem').uploadingFileMessage('Sending…')]).toHtml();
     assert.match(html, /style="--min-height: 12rem; --max-height: 24rem; --rich-editor-sticky-offset: 5rem;"/);
-    assert.match(html, /class="fi-fo-rich-editor-panels fi-fo-rich-editor-sticky-panels"/);
+    assert.match(html, /class="nv-fo-rich-editor-panels nv-fo-rich-editor-sticky-panels"/);
     assert.match(html, /uploadingFileMessage: 'Sending…',/);
     assert.match(html, /<span>Sending…<\/span>/);
     const none = await form(host({ body: '' }), [RichEditor.make('body').minHeight(null)]).toHtml();

@@ -23,7 +23,7 @@ They do not render a label, a hint or validation messages. For a complete form w
 
 ## Input
 
-`<x-input>` renders an `<input>` element with the `fi-input` class. Every attribute of the tag is placed on the element, props and HTML attributes alike:
+`<x-input>` renders an `<input>` element with the `nv-input` class. Every attribute of the tag is placed on the element, props and HTML attributes alike:
 
 ```html
 <x-input-wrapper>
@@ -166,7 +166,7 @@ HTML attributes are placed on the wrapper element.
 
 ## Select
 
-`<x-select>` renders a native `<select>` element with the `fi-select-input` class. Write the `<option>` elements as its content; like `<x-input>`, every attribute of the tag is placed on the element:
+`<x-select>` renders a native `<select>` element with the `nv-select-input` class. Write the `<option>` elements as its content; like `<x-input>`, every attribute of the tag is placed on the element:
 
 ```html
 <x-input-wrapper>

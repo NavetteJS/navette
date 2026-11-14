@@ -1,0 +1,11 @@
+.nv-sc-icon {
+    @apply text-gray-400 dark:text-gray-500;
+
+    &.nv-sc-icon-htmlable {
+        @apply inline-block;
+    }
+
+    &.nv-color {
+        @apply text-color-500 dark:text-color-400;
+    }
+}

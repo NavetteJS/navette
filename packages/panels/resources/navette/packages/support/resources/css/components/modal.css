@@ -1,0 +1,494 @@
+.nv-modal {
+    @apply outline-none;
+
+    &.nv-modal-slide-over,
+    &.nv-width-screen {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            @apply h-dvh;
+
+            & .nv-modal-content {
+                @apply flex-1;
+            }
+        }
+    }
+
+    &.nv-modal-slide-over.nv-modal-slide-over-from-start {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            @apply me-auto;
+
+            &.nv-transition-enter-start,
+            &.nv-transition-leave-end {
+                @apply -translate-x-full rtl:translate-x-full;
+            }
+        }
+    }
+
+    &.nv-modal-slide-over.nv-modal-slide-over-from-end {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            @apply ms-auto;
+
+            &.nv-transition-enter-start,
+            &.nv-transition-leave-end {
+                @apply translate-x-full rtl:-translate-x-full;
+            }
+        }
+    }
+
+    &.nv-modal-slide-over {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            @apply overflow-y-auto;
+
+            &.nv-transition-enter-end,
+            &.nv-transition-leave-start {
+                @apply translate-x-0;
+            }
+
+            & .nv-modal-header {
+                @apply gap-x-3 pt-5;
+            }
+
+            & .nv-modal-icon-bg {
+                @apply -my-2 -ms-2 p-2;
+            }
+
+            & .nv-modal-close-btn {
+                @apply end-6 top-5;
+            }
+        }
+    }
+
+    &:not(.nv-modal-slide-over) {
+        &:not(.nv-width-screen) {
+            &:not(.nv-modal-has-sticky-header):not(
+                    .nv-modal-has-sticky-footer
+                ) {
+                & > .nv-modal-window-ctn {
+                    @apply overflow-y-auto;
+                }
+            }
+
+            &.nv-modal-has-sticky-header,
+            &.nv-modal-has-sticky-footer {
+                & > .nv-modal-window-ctn > .nv-modal-window {
+                    @apply max-h-[calc(100dvh-2rem)] overflow-y-auto;
+                }
+            }
+        }
+
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            &.nv-transition-enter-start,
+            &.nv-transition-leave-end {
+                @apply scale-95 opacity-0;
+            }
+
+            &.nv-transition-enter-end,
+            &.nv-transition-leave-start {
+                @apply scale-100 opacity-100;
+            }
+
+            & .nv-modal-close-btn {
+                @apply end-4 top-4;
+            }
+        }
+    }
+
+    &.nv-align-start:not(.nv-modal-has-sticky-header) {
+        & > .nv-modal-window-ctn > .nv-modal-window-has-icon {
+            & .nv-modal-content {
+                @apply ps-[5.25rem] pe-6;
+            }
+
+            & .nv-modal-footer {
+                &:not(.nv-align-center) {
+                    @apply ps-[5.25rem] pe-6;
+                }
+            }
+        }
+    }
+
+    &:not(.nv-align-start) {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            & .nv-modal-content,
+            & .nv-modal-footer {
+                @apply px-6;
+            }
+        }
+    }
+
+    & > .nv-modal-close-overlay {
+        @apply fixed inset-0 z-40 bg-gray-950/50 transition-opacity duration-300 dark:bg-gray-950/75;
+    }
+
+    &.nv-modal-open:has(~ .nv-modal.nv-modal-open) > .nv-modal-close-overlay {
+        @apply opacity-0;
+    }
+
+    &.nv-modal-open ~ .nv-modal.nv-modal-open {
+        & > .nv-modal-close-overlay,
+        & > .nv-modal-window-ctn {
+            @apply z-50;
+        }
+    }
+
+    /* Like the modal itself, the window container does not show a focus outline when it receives focus from the focus trap, such as when the modal has no tabbable content. */
+    & > .nv-modal-window-ctn {
+        @apply fixed inset-0 z-40 grid min-h-full grid-rows-[1fr_auto_1fr] justify-items-center outline-none sm:grid-rows-[1fr_auto_3fr];
+
+        &.nv-clickable {
+            @apply cursor-pointer;
+        }
+    }
+
+    &.nv-modal-click-through {
+        @apply pointer-events-none;
+    }
+
+    &:not(.nv-modal-slide-over):not(.nv-width-screen) {
+        & > .nv-modal-window-ctn {
+            @apply p-4;
+
+            & > .nv-modal-window {
+                @apply mx-auto rounded-xl;
+            }
+        }
+
+        &.nv-modal-has-sticky-header {
+            & > .nv-modal-window-ctn > .nv-modal-window > .nv-modal-header {
+                @apply rounded-t-xl;
+            }
+        }
+
+        &.nv-modal-has-sticky-footer {
+            & > .nv-modal-window-ctn > .nv-modal-window > .nv-modal-footer {
+                @apply rounded-b-xl;
+            }
+        }
+    }
+
+    /* Like the modal itself, the window does not show a focus outline when it receives focus from the focus trap, such as when it carries the `autofocus` attribute. */
+    & > .nv-modal-window-ctn > .nv-modal-window {
+        @apply pointer-events-auto relative row-start-2 flex w-full cursor-default flex-col bg-white shadow-xl ring-1 ring-gray-950/5 outline-none dark:bg-gray-900 dark:ring-white/10;
+
+        & .nv-modal-header {
+            @apply flex px-6 pt-6;
+
+            &.nv-vertical-align-center {
+                @apply items-center;
+            }
+        }
+
+        & .nv-modal-eyebrow {
+            @apply mb-1 text-xs font-medium text-gray-500 dark:text-gray-400;
+        }
+
+        & .nv-modal-heading {
+            @apply text-base leading-6 font-semibold text-gray-950 dark:text-white;
+        }
+
+        & .nv-modal-description {
+            @apply mt-2 text-sm text-gray-500 dark:text-gray-400;
+        }
+
+        & .nv-modal-content {
+            @apply flex flex-col gap-y-4 py-6;
+        }
+
+        &.nv-align-start,
+        &.nv-align-left {
+            & .nv-modal-header {
+                @apply gap-x-5;
+            }
+
+            & .nv-modal-icon-bg {
+                @apply p-2;
+            }
+        }
+
+        &.nv-align-center {
+            & .nv-modal-header {
+                @apply flex-col text-center;
+            }
+
+            & .nv-modal-icon-ctn {
+                @apply mb-5 flex items-center justify-center;
+            }
+
+            & .nv-modal-icon-bg {
+                @apply p-3;
+            }
+        }
+
+        &.nv-hidden {
+            @apply hidden;
+        }
+
+        &.nv-width-3xs {
+            @apply max-w-3xs;
+        }
+
+        &.nv-width-2xs {
+            @apply max-w-2xs;
+        }
+
+        &.nv-width-xs {
+            @apply max-w-xs;
+        }
+
+        &.nv-width-sm {
+            @apply max-w-sm;
+        }
+
+        &.nv-width-md {
+            @apply max-w-md;
+        }
+
+        &.nv-width-lg {
+            @apply max-w-lg;
+        }
+
+        &.nv-width-xl {
+            @apply max-w-xl;
+        }
+
+        &.nv-width-2xl {
+            @apply max-w-2xl;
+        }
+
+        &.nv-width-3xl {
+            @apply max-w-3xl;
+        }
+
+        &.nv-width-4xl {
+            @apply max-w-4xl;
+        }
+
+        &.nv-width-5xl {
+            @apply max-w-5xl;
+        }
+
+        &.nv-width-6xl {
+            @apply max-w-6xl;
+        }
+
+        &.nv-width-7xl {
+            @apply max-w-7xl;
+        }
+
+        &.nv-width-none {
+            @apply max-w-none;
+        }
+
+        &.nv-width-full {
+            @apply max-w-full;
+        }
+
+        &.nv-width-min {
+            @apply max-w-min;
+        }
+
+        &.nv-width-max {
+            @apply max-w-max;
+        }
+
+        &.nv-width-fit {
+            @apply max-w-fit;
+        }
+
+        &.nv-width-prose {
+            @apply max-w-prose;
+        }
+
+        &.nv-width-container {
+            @apply container;
+        }
+
+        &.nv-width-screen-sm {
+            @apply max-w-screen-sm;
+        }
+
+        &.nv-width-screen-md {
+            @apply max-w-screen-md;
+        }
+
+        &.nv-width-screen-lg {
+            @apply max-w-screen-lg;
+        }
+
+        &.nv-width-screen-xl {
+            @apply max-w-screen-xl;
+        }
+
+        &.nv-width-screen-2xl {
+            @apply max-w-screen-2xl;
+        }
+
+        &.nv-width-screen {
+            @apply fixed inset-0;
+        }
+
+        &.nv-transition-enter,
+        &.nv-transition-leave {
+            @apply duration-300;
+        }
+
+        &.nv-modal-window-has-close-btn {
+            &.nv-align-center:not(.nv-modal-window-has-icon) {
+                & .nv-modal-eyebrow,
+                & .nv-modal-heading {
+                    @apply ms-6;
+                }
+            }
+
+            &:not(.nv-modal-window-has-icon),
+            &.nv-align-start,
+            &.nv-align-left {
+                & .nv-modal-eyebrow,
+                & .nv-modal-heading {
+                    @apply me-6;
+                }
+            }
+        }
+
+        & .nv-modal-close-btn {
+            @apply absolute;
+        }
+
+        & .nv-modal-footer {
+            @apply w-full;
+
+            & .nv-modal-footer-actions {
+                @apply gap-3;
+            }
+
+            &.nv-align-start,
+            &.nv-align-left {
+                & .nv-modal-footer-actions {
+                    @apply flex flex-wrap items-center;
+                }
+            }
+
+            &.nv-align-center {
+                @apply px-6;
+
+                & .nv-modal-footer-actions {
+                    @apply flex flex-col-reverse;
+                }
+            }
+
+            &.nv-align-end,
+            &.nv-align-right {
+                & .nv-modal-footer-actions {
+                    @apply flex flex-row-reverse flex-wrap items-center;
+                }
+            }
+        }
+
+        & .nv-modal-icon-bg {
+            @apply rounded-full bg-gray-100 dark:bg-gray-500/20;
+
+            & > .nv-icon {
+                @apply text-gray-500 dark:text-gray-400;
+            }
+
+            &.nv-color {
+                @apply bg-color-100 dark:bg-color-500/20;
+
+                & > .nv-icon {
+                    @apply text-color-600 dark:text-color-400;
+                }
+            }
+        }
+    }
+
+    &.nv-modal-has-sticky-header {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            & > .nv-modal-header {
+                @apply sticky top-0 z-10 border-b border-gray-200 bg-white pb-6 dark:border-white/10 dark:bg-gray-900;
+            }
+
+            & .nv-modal-content,
+            & .nv-modal-footer {
+                @apply px-6;
+            }
+        }
+    }
+
+    &.nv-modal-slide-over.nv-modal-has-sticky-header {
+        & > .nv-modal-window-ctn > .nv-modal-window > .nv-modal-header {
+            @apply pb-5;
+        }
+    }
+
+    &.nv-modal-has-sticky-footer {
+        & > .nv-modal-window-ctn > .nv-modal-window > .nv-modal-footer {
+            @apply sticky bottom-0 z-10 border-t border-gray-200 bg-white py-5 dark:border-white/10 dark:bg-gray-900;
+        }
+    }
+
+    &:not(.nv-modal-has-sticky-footer) {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            &:not(.nv-modal-window-has-content) {
+                & .nv-modal-footer {
+                    @apply mt-6;
+                }
+
+                &:not(.nv-modal-window-has-footer) {
+                    & .nv-modal-header {
+                        @apply pb-6;
+                    }
+                }
+            }
+
+            & .nv-modal-footer {
+                @apply pb-6;
+            }
+        }
+    }
+
+    &:not(.nv-modal-has-sticky-header) {
+        &
+            > .nv-modal-window-ctn
+            > .nv-modal-window:not(.nv-modal-window-has-icon) {
+            & .nv-modal-content,
+            & .nv-modal-footer {
+                @apply px-6;
+            }
+        }
+    }
+
+    &.nv-modal-slide-over {
+        & > .nv-modal-window-ctn > .nv-modal-window > .nv-modal-footer {
+            @apply mt-auto;
+        }
+    }
+
+    @supports (container-type: inline-size) {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            & .nv-modal-footer {
+                &.nv-align-center {
+                    @apply @container;
+
+                    & .nv-modal-footer-actions {
+                        @apply @sm:grid @sm:grid-cols-[repeat(auto-fit,minmax(0,1fr))];
+                    }
+                }
+            }
+        }
+    }
+
+    @supports not (container-type: inline-size) {
+        & > .nv-modal-window-ctn > .nv-modal-window {
+            & .nv-modal-footer {
+                &.nv-align-center {
+                    & .nv-modal-footer-actions {
+                        @apply sm:grid sm:grid-cols-[repeat(auto-fit,minmax(0,1fr))];
+                    }
+                }
+            }
+        }
+    }
+}
+
+& .nv-modal-trigger {
+    @apply flex;
+}

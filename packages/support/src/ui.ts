@@ -5,8 +5,8 @@ import { Attributes, cls, e, icon, icons, js, loadingIndicator, views, type Colo
 import { t, tc } from './i18n.ts';
 import { fileURLToPath } from 'node:url';
 
-// The base views (`filament::components.*`) live in this package so they work without a panel.
-views.namespace('filament', fileURLToPath(new URL('../views', import.meta.url)));
+// The base views (`navette::components.*`) live in this package so they work without a panel.
+views.namespace('navette', fileURLToPath(new URL('../views', import.meta.url)));
 
 let manager: ColorManager | null = null;
 /** Sets the color manager used by the components (usually the panel's). */
@@ -26,12 +26,12 @@ export type BadgeProps = { color?: string; size?: Size; icon?: string | null; ic
 /** Badge. */
 export function badge(props: BadgeProps = {}, slot = ''): string {
     const { color = 'primary', size = 'md', tag = 'span' } = props;
-    const attributes = new Attributes(props.attributes ?? {}).class([...colorsOf('badge', color), 'fi-badge', `fi-size-${size}`]);
+    const attributes = new Attributes(props.attributes ?? {}).class([...colorsOf('badge', color), 'nv-badge', `nv-size-${size}`]);
     const iconHtml = props.icon ? icon(props.icon, { size: 'sm' }) : '';
-    return `<${tag} ${attributes.toHtml()}>${props.iconPosition === 'after' ? '' : iconHtml}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${slot}</span></span>${props.iconPosition === 'after' ? iconHtml : ''}</${tag}>`;
+    return `<${tag} ${attributes.toHtml()}>${props.iconPosition === 'after' ? '' : iconHtml}<span class="nv-badge-label-ctn"><span class="nv-badge-label">${slot}</span></span>${props.iconPosition === 'after' ? iconHtml : ''}</${tag}>`;
 }
 /** Small counter on a button or link (rendered without the badge label wrapper). */
-const counter = (value: string | number, color = 'primary'): string => `<span class="${cls([...colorsOf('badge', color), 'fi-badge', 'fi-size-xs'])}">${e(String(value))}</span>`;
+const counter = (value: string | number, color = 'primary'): string => `<span class="${cls([...colorsOf('badge', color), 'nv-badge', 'nv-size-xs'])}">${e(String(value))}</span>`;
 
 // ------------------------------------------------------------------ icon-button
 export type IconButtonProps = { icon: string; label: string; color?: string; size?: Size; disabled?: boolean; tag?: 'button' | 'a'; href?: string | null; badge?: string | number | null; badgeColor?: string; tooltip?: string | null; attributes?: Attrs };
@@ -46,10 +46,10 @@ export function iconButton(props: IconButtonProps): string {
         .merge({
             // A disabled button with a tooltip stays focusable, so its tooltip can show.
             'aria-disabled': disabled ? 'true' : null, 'aria-label': props.label, disabled: disabled && !tooltip, href: tag === 'a' && !(disabled && tooltip) ? (props.href ?? null) : null, tabindex: tag === 'a' && disabled && tooltip ? '0' : null, title: tooltip ? null : props.label,
-            type: tag === 'button' ? 'button' : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'fi-disabled' : null,
+            type: tag === 'button' ? 'button' : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'nv-disabled' : null,
         })
-        .class([...colorsOf('icon-button', color), 'fi-icon-btn', { 'fi-disabled': disabled }, `fi-size-${size}`, extraClass]);
-    const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="fi-icon-btn-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
+        .class([...colorsOf('icon-button', color), 'nv-icon-btn', { 'nv-disabled': disabled }, `nv-size-${size}`, extraClass]);
+    const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="nv-icon-btn-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
     return `<${tag} ${attributes.toHtml()}>${icon(props.icon, { size: ICON_BUTTON_ICON_SIZE[size] })}${badgeHtml}</${tag}>`;
 }
 
@@ -67,11 +67,11 @@ export function button(props: ButtonProps = {}, slot = ''): string {
     const attributes = new Attributes({ ...tooltipAttribute(tooltip), ...(props.attributes ?? {}) })
         .merge({
             'aria-disabled': disabled ? 'true' : null, disabled: disabled && !tooltip, href: tag === 'a' ? (props.href ?? null) : null, tabindex: tag === 'a' && disabled && tooltip ? '0' : null,
-            type: tag === 'button' ? type : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'fi-disabled' : null,
+            type: tag === 'button' ? type : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'nv-disabled' : null,
         })
-        .class([...colorsOf(outlined ? 'button-outlined' : 'button', color), 'fi-btn', { 'fi-disabled': disabled, 'fi-outlined': outlined }, `fi-size-${size}`]);
+        .class([...colorsOf(outlined ? 'button-outlined' : 'button', color), 'nv-btn', { 'nv-disabled': disabled, 'nv-outlined': outlined }, `nv-size-${size}`]);
     const iconHtml = props.icon ? icon(props.icon) : '';
-    const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="fi-btn-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
+    const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="nv-btn-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
     return `<${tag} ${attributes.toHtml()}>${iconPosition === 'before' ? iconHtml : ''}${slot}${iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
 }
 
@@ -88,16 +88,16 @@ export function link(props: LinkProps = {}, slot = ''): string {
     const tooltip = props.tooltip || null, disabled = props.disabled === true;
     const attributes = new Attributes({ ...tooltipAttribute(tooltip), ...(props.attributes ?? {}) })
         .merge({ 'aria-disabled': disabled ? 'true' : null, disabled: tag === 'button' && disabled && !tooltip, href: tag === 'a' ? (props.href ?? null) : null, tabindex: tag === 'a' && disabled && tooltip ? '0' : null, type: tag === 'button' ? 'button' : null })
-        .class([...colorsOf('link', color), 'fi-link', { 'fi-disabled': disabled }, `fi-size-${size}`, props.weight ? `fi-font-${props.weight}` : null]);
+        .class([...colorsOf('link', color), 'nv-link', { 'nv-disabled': disabled }, `nv-size-${size}`, props.weight ? `nv-font-${props.weight}` : null]);
     const iconHtml = props.icon ? icon(props.icon) : '';
-    const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="fi-link-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
-    return `<${tag} ${attributes.toHtml()}>${iconPosition === 'before' ? iconHtml : ''}<span class="fi-link-label">${slot}</span>${iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
+    const badgeHtml = props.badge !== null && props.badge !== undefined ? `<div class="nv-link-badge-ctn">${counter(props.badge, props.badgeColor)}</div>` : '';
+    return `<${tag} ${attributes.toHtml()}>${iconPosition === 'before' ? iconHtml : ''}<span class="nv-link-label">${slot}</span>${iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
 }
 
 // ------------------------------------------------------------------ avatar
 /** Avatar image, circular by default. */
 export function avatar(props: { src: string; alt?: string; size?: Size; circular?: boolean; attributes?: Attrs }): string {
-    const attributes = new Attributes(props.attributes ?? {}).merge({ alt: props.alt ?? null, src: props.src }).class(['fi-avatar', { 'fi-circular': props.circular !== false }, `fi-size-${props.size ?? 'md'}`]);
+    const attributes = new Attributes(props.attributes ?? {}).merge({ alt: props.alt ?? null, src: props.src }).class(['nv-avatar', { 'nv-circular': props.circular !== false }, `nv-size-${props.size ?? 'md'}`]);
     return `<img ${attributes.toHtml()} />`;
 }
 
@@ -107,15 +107,15 @@ export function avatar(props: { src: string; alt?: string; size?: Size; circular
  * The last item is the current page.
  */
 export function breadcrumbs(items: { label: string; url?: string | null }[], label = 'Breadcrumb'): string {
-    const separators = icon('m-chevron-right', { alias: 'breadcrumbs.separator', attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-ltr' }) }) + icon('m-chevron-left', { alias: 'breadcrumbs.separator.rtl', attributes: new Attributes({ 'aria-hidden': 'true', class: 'fi-breadcrumbs-item-separator fi-rtl' }) });
-    const list = items.map((item, index) => `<li class="fi-breadcrumbs-item">${index > 0 ? separators : ''}${((current) => (item.url === undefined || item.url === null ? `<span${current} class="fi-breadcrumbs-item-label">${e(item.label)}</span>` : `<a${item.url ? ` href="${e(item.url)}"` : ''}${current} class="fi-breadcrumbs-item-label">${e(item.label)}</a>`))(index === items.length - 1 ? ' aria-current="page"' : '')}</li>`);
-    return `<nav class="fi-breadcrumbs" aria-label="${e(label)}"><ol class="fi-breadcrumbs-list">${list.join('')}</ol></nav>`;
+    const separators = icon('m-chevron-right', { alias: 'breadcrumbs.separator', attributes: new Attributes({ 'aria-hidden': 'true', class: 'nv-breadcrumbs-item-separator nv-ltr' }) }) + icon('m-chevron-left', { alias: 'breadcrumbs.separator.rtl', attributes: new Attributes({ 'aria-hidden': 'true', class: 'nv-breadcrumbs-item-separator nv-rtl' }) });
+    const list = items.map((item, index) => `<li class="nv-breadcrumbs-item">${index > 0 ? separators : ''}${((current) => (item.url === undefined || item.url === null ? `<span${current} class="nv-breadcrumbs-item-label">${e(item.label)}</span>` : `<a${item.url ? ` href="${e(item.url)}"` : ''}${current} class="nv-breadcrumbs-item-label">${e(item.label)}</a>`))(index === items.length - 1 ? ' aria-current="page"' : '')}</li>`);
+    return `<nav class="nv-breadcrumbs" aria-label="${e(label)}"><ol class="nv-breadcrumbs-list">${list.join('')}</ol></nav>`;
 }
 
 // ------------------------------------------------------------------ basic inputs
 /** Bare checkbox. */
 export function checkbox(props: { checked?: boolean; valid?: boolean; attributes?: Attrs } = {}): string {
-    const attributes = new Attributes(props.attributes ?? {}).merge({ type: 'checkbox', checked: props.checked === true }).class(['fi-checkbox-input', props.valid === false ? 'fi-invalid' : 'fi-valid']);
+    const attributes = new Attributes(props.attributes ?? {}).merge({ type: 'checkbox', checked: props.checked === true }).class(['nv-checkbox-input', props.valid === false ? 'nv-invalid' : 'nv-valid']);
     return `<input ${attributes.toHtml()} />`;
 }
 /** Loading spinner. */
@@ -133,25 +133,25 @@ export type InputWrapperProps = {
     /** Alpine expressions for the error and disabled states, instead of `valid` and `disabled` (`alpine-valid="! errors.includes('name')"`). */
     alpineValid?: string | null; alpineDisabled?: string | null; attributes?: Attrs;
 };
-const FOCUS_INPUT = "if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')";
-const affixIcon = (name: string, color: string | undefined) => icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) });
+const FOCUS_INPUT = "if (! $event.target.closest('.nv-input-wrp-actions')) $dispatch('focus-input')";
+const affixIcon = (name: string, color: string | undefined) => icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []) });
 /** Input wrapper: border, prefix and suffix (text or icon). */
 export function inputWrapper(props: InputWrapperProps = {}, slot = ''): string {
     const hasPrefix = !!(props.prefix || props.prefixIcon), hasSuffix = !!(props.suffix || props.suffixIcon);
     const alpineValid = props.alpineValid || null, alpineDisabled = props.alpineDisabled || null;
-    const alpineClasses: Attrs = alpineValid || alpineDisabled ? { 'x-bind:class': `{\n${alpineDisabled ? ` 'fi-disabled': ${alpineDisabled},\n` : ''}${alpineValid ? ` 'fi-invalid': ! (${alpineValid}),\n` : ''} }` } : {};
-    const attributes = new Attributes({ ...alpineClasses, ...(props.attributes ?? {}) }).class(['fi-input-wrp', { 'fi-disabled': !alpineDisabled && props.disabled === true, 'fi-invalid': !alpineValid && props.valid === false }]);
-    const prefix = hasPrefix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['fi-input-wrp-prefix', 'fi-input-wrp-prefix-has-content', { 'fi-inline': props.inlinePrefix === true, 'fi-input-wrp-prefix-has-label': !!props.prefix }])}">${props.prefixIcon ? affixIcon(props.prefixIcon, props.prefixIconColor) : ''}${props.prefix ? `<span class="fi-input-wrp-label">${e(props.prefix)}</span>` : ''}</div>` : '';
-    const suffix = hasSuffix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['fi-input-wrp-suffix', { 'fi-inline': props.inlineSuffix === true, 'fi-input-wrp-suffix-has-label': !!props.suffix }])}">${props.suffix ? `<span class="fi-input-wrp-label">${e(props.suffix)}</span>` : ''}${props.suffixIcon ? affixIcon(props.suffixIcon, props.suffixIconColor) : ''}</div>` : '';
-    return `<div ${attributes.toHtml()}>${prefix}<div class="fi-input-wrp-content-ctn">${slot}</div>${suffix}</div>`;
+    const alpineClasses: Attrs = alpineValid || alpineDisabled ? { 'x-bind:class': `{\n${alpineDisabled ? ` 'nv-disabled': ${alpineDisabled},\n` : ''}${alpineValid ? ` 'nv-invalid': ! (${alpineValid}),\n` : ''} }` } : {};
+    const attributes = new Attributes({ ...alpineClasses, ...(props.attributes ?? {}) }).class(['nv-input-wrp', { 'nv-disabled': !alpineDisabled && props.disabled === true, 'nv-invalid': !alpineValid && props.valid === false }]);
+    const prefix = hasPrefix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['nv-input-wrp-prefix', 'nv-input-wrp-prefix-has-content', { 'nv-inline': props.inlinePrefix === true, 'nv-input-wrp-prefix-has-label': !!props.prefix }])}">${props.prefixIcon ? affixIcon(props.prefixIcon, props.prefixIconColor) : ''}${props.prefix ? `<span class="nv-input-wrp-label">${e(props.prefix)}</span>` : ''}</div>` : '';
+    const suffix = hasSuffix ? `<div x-on:click="${FOCUS_INPUT}" class="${cls(['nv-input-wrp-suffix', { 'nv-inline': props.inlineSuffix === true, 'nv-input-wrp-suffix-has-label': !!props.suffix }])}">${props.suffix ? `<span class="nv-input-wrp-label">${e(props.suffix)}</span>` : ''}${props.suffixIcon ? affixIcon(props.suffixIcon, props.suffixIconColor) : ''}</div>` : '';
+    return `<div ${attributes.toHtml()}>${prefix}<div class="nv-input-wrp-content-ctn">${slot}</div>${suffix}</div>`;
 }
 /** Bare text input, meant to be placed in `inputWrapper`. */
-export function input(attributes: Attrs = {}): string { return `<input ${new Attributes(attributes).class(['fi-input']).toHtml()} />`; }
+export function input(attributes: Attrs = {}): string { return `<input ${new Attributes(attributes).class(['nv-input']).toHtml()} />`; }
 /** Bare native select; `slot` holds the `<option>` elements. */
-export function select(attributes: Attrs = {}, slot = ''): string { return `<select ${new Attributes(attributes).class(['fi-select-input']).toHtml()}>${slot}</select>`; }
+export function select(attributes: Attrs = {}, slot = ''): string { return `<select ${new Attributes(attributes).class(['nv-select-input']).toHtml()}>${slot}</select>`; }
 /** Fieldset with an optional legend. */
 export function fieldset(props: { label?: string | null; labelHidden?: boolean; attributes?: Attrs } = {}, slot = ''): string {
-    const attributes = new Attributes(props.attributes ?? {}).class(['fi-fieldset', { 'fi-fieldset-label-hidden': props.labelHidden === true }]);
+    const attributes = new Attributes(props.attributes ?? {}).class(['nv-fieldset', { 'nv-fieldset-label-hidden': props.labelHidden === true }]);
     return `<fieldset ${attributes.toHtml()}>${props.label ? `<legend>${e(props.label)}</legend>` : ''}${slot}</fieldset>`;
 }
 
@@ -160,13 +160,13 @@ export type CalloutProps = {
     heading?: string | null; description?: string | null; color?: string | null; icon?: string | null; iconColor?: string | null; iconSize?: 'sm' | 'md' | 'lg';
     footer?: string | null; controls?: string | null; attributes?: Attrs;
 };
-const colorMark = (color: string | null | undefined) => (color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []);
+const colorMark = (color: string | null | undefined) => (color && color !== 'gray' ? ['nv-color', `nv-color-${color}`] : []);
 /** Callout box. `footer` and `controls` take already rendered HTML (buttons…). */
 export function callout(props: CalloutProps = {}): string {
-    const attributes = new Attributes(props.attributes ?? {}).class(['fi-callout', ...colorMark(props.color)]);
-    const iconHtml = props.icon ? icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class([...colorMark(props.iconColor ?? props.color), 'fi-callout-icon']) }) : '';
-    const text = `<div class="fi-callout-text">${props.heading ? `<h4 class="fi-callout-heading">${e(props.heading)}</h4>` : ''}${props.description ? `<p class="fi-callout-description">${e(props.description)}</p>` : ''}</div>`;
-    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-callout-main">${text}${props.footer ? `<div class="fi-callout-footer">${props.footer}</div>` : ''}</div>${props.controls ? `<div class="fi-callout-controls">${props.controls}</div>` : ''}</div>`;
+    const attributes = new Attributes(props.attributes ?? {}).class(['nv-callout', ...colorMark(props.color)]);
+    const iconHtml = props.icon ? icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class([...colorMark(props.iconColor ?? props.color), 'nv-callout-icon']) }) : '';
+    const text = `<div class="nv-callout-text">${props.heading ? `<h4 class="nv-callout-heading">${e(props.heading)}</h4>` : ''}${props.description ? `<p class="nv-callout-description">${e(props.description)}</p>` : ''}</div>`;
+    return `<div ${attributes.toHtml()}>${iconHtml}<div class="nv-callout-main">${text}${props.footer ? `<div class="nv-callout-footer">${props.footer}</div>` : ''}</div>${props.controls ? `<div class="nv-callout-controls">${props.controls}</div>` : ''}</div>`;
 }
 
 // ------------------------------------------------------------------ empty-state
@@ -174,9 +174,9 @@ export type EmptyStateProps = { heading: string; description?: string | null; ic
 /** Empty state: icon, heading, description and footer (already rendered actions). */
 export function emptyState(props: EmptyStateProps): string {
     const color = props.iconColor ?? 'primary';
-    const attributes = new Attributes(props.attributes ?? {}).class(['fi-empty-state', { 'fi-empty-state-not-contained': props.contained === false }]);
-    const iconHtml = props.icon ? `<div class="${cls(['fi-empty-state-icon-bg', ...colorMark(color)])}">${icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class(colorMark(color)) })}</div>` : '';
-    return `<div ${attributes.toHtml()}><div class="fi-empty-state-content">${iconHtml}<div class="fi-empty-state-text-ctn"><h2 class="fi-empty-state-heading">${e(props.heading)}</h2>${props.description ? `<p class="fi-empty-state-description">${e(props.description)}</p>` : ''}${props.footer ? `<footer class="fi-empty-state-footer">${props.footer}</footer>` : ''}</div></div></div>`;
+    const attributes = new Attributes(props.attributes ?? {}).class(['nv-empty-state', { 'nv-empty-state-not-contained': props.contained === false }]);
+    const iconHtml = props.icon ? `<div class="${cls(['nv-empty-state-icon-bg', ...colorMark(color)])}">${icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class(colorMark(color)) })}</div>` : '';
+    return `<div ${attributes.toHtml()}><div class="nv-empty-state-content">${iconHtml}<div class="nv-empty-state-text-ctn"><h2 class="nv-empty-state-heading">${e(props.heading)}</h2>${props.description ? `<p class="nv-empty-state-description">${e(props.description)}</p>` : ''}${props.footer ? `<footer class="nv-empty-state-footer">${props.footer}</footer>` : ''}</div></div></div>`;
 }
 
 // ------------------------------------------------------------------ pagination
@@ -202,7 +202,7 @@ export function pagination(props: PaginationProps): string {
     const lastPage = simple ? props.page + (props.hasMore ? 1 : 0) : Math.max(1, Math.ceil(props.total! / props.perPage));
     const from = (props.page - 1) * props.perPage + 1;
     const property = props.property ?? 'tableRecordsPerPage';
-    return views.render('filament::components.pagination', {
+    return views.render('navette::components.pagination', {
         id: props.id, simple, extremeLinks: props.extremeLinks === true, property, t, tc,
         targets: [...new Set([...(props.loadingTargets ?? []), 'previousPage', 'gotoPage', 'setPage', 'nextPage', 'paginators', property])].join(','),
         page: { page: props.page, lastPage, total: props.total ?? 0, from, to: simple ? from + props.perPage - 1 : Math.min(props.total!, from + props.perPage - 1) },
@@ -226,32 +226,32 @@ export function section(props: SectionProps = {}, slot = ''): string {
     const hasText = !!props.heading || !!props.description;
     const hasHeader = !!props.icon || hasText || collapsible || !!props.afterHeader;
     const tag = props.headingTag ?? 'h2';
-    const expand = t('filament::components/section.actions.expand.label'), collapse = t('filament::components/section.actions.collapse.label');
+    const expand = t('navette::components/section.actions.expand.label'), collapse = t('navette::components/section.actions.collapse.label');
     const attributes = new Attributes(props.attributes ?? {})
         .merge({
-            'x-data': persistCollapsed ? `{ isCollapsed: $persist(${collapsed ? 'true' : 'false'}).as(\`filament:section:collapsed:\${${collapseId} ?? $el.id}\`) , }` : `{ isCollapsed: ${collapsed ? 'true' : 'false'} , }`,
+            'x-data': persistCollapsed ? `{ isCollapsed: $persist(${collapsed ? 'true' : 'false'}).as(\`navette:section:collapsed:\${${collapseId} ?? $el.id}\`) , }` : `{ isCollapsed: ${collapsed ? 'true' : 'false'} , }`,
             ...(collapsible ? {
-                'x-id': "['fi-section-content']",
+                'x-id': "['nv-section-content']",
                 'x-on:collapse-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = true`,
                 'x-on:expand': 'isCollapsed = false',
                 'x-on:expand-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = false`,
                 'x-on:open-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = false`,
                 'x-on:toggle-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = ! isCollapsed`,
-                'x-bind:class': "isCollapsed && 'fi-collapsed'",
+                'x-bind:class': "isCollapsed && 'nv-collapsed'",
             } : {}),
         })
-        .class(['fi-section', {
-            'fi-section-not-contained': props.contained === false, 'fi-section-has-content-before': props.contentBefore === true, 'fi-section-has-header': hasHeader,
-            'fi-aside': props.aside === true, 'fi-compact': props.compact === true, 'fi-collapsible': collapsible, 'fi-divided': props.divided === true, 'fi-secondary': props.secondary === true,
+        .class(['nv-section', {
+            'nv-section-not-contained': props.contained === false, 'nv-section-has-content-before': props.contentBefore === true, 'nv-section-has-header': hasHeader,
+            'nv-aside': props.aside === true, 'nv-compact': props.compact === true, 'nv-collapsible': collapsible, 'nv-divided': props.divided === true, 'nv-secondary': props.secondary === true,
         }]);
-    const text = hasText ? `<div class="fi-section-header-text-ctn">${props.heading ? `<${tag} class="fi-section-header-heading">${e(props.heading)}</${tag}>` : ''}${props.description ? `<p class="fi-section-header-description">${e(props.description)}</p>` : ''}</div>` : '';
-    const content = hasText || props.afterHeader ? `<div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${text}${props.afterHeader ? `<div class="fi-section-header-after-ctn">${props.afterHeader}</div>` : ''}</div>` : '';
+    const text = hasText ? `<div class="nv-section-header-text-ctn">${props.heading ? `<${tag} class="nv-section-header-heading">${e(props.heading)}</${tag}>` : ''}${props.description ? `<p class="nv-section-header-description">${e(props.description)}</p>` : ''}</div>` : '';
+    const content = hasText || props.afterHeader ? `<div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasText }])}">${text}${props.afterHeader ? `<div class="nv-section-header-after-ctn">${props.afterHeader}</div>` : ''}</div>` : '';
     const toggle = collapsible ? iconButton({ color: 'gray', icon: icons.resolve('section.collapse-button') ?? 'm-chevron-up', label: collapsed ? expand : collapse, attributes: {
         'x-bind:aria-label': `isCollapsed ? ${js(expand)} : ${js(collapse)}`, 'aria-expanded': collapsed ? 'false' : 'true', 'x-bind:aria-expanded': '(! isCollapsed).toString()',
-        'x-bind:aria-controls': "$id('fi-section-content')", 'x-on:click.stop': 'isCollapsed = ! isCollapsed', class: 'fi-section-collapse-btn',
+        'x-bind:aria-controls': "$id('nv-section-content')", 'x-on:click.stop': 'isCollapsed = ! isCollapsed', class: 'nv-section-collapse-btn',
     } }) : '';
-    const header = hasHeader ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header">${props.icon ? icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class(colorMark(props.iconColor)) }) : ''}${content}${toggle}</header>` : '';
-    const body = slot !== '' || props.footer ? `<div${collapsible ? ` x-bind:id="$id('fi-section-content')"${collapsed || persistCollapsed ? ' x-cloak' : ''}` : ''} class="fi-section-content-ctn">${slot !== '' ? `<div class="fi-section-content">${slot}</div>` : ''}${props.footer ? `<footer class="fi-section-footer">${props.footer}</footer>` : ''}</div>` : '';
+    const header = hasHeader ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header">${props.icon ? icon(props.icon, { size: props.iconSize ?? 'lg', attributes: new Attributes().class(colorMark(props.iconColor)) }) : ''}${content}${toggle}</header>` : '';
+    const body = slot !== '' || props.footer ? `<div${collapsible ? ` x-bind:id="$id('nv-section-content')"${collapsed || persistCollapsed ? ' x-cloak' : ''}` : ''} class="nv-section-content-ctn">${slot !== '' ? `<div class="nv-section-content">${slot}</div>` : ''}${props.footer ? `<footer class="nv-section-footer">${props.footer}</footer>` : ''}</div>` : '';
     return `<section ${attributes.toHtml()}>${header}${body}</section>`;
 }
 
@@ -268,16 +268,16 @@ export type TabItem = {
 export function tabItem(item: TabItem): string {
     const tag = item.tag ?? 'button';
     const alpineActive = item.alpineActive || null;
-    const itemAttributes = new Attributes({ ...(alpineActive ? { 'x-bind:class': `{\n 'fi-active': ${alpineActive},\n }` } : {}), ...(item.attributes ?? {}) })
+    const itemAttributes = new Attributes({ ...(alpineActive ? { 'x-bind:class': `{\n 'nv-active': ${alpineActive},\n }` } : {}), ...(item.attributes ?? {}) })
         .merge({ type: tag === 'button' ? 'button' : null, href: tag === 'a' ? (item.href ?? null) : null, 'aria-current': item.active ? (tag === 'a' ? 'page' : 'true') : null })
-        .class(['fi-tabs-item', { 'fi-active': !alpineActive && item.active === true }]);
+        .class(['nv-tabs-item', { 'nv-active': !alpineActive && item.active === true }]);
     const iconHtml = item.icon ? icon(item.icon) : '';
     const badgeHtml = item.badge !== null && item.badge !== undefined ? badge({ color: item.badgeColor ?? 'primary', size: 'sm' }, e(String(item.badge))) : '';
-    return `<${tag} ${itemAttributes.toHtml()}>${item.iconPosition === 'after' ? '' : iconHtml}<span class="fi-tabs-item-label">${item.labelHtml ?? e(item.label)}</span>${item.iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
+    return `<${tag} ${itemAttributes.toHtml()}>${item.iconPosition === 'after' ? '' : iconHtml}<span class="nv-tabs-item-label">${item.labelHtml ?? e(item.label)}</span>${item.iconPosition === 'after' ? iconHtml : ''}${badgeHtml}</${tag}>`;
 }
 /** Tabs: a list of items, or `slot` holding rendered `<x-tabs.item>` tags. */
 export function tabs(props: { label?: string | null; vertical?: boolean; contained?: boolean; attributes?: Attrs }, items: TabItem[] = [], slot = ''): string {
-    const attributes = new Attributes(props.attributes ?? {}).merge({ 'aria-label': props.label ?? null }).class(['fi-tabs', { 'fi-contained': props.contained === true, 'fi-vertical': props.vertical === true }]);
+    const attributes = new Attributes(props.attributes ?? {}).merge({ 'aria-label': props.label ?? null }).class(['nv-tabs', { 'nv-contained': props.contained === true, 'nv-vertical': props.vertical === true }]);
     return `<nav ${attributes.toHtml()}>${items.map(tabItem).join('')}${slot}</nav>`;
 }
 
@@ -295,16 +295,16 @@ export function dropdownItem(item: DropdownItem): string {
     const attributes = new Attributes(item.attributes ?? {})
         .merge({
             'aria-disabled': item.disabled ? 'true' : null, disabled: item.disabled === true && tag === 'button', href: tag === 'a' ? (item.href ?? null) : null, role: 'menuitem', tabindex: '-1',
-            type: tag === 'button' ? 'button' : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'fi-disabled' : null,
+            type: tag === 'button' ? 'button' : null, 'wire:loading.attr': tag === 'button' ? 'aria-disabled' : null, 'wire:loading.class': tag === 'button' ? 'nv-disabled' : null,
         })
-        .class([...colorsOf('dropdown-item', color), 'fi-dropdown-list-item', { 'fi-disabled': item.disabled === true }]);
+        .class([...colorsOf('dropdown-item', color), 'nv-dropdown-list-item', { 'nv-disabled': item.disabled === true }]);
     const iconColor = item.iconColor ?? (color !== 'gray' ? color : null);
-    const lead = item.icon ? icon(item.icon, { attributes: new Attributes().class(colorMark(iconColor)) }) : item.image ? `<div class="fi-dropdown-list-item-image" style="background-image: url('${e(item.image)}')"></div>` : '';
-    const badgeHtml = item.badge !== null && item.badge !== undefined ? `<span class="${cls([...colorsOf('badge', item.badgeColor ?? 'primary'), 'fi-badge'])}">${e(String(item.badge))}</span>` : '';
-    return `<${tag} ${attributes.toHtml()}>${lead}<span class="fi-dropdown-list-item-label">${item.labelHtml ?? e(item.label)}</span>${badgeHtml}</${tag}>`;
+    const lead = item.icon ? icon(item.icon, { attributes: new Attributes().class(colorMark(iconColor)) }) : item.image ? `<div class="nv-dropdown-list-item-image" style="background-image: url('${e(item.image)}')"></div>` : '';
+    const badgeHtml = item.badge !== null && item.badge !== undefined ? `<span class="${cls([...colorsOf('badge', item.badgeColor ?? 'primary'), 'nv-badge'])}">${e(String(item.badge))}</span>` : '';
+    return `<${tag} ${attributes.toHtml()}>${lead}<span class="nv-dropdown-list-item-label">${item.labelHtml ?? e(item.label)}</span>${badgeHtml}</${tag}>`;
 }
 /** List of dropdown menu items. */
-export function dropdownList(items: DropdownItem[]): string { return `<div class="fi-dropdown-list">${items.map(dropdownItem).join('')}</div>`; }
+export function dropdownList(items: DropdownItem[]): string { return `<div class="nv-dropdown-list">${items.map(dropdownItem).join('')}</div>`; }
 /** Dropdown: `trigger` is the trigger's HTML, `slot` the panel content. */
 export function dropdown(props: {
     trigger: string; width?: string | null; maxHeight?: string | null; placement?: string | null; offset?: number;
@@ -312,9 +312,9 @@ export function dropdown(props: {
     menu?: boolean; attributes?: Attrs;
 }, slot = ''): string {
     const menu = props.menu !== false;
-    const attributes = new Attributes(props.attributes ?? {}).merge({ 'x-data': `filamentDropdown({ isMenu: ${menu ? 'true' : 'false'} })` }).class(['fi-dropdown']);
+    const attributes = new Attributes(props.attributes ?? {}).merge({ 'x-data': `navetteDropdown({ isMenu: ${menu ? 'true' : 'false'} })` }).class(['nv-dropdown']);
     const float = `x-float${props.placement ? `.placement.${props.placement}` : ''}.flip.offset`;
-    return `<div ${attributes.toHtml()}><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${props.trigger}</div><div x-cloak ${float}="{ offset: ${props.offset ?? 8}, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0"${menu ? ' role="menu"' : ''} class="${cls(['fi-dropdown-panel', props.width ? `fi-width-${props.width}` : null, { 'fi-scrollable': !!props.maxHeight }])}" style="${props.maxHeight ? `max-height: ${e(props.maxHeight)};` : ''}">${slot}</div></div>`;
+    return `<div ${attributes.toHtml()}><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger">${props.trigger}</div><div x-cloak ${float}="{ offset: ${props.offset ?? 8}, }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0"${menu ? ' role="menu"' : ''} class="${cls(['nv-dropdown-panel', props.width ? `nv-width-${props.width}` : null, { 'nv-scrollable': !!props.maxHeight }])}" style="${props.maxHeight ? `max-height: ${e(props.maxHeight)};` : ''}">${slot}</div></div>`;
 }
 
 // ------------------------------------------------------------------ modal
@@ -337,7 +337,7 @@ export type ModalProps = {
 /** Modal, opened by an `open-modal` event carrying its id. */
 export function modal(props: ModalProps, slot = ''): string {
     const { alignment = 'start', width = 'sm', closeButton = ModalComponent.hasCloseButton, closeByClickingAway = ModalComponent.isClosedByClickingAway, closeByEscaping = ModalComponent.isClosedByEscaping } = props;
-    const id = props.id || `fi-modal-${Math.random().toString(36).slice(2, 12)}`;
+    const id = props.id || `nv-modal-${Math.random().toString(36).slice(2, 12)}`;
     const trap = (props.autofocus ?? ModalComponent.isAutofocused) === false ? 'x-trap.noreturn.noautofocus' : 'x-trap.noreturn';
     const hasHeading = !!props.heading, hasDescription = !!props.description && hasHeading;
     const hasFooter = !!props.footer || (props.footerActions?.length ?? 0) > 0;
@@ -347,27 +347,27 @@ export function modal(props: ModalProps, slot = ''): string {
     const iconColor = props.iconColor ?? 'primary';
     // Scrolling window (slide-over, sticky header or footer): the focus trap goes on the window itself, not its container.
     const trapOnWindow = props.slideOver === true || props.stickyHeader === true || props.stickyFooter === true;
-    const closeHtml = closeButton ? iconButton({ color: 'gray', icon: icons.resolve('modal.close-button') ?? 'o-x-mark', label: t('filament::components/modal.actions.close.label'), attributes: { tabindex: closeByEscaping ? '-1' : null, 'x-on:click': close, class: 'fi-modal-close-btn' } }).replace('fi-icon fi-size-md', 'fi-icon fi-size-lg') : '';
-    const iconHtml = props.icon ? `<div class="fi-modal-icon-ctn"><div class="${cls([...colorMark(iconColor), 'fi-modal-icon-bg'])}">${icon(props.icon, { size: 'lg' })}</div></div>` : '';
-    const header = hasHeading ? `<div wire:key="${e(key('header'))}" class="${cls(['fi-modal-header', { 'fi-vertical-align-center': !!props.icon && !props.eyebrow && !hasDescription && alignment === 'start' }])}">${closeHtml}${iconHtml}<div>${props.eyebrow ? `<p class="fi-modal-eyebrow">${e(props.eyebrow)}</p>` : ''}<h2 id="${e(id)}.heading" class="fi-modal-heading">${e(props.heading!)}</h2>${hasDescription ? `<p id="${e(id)}.description" class="fi-modal-description">${e(props.description!)}</p>` : ''}</div></div>` : '';
-    const content = hasContent ? `<div wire:key="${e(key('content'))}" class="fi-modal-content">${slot}</div>` : '';
-    const footer = hasFooter ? `<div wire:key="${e(key('footer'))}" class="${cls(['fi-modal-footer', `fi-align-${props.footerActionsAlignment ?? 'start'}`])}">${props.footer ? props.footer : `<div class="fi-modal-footer-actions">${(props.footerActions ?? []).join('')}</div>`}</div>` : '';
-    const windowClasses = cls(['fi-modal-window', { 'fi-modal-window-has-close-btn': closeButton, 'fi-modal-window-has-content': hasContent, 'fi-modal-window-has-footer': hasFooter, 'fi-modal-window-has-icon': !!props.icon }, `fi-align-${alignment}`, `fi-width-${width}`]);
+    const closeHtml = closeButton ? iconButton({ color: 'gray', icon: icons.resolve('modal.close-button') ?? 'o-x-mark', label: t('navette::components/modal.actions.close.label'), attributes: { tabindex: closeByEscaping ? '-1' : null, 'x-on:click': close, class: 'nv-modal-close-btn' } }).replace('nv-icon nv-size-md', 'nv-icon nv-size-lg') : '';
+    const iconHtml = props.icon ? `<div class="nv-modal-icon-ctn"><div class="${cls([...colorMark(iconColor), 'nv-modal-icon-bg'])}">${icon(props.icon, { size: 'lg' })}</div></div>` : '';
+    const header = hasHeading ? `<div wire:key="${e(key('header'))}" class="${cls(['nv-modal-header', { 'nv-vertical-align-center': !!props.icon && !props.eyebrow && !hasDescription && alignment === 'start' }])}">${closeHtml}${iconHtml}<div>${props.eyebrow ? `<p class="nv-modal-eyebrow">${e(props.eyebrow)}</p>` : ''}<h2 id="${e(id)}.heading" class="nv-modal-heading">${e(props.heading!)}</h2>${hasDescription ? `<p id="${e(id)}.description" class="nv-modal-description">${e(props.description!)}</p>` : ''}</div></div>` : '';
+    const content = hasContent ? `<div wire:key="${e(key('content'))}" class="nv-modal-content">${slot}</div>` : '';
+    const footer = hasFooter ? `<div wire:key="${e(key('footer'))}" class="${cls(['nv-modal-footer', `nv-align-${props.footerActionsAlignment ?? 'start'}`])}">${props.footer ? props.footer : `<div class="nv-modal-footer-actions">${(props.footerActions ?? []).join('')}</div>`}</div>` : '';
+    const windowClasses = cls(['nv-modal-window', { 'nv-modal-window-has-close-btn': closeButton, 'nv-modal-window-has-content': hasContent, 'nv-modal-window-has-footer': hasFooter, 'nv-modal-window-has-icon': !!props.icon }, `nv-align-${alignment}`, `nv-width-${width}`]);
     const outer = new Attributes()
         .merge({
             'aria-describedby': hasDescription ? `${id}.description` : null, 'aria-labelledby': hasHeading ? `${id}.heading` : null, 'aria-modal': 'true', id, role: props.alert ? 'alertdialog' : 'dialog', tabindex: '-1',
-            'x-data': `filamentModal({ id: ${js(id)}, isScrollLocked: true, shouldRestoreFocus: true, })`, 'data-fi-modal-id': id,
+            'x-data': `navetteModal({ id: ${js(id)}, isScrollLocked: true, shouldRestoreFocus: true, })`, 'data-nv-modal-id': id,
             'x-on:close-modal.window': `if (($event.detail.id === ${js(id)}) && isOpen) close()`,
             'x-on:close-modal-quietly.window': `if (($event.detail.id === ${js(id)}) && isOpen) closeQuietly()`,
             'x-on:open-modal.window': `if (($event.detail.id === ${js(id)}) && (! isOpen)) open()`,
-            'x-bind:class': "{ 'fi-modal-open': isOpen, }", 'x-cloak': true, 'x-show': 'isOpen',
+            'x-bind:class': "{ 'nv-modal-open': isOpen, }", 'x-cloak': true, 'x-show': 'isOpen',
         })
-        .class(['fi-modal', { 'fi-absolute-positioning-context': !props.slideOver, 'fi-modal-slide-over': props.slideOver === true, 'fi-modal-has-sticky-header': props.stickyHeader === true, 'fi-modal-has-sticky-footer': props.stickyFooter === true }]);
-    const html = `<div ${outer.toHtml()}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div><div${trapOnWindow ? '' : ' tabindex="-1"'}${closeByClickingAway ? ` x-on:click.self="${e(close)}"` : ''}${trapOnWindow ? '' : ` ${trap}="isTrapActive"`} class="${cls(['fi-modal-window-ctn', { 'fi-clickable': closeByClickingAway }])}"><div${closeByEscaping ? ` x-on:keydown.window.escape="if (isTopmost()) ${e(close)}"` : ''} x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:key="${e(key('window'))}"${trapOnWindow ? ` ${trap}="isTrapActive" tabindex="0"` : ''} class="${windowClasses}">${header}${content}${footer}</div></div></div>`;
+        .class(['nv-modal', { 'nv-absolute-positioning-context': !props.slideOver, 'nv-modal-slide-over': props.slideOver === true, 'nv-modal-has-sticky-header': props.stickyHeader === true, 'nv-modal-has-sticky-footer': props.stickyFooter === true }]);
+    const html = `<div ${outer.toHtml()}><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="nv-modal-close-overlay"></div><div${trapOnWindow ? '' : ' tabindex="-1"'}${closeByClickingAway ? ` x-on:click.self="${e(close)}"` : ''}${trapOnWindow ? '' : ` ${trap}="isTrapActive"`} class="${cls(['nv-modal-window-ctn', { 'nv-clickable': closeByClickingAway }])}"><div${closeByEscaping ? ` x-on:keydown.window.escape="if (isTopmost()) ${e(close)}"` : ''} x-show="isWindowVisible" x-transition:enter="nv-transition-enter" x-transition:leave="nv-transition-leave" x-transition:enter-start="nv-transition-enter-start" x-transition:enter-end="nv-transition-enter-end" x-transition:leave-start="nv-transition-leave-start" x-transition:leave-end="nv-transition-leave-end" wire:key="${e(key('window'))}"${trapOnWindow ? ` ${trap}="isTrapActive" tabindex="0"` : ''} class="${windowClasses}">${header}${content}${footer}</div></div></div>`;
     if (!props.trigger) return html;
     // The trigger opens the modal unless it is disabled (`<x-slot name="trigger" disabled>`).
     const { disabled: triggerDisabled, ...triggerRest } = props.triggerAttributes ?? {};
-    const trigger = new Attributes({ ...(triggerDisabled ? {} : { 'x-on:click': `$dispatch('open-modal', { id: ${js(id)} })` }), ...triggerRest }).class(['fi-modal-trigger']);
+    const trigger = new Attributes({ ...(triggerDisabled ? {} : { 'x-on:click': `$dispatch('open-modal', { id: ${js(id)} })` }), ...triggerRest }).class(['nv-modal-trigger']);
     return `<div><div ${trigger.toHtml()}>${props.trigger}</div>${html}</div>`;
 }
 
@@ -385,7 +385,7 @@ views
     // Every prop other than `checked` and `valid` is an attribute of the input (`name`, `value`, `disabled`…).
     .component('checkbox', ({ checked, valid, attributes, ...rest }) => checkbox({ checked, valid, attributes: { ...rest, ...attributes } }))
     .component('dropdown', withSlot(dropdown))
-    .component('dropdown-list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="fi-dropdown-list">${slot}</div>`))
+    .component('dropdown-list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="nv-dropdown-list">${slot}</div>`))
     .component('dropdown-item', (props, slot) => dropdownItem({ ...props, label: props.label ?? '', labelHtml: props.label === undefined ? slot.trim() : null } as DropdownItem))
     .component('empty-state', (props, slot) => emptyState({ ...props, footer: props.footer ?? (slot || null) } as EmptyStateProps))
     .component('fieldset', withSlot(fieldset))
@@ -407,7 +407,7 @@ views
 // Filament's names for the same components: `<x-input.wrapper>`, `<x-dropdown.list>`, `<x-dropdown.list.item>`.
 views
     .component('input.wrapper', withSlot(inputWrapper))
-    .component('dropdown.list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="fi-dropdown-list">${slot}</div>`))
+    .component('dropdown.list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="nv-dropdown-list">${slot}</div>`))
     .component('dropdown.list.item', (props, slot) => dropdownItem({ ...props, label: props.label ?? '', labelHtml: props.label === undefined ? slot.trim() : null } as DropdownItem));
 
 export const ui = { avatar, badge, breadcrumbs, button, callout, checkbox, dropdown, dropdownItem, dropdownList, emptyState, fieldset, iconButton, input, inputWrapper, link, modal, pagination, section, select, spinner, tabItem, tabs };

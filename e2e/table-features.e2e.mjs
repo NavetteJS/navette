@@ -15,11 +15,11 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(String(error)));
 const { step, exitCode } = reporter({ errorLines: 3 });
-const toolbar = () => page.locator('.fi-ta-header-toolbar');
-const rows = () => page.locator('.fi-ta-records > tr.fi-ta-row');
-const headers = async () => (await page.locator('thead tr:last-child th.fi-ta-header-cell').allInnerTexts()).map((text) => text.trim());
-const cellTexts = async (name) => (await page.locator(`.fi-ta-records td.fi-ta-cell-${name}`).allInnerTexts()).map((text) => text.trim());
-const notification = (title) => page.locator('.fi-no-notification-title', { hasText: title });
+const toolbar = () => page.locator('.nv-ta-header-toolbar');
+const rows = () => page.locator('.nv-ta-records > tr.nv-ta-row');
+const headers = async () => (await page.locator('thead tr:last-child th.nv-ta-header-cell').allInnerTexts()).map((text) => text.trim());
+const cellTexts = async (name) => (await page.locator(`.nv-ta-records td.nv-ta-cell-${name}`).allInnerTexts()).map((text) => text.trim());
+const notification = (title) => page.locator('.nv-no-notification-title', { hasText: title });
 /** Waits for the next Livewire answer whose request mentions `text`. */
 const answer = (text) => page.waitForResponse((response) => response.url().includes('/livewire') && (response.request().postData() ?? '').includes(text));
 const settle = async (promise) => { await promise; await page.waitForLoadState('networkidle'); };
@@ -30,40 +30,40 @@ try {
     await rows().first().waitFor();
 
     await step('heading with its description, striped rows and row numbers from the row loop', async () => {
-        assert.equal((await page.locator('.fi-ta-header-description').innerText()).trim(), 'Drag rows to reorder them; the column manager reorders columns.');
-        assert.deepEqual(await Promise.all([0, 1, 2, 3].map(async (index) => /fi-striped/.test(await rows().nth(index).getAttribute('class')))), [false, true, false, true]);
+        assert.equal((await page.locator('.nv-ta-header-description').innerText()).trim(), 'Drag rows to reorder them; the column manager reorders columns.');
+        assert.deepEqual(await Promise.all([0, 1, 2, 3].map(async (index) => /nv-striped/.test(await rows().nth(index).getAttribute('class')))), [false, true, false, true]);
         assert.deepEqual((await cellTexts('position')).slice(0, 3), ['1', '2', '3']);
     });
 
     await step('rows link to the edit page in a new tab', async () => {
-        const link = rows().first().locator('td.fi-ta-cell-title a.fi-ta-col');
+        const link = rows().first().locator('td.nv-ta-cell-title a.nv-ta-col');
         assert.equal(await link.getAttribute('target'), '_blank');
         assert.match(await link.getAttribute('href'), /\/lab\/tasks\/\d+\/edit$/);
     });
 
     await step('the page goes in the URL as `tasksPage`, with first and last page links, and survives a reload', async () => {
         const total = db.prepare('select count(*) c from tasks').get().c;
-        await settle(Promise.all([answer('nextPage'), page.locator('.fi-pagination-item[rel="next"] button').click()]));
+        await settle(Promise.all([answer('nextPage'), page.locator('.nv-pagination-item[rel="next"] button').click()]));
         await page.waitForURL(/tasksPage=2/);
-        assert.equal(await page.locator('.fi-pagination-item[rel="first"]').count(), 1);
-        assert.equal(await page.locator('.fi-pagination-item[rel="last"]').count(), 1);
+        assert.equal(await page.locator('.nv-pagination-item[rel="first"]').count(), 1);
+        assert.equal(await page.locator('.nv-pagination-item[rel="last"]').count(), 1);
         await page.reload();
         await rows().first().waitFor();
-        assert.equal((await page.locator('.fi-pagination-item.fi-active').innerText()).trim(), '2');
+        assert.equal((await page.locator('.nv-pagination-item.nv-active').innerText()).trim(), '2');
         // The row loop counts the rows of the page; the eleventh task (by position) opens page 2.
         assert.deepEqual((await cellTexts('position')).slice(0, 1), ['1']);
         assert.equal((await cellTexts('sort'))[0], String(db.prepare('select sort from tasks order by sort, id limit 1 offset 10').get().sort));
-        await settle(Promise.all([answer('gotoPage'), page.locator('.fi-pagination-item[rel="last"] button').click()]));
-        assert.equal((await page.locator('.fi-pagination-item.fi-active').innerText()).trim(), String(Math.ceil(total / 10)));
+        await settle(Promise.all([answer('gotoPage'), page.locator('.nv-pagination-item[rel="last"] button').click()]));
+        assert.equal((await page.locator('.nv-pagination-item.nv-active').innerText()).trim(), String(Math.ceil(total / 10)));
     });
 
     await step('records per page are kept in the session', async () => {
-        await settle(Promise.all([answer('tableRecordsPerPage'), page.locator('.fi-pagination-records-per-page-select:not(.fi-compact) select').selectOption('25')]));
+        await settle(Promise.all([answer('tableRecordsPerPage'), page.locator('.nv-pagination-records-per-page-select:not(.nv-compact) select').selectOption('25')]));
         assert.equal(await rows().count(), 25);
         await page.goto(`${BASE}/lab/tasks`);
         await rows().first().waitFor();
         assert.equal(await rows().count(), 25);
-        await settle(Promise.all([answer('tableRecordsPerPage'), page.locator('.fi-pagination-records-per-page-select:not(.fi-compact) select').selectOption('10')]));
+        await settle(Promise.all([answer('tableRecordsPerPage'), page.locator('.nv-pagination-records-per-page-select:not(.nv-compact) select').selectOption('10')]));
     });
 
     await step('the search field has its placeholder and searches the title and the description', async () => {
@@ -83,21 +83,21 @@ try {
     });
 
     await step('priorities sort by their rank through the column sort query', async () => {
-        await settle(Promise.all([answer('sortTable'), page.locator('th.fi-ta-header-cell-priority button').click()]));
+        await settle(Promise.all([answer('sortTable'), page.locator('th.nv-ta-header-cell-priority button').click()]));
         const ranks = (await cellTexts('priority')).map((priority) => ['low', 'medium', 'high', 'urgent'].indexOf(priority.toLowerCase()));
         assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
         assert.equal(ranks[0], 0);
-        await settle(Promise.all([answer('sortTable'), page.locator('th.fi-ta-header-cell-priority button').click()]));
-        await settle(Promise.all([answer('sortTable'), page.locator('th.fi-ta-header-cell-priority button').click()]));
+        await settle(Promise.all([answer('sortTable'), page.locator('th.nv-ta-header-cell-priority button').click()]));
+        await settle(Promise.all([answer('sortTable'), page.locator('th.nv-ta-header-cell-priority button').click()]));
     });
 
     await step('the column manager is live and reorderable, and its state is kept in the session', async () => {
-        const manager = toolbar().locator('.fi-ta-col-manager-dropdown');
-        await manager.locator('.fi-dropdown-trigger button').click();
-        const panel = manager.locator('.fi-dropdown-panel');
+        const manager = toolbar().locator('.nv-ta-col-manager-dropdown');
+        await manager.locator('.nv-dropdown-trigger button').click();
+        const panel = manager.locator('.nv-dropdown-panel');
         await panel.waitFor();
         assert.equal(await panel.getByRole('button', { name: 'Apply columns' }).count(), 0, 'no "Apply" button when live');
-        assert.match(await panel.locator('.fi-ta-col-manager-items').getAttribute('style'), /--cols-lg: 2;/);
+        assert.match(await panel.locator('.nv-ta-col-manager-items').getAttribute('style'), /--cols-lg: 2;/);
         const hidden = answer('applyTableColumnManager');
         await panel.locator('label', { hasText: 'Status' }).locator('input').uncheck();
         await settle(hidden);
@@ -114,9 +114,9 @@ try {
         const after = await headers();
         assert.deepEqual(after, before, `${after.join(',')} / ${before.join(',')}`);
         // "Reset" (in the footer) restores the declared columns.
-        await toolbar().locator('.fi-ta-col-manager-dropdown .fi-dropdown-trigger button').click();
+        await toolbar().locator('.nv-ta-col-manager-dropdown .nv-dropdown-trigger button').click();
         const reset = answer('resetTableColumnManager');
-        await toolbar().locator('.fi-ta-col-manager-actions-ctn').getByRole('button', { name: 'Reset' }).click();
+        await toolbar().locator('.nv-ta-col-manager-actions-ctn').getByRole('button', { name: 'Reset' }).click();
         await settle(reset);
         const restored = await headers();
         assert.deepEqual(restored, ['#', 'Title', 'Status', 'Priority', 'Estimated', 'Position'], restored.join(','));
@@ -126,7 +126,7 @@ try {
     await step('reordering: custom trigger, paginated, a keyboard move saves the order and runs the callback', async () => {
         await settle(toolbar().getByRole('button', { name: 'Reorder tasks' }).click());
         await toolbar().getByRole('button', { name: 'Done reordering' }).waitFor();
-        assert.equal(await page.locator('.fi-pagination').count(), 1, 'paginated while reordering');
+        assert.equal(await page.locator('.nv-pagination').count(), 1, 'paginated while reordering');
         assert.equal(await rows().count(), 10);
         const keys = await rows().evaluateAll((elements) => elements.map((element) => element.getAttribute('x-sortable-item')));
         const firstSort = db.prepare('select sort from tasks where id = ?').get(keys[0]).sort;
@@ -145,25 +145,25 @@ try {
     await step('lazy loading: the records arrive after the page, under the custom header', async () => {
         await page.locator('[data-cy="timesheets-header"]').waitFor();
         await rows().first().waitFor();
-        assert.equal(await page.locator('.fi-ta.fi-loading').count(), 0);
-        assert.equal(await page.locator('.fi-ta-content-ctn').evaluate((element) => element.hasAttribute('wire:poll.60s')), true, 'polls every 60 seconds');
+        assert.equal(await page.locator('.nv-ta.nv-loading').count(), 0);
+        assert.equal(await page.locator('.nv-ta-content-ctn').evaluate((element) => element.hasAttribute('wire:poll.60s')), true, 'polls every 60 seconds');
     });
 
     await step('cursor pagination: previous / next only, pages follow the date order', async () => {
         const ordered = db.prepare('select id from timesheets order by date desc, id asc limit 20').all().map((row) => String(row.id));
         const keys = async () => rows().evaluateAll((elements) => elements.map((element) => element.getAttribute('wire:key').split('.').pop()));
         assert.deepEqual(await keys(), ordered.slice(0, 10));
-        assert.equal(await page.locator('.fi-pagination-overview').count(), 0);
-        await settle(Promise.all([answer('setPage'), page.locator('.fi-pagination-next-btn').click()]));
+        assert.equal(await page.locator('.nv-pagination-overview').count(), 0);
+        await settle(Promise.all([answer('setPage'), page.locator('.nv-pagination-next-btn').click()]));
         assert.deepEqual(await keys(), ordered.slice(10, 20));
-        await settle(Promise.all([answer('setPage'), page.locator('.fi-pagination-previous-btn').click()]));
+        await settle(Promise.all([answer('setPage'), page.locator('.nv-pagination-previous-btn').click()]));
         assert.deepEqual(await keys(), ordered.slice(0, 10));
-        assert.equal(await page.locator('.fi-pagination-previous-btn').count(), 0);
+        assert.equal(await page.locator('.nv-pagination-previous-btn').count(), 0);
     });
 
     await step('the column manager opens in a modal, and applies with its footer button', async () => {
         await toolbar().getByRole('button', { name: 'Columns' }).click();
-        const modal = page.locator('.fi-modal.fi-modal-open .fi-modal-window');
+        const modal = page.locator('.nv-modal.nv-modal-open .nv-modal-window');
         await modal.waitFor();
         await modal.locator('label', { hasText: 'Hours' }).locator('input').uncheck();
         const applied = answer('applyTableColumnManager');

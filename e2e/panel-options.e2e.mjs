@@ -25,8 +25,8 @@ try {
     await step('links prefetch their page on hover', async () => {
         await page.goto(`${BASE}/projects/${project.id}/edit`);
         await page.locator('[id="form.name"]').waitFor();
-        assert.ok(await page.locator('.fi-sidebar-item a[wire\\:navigate\\.hover]').count() > 0);
-        assert.equal(await page.locator('.fi-sidebar-item a[wire\\:navigate]').count(), 0);
+        assert.ok(await page.locator('.nv-sidebar-item a[wire\\:navigate\\.hover]').count() > 0);
+        assert.equal(await page.locator('.nv-sidebar-item a[wire\\:navigate]').count(), 0);
     });
     await step('untouched forms have no unsaved changes, whatever their fields', async () => {
         const pages = [
@@ -48,7 +48,7 @@ try {
         assert.equal(await isSaved(), false);
         const messages = [];
         page.once('dialog', (dialog) => { messages.push(dialog.message()); dialog.dismiss(); });
-        await page.locator('.fi-sidebar-item a', { hasText: 'Tasks' }).first().click();
+        await page.locator('.nv-sidebar-item a', { hasText: 'Tasks' }).first().click();
         await page.waitForTimeout(500);
         assert.equal(messages.length, 1);
         assert.match(messages[0], /unsaved changes/i);
@@ -56,7 +56,7 @@ try {
     });
     await step('accepting leaves the page', async () => {
         page.once('dialog', (dialog) => dialog.accept());
-        await page.locator('.fi-sidebar-item a', { hasText: 'Tasks' }).first().click();
+        await page.locator('.nv-sidebar-item a', { hasText: 'Tasks' }).first().click();
         await page.waitForURL((url) => url.pathname.endsWith('/tasks'));
     });
     await step('once saved, the page can be left without a question', async () => {
@@ -68,7 +68,7 @@ try {
         assert.equal(db.prepare('select name from projects where id = ?').get(project.id).name, `${project.name} (kept)`);
         let asked = false;
         page.once('dialog', (dialog) => { asked = true; dialog.dismiss(); });
-        await page.locator('.fi-sidebar-item a', { hasText: 'Tasks' }).first().click();
+        await page.locator('.nv-sidebar-item a', { hasText: 'Tasks' }).first().click();
         await page.waitForURL((url) => url.pathname.endsWith('/tasks'));
         assert.equal(asked, false);
     });

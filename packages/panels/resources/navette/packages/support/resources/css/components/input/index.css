@@ -1,0 +1,55 @@
+input.nv-input {
+    @apply block w-full appearance-none border-none bg-transparent px-3 py-1.5 text-start text-sm leading-6 text-gray-950 transition duration-75 placeholder:text-gray-400 focus:ring-0 focus:outline-none disabled:text-gray-500 disabled:[-webkit-text-fill-color:var(--color-gray-500)] disabled:placeholder:[-webkit-text-fill-color:var(--color-gray-400)] dark:text-white dark:placeholder:text-gray-500 dark:disabled:text-gray-400 dark:disabled:[-webkit-text-fill-color:var(--color-gray-400)] dark:disabled:placeholder:[-webkit-text-fill-color:var(--color-gray-500)];
+
+    /* https://defensivecss.dev/tip/input-zoom-safari */
+    @supports (-webkit-touch-callout: none) {
+        @apply text-base;
+    }
+
+    &.nv-input-has-inline-prefix {
+        @apply ps-0;
+    }
+
+    &.nv-input-has-inline-suffix {
+        @apply pe-0;
+    }
+
+    &.nv-align-center {
+        @apply text-center;
+    }
+
+    &.nv-align-end {
+        @apply text-end;
+    }
+
+    &.nv-align-left {
+        @apply text-left;
+    }
+
+    &.nv-align-right {
+        @apply text-end;
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply text-justify;
+    }
+}
+
+input[type='date'].nv-input,
+input[type='datetime-local'].nv-input,
+input[type='time'].nv-input {
+    /* An almost transparent white background color is used
+     instead of fully transparent to fix a Safari bug
+     where the date/time input "placeholder" colors too dark.
+
+     https://github.com/filamentphp/filament/issues/7087
+     https://github.com/filamentphp/filament/issues/18570 */
+
+    @apply bg-white/[1%];
+}
+
+input[type='range'].nv-input {
+    @apply mx-auto appearance-auto;
+    width: calc(100% - 1.5rem);
+}

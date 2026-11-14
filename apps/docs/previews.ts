@@ -34,7 +34,7 @@ export type RenderedPreview = { html: string; width: string | null; viewport: nu
 // The same setup as a panel: colors (blue primary), views, translations.
 const colors = new support.ColorManager().register({ primary: support.Color.Blue });
 for (const use of [actions.useColorManager, forms.useColorManager, tables.useColorManager, infolists.useColorManager, useUiColorManager]) use(colors);
-support.views.share({ t, tc, assetUrl: (file: string) => `/assets/filament/${file}` });
+support.views.share({ t, tc, assetUrl: (file: string) => `/assets/navette/${file}` });
 // HTML displayed by entries (markdown(), html()) is sanitized as in a panel.
 infolists.useHtmlSanitizer((html: string) => forms.richDocumentToHtml(forms.richHtmlToDocument(html)) ?? '');
 
@@ -156,13 +156,13 @@ export async function renderPreview(preview: Preview): Promise<RenderedPreview> 
     } else if (items.length && items.every((item) => item instanceof actions.Action || item instanceof actions.ActionGroup)) {
         const parts: string[] = [];
         for (const item of items) parts.push(item instanceof actions.Action ? await item.toHtml(context) : await (item as actions.ActionGroup).toHtml(context, {}, (action: actions.Action) => action.getName()));
-        html = `<div class="fi-ac fi-align-start">${parts.join('')}</div>`;
+        html = `<div class="nv-ac nv-align-start">${parts.join('')}</div>`;
     } else if (items.length && items.every((item) => item instanceof panels.Stat)) {
         // Same grid as StatsOverviewWidget. Charts need JavaScript and stay empty.
-        const panel = { colors, assetUrl: (file: string) => `/assets/filament/${file}` } as any;
+        const panel = { colors, assetUrl: (file: string) => `/assets/navette/${file}` } as any;
         const columns = items.length < 3 ? 3 : items.length % 3 !== 1 ? 3 : 4;
-        const cells = (items as panels.Stat[]).map((stat, index) => `<div class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${stat.toHtml(panel, `stat-${index}`)}</div></div>`).join('');
-        html = `<div class="fi-wi-widget fi-wi-stats-overview"><div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div class="fi-grid-col"><div class="fi-sc-component fi-grid-ctn"><div class="fi-sc-section"><section class="fi-section fi-section-not-contained"><div class="fi-section-content-ctn"><div class="fi-section-content fi-grid @xl:fi-grid-cols !@lg:fi-grid-cols fi-sc fi-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div></div>`;
+        const cells = (items as panels.Stat[]).map((stat, index) => `<div class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${stat.toHtml(panel, `stat-${index}`)}</div></div>`).join('');
+        html = `<div class="nv-wi-widget nv-wi-stats-overview"><div class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div class="nv-grid-col"><div class="nv-sc-component nv-grid-ctn"><div class="nv-sc-section"><section class="nv-section nv-section-not-contained"><div class="nv-section-content-ctn"><div class="nv-section-content nv-grid @xl:nv-grid-cols !@lg:nv-grid-cols nv-sc nv-sc-has-gap" style="--cols-cxl: repeat(${columns}, minmax(0, 1fr)); --cols-nclg: repeat(${columns}, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">${cells}</div></div></section></div></div></div></div></div>`;
     } else if (items.length && items.every((item) => typeof item === 'string' || item instanceof support.HtmlString)) {
         // HTML, from template(): shown as is.
         html = items.map(String).join('');
@@ -197,7 +197,7 @@ export function previewDocument(rendered: RenderedPreview): string {
 ${wireStyles()}
 <link rel="stylesheet" href="/assets/fonts/inter/index.css">
 ${colors.renderCssVariables()}
-<link rel="stylesheet" href="/assets/filament/css/filament/filament/app.css">
+<link rel="stylesheet" href="/assets/navette/css/navette/navette/app.css">
 <style>
 :root { --font-family: 'Inter Variable'; --font-family-mono: 'ui-monospace'; --font-family-serif: 'ui-serif'; }
 html, body { margin: 0; background: transparent; }
@@ -236,16 +236,16 @@ html, body { margin: 0; background: transparent; }
     };
     // Without Alpine, no tab or wizard step is active: activate the first one, as on page load.
     const activate = () => {
-        for (const tabs of document.querySelectorAll('.fi-sc-tabs')) {
+        for (const tabs of document.querySelectorAll('.nv-sc-tabs')) {
             tabs.querySelectorAll('[x-ref="tabsHeader"]').forEach((header) => header.removeAttribute('x-cloak'));
-            tabs.querySelector('.fi-tabs-item')?.classList.add('fi-active');
-            tabs.querySelector(':scope > .fi-sc-tabs-tab')?.classList.add('fi-active');
+            tabs.querySelector('.nv-tabs-item')?.classList.add('nv-active');
+            tabs.querySelector(':scope > .nv-sc-tabs-tab')?.classList.add('nv-active');
         }
-        for (const wizard of document.querySelectorAll('.fi-sc-wizard')) {
-            wizard.querySelectorAll('[x-cloak]').forEach((element) => { if (element.matches('.fi-sc-wizard-header, .fi-sc-wizard-header *')) element.removeAttribute('x-cloak'); });
-            wizard.querySelector('.fi-sc-wizard-header-step')?.classList.add('fi-active');
-            const step = wizard.querySelector('.fi-sc-wizard-step');
-            step?.classList.add('fi-active');
+        for (const wizard of document.querySelectorAll('.nv-sc-wizard')) {
+            wizard.querySelectorAll('[x-cloak]').forEach((element) => { if (element.matches('.nv-sc-wizard-header, .nv-sc-wizard-header *')) element.removeAttribute('x-cloak'); });
+            wizard.querySelector('.nv-sc-wizard-header-step')?.classList.add('nv-active');
+            const step = wizard.querySelector('.nv-sc-wizard-step');
+            step?.classList.add('nv-active');
             step?.removeAttribute('x-cloak');
         }
         // Toggles get their classes from Alpine; the server already rendered aria-checked.
@@ -260,15 +260,15 @@ html, body { margin: 0; background: transparent; }
     const selected = ${JSON.stringify(rendered.selected ?? []).replace(/</g, '\\u003c')};
     window.pluralize ??= (text, count, replace) => text.split('|')[count === 1 ? 0 : 1].replace(/:(\\w+)/g, (match, key) => replace?.[key] ?? match);
     const tables = () => {
-        for (const table of document.querySelectorAll('.fi-ta')) {
-            table.querySelectorAll('.fi-ta-filters[x-cloak]:not([x-show])').forEach((filters) => filters.removeAttribute('x-cloak'));
+        for (const table of document.querySelectorAll('.nv-ta')) {
+            table.querySelectorAll('.nv-ta-filters[x-cloak]:not([x-show])').forEach((filters) => filters.removeAttribute('x-cloak'));
             const max = Number(/maxSelectableRecords:\\s*(\\d+)/.exec(table.getAttribute('x-data') ?? '')?.[1]) || null;
-            const boxes = [...table.querySelectorAll('.fi-ta-record-checkbox')];
+            const boxes = [...table.querySelectorAll('.nv-ta-record-checkbox')];
             for (const box of boxes) box.checked = selected.includes(box.value);
             const count = boxes.filter((box) => box.checked).length;
             if (!count) continue;
             if (max && count >= max) for (const box of boxes) if (!box.checked && box.hasAttribute('x-bind:disabled')) box.disabled = true;
-            if (count === boxes.length) table.querySelectorAll('.fi-ta-page-checkbox').forEach((box) => { box.checked = true; });
+            if (count === boxes.length) table.querySelectorAll('.nv-ta-page-checkbox').forEach((box) => { box.checked = true; });
             // Conditions on the selection count only, such as "getSelectedRecordsCount() && 1".
             for (const element of table.querySelectorAll('[x-show*="getSelectedRecordsCount()"]')) {
                 const code = element.getAttribute('x-show').replace(/getSelectedRecordsCount\\(\\)/g, String(count));
@@ -276,8 +276,8 @@ html, body { margin: 0; background: transparent; }
                 element.removeAttribute('x-cloak');
                 element.removeAttribute('hidden');
             }
-            table.querySelectorAll('.fi-ta-selection-indicator [x-show="isLoading"]').forEach((spinner) => { spinner.style.display = 'none'; });
-            for (const text of table.querySelectorAll('.fi-ta-selection-indicator [x-text]')) {
+            table.querySelectorAll('.nv-ta-selection-indicator [x-show="isLoading"]').forEach((spinner) => { spinner.style.display = 'none'; });
+            for (const text of table.querySelectorAll('.nv-ta-selection-indicator [x-text]')) {
                 try { text.textContent = Function('getSelectedRecordsCount', 'return (' + text.getAttribute('x-text') + ')')(() => count); } catch {}
             }
             // "Select all" is offered while some records are not selected, and only if the limit allows them all.
@@ -290,7 +290,7 @@ html, body { margin: 0; background: transparent; }
 })();
 </script>
 </head>
-<body class="fi-body">
+<body class="nv-body">
 <div class="preview-root">${rendered.html}</div>
 </body>
 </html>

@@ -103,7 +103,7 @@ addTranslations('blog', {
 });
 ```
 
-Keys added later replace the earlier ones: an application may call `addTranslations()` after importing a plugin to change some of its texts. Navette's own texts may be changed the same way, with their namespaces (`filament-panels`, `filament-forms`, `filament-tables`, `filament-actions`…).
+Keys added later replace the earlier ones: an application may call `addTranslations()` after importing a plugin to change some of its texts. Navette's own texts may be changed the same way, with their namespaces (`navette-panels`, `navette-forms`, `navette-tables`, `navette-actions`…).
 
 ### Assets
 

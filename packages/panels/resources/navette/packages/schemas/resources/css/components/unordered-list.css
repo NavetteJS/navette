@@ -1,0 +1,15 @@
+.nv-sc-unordered-list {
+    @apply ms-3 list-disc text-sm;
+
+    &.nv-size-xs {
+        @apply text-xs;
+    }
+
+    &.nv-size-md {
+        @apply text-base;
+    }
+
+    &.nv-size-lg {
+        @apply text-lg;
+    }
+}

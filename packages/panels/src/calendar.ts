@@ -104,7 +104,7 @@ export function renderCalendarEvent(event: CalendarEvent, context: { day: string
     const attributes = new Attributes({
         title: event.description ?? event.title, 'data-event': String(event.id),
         ...(url ? { href: url, ...(event.openUrlInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : url.startsWith('/') ? { 'wire:navigate': '' } : {}) } : context.clickable ? { type: 'button', 'wire:click': call('selectEvent', event.id) } : {}),
-    }).class(['nv-cal-event', 'fi-color', `fi-color-${color}`, context.day > start ? 'nv-cal-event-continued' : null, context.day < end ? 'nv-cal-event-continues' : null]);
+    }).class(['nv-cal-event', 'nv-color', `nv-color-${color}`, context.day > start ? 'nv-cal-event-continued' : null, context.day < end ? 'nv-cal-event-continues' : null]);
     const tag = url ? 'a' : context.clickable ? 'button' : 'div';
     return `<${tag} ${attributes.toHtml()}>${time ? `<time class="nv-cal-event-time">${e(time)}</time>` : ''}<span class="nv-cal-event-title">${e(event.title)}</span></${tag}>`;
 }
@@ -122,7 +122,7 @@ export function renderCalendar(model: CalendarModel): string {
     const dayNumber = (day: string, text: string) => (model.datesClickable
         ? `<button type="button" wire:click="${call('selectDate', day)}" class="nv-cal-day-number">${e(text)}</button>`
         : `<span class="nv-cal-day-number">${e(text)}</span>`);
-    const iconButton = (name: string, label: string, method: string) => `<button type="button" wire:click="${method}" title="${e(label)}" aria-label="${e(label)}" class="fi-icon-btn fi-size-md nv-cal-nav">${icon(name, { alias: `panels::calendar.${method === 'previousPeriod' ? 'previous' : 'next'}-button` })}</button>`;
+    const iconButton = (name: string, label: string, method: string) => `<button type="button" wire:click="${method}" title="${e(label)}" aria-label="${e(label)}" class="nv-icon-btn nv-size-md nv-cal-nav">${icon(name, { alias: `panels::calendar.${method === 'previousPeriod' ? 'previous' : 'next'}-button` })}</button>`;
     const switcher = model.views.length > 1
         ? `<div class="nv-cal-views" role="group">${model.views.map((name) => `<button type="button" wire:click="${call('setView', name)}" aria-pressed="${name === view}" class="nv-cal-view${name === view ? ' nv-cal-view-active' : ''}">${e(labels[name])}</button>`).join('')}</div>`
         : '';

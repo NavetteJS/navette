@@ -1,0 +1,342 @@
+.nv-ta-content-loading {
+    --loading-skeleton-animation: var(--animate-pulse);
+    --loading-skeleton-bg: var(--gray-200);
+    --loading-skeleton-border-radius: var(--radius-md);
+
+    @variant dark {
+        --loading-skeleton-bg: rgb(255 255 255 / 0.1);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        --loading-skeleton-animation: none;
+    }
+
+    & > .nv-ta-content,
+    & > .nv-ta-table > .nv-ta-records {
+        @apply pointer-events-none;
+    }
+}
+
+.nv-ta-content-ctn {
+    @apply relative divide-y divide-gray-200 overflow-x-auto dark:divide-white/10 dark:border-t-white/10;
+
+    & .nv-ta-content-header {
+        @apply flex items-center gap-4 gap-x-6 bg-gray-50 px-4 sm:px-6 dark:bg-white/5;
+
+        & .nv-ta-page-checkbox {
+            @apply my-4 shrink-0;
+        }
+
+        & .nv-ta-sorting-settings {
+            @apply flex gap-x-3 py-3;
+        }
+    }
+
+    &:not(.nv-ta-ctn-with-footer .nv-ta-content-ctn) {
+        @apply rounded-b-xl;
+    }
+
+    &:not(.nv-ta-ctn-with-header .nv-ta-content-ctn) {
+        @apply border-t-0;
+    }
+
+    & .nv-ta-content {
+        @apply grid;
+
+        &.nv-ta-content-grid {
+            @apply gap-4 p-4 sm:px-6;
+
+            &.nv-ta-content-grouped {
+                @apply pt-0;
+            }
+
+            & .nv-ta-group-header {
+                @apply -mx-4 border-y border-gray-200 first:border-t-0 sm:-mx-6 dark:border-white/5;
+                width: calc(100% + 2rem);
+
+                @variant sm {
+                    width: calc(100% + 3rem);
+                }
+            }
+
+            & .nv-ta-record {
+                @apply rounded-xl shadow-sm ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10;
+
+                &.nv-clickable {
+                    @apply dark:hover:bg-white/10 dark:hover:ring-white/20;
+                }
+
+                &.nv-selected {
+                    @apply dark:bg-white/10 dark:ring-white/20;
+                }
+
+                &:not(.nv-selected) {
+                    @apply bg-white dark:bg-white/5 dark:ring-white/10;
+                }
+
+                &.nv-ta-record-with-content-prefix {
+                    & .nv-ta-record-content {
+                        @apply ps-2;
+                    }
+
+                    & .nv-ta-actions {
+                        @apply ps-2;
+                    }
+                }
+
+                &.nv-ta-record-with-content-suffix {
+                    & .nv-ta-record-content {
+                        @apply pe-2;
+                    }
+
+                    & .nv-ta-actions {
+                        @apply pe-2;
+                    }
+                }
+            }
+        }
+
+        &:not(.nv-ta-content-grid) {
+            @apply divide-y divide-gray-200 dark:divide-white/10;
+
+            & .nv-ta-record {
+                &.nv-clickable {
+                    @apply dark:hover:bg-white/5;
+                }
+
+                &.nv-selected {
+                    @apply before:bg-primary-600 dark:before:bg-primary-500 before:absolute before:inset-y-0 before:start-0 before:w-0.5 dark:bg-white/5;
+                }
+
+                & .nv-ta-record-content-ctn {
+                    @apply md:flex-row md:items-center;
+                }
+
+                &:not(.nv-ta-record-with-content-prefix) {
+                    & .nv-ta-record-content {
+                        @apply sm:ps-6;
+                    }
+
+                    & .nv-ta-actions {
+                        @apply sm:ps-6;
+                    }
+                }
+
+                &:not(.nv-ta-record-with-content-suffix) {
+                    & .nv-ta-record-content {
+                        @apply sm:pe-6;
+                    }
+
+                    & .nv-ta-actions {
+                        @apply sm:pe-6;
+                    }
+                }
+
+                &.nv-ta-record-with-content-prefix {
+                    @apply sm:ps-3;
+
+                    & .nv-ta-record-content {
+                        @apply ps-3;
+                    }
+
+                    & .nv-ta-actions {
+                        @apply ps-3;
+                    }
+                }
+
+                &.nv-ta-record-with-content-suffix {
+                    @apply sm:pe-3;
+
+                    & .nv-ta-record-content {
+                        @apply pe-3;
+                    }
+
+                    & .nv-ta-actions {
+                        @apply pe-3;
+                    }
+                }
+
+                & .nv-ta-actions {
+                    @apply md:ps-3;
+                }
+            }
+        }
+
+        & .nv-ta-group-header {
+            @apply col-span-full bg-gray-50 px-1 sm:px-3 dark:bg-white/5;
+
+            & .nv-ta-group-checkbox {
+                @apply mx-3;
+            }
+        }
+
+        & .nv-ta-group-summary,
+        & .nv-ta-table {
+            @apply col-span-full;
+        }
+
+        & .nv-ta-record {
+            @apply relative flex h-full items-center bg-white transition duration-75 dark:bg-gray-900;
+
+            .nv-ta-content-loading & .nv-ta-record-checkbox {
+                @apply shadow-none ring-0 transition-none;
+                animation: var(--loading-skeleton-animation);
+                background-color: var(--loading-skeleton-bg) !important;
+                background-image: none !important;
+            }
+
+            &.nv-ta-record-with-content-prefix {
+                @apply ps-1;
+            }
+
+            &.nv-ta-record-with-content-suffix {
+                @apply pe-1;
+            }
+
+            &.nv-clickable {
+                @apply hover:bg-gray-50;
+            }
+
+            &.nv-collapsed {
+                @apply hidden;
+            }
+
+            &.nv-selected {
+                @apply bg-gray-50;
+            }
+
+            & .nv-ta-reorder-handle {
+                @apply mx-1 my-2;
+            }
+
+            & .nv-ta-record-checkbox {
+                @apply mx-3 my-4 shrink-0;
+            }
+
+            & .nv-ta-record-content-ctn {
+                @apply flex h-full w-full flex-col gap-y-3 py-4;
+
+                & > :nth-child(1) {
+                    @apply flex-1;
+                }
+
+                & .nv-ta-record-content {
+                    @apply block w-full;
+
+                    & .nv-ta-col {
+                        @apply flex justify-start text-start disabled:pointer-events-none;
+
+                        &.nv-growable {
+                            @apply w-full;
+                        }
+
+                        &.nv-align-center {
+                            @apply justify-center text-center;
+                        }
+
+                        &.nv-align-end {
+                            @apply justify-end text-end;
+                        }
+
+                        &.nv-align-left {
+                            @apply justify-start text-left;
+                        }
+
+                        &.nv-align-right {
+                            @apply justify-end text-right;
+                        }
+
+                        &.nv-align-justify,
+                        &.nv-align-between {
+                            @apply justify-between text-justify;
+                        }
+                    }
+
+                    &.nv-collapsible {
+                        @apply mt-3;
+                    }
+
+                    & .nv-growable {
+                        @apply w-full flex-1;
+                    }
+
+                    & .sm\:nv-hidden {
+                        @apply sm:hidden;
+                    }
+
+                    & .md\:nv-hidden {
+                        @apply md:hidden;
+                    }
+
+                    & .lg\:nv-hidden {
+                        @apply lg:hidden;
+                    }
+
+                    & .xl\:nv-hidden {
+                        @apply xl:hidden;
+                    }
+
+                    & .\32xl\:nv-hidden {
+                        @apply 2xl:hidden;
+                    }
+
+                    & .sm\:nv-visible {
+                        @apply hidden sm:block;
+                    }
+
+                    & .md\:nv-visible {
+                        @apply hidden md:block;
+                    }
+
+                    & .lg\:nv-visible {
+                        @apply hidden lg:block;
+                    }
+
+                    & .xl\:nv-visible {
+                        @apply hidden xl:block;
+                    }
+
+                    & .\32xl\:nv-visible {
+                        @apply hidden 2xl:block;
+                    }
+                }
+            }
+
+            & .nv-ta-record-collapse-btn {
+                @apply mx-1 my-2 shrink-0;
+            }
+
+            & .nv-ta-actions {
+                &.nv-ta-actions-before-columns-position {
+                    @apply order-first;
+                }
+            }
+
+            &:not(.nv-ta-record-with-content-prefix) {
+                & .nv-ta-record-content {
+                    @apply ps-4;
+                }
+
+                & .nv-ta-actions {
+                    @apply ps-4;
+                }
+            }
+
+            &:not(.nv-ta-record-with-content-suffix) {
+                & .nv-ta-record-content {
+                    @apply pe-4;
+                }
+
+                & .nv-ta-actions {
+                    @apply pe-4;
+                }
+            }
+
+            &.nv-ta-record-collapsed {
+                & .nv-ta-record-collapse-btn {
+                    @apply rotate-180;
+                }
+            }
+        }
+    }
+}

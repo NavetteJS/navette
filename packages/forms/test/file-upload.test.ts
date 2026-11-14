@@ -77,8 +77,8 @@ test('deletable(false) keeps saved files; editor and avatar options reach the br
     assert.match(html, /isAvatar: true/);
     assert.match(html, /hasImageEditor: true/);
     assert.match(html, /isDownloadable: true/);
-    assert.match(html, /fi-fo-file-upload-avatar fi-align-center/);
-    assert.match(html, /class="fi-fo-file-upload-editor fi-fo-file-upload-editor-circle-cropper"/);
+    assert.match(html, /nv-fo-file-upload-avatar nv-align-center/);
+    assert.match(html, /class="nv-fo-file-upload-editor nv-fo-file-upload-editor-circle-cropper"/);
     assert.match(html, />16:9<\/button>/);
 });
 

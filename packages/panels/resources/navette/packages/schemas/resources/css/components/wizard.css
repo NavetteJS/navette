@@ -1,0 +1,177 @@
+.nv-sc-wizard {
+    @apply flex flex-col;
+
+    & .nv-sc-wizard-header {
+        @apply grid md:grid-flow-col md:overflow-x-auto;
+
+        & .nv-sc-wizard-header-step {
+            @apply relative flex;
+
+            &:not(.nv-active) {
+                @apply hidden md:flex;
+            }
+
+            & .nv-sc-wizard-header-step-btn {
+                @apply flex h-full items-center gap-x-4 px-6 py-4 text-start;
+
+                & .nv-sc-wizard-header-step-icon-ctn {
+                    @apply flex size-10 shrink-0 items-center justify-center rounded-full;
+
+                    & .nv-sc-wizard-header-step-number {
+                        @apply text-sm font-medium;
+                    }
+                }
+
+                & .nv-sc-wizard-header-step-text {
+                    @apply grid justify-items-start md:w-max md:max-w-60;
+
+                    & .nv-sc-wizard-header-step-label {
+                        @apply text-sm font-medium;
+                    }
+
+                    & .nv-sc-wizard-header-step-description {
+                        @apply text-start text-sm text-gray-500 dark:text-gray-400;
+                    }
+                }
+            }
+
+            & .nv-sc-wizard-header-step-separator {
+                @apply absolute end-0 hidden h-full w-5 text-gray-200 md:block rtl:rotate-180 dark:text-white/5;
+            }
+
+            &.nv-completed {
+                & .nv-sc-wizard-header-step-btn {
+                    & .nv-sc-wizard-header-step-icon-ctn {
+                        @apply bg-primary-600 dark:bg-primary-500;
+
+                        & .nv-icon {
+                            @apply text-white;
+                        }
+                    }
+
+                    & .nv-sc-wizard-header-step-text {
+                        & .nv-sc-wizard-header-step-label {
+                            @apply text-gray-950 dark:text-white;
+                        }
+                    }
+                }
+            }
+
+            &:not(.nv-completed) {
+                & .nv-sc-wizard-header-step-btn {
+                    & .nv-sc-wizard-header-step-icon-ctn {
+                        @apply border-2;
+                    }
+                }
+
+                &.nv-active {
+                    & .nv-sc-wizard-header-step-btn {
+                        & .nv-sc-wizard-header-step-icon-ctn {
+                            & .nv-icon {
+                                @apply text-primary-600 dark:text-primary-500;
+                            }
+                        }
+                    }
+                }
+
+                &:not(.nv-active) {
+                    & .nv-sc-wizard-header-step-btn {
+                        & .nv-sc-wizard-header-step-icon-ctn {
+                            & .nv-icon {
+                                @apply text-gray-500 dark:text-gray-400;
+                            }
+                        }
+
+                        & .nv-sc-wizard-header-step-text {
+                            & .nv-sc-wizard-header-step-label {
+                                @apply text-gray-500 dark:text-gray-400;
+                            }
+                        }
+                    }
+                }
+            }
+
+            &.nv-active {
+                & .nv-sc-wizard-header-step-btn {
+                    & .nv-sc-wizard-header-step-icon-ctn {
+                        @apply border-primary-600 dark:border-primary-500;
+
+                        & .nv-sc-wizard-header-step-number {
+                            @apply text-primary-600 dark:text-primary-500;
+                        }
+                    }
+
+                    & .nv-sc-wizard-header-step-text {
+                        & .nv-sc-wizard-header-step-label {
+                            @apply text-primary-700 dark:text-primary-400;
+                        }
+                    }
+                }
+            }
+
+            &:not(.nv-active) {
+                & .nv-sc-wizard-header-step-btn {
+                    & .nv-sc-wizard-header-step-icon-ctn {
+                        @apply border-gray-300 dark:border-gray-600;
+
+                        & .nv-sc-wizard-header-step-number {
+                            @apply text-gray-500 dark:text-gray-400;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    & .nv-sc-wizard-step {
+        @apply outline-hidden;
+
+        &:not(.nv-active) {
+            @apply hidden;
+        }
+    }
+
+    &:not(.nv-sc-wizard-header-hidden) {
+        & .nv-sc-wizard-step {
+            &.nv-active {
+                @apply mt-6;
+            }
+        }
+    }
+
+    & .nv-sc-wizard-footer {
+        @apply flex items-center justify-between gap-x-3;
+
+        & > .nv-hidden {
+            @apply hidden;
+        }
+    }
+
+    &.nv-contained {
+        @apply rounded-xl bg-white shadow-xs ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10;
+
+        & .nv-sc-wizard-header {
+            @apply border-b border-gray-200 dark:border-white/10;
+        }
+
+        & .nv-sc-wizard-step {
+            &.nv-active {
+                @apply mt-0 p-6;
+            }
+        }
+
+        & .nv-sc-wizard-footer {
+            @apply px-6 pb-6;
+        }
+    }
+
+    &:not(.nv-contained) {
+        & .nv-sc-wizard-header {
+            @apply rounded-xl bg-white shadow-xs ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10;
+        }
+
+        & .nv-sc-wizard-footer {
+            @apply mt-6;
+        }
+    }
+}

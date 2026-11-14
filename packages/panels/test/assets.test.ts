@@ -86,9 +86,9 @@ test('rendering: on-request assets stay out of the page; script data and CSS var
     assert.doesNotMatch(manager.renderScripts(null, { spa: false }), /data-navigate/);
     manager.registerScriptData({ user: { name: '</script><script>alert(1)</script>' } });
     const data = manager.renderScriptData();
-    assert.match(data, /^window\.filamentData = \{"user":\{"name":"\\u003c\/script\\u003e/);
+    assert.match(data, /^window\.navetteData = \{"user":\{"name":"\\u003c\/script\\u003e/);
     assert.doesNotMatch(data, /<\/script>/);
-    assert.equal(new AssetManager().renderScriptData(), 'window.filamentData = []');
+    assert.equal(new AssetManager().renderScriptData(), 'window.navetteData = []');
     manager.registerCssVariables({ 'background-image': 'url(/bg.jpg)', 'bad name': 'x', evil: 'red;}</style><script>' });
     const css = manager.renderStyles();
     assert.match(css, /<style>:root\{--background-image:url\(\/bg\.jpg\);--evil:red\/stylescript;\}<\/style>/);
@@ -121,9 +121,9 @@ test('the panel router serves registered files with long caching at their curren
         assert.match(adminPage.text, /<link href="\/css\/app\/served\.css\?v=[0-9a-f]+" rel="stylesheet"/);
         assert.match(adminPage.text, /\/css\/app\/admin-only\.css\?v=/);
         assert.match(adminPage.text, /<script src="\/js\/app\/served\.js\?v=[0-9a-f]+"><\/script>/);
-        assert.match(adminPage.text, /window\.filamentData = \{"locale":"fr"\}/);
+        assert.match(adminPage.text, /window\.navetteData = \{"locale":"fr"\}/);
         // Registered scripts come before the panel's own scripts.
-        assert.ok(adminPage.text.indexOf('/js/app/served.js') < adminPage.text.indexOf('js/filament/actions/actions.js'));
+        assert.ok(adminPage.text.indexOf('/js/app/served.js') < adminPage.text.indexOf('js/navette/actions/actions.js'));
         const otherPage = await get('/other', cookie);
         assert.equal(otherPage.status, 200);
         assert.match(otherPage.text, /\/css\/app\/served\.css/);

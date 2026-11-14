@@ -1,0 +1,31 @@
+.nv-icon {
+    @apply size-5;
+
+    &.nv-size-xs {
+        @apply size-3;
+    }
+
+    &.nv-size-sm {
+        @apply size-4;
+    }
+
+    &.nv-size-md {
+        @apply size-5;
+    }
+
+    &.nv-size-lg {
+        @apply size-6;
+    }
+
+    &.nv-size-xl {
+        @apply size-7;
+    }
+
+    &.nv-size-2xl {
+        @apply size-8;
+    }
+
+    & > svg {
+        @apply h-[inherit] w-[inherit];
+    }
+}

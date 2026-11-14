@@ -10,7 +10,7 @@ const StockGauge = {
             const percent = Math.round((Math.min(qty ?? 0, max) / max) * 100);
             const status = qty === null ? 'Unknown' : qty <= securityStock ? 'Reorder soon' : 'In stock';
 
-            return h('div', { id: props.id ?? undefined, class: 'fi-lab-stock-gauge', style: 'display: grid; gap: 0.5rem' }, [
+            return h('div', { id: props.id ?? undefined, class: 'nv-lab-stock-gauge', style: 'display: grid; gap: 0.5rem' }, [
                 h('div', { style: 'display: flex; justify-content: space-between; font-size: 0.875rem' }, [
                     h('span', { 'data-stock-status': '' }, status),
                     h('span', { 'data-stock-quantity': '' }, `${qty ?? 0} / ${max}`),

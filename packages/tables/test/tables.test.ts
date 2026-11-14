@@ -40,6 +40,6 @@ test('getTableRecords only accepts what the table declares (sort, search, page s
 });
 
 test('TextColumn: short and full markup', async () => {
-    assert.equal(await TextColumn.make('phone').toHtml({ phone: '<b>1</b>' }), '<div class="fi-ta-text fi-ta-text-item fi-size-sm">&lt;b&gt;1&lt;/b&gt;</div>');
-    assert.equal(await TextColumn.make('name').weight('medium').toHtml({ name: 'Abby' }), '<div class="fi-ta-text-item fi-size-sm fi-font-medium fi-ta-text">Abby</div>');
+    assert.equal(await TextColumn.make('phone').toHtml({ phone: '<b>1</b>' }), '<div class="nv-ta-text nv-ta-text-item nv-size-sm">&lt;b&gt;1&lt;/b&gt;</div>');
+    assert.equal(await TextColumn.make('name').weight('medium').toHtml({ name: 'Abby' }), '<div class="nv-ta-text-item nv-size-sm nv-font-medium nv-ta-text">Abby</div>');
 });

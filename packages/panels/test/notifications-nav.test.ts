@@ -10,11 +10,11 @@ import { notificationActionFromArray, notificationActionsHtml, renderNotificatio
 const ada: User = { id: 1, name: 'Ada', email: 'ada@example.com' };
 const auth: AuthProvider = { attempt: async () => null, find: async (id) => (String(id) === '1' ? ada : null) };
 
-test('Notification.fromArray(): the JSON of FilamentNotification is read, and what comes from the browser is checked', () => {
+test('Notification.fromArray(): the JSON of NavetteNotification is read, and what comes from the browser is checked', () => {
     const data = Notification.fromArray({
         id: 'greeting', title: 'Saved', body: 'Changes saved.', status: 'success', color: 'warning', icon: 'heroicon-o-document-text', iconColor: 'info', duration: 5000,
         actions: [
-            { name: 'viewPost', url: '/posts/1', shouldOpenUrlInNewTab: true, view: 'filament::components.button.index', color: 'gray' },
+            { name: 'viewPost', url: '/posts/1', shouldOpenUrlInNewTab: true, view: 'navette::components.button.index', color: 'gray' },
             { name: 'undo', label: 'Undo', event: 'undoEditingPost', eventData: [5], dispatchDirection: 'to', dispatchToComponent: 'posts-table', shouldClose: true },
             { actions: [{ name: 'grouped' }] },
             'not an action',
@@ -55,17 +55,17 @@ test('notification actions: Filament click handlers, colors from the panel, URLs
         { label: 'Open', url: '/orders/5', close: true },
         { label: 'Evil', url: 'data:text/html,<script>alert(1)</script>' },
     ]).getData().actions, { navigate: true });
-    assert.match(html, /<button type="button" x-on:click="\$wire\.\$dispatchSelf\(&#039;undo&#039;, [^"]+\); close\(\)" class="fi-ac-btn-action fi-btn fi-size-sm fi-color fi-color-primary fi-bg-color-\d+ /);
-    assert.match(html, /x-on:click="Livewire\.dispatchTo\(&#039;orders-table&#039;, &#039;refresh&#039;, [^"]+\)" class="fi-ac-btn-action fi-btn fi-size-sm fi-outlined fi-color fi-color-gray/);
-    assert.match(html, /<button type="button" x-on:click="markAsRead\(\)" class="fi-ac-link-action fi-link fi-size-sm fi-color fi-color-primary fi-text-color-\d+ dark:fi-text-color-\d+"><span class="fi-link-label">Read<\/span><\/button>/);
+    assert.match(html, /<button type="button" x-on:click="\$wire\.\$dispatchSelf\(&#039;undo&#039;, [^"]+\); close\(\)" class="nv-ac-btn-action nv-btn nv-size-sm nv-color nv-color-primary nv-bg-color-\d+ /);
+    assert.match(html, /x-on:click="Livewire\.dispatchTo\(&#039;orders-table&#039;, &#039;refresh&#039;, [^"]+\)" class="nv-ac-btn-action nv-btn nv-size-sm nv-outlined nv-color nv-color-gray/);
+    assert.match(html, /<button type="button" x-on:click="markAsRead\(\)" class="nv-ac-link-action nv-link nv-size-sm nv-color nv-color-primary nv-text-color-\d+ dark:nv-text-color-\d+"><span class="nv-link-label">Read<\/span><\/button>/);
     // Closing before following a link in the same tab closes at once, like Filament.
     assert.match(html, /<a href="\/orders\/5" wire:navigate x-on:click="close\(true\)"/);
     assert.doesNotMatch(html, /data:|Evil/);
     assert.throws(() => Notification.make().actions([{ label: 'x', dispatch: { event: 'ok', to: 'a" b' } }]), /Invalid component name/);
 
     // Background color of the notification.
-    assert.match(renderNotification(Notification.make().title('Hi').color('success').getData()), /class="fi-color fi-color-success fi-no-notification"/);
-    assert.match(renderNotification(Notification.make().title('Hi').color('gray').getData()), /class="fi-no-notification"/);
+    assert.match(renderNotification(Notification.make().title('Hi').color('success').getData()), /class="nv-color nv-color-success nv-no-notification"/);
+    assert.match(renderNotification(Notification.make().title('Hi').color('gray').getData()), /class="nv-no-notification"/);
 });
 
 test('notifications component: a notification sent from JavaScript is pushed, closed, and its position can be changed', async () => {
@@ -74,10 +74,10 @@ test('notifications component: a notification sent from JavaScript is pushed, cl
     // Snapshot data: `[value, { s: 'arr' }]` tuples.
     const ids = (snap: Snapshot) => Object.keys((snap.data.notifications as any)[0]);
     const dispatch = (snap: Snapshot, event: string, params: unknown) => runtime.update(JSON.parse(JSON.stringify(snap)), {}, [{ method: '__dispatch', params: [event, params] }], { mailbox: 'm' });
-    // `FilamentNotification.send()` dispatches `notificationSent` with `{ notification }`.
+    // `NavetteNotification.send()` dispatches `notificationSent` with `{ notification }`.
     let next = await dispatch(snapshot, 'notificationSent', { notification: { id: 'js-1', title: '<b>Saved</b><img src=x onerror=alert(1)><script>alert(2)</script>', status: 'success', duration: 'persistent' } });
     // Title and body are sanitized HTML, as in Filament: formatting stays, scripts and event handlers go.
-    assert.match(next.effects.html!, /<h3 class="fi-no-notification-title"><b>Saved<\/b>/);
+    assert.match(next.effects.html!, /<h3 class="nv-no-notification-title"><b>Saved<\/b>/);
     assert.doesNotMatch(next.effects.html!, /onerror|<script|alert\(2\)/);
     assert.match(next.effects.html!, /x-on:close-notification\.window="if \(\$event\.detail\.id == &#039;js-1&#039;\) close\(\)"|x-on:close-notification\.window="if \(\$event\.detail\.id == 'js-1'\) close\(\)"/);
     assert.deepEqual(ids(next.snapshot), ['js-1']);
@@ -92,11 +92,11 @@ test('notifications component: a notification sent from JavaScript is pushed, cl
     assert.equal(ids(next.snapshot).length, 20);
     assert.equal(ids(next.snapshot)[0], 'n-2');
 
-    assert.match(next.effects.html!, /class="fi-no fi-align-right fi-vertical-align-start"/);
+    assert.match(next.effects.html!, /class="nv-no nv-align-right nv-vertical-align-start"/);
     Notifications.alignment('start');
     Notifications.verticalAlignment('end');
     try {
-        assert.match((await dispatch(next.snapshot, 'notificationClosed', { id: 'n-5' })).effects.html!, /class="fi-no fi-align-start fi-vertical-align-end"/);
+        assert.match((await dispatch(next.snapshot, 'notificationClosed', { id: 'n-5' })).effects.html!, /class="nv-no nv-align-start nv-vertical-align-end"/);
         assert.throws(() => Notifications.alignment('top' as any), /Invalid notifications alignment/);
     } finally {
         Notifications.alignment('right');
@@ -120,9 +120,9 @@ test('database notifications: action buttons are stored in the Filament format a
         const stored = JSON.parse(row.data);
         assert.equal(stored.color, 'info');
         assert.deepEqual(stored.actions.map((action: any) => [action.label, action.view, action.url, action.event, action.shouldMarkAsRead, action.shouldClose]), [
-            ['Open', 'filament::components.button.index', '/invoices/1', null, false, false],
-            ['Mark as read', 'filament::components.link', null, null, true, false],
-            ['Archive', 'filament::components.link', null, 'archiveInvoice', false, true],
+            ['Open', 'navette::components.button.index', '/invoices/1', null, false, false],
+            ['Mark as read', 'navette::components.link', null, null, true, false],
+            ['Archive', 'navette::components.link', null, 'archiveInvoice', false, true],
         ]);
         const [read] = await store.list(1, 10);
         assert.equal(read.color, 'info');
@@ -149,28 +149,28 @@ test('collapsed sidebar: a navigation group with an icon has a dropdown of its i
         panel.logIn({ cookie: (name: string, value: string) => { cookie = `${name}=${value}`; }, req: {} } as any, ada, false);
         const get = async (path: string) => (await fetch(`http://127.0.0.1:${(server.address() as any).port}${path}`, { headers: { cookie } })).text();
         // Without a sidebar collapsible on desktop, no dropdown.
-        assert.doesNotMatch(await get('/collapsed/refunds'), /fi-sidebar-group-dropdown-trigger-btn/);
+        assert.doesNotMatch(await get('/collapsed/refunds'), /nv-sidebar-group-dropdown-trigger-btn/);
 
         panel.sidebarCollapsibleOnDesktop();
         const html = await get('/collapsed/refunds');
         const shop = html.slice(html.indexOf('data-group-label="Shop"'), html.indexOf('data-group-label="Admin"'));
-        assert.match(shop, /<div x-data="filamentDropdown\(\{ isMenu: true \}\)" x-show="! \$store\.sidebar\.isOpen" class="fi-dropdown">/);
-        assert.match(shop, /<button aria-label="Shop" x-data="filamentSidebarTooltip" x-tooltip="getTooltip\(\{ content: &#39;Shop&#39;, allowHTML: false, \}\)" class="fi-sidebar-group-dropdown-trigger-btn">/);
+        assert.match(shop, /<div x-data="navetteDropdown\(\{ isMenu: true \}\)" x-show="! \$store\.sidebar\.isOpen" class="nv-dropdown">/);
+        assert.match(shop, /<button aria-label="Shop" x-data="navetteSidebarTooltip" x-tooltip="getTooltip\(\{ content: &#39;Shop&#39;, allowHTML: false, \}\)" class="nv-sidebar-group-dropdown-trigger-btn">/);
         assert.match(shop, /x-float\.placement\.right-start\.flip\.offset=/);
-        assert.match(shop, /<div class="fi-dropdown-header">\s*<span>\s*Shop\s*<\/span>/);
+        assert.match(shop, /<div class="nv-dropdown-header">\s*<span>\s*Shop\s*<\/span>/);
         // An item with child items forms a list with them; the dropdown keeps the items' icons; the current page is highlighted.
-        const lists = [...shop.matchAll(/<div class="fi-dropdown-list">([\s\S]*?)<\/div>\s*(?=<div class="fi-dropdown-list">|<\/div>)/g)].map((match) => [...match[1].matchAll(/fi-dropdown-list-item-label">([^<]+)</g)].map((label) => label[1]));
+        const lists = [...shop.matchAll(/<div class="nv-dropdown-list">([\s\S]*?)<\/div>\s*(?=<div class="nv-dropdown-list">|<\/div>)/g)].map((match) => [...match[1].matchAll(/nv-dropdown-list-item-label">([^<]+)</g)].map((label) => label[1]));
         assert.deepEqual(lists, [['Orders', 'Refunds'], ['Products']]);
-        assert.match(shop, /<a href="\/collapsed\/refunds" aria-current="page" class="fi-dropdown-list-item fi-color fi-color-primary[^"]*" role="menuitem" tabindex="-1"><svg[^>]*class="fi-color fi-color-primary fi-icon fi-size-md"/);
+        assert.match(shop, /<a href="\/collapsed\/refunds" aria-current="page" class="nv-dropdown-list-item nv-color nv-color-primary[^"]*" role="menuitem" tabindex="-1"><svg[^>]*class="nv-color nv-color-primary nv-icon nv-size-md"/);
         // Collapsed, the group's button and items are hidden: the dropdown replaces them.
-        assert.match(shop, /class="fi-sidebar-group-btn"/);
-        assert.match(shop, /x-show="\$store\.sidebar\.isOpen" x-transition:enter="fi-transition-enter"[^>]*class="fi-sidebar-group-btn"/);
+        assert.match(shop, /class="nv-sidebar-group-btn"/);
+        assert.match(shop, /x-show="\$store\.sidebar\.isOpen" x-transition:enter="nv-transition-enter"[^>]*class="nv-sidebar-group-btn"/);
         assert.match(shop, /x-show="\$store\.sidebar\.isOpen \? ! \$store\.sidebar\.groupIsCollapsed\(label\) : ! true"/);
         // The items of a group without an icon stay, as icons with a tooltip.
         const admin = html.slice(html.indexOf('data-group-label="Admin"'));
-        assert.doesNotMatch(admin.slice(0, admin.indexOf('</li>')), /fi-sidebar-group-dropdown-trigger-btn/);
+        assert.doesNotMatch(admin.slice(0, admin.indexOf('</li>')), /nv-sidebar-group-dropdown-trigger-btn/);
         assert.match(admin, /x-show="\$store\.sidebar\.isOpen \? ! \$store\.sidebar\.groupIsCollapsed\(label\) : ! false"/);
-        assert.match(admin, /x-bind:aria-label="\$store\.sidebar\.isOpen \? null : &#39;Settings&#39;" x-data="filamentSidebarTooltip" x-tooltip="getTooltip\(\{ content: &#39;Settings&#39;, allowHTML: false, \}\)" class="fi-sidebar-item-btn"/);
-        assert.match(admin, /<span x-show="\$store\.sidebar\.isOpen" x-transition:enter="fi-transition-enter"[^>]*class="fi-sidebar-item-label">/);
+        assert.match(admin, /x-bind:aria-label="\$store\.sidebar\.isOpen \? null : &#39;Settings&#39;" x-data="navetteSidebarTooltip" x-tooltip="getTooltip\(\{ content: &#39;Settings&#39;, allowHTML: false, \}\)" class="nv-sidebar-item-btn"/);
+        assert.match(admin, /<span x-show="\$store\.sidebar\.isOpen" x-transition:enter="nv-transition-enter"[^>]*class="nv-sidebar-item-label">/);
     } finally { server.close(); }
 });

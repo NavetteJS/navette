@@ -24,7 +24,7 @@ export class EffortColumn<R = any> extends Column<R> {
     static make<R = any>(name: string): EffortColumn<R> { return new EffortColumn<R>(name); }
     async toHtml(record: R): Promise<string> {
         const effort = Math.max(0, Math.min(5, Math.floor(Number(await this.getState(record)) || 0)));
-        return `<div class="fi-ta-text fi-ta-text-item fi-size-sm app-effort-cell" title="${effort}/5">${'●'.repeat(effort)}${'○'.repeat(5 - effort)}</div>`;
+        return `<div class="nv-ta-text nv-ta-text-item nv-size-sm app-effort-cell" title="${effort}/5">${'●'.repeat(effort)}${'○'.repeat(5 - effort)}</div>`;
     }
 }
 

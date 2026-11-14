@@ -89,8 +89,8 @@ test('guest access: pages open without signing in, policies decide with a null u
         const response = await get('/guests');
         assert.equal(response.status, 200);
         const html = await response.text();
-        assert.match(html, /fi-sidebar/);
-        assert.doesNotMatch(html, /fi-user-menu/);
+        assert.match(html, /nv-sidebar/);
+        assert.doesNotMatch(html, /nv-user-menu/);
     });
     assert.throws(() => panelRouter(Panel.make().id('tenant-guests').path('tg').key('k').authGuard('tg').auth(auth).guestAccess().tenant({ getTenants: async () => [], find: async () => null, canAccess: async () => false, getKey: () => '', getName: () => '' }), new WireRuntime({ key: 'k' })), /not available in a multi-tenant panel/);
 });

@@ -1,0 +1,29 @@
+.nv-no {
+    @apply pointer-events-none fixed inset-4 z-50 mx-auto flex gap-3;
+
+    &.nv-align-start,
+    &.nv-align-left {
+        @apply items-start;
+    }
+
+    &.nv-align-center {
+        @apply items-center;
+    }
+
+    &.nv-align-end,
+    &.nv-align-right {
+        @apply items-end;
+    }
+
+    &.nv-vertical-align-start {
+        @apply flex-col-reverse justify-end;
+    }
+
+    &.nv-vertical-align-center {
+        @apply flex-col justify-center;
+    }
+
+    &.nv-vertical-align-end {
+        @apply flex-col justify-end;
+    }
+}

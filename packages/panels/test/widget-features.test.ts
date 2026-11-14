@@ -157,9 +157,9 @@ test('stats: extra attributes and placeholders', () => {
         .extraAttributes({ class: 'cursor-pointer', 'wire:click': "$dispatch('setStatusFilter', { filter: \"processed\" })", 'bad name': 'x', 'on"click': 'x', href: '/evil' })
         .extraAttributes({ 'data-stat': 'processed' }, true);
     const html = stat.toHtml(panel, 'k');
-    assert.match(html, /^<a href="\/orders" class="fi-wi-stats-overview-stat cursor-pointer" wire:click="\$dispatch\(&#0?39;setStatusFilter&#0?39;, \{ filter: &quot;processed&quot; \}\)" data-stat="processed">/);
+    assert.match(html, /^<a href="\/orders" class="nv-wi-stats-overview-stat cursor-pointer" wire:click="\$dispatch\(&#0?39;setStatusFilter&#0?39;, \{ filter: &quot;processed&quot; \}\)" data-stat="processed">/);
     assert.doesNotMatch(html, /bad name|on"click|\/evil/);
-    assert.match(html, /<div class="fi-wi-stats-overview-stat-placeholder">&lt;none&gt;<\/div>/);
+    assert.match(html, /<div class="nv-wi-stats-overview-stat-placeholder">&lt;none&gt;<\/div>/);
     // 0 is not blank; whitespace is.
     assert.match(Stat.make('Zero', 0).placeholder('-').toHtml(panel, 'k'), /stat-value">0</);
     assert.match(Stat.make('Blank', '  ').placeholder('-').toHtml(panel, 'k'), /stat-placeholder">-</);
@@ -174,14 +174,14 @@ test('stats: extra attributes and placeholders', () => {
 
 test('chart filters form: live filters in a dropdown of the header', async () => {
     const chart = livewire(SalesChart);
-    await chart.assertOk().assertSet('filters.region', 'north').assertSee(['fi-dropdown fi-wi-chart-filter', 'fi-wi-chart-filter-content', 'Sales north'])
-        .assertDontSee('fi-wi-chart-filter-content-actions-ctn');
+    await chart.assertOk().assertSet('filters.region', 'north').assertSee(['nv-dropdown nv-wi-chart-filter', 'nv-wi-chart-filter-content', 'Sales north'])
+        .assertDontSee('nv-wi-chart-filter-content-actions-ctn');
     await chart.set('filters.region', 'south').assertDispatched('updateChartData', (_name, params) => params.data.datasets[0].label === 'Sales south');
 });
 
 test('chart deferred filters: applied by the Apply button, reset to the defaults', async () => {
     const chart = livewire(DeferredChart);
-    await chart.assertSet('filters.region', 'north').assertSet('deferredFilters.region', 'north').assertSee(['fi-wi-chart-filter-content-actions-ctn', 'Update chart', 'Reset']);
+    await chart.assertSet('filters.region', 'north').assertSet('deferredFilters.region', 'north').assertSee(['nv-wi-chart-filter-content-actions-ctn', 'Update chart', 'Reset']);
     await chart.set('deferredFilters.region', 'east').assertSet('filters.region', 'north');
     await chart.call('applyFilters').assertSet('filters.region', 'east').assertDispatched('updateChartData', (_name, params) => params.data.datasets[0].label === 'Sales east');
     await chart.call('resetFilters').assertSet('filters.region', 'north').assertSet('deferredFilters.region', 'north');
@@ -191,14 +191,14 @@ test('chart deferred filters: applied by the Apply button, reset to the defaults
 
 test('chart empty state: actions (with or without a modal), custom view, isEmpty()', async () => {
     const chart = livewire(EmptyChart);
-    await chart.assertOk().assertSee(['fi-empty-state-footer', 'fi-ac fi-align-center', 'Refresh', 'Reset data', 'href="/docs"', 'wire:partial="action-modals"']);
+    await chart.assertOk().assertSee(['nv-empty-state-footer', 'nv-ac nv-align-center', 'Refresh', 'Reset data', 'href="/docs"', 'wire:partial="action-modals"']);
     await chart.callAction('refresh').assertNotified('Refreshed');
     await chart.mountAction('confirmReset').assertActionMounted('confirmReset').callMountedAction().assertNotified('Reset done').assertActionNotMounted();
     // Only the declared actions can be mounted; a link is not mountable.
     await chart.call('mountAction', 'deleteEverything').assertNotFound();
     await chart.call('mountAction', 'docs').assertNotFound();
-    await livewire(CustomEmptyChart).assertSee('<p class="custom-empty">Nothing here</p>').assertDontSee('fi-empty-state-heading');
-    await livewire(NotEmptyChart).assertSee('fi-empty-state').assertDontSee('wire:partial="action-modals"');
+    await livewire(CustomEmptyChart).assertSee('<p class="custom-empty">Nothing here</p>').assertDontSee('nv-empty-state-heading');
+    await livewire(NotEmptyChart).assertSee('nv-empty-state').assertDontSee('wire:partial="action-modals"');
 });
 
 test('chart options may be raw JavaScript', async () => {
@@ -207,7 +207,7 @@ test('chart options may be raw JavaScript', async () => {
 });
 
 test('a lazy widget may customize its loading placeholder', async () => {
-    await livewire(LazyDashboard).assertOk().assertSee(['class="custom-placeholder fi-grid-col lg:fi-grid-col-span"', 'Loading', '__lazyLoad']);
+    await livewire(LazyDashboard).assertOk().assertSee(['class="custom-placeholder nv-grid-col lg:nv-grid-col-span"', 'Loading', '__lazyLoad']);
     // Then it loads like any widget.
     await livewire(LazyStats).assertOk().assertSeeText('Lazy');
 });

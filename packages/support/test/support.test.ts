@@ -14,10 +14,10 @@ test('js() escapes quotes and HTML characters inside JS literals', () => {
 });
 
 test('Attributes: merge puts defaults first, class() appends, true becomes the attribute name', () => {
-    const a = new Attributes().grid({}).merge({ 'x-data': 'x', hidden: null }).class(['fi-sc', { 'fi-inline': false }, 'fi-sc-has-gap']);
-    assert.equal(a.toHtml(), 'x-data="x" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"');
-    assert.equal(new Attributes().merge({ autofocus: true, disabled: false, id: 'form.email', 'wire:model': 'data.email' }).class(['fi-input']).toHtml(), 'autofocus="autofocus" id="form.email" wire:model="data.email" class="fi-input"');
-    assert.equal(new Attributes().gridColumn({ default: 1 }, true).toHtml(), 'class="fi-grid-col fi-hidden" style="--col-span-default: span 1 / span 1;"');
+    const a = new Attributes().grid({}).merge({ 'x-data': 'x', hidden: null }).class(['nv-sc', { 'nv-inline': false }, 'nv-sc-has-gap']);
+    assert.equal(a.toHtml(), 'x-data="x" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"');
+    assert.equal(new Attributes().merge({ autofocus: true, disabled: false, id: 'form.email', 'wire:model': 'data.email' }).class(['nv-input']).toHtml(), 'autofocus="autofocus" id="form.email" wire:model="data.email" class="nv-input"');
+    assert.equal(new Attributes().gridColumn({ default: 1 }, true).toHtml(), 'class="nv-grid-col nv-hidden" style="--col-span-default: span 1 / span 1;"');
     assert.equal(cls(['a', { b: true, c: false }, null, 'd']), 'a b d');
 });
 
@@ -29,7 +29,7 @@ test('colors: oklch to rgb conversion and contrast (2.2 gamma formula)', () => {
 
 test('filled button: color classes for primary = Blue, none for gray', () => {
     const classes = new ColorManager().register({ primary: Color.Blue }).getComponentClasses('button', 'primary').join(' ');
-    assert.equal(classes, 'fi-color fi-color-primary fi-bg-color-600 hover:fi-bg-color-500 dark:fi-bg-color-600 dark:hover:fi-bg-color-500 fi-text-color-0 hover:fi-text-color-0 dark:fi-text-color-0 dark:hover:fi-text-color-0');
+    assert.equal(classes, 'nv-color nv-color-primary nv-bg-color-600 hover:nv-bg-color-500 dark:nv-bg-color-600 dark:hover:nv-bg-color-500 nv-text-color-0 hover:nv-text-color-0 dark:nv-text-color-0 dark:hover:nv-text-color-0');
     assert.deepEqual(new ColorManager().getComponentClasses('button', 'gray'), []);
     // Amber (default primary): light 400 background with dark text.
     assert.equal(buttonColorMap(Color.Amber).bg, 400);
@@ -37,8 +37,8 @@ test('filled button: color classes for primary = Blue, none for gray', () => {
 });
 
 test('Heroicons icon and translations', () => {
-    assert.match(icon('m-eye'), /^<svg class="fi-icon fi-size-md" xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">/);
-    assert.equal(t('filament-panels::auth/pages/login.form.email.label'), 'Email address');
-    assert.equal(t('filament-panels::auth/pages/login.form.email.label', {}, 'fr'), 'Adresse e-mail');
-    assert.equal(t('filament-panels::auth/pages/login.messages.failed'), 'These credentials do not match our records.');
+    assert.match(icon('m-eye'), /^<svg class="nv-icon nv-size-md" xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">/);
+    assert.equal(t('navette-panels::auth/pages/login.form.email.label'), 'Email address');
+    assert.equal(t('navette-panels::auth/pages/login.form.email.label', {}, 'fr'), 'Adresse e-mail');
+    assert.equal(t('navette-panels::auth/pages/login.messages.failed'), 'These credentials do not match our records.');
 });

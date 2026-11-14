@@ -1,0 +1,46 @@
+.nv-simple-user-menu-ctn {
+    @apply flex items-center gap-x-4;
+}
+
+.nv-topbar .nv-user-menu-trigger {
+    @apply shrink-0;
+}
+
+.nv-sidebar .nv-user-menu-trigger {
+    @apply flex w-full items-center justify-center gap-x-3 rounded-lg p-2 text-sm font-medium outline-hidden transition duration-75;
+
+    & .nv-user-avatar {
+        @apply shrink-0;
+    }
+
+    & .nv-icon {
+        @apply ms-auto size-5 shrink-0 text-gray-400 transition duration-75 group-hover:text-gray-500 group-focus-visible:text-gray-500 dark:text-gray-500 dark:group-hover:text-gray-400 dark:group-focus-visible:text-gray-400;
+    }
+
+    &:hover {
+        & .nv-icon {
+            @apply text-gray-500 dark:text-gray-400;
+        }
+    }
+
+    &:focus-visible {
+        & .nv-icon {
+            @apply text-gray-500 dark:text-gray-400;
+        }
+    }
+
+    .nv-user-menu-trigger-text {
+        @apply grid justify-items-start text-start text-gray-950 dark:text-white;
+    }
+}
+
+.nv-sidebar {
+    & .nv-user-menu {
+        & .nv-dropdown-panel {
+            max-width: max(
+                14rem,
+                calc(100% - var(--sidebar-footer-margin-x) * 2)
+            ) !important;
+        }
+    }
+}

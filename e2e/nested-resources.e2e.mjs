@@ -14,7 +14,7 @@ const { step, exitCode } = reporter({ errorLines: 5 });
 const db = openDatabase(dbFile);
 const [project, other] = db.prepare('select id, name from projects where deleted_at is null order by id limit 2').all();
 const foreignTask = db.prepare('select id from tasks where project_id = ? order by id limit 1').get(other.id);
-const crumbs = async () => (await page.locator('.fi-breadcrumbs-item').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+const crumbs = async () => (await page.locator('.nv-breadcrumbs-item').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
 const until = async (check, label) => { for (let i = 0; i < 40; i++) { if (await check()) return; await page.waitForTimeout(250); } throw new Error(`timed out waiting for: ${label}`); };
 const title = `Nested task ${Date.now()}`;
 let created = null;
@@ -23,7 +23,7 @@ await login(page, BASE, user);
 try {
     await step('the Tasks relation manager links "New task" to the create page under the project', async () => {
         await page.goto(`${BASE}/projects/${project.id}?relation=tasks`);
-        const create = page.locator('[id$="relationManagerTabs"] a.fi-btn', { hasText: 'New task' }).first();
+        const create = page.locator('[id$="relationManagerTabs"] a.nv-btn', { hasText: 'New task' }).first();
         await create.waitFor({ timeout: 10000 });
         assert.equal(new URL(await create.getAttribute('href'), BASE).pathname, `/projects/${project.id}/tasks/create`);
         await create.click();
@@ -46,18 +46,18 @@ try {
         await page.locator('form#form button[type=submit]').first().click();
         await page.getByText('Saved').first().waitFor({ timeout: 10000 });
         assert.equal(db.prepare('select title, project_id from tasks where id = ?').get(created.id).title, `${title} (edited)`);
-        const tasksCrumb = page.locator('.fi-breadcrumbs-item a', { hasText: 'Tasks' });
+        const tasksCrumb = page.locator('.nv-breadcrumbs-item a', { hasText: 'Tasks' });
         const href = new URL(await tasksCrumb.getAttribute('href'), BASE);
         assert.equal(`${href.pathname}${href.search}`, `/projects/${project.id}?relation=tasks`);
     });
     await step('a row of the relation manager opens the task under its project', async () => {
         await page.goto(`${BASE}/projects/${project.id}?relation=tasks`);
-        const search = page.locator('[id$="relationManagerTabs"] .fi-ta-search-field input').first();
+        const search = page.locator('[id$="relationManagerTabs"] .nv-ta-search-field input').first();
         await search.waitFor({ timeout: 10000 });
         await search.fill(`${title} (edited)`);
-        const row = page.locator('[id$="relationManagerTabs"] .fi-ta-row', { hasText: `${title} (edited)` }).first();
+        const row = page.locator('[id$="relationManagerTabs"] .nv-ta-row', { hasText: `${title} (edited)` }).first();
         await row.waitFor({ timeout: 10000 });
-        await row.locator('.fi-ta-cell a').first().click();
+        await row.locator('.nv-ta-cell a').first().click();
         await page.waitForURL((url) => url.pathname === `/projects/${project.id}/tasks/${created.id}/edit`, { timeout: 10000 });
     });
     await step('a forged URL with a task of another project, or an unknown project, is refused (404)', async () => {
@@ -68,8 +68,8 @@ try {
     });
     await step('deleting the task goes back to the project, on its Tasks tab', async () => {
         await page.goto(`${BASE}/projects/${project.id}/tasks/${created.id}/edit`);
-        await page.locator('.fi-header .fi-btn', { hasText: 'Delete' }).first().click();
-        await page.locator('.fi-modal.fi-modal-open .fi-modal-footer .fi-btn', { hasText: 'Delete' }).click();
+        await page.locator('.nv-header .nv-btn', { hasText: 'Delete' }).first().click();
+        await page.locator('.nv-modal.nv-modal-open .nv-modal-footer .nv-btn', { hasText: 'Delete' }).click();
         await page.waitForURL((url) => url.pathname === `/projects/${project.id}` && url.search === '?relation=tasks', { timeout: 10000 });
         assert.equal(db.prepare('select count(*) as n from tasks where id = ?').get(created.id).n, 0);
     });
@@ -78,9 +78,9 @@ try {
     await step('singular resource: the site settings are a menu item opening the edit page at the resource URL', async () => {
         db.prepare("delete from settings where \"group\" = 'site' and name = 'general'").run();
         await page.goto(`${BASE}/lab`);
-        await page.locator('.fi-sidebar-item a', { hasText: 'Site Settings' }).click();
+        await page.locator('.nv-sidebar-item a', { hasText: 'Site Settings' }).click();
         await page.waitForURL((url) => url.pathname === '/lab/site-settings');
-        assert.equal((await page.locator('.fi-header-heading').innerText()).trim(), 'Site Settings');
+        assert.equal((await page.locator('.nv-header-heading').innerText()).trim(), 'Site Settings');
         assert.equal(await page.locator('[id="form.site_name"]').inputValue(), 'Navette Lab', 'the defaults, as there is no record yet');
         assert.equal(await page.locator('form#form button', { hasText: 'Cancel' }).count(), 0);
     });

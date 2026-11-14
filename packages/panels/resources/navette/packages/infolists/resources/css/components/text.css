@@ -1,0 +1,234 @@
+.nv-in-text {
+    @apply w-full;
+
+    &.nv-numeric {
+        /* Numeric and money entries use tabular figures, so digits line up
+           down a column of entries. */
+        @apply tabular-nums;
+    }
+
+    &.nv-in-text-affixed {
+        @apply flex gap-3;
+    }
+
+    & .nv-in-text-affixed-content {
+        @apply min-w-0 flex-1;
+    }
+
+    & .nv-in-text-affix {
+        @apply flex items-center gap-3 self-stretch;
+    }
+
+    &.nv-in-text-list-limited {
+        /* Add space between content and list limit message. */
+        @apply flex flex-col;
+
+        &.nv-in-text-has-badges {
+            /* When the content contains badges, more gap is required to balance the spacing. */
+            @apply gap-y-2;
+        }
+
+        &:not(.nv-in-text-has-badges) {
+            /* When the content does not contain badges, less gap is required to balance the spacing. */
+            @apply gap-y-1;
+        }
+    }
+
+    ul&.nv-bulleted,
+    &.nv-bulleted ul {
+        @apply list-inside list-disc;
+    }
+
+    &:not(.nv-in-text-has-line-breaks) {
+        ul&.nv-in-text-has-badges,
+        &.nv-in-text-has-badges ul {
+            /* A list of badges without line breaks need to remain on the same line, not wrap */
+            @apply flex gap-x-1.5;
+
+            &.nv-wrapped,
+            &:is(.nv-wrapped ul) {
+                /* When wrap is enabled, some badges can remain on the same line as others and some should wrap */
+                @apply flex-wrap gap-y-1;
+            }
+        }
+    }
+
+    ul&.nv-in-text-has-badges,
+    &.nv-in-text-has-badges ul {
+        &.nv-in-text-has-line-breaks,
+        &:is(.nv-in-text-has-line-breaks ul) {
+            /* Add vertical gap between badges in a list with line breaks */
+            @apply flex flex-col gap-y-1;
+        }
+
+        &:not(ul.nv-in-text-has-line-breaks),
+        &:not(.nv-in-text-has-line-breaks ul) {
+            /* A list of badges without line breaks need to remain on the same line, not wrap */
+            @apply flex gap-x-1.5;
+
+            &.nv-wrapped,
+            &:is(.nv-wrapped ul) {
+                /* When wrap is enabled, some badges can remain on the same line as others and some should wrap */
+                @apply flex-wrap gap-y-1;
+            }
+        }
+    }
+
+    &.nv-wrapped:not(.nv-in-text-has-badges.nv-in-text-has-line-breaks) {
+        /* If the content has badges, and they have line breaks, setting `whitespace-normal` sometimes pushes the badge
+             onto the line below the bullet point if there is one, and badge content does not need to wrap anyway. */
+        @apply whitespace-normal;
+        @apply wrap-break-word;
+
+        & .nv-badge,
+        & .nv-in-text-list-limited-message {
+            /* Badge content and list limited message and actions should not wrap. */
+            @apply whitespace-nowrap;
+        }
+    }
+
+    & > .nv-in-text-list-limited-message {
+        @apply text-sm text-gray-500 dark:text-gray-400;
+    }
+
+    &.nv-align-center {
+        @apply text-center;
+
+        ul&,
+        & ul {
+            @apply justify-center;
+        }
+    }
+
+    &.nv-align-end,
+    &.nv-align-right {
+        @apply text-end;
+
+        ul&,
+        & ul {
+            @apply justify-end;
+        }
+    }
+
+    &.nv-align-justify,
+    &.nv-align-between {
+        @apply text-justify;
+
+        ul&,
+        & ul {
+            @apply justify-between;
+        }
+    }
+}
+
+.nv-in-text-item {
+    @apply text-gray-950 dark:text-white;
+
+    & a {
+        @apply hover:underline focus-visible:underline;
+    }
+
+    &:not(.nv-bulleted li.nv-in-text-item) {
+        /* Line clamping sets the `display` property of the list item to `-webkit-box` instead of `list-item`, which hides the bullet point. */
+        @apply line-clamp-(--line-clamp,none);
+    }
+
+    & > .nv-copyable {
+        @apply focus-visible:ring-primary-600 dark:focus-visible:ring-primary-500 cursor-pointer rounded-md outline-none focus-visible:ring-2;
+    }
+
+    &.nv-size-xs {
+        @apply text-xs;
+    }
+
+    &.nv-size-sm {
+        @apply text-sm;
+    }
+
+    &.nv-size-md {
+        @apply text-base;
+    }
+
+    &.nv-size-lg {
+        @apply text-lg;
+    }
+
+    &.nv-font-thin {
+        @apply font-thin;
+    }
+
+    &.nv-font-extralight {
+        @apply font-extralight;
+    }
+
+    &.nv-font-light {
+        @apply font-light;
+    }
+
+    &.nv-font-normal {
+        @apply font-normal;
+    }
+
+    &.nv-font-medium {
+        @apply font-medium;
+    }
+
+    &.nv-font-semibold {
+        @apply font-semibold;
+    }
+
+    &.nv-font-bold {
+        @apply font-bold;
+    }
+
+    &.nv-font-extrabold {
+        @apply font-extrabold;
+    }
+
+    &.nv-font-black {
+        @apply font-black;
+    }
+
+    &.nv-font-sans {
+        @apply font-sans;
+    }
+
+    &.nv-font-serif {
+        @apply font-serif;
+    }
+
+    &.nv-font-mono {
+        @apply font-mono;
+    }
+
+    &.nv-color {
+        @apply text-(--text) dark:text-(--dark-text);
+
+        li&::marker {
+            @apply text-gray-950;
+        }
+
+        @variant dark {
+            li&::marker {
+                @apply text-white;
+            }
+        }
+    }
+
+    &.nv-color-gray {
+        @apply text-gray-500 dark:text-gray-400;
+
+        li&::marker {
+            @apply text-gray-950;
+        }
+    }
+
+    & > .nv-icon,
+    & > span:not(.nv-badge) > .nv-icon {
+        @apply inline-block shrink-0 text-gray-400 dark:text-gray-500;
+
+        &.nv-color {
+            @apply text-color-500;
+        }
+    }
+}

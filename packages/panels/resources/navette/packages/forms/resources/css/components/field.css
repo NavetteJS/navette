@@ -1,0 +1,88 @@
+.nv-fo-field {
+    @apply grid gap-y-2;
+
+    &.nv-fo-field-has-inline-label {
+        @apply sm:grid-cols-3 sm:items-start sm:gap-x-4;
+
+        & .nv-fo-field-content-col {
+            @apply sm:col-span-2;
+        }
+    }
+
+    & .nv-fo-field-label-ctn,
+    & .nv-fo-field-label {
+        @apply flex items-start gap-x-3;
+
+        & > .nv-checkbox-input {
+            @apply mt-0.5 shrink-0;
+        }
+
+        & > .nv-toggle {
+            @apply -my-0.5;
+        }
+
+        & > .nv-sc:nth-child(1) {
+            @apply grow-0;
+        }
+
+        &.nv-hidden {
+            @apply hidden;
+        }
+    }
+
+    & .nv-fo-field-label-content {
+        @apply text-sm font-medium text-gray-950 dark:text-white;
+
+        & .nv-fo-field-label-required-mark {
+            @apply text-danger-600 dark:text-danger-400 font-medium;
+        }
+    }
+
+    & .nv-fo-field-label-col {
+        @apply grid h-full auto-cols-fr gap-y-2;
+
+        &.nv-vertical-align-start {
+            @apply sm:items-start;
+        }
+
+        &.nv-vertical-align-center {
+            @apply sm:items-center;
+        }
+
+        &.nv-vertical-align-end {
+            @apply sm:items-end;
+        }
+    }
+
+    & .nv-fo-field-content-col {
+        @apply grid auto-cols-fr gap-y-2;
+    }
+
+    & .nv-fo-field-content-slot {
+        @apply contents;
+    }
+
+    & .nv-fo-field-content-ctn {
+        @apply flex w-full items-center gap-x-3;
+
+        &.nv-empty {
+            @apply contents;
+
+            & > .nv-fo-field-content {
+                @apply contents;
+            }
+        }
+    }
+
+    & .nv-fo-field-content {
+        @apply w-full;
+    }
+
+    & .nv-fo-field-wrp-error-message {
+        @apply text-danger-600 dark:text-danger-400 text-sm;
+    }
+
+    & .nv-fo-field-wrp-error-list {
+        @apply list-inside list-disc space-y-0.5;
+    }
+}

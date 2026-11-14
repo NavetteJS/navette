@@ -30,21 +30,21 @@ test('`paginated(false)` and the `all` option load every record; an undeclared p
     assert.equal((await getTableRecords(withAll, host({ tableRecordsPerPage: 'all' }), adapter)).records.length, 30);
     const unpaginated = new Table().paginated(false).columns([TextColumn.make('title')]);
     assert.equal((await getTableRecords(unpaginated, host({ paginators: { page: 3 } }), adapter)).records.length, 30);
-    assert.doesNotMatch(clean(await renderTable(unpaginated, host(), adapter)), /fi-pagination/);
-    assert.match(clean(await renderTable(paginated, host(), adapter)), /fi-pagination/);
+    assert.doesNotMatch(clean(await renderTable(unpaginated, host(), adapter)), /nv-pagination/);
+    assert.match(clean(await renderTable(paginated, host(), adapter)), /nv-pagination/);
     assert.deepEqual(new Table().paginated([25, 50]).getPageOptions(), [25, 50]);
 });
 
 test('empty state: custom heading, description, icon and actions, or custom HTML', async () => {
     const emptyQuery = (table: Table) => table.columns([TextColumn.make('title').searchable()]);
     const defaults = clean(await renderTable(emptyQuery(new Table().pluralModelLabel('notes')), host({ tableSearch: 'nothing matches' }), adapter));
-    assert.match(defaults, /<h2 class="fi-ta-empty-state-heading">No notes<\/h2>/);
-    assert.doesNotMatch(defaults, /fi-ta-empty-state-description/);
+    assert.match(defaults, /<h2 class="nv-ta-empty-state-heading">No notes<\/h2>/);
+    assert.doesNotMatch(defaults, /nv-ta-empty-state-description/);
     const custom = clean(await renderTable(emptyQuery(new Table().emptyStateHeading('Nothing yet').emptyStateDescription(() => 'Write your first note.').emptyStateIcon('o-document')), host({ tableSearch: 'nothing matches' }), adapter, { emptyStateActions: ['<button>New note</button>'] }));
-    assert.match(custom, /<h2 class="fi-ta-empty-state-heading">Nothing yet<\/h2><p class="fi-ta-empty-state-description">Write your first note\.<\/p><div class="fi-ta-actions fi-align-center fi-wrapped"><button>New note<\/button><\/div>/);
+    assert.match(custom, /<h2 class="nv-ta-empty-state-heading">Nothing yet<\/h2><p class="nv-ta-empty-state-description">Write your first note\.<\/p><div class="nv-ta-actions nv-align-center nv-wrapped"><button>New note<\/button><\/div>/);
     const html = clean(await renderTable(emptyQuery(new Table().emptyState('<div class="my-empty">Empty</div>')), host({ tableSearch: 'nothing matches' }), adapter));
     assert.match(html, /<div class="my-empty">Empty<\/div>/);
-    assert.doesNotMatch(html, /fi-ta-empty-state-heading/);
+    assert.doesNotMatch(html, /nv-ta-empty-state-heading/);
 });
 
 test('`Table.configureUsing()` applies to new tables, before their own options', () => {
@@ -64,17 +64,17 @@ test('row actions position, responsive columns, selectability and selection limi
     const columns = () => [TextColumn.make('title').visibleFrom('md').width(200).wrapHeader(), TextColumn.make('id').hiddenFrom('lg').grow()];
     const render = (table: Table) => renderTable(table.columns(columns()), host(), adapter, { bulkActions: ['<button>Delete</button>'], rowActionsHtml: actionsHtml });
     const after = clean(await render(new Table()));
-    assert.match(after, /class="fi-ta-cell fi-ta-cell-id lg:fi-hidden">[\s\S]*?<\/td><td class="fi-ta-cell"><div class="fi-ta-actions"><button>Edit<\/button>/);
-    assert.match(after, /class="fi-ta-header-cell fi-ta-header-cell-title fi-wrapped md:fi-visible" style="width: 200px"/);
-    assert.match(after, /class="fi-ta-header-cell fi-ta-header-cell-id fi-growable lg:fi-hidden"/);
+    assert.match(after, /class="nv-ta-cell nv-ta-cell-id lg:nv-hidden">[\s\S]*?<\/td><td class="nv-ta-cell"><div class="nv-ta-actions"><button>Edit<\/button>/);
+    assert.match(after, /class="nv-ta-header-cell nv-ta-header-cell-title nv-wrapped md:nv-visible" style="width: 200px"/);
+    assert.match(after, /class="nv-ta-header-cell nv-ta-header-cell-id nv-growable lg:nv-hidden"/);
     const before = clean(await render(new Table().recordActionsPosition('before-columns')));
-    assert.match(before, /fi-ta-selection-cell"><input[^>]*><\/td><td class="fi-ta-cell"><div class="fi-ta-actions fi-align-start"><button>Edit<\/button>/);
+    assert.match(before, /nv-ta-selection-cell"><input[^>]*><\/td><td class="nv-ta-cell"><div class="nv-ta-actions nv-align-start"><button>Edit<\/button>/);
     const beforeCells = clean(await render(new Table().recordActionsPosition('before-cells')));
-    assert.match(beforeCells, /<td class="fi-ta-cell"><div class="fi-ta-actions fi-align-start"><button>Edit<\/button><\/div><\/td><td class="fi-ta-cell fi-ta-selection-cell">/);
+    assert.match(beforeCells, /<td class="nv-ta-cell"><div class="nv-ta-actions nv-align-start"><button>Edit<\/button><\/div><\/td><td class="nv-ta-cell nv-ta-selection-cell">/);
     const limited = clean(await render(new Table().maxSelectableRecords(3).checkIfRecordIsSelectableUsing((record: any) => record.title !== 'Note 1')));
     assert.match(limited, /maxSelectableRecords: 3,/);
     assert.match(limited, /x-bind:disabled="! areRecordsToggleable\(\[/);
-    assert.equal((limited.match(/class="fi-ta-record-checkbox/g) ?? []).length, 9, 'Note 1 has no checkbox');
+    assert.equal((limited.match(/class="nv-ta-record-checkbox/g) ?? []).length, 9, 'Note 1 has no checkbox');
     assert.match(limited, /value="29" x-ref="allSelectableRecordsCount"/);
 });
 
@@ -94,7 +94,7 @@ test('toolbar actions: buttons in the toolbar, and a bulk action group for the b
     assert.equal(table.getToolbarActions().length, 1);
     assert.equal(new Table().getBulkActions(), null);
     const html = clean(await renderTable(table, host(), adapter, { toolbarActions: ['<button>Export</button>'] }));
-    assert.match(html, /<div class="fi-ta-actions fi-align-start fi-wrapped"><button>Export<\/button>/);
+    assert.match(html, /<div class="nv-ta-actions nv-align-start nv-wrapped"><button>Export<\/button>/);
 });
 
 test('column layouts: `Grid`, collapsible `Panel`, `View`, `contentGrid()`, `grow()` and responsive components', async () => {
@@ -108,13 +108,13 @@ test('column layouts: `Grid`, collapsible `Panel`, `View`, `contentGrid()`, `gro
         Panel.make([TextColumn.make('id').label('Hidden id')]).collapsible(),
     ]);
     const html = clean(await renderTable(table, host(), adapter));
-    assert.match(html, /role="list" class="fi-grid md:fi-grid-cols xl:fi-grid-cols fi-ta-content fi-ta-content-grid" style="--cols-md: repeat\(2, minmax\(0, 1fr\)\); --cols-xl: repeat\(3, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
-    assert.match(html, /<div class="fi-grid-col fi-ta-col" style="--col-span-default: span 1 \/ span 1;"><div class="fi-ta-text/, 'grow(false)');
-    assert.match(html, /class="fi-grid-col fi-growable md:fi-hidden"[^>]*><div class="fi-ta-stack/);
+    assert.match(html, /role="list" class="nv-grid md:nv-grid-cols xl:nv-grid-cols nv-ta-content nv-ta-content-grid" style="--cols-md: repeat\(2, minmax\(0, 1fr\)\); --cols-xl: repeat\(3, minmax\(0, 1fr\)\); --cols-default: repeat\(1, minmax\(0, 1fr\)\);"/);
+    assert.match(html, /<div class="nv-grid-col nv-ta-col" style="--col-span-default: span 1 \/ span 1;"><div class="nv-ta-text/, 'grow(false)');
+    assert.match(html, /class="nv-grid-col nv-growable md:nv-hidden"[^>]*><div class="nv-ta-stack/);
     assert.match(html, /<span class="my-view">6<\/span>/);
-    assert.match(html, /class="fi-grid lg:fi-grid-cols fi-ta-grid fi-gap-sm lg:fi-gap-lg"/);
+    assert.match(html, /class="nv-grid lg:nv-grid-cols nv-ta-grid nv-gap-sm lg:nv-gap-lg"/);
     assert.match(html, /x-data="\{ isCollapsed: true \}"/);
-    assert.match(html, /<div x-collapse x-show="! isCollapsed" class="fi-ta-record-content fi-collapsible"><div class="fi-grid-col fi-growable"[^>]*><div class="fi-ta-panel">/);
-    assert.match(html, /class="fi-ta-record-collapse-btn fi-icon-btn"/);
-    assert.match(html, /fi-ta-actions fi-wrapped sm:fi-not-wrapped fi-align-start"|fi-ta-record-with-content-suffix/);
+    assert.match(html, /<div x-collapse x-show="! isCollapsed" class="nv-ta-record-content nv-collapsible"><div class="nv-grid-col nv-growable"[^>]*><div class="nv-ta-panel">/);
+    assert.match(html, /class="nv-ta-record-collapse-btn nv-icon-btn"/);
+    assert.match(html, /nv-ta-actions nv-wrapped sm:nv-not-wrapped nv-align-start"|nv-ta-record-with-content-suffix/);
 });

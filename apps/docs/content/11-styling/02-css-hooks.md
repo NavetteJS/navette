@@ -4,20 +4,20 @@ title: CSS hooks
 
 ## Introduction
 
-The markup rendered by Navette carries "hook" classes: classes that start with `fi-` and name the elements of the interface, such as `fi-sidebar`, `fi-btn` or `fi-ta-row`. You can target them with your own CSS to change the look of the panel, without overriding any view.
+The markup rendered by Navette carries "hook" classes: classes that start with `nv-` and name the elements of the interface, such as `nv-sidebar`, `nv-btn` or `nv-ta-row`. You can target them with your own CSS to change the look of the panel, without overriding any view.
 
 ## Discovering hook classes
 
-Open the developer tools of your browser and inspect the element you want to style. Its hook classes are listed in its `class` attribute, next to classes that describe its state (`fi-active`, `fi-disabled`), its size (`fi-size-md`) or its color (`fi-color-primary`).
+Open the developer tools of your browser and inspect the element you want to style. Its hook classes are listed in its `class` attribute, next to classes that describe its state (`nv-active`, `nv-disabled`), its size (`nv-size-md`) or its color (`nv-color-primary`).
 
 Some classes tell you where you are:
 
 | Element | Classes |
 |---|---|
-| `<body>` | `fi-body`, `fi-panel-<id of the panel>`, and `fi-body-has-topbar`, `fi-body-has-navigation`… |
-| A resource page | `fi-resource-<slug>` (slashes become dashes: `fi-resource-shop-customers`) |
-| The page of a record | `fi-resource-record-<key>` |
-| The type of resource page | `fi-resource-list-records-page`, `fi-resource-create-record-page`, `fi-resource-edit-record-page`, `fi-resource-view-record-page`, `fi-resource-manage-related-records-page` |
+| `<body>` | `nv-body`, `nv-panel-<id of the panel>`, and `nv-body-has-topbar`, `nv-body-has-navigation`… |
+| A resource page | `nv-resource-<slug>` (slashes become dashes: `nv-resource-shop-customers`) |
+| The page of a record | `nv-resource-record-<key>` |
+| The type of resource page | `nv-resource-list-records-page`, `nv-resource-create-record-page`, `nv-resource-edit-record-page`, `nv-resource-view-record-page`, `nv-resource-manage-related-records-page` |
 
 A custom page may add its own classes by overriding `getPageClasses()`:
 
@@ -40,7 +40,7 @@ In a [custom theme](/styling/overview#creating-a-custom-theme), compiled by Tail
 ```css
 @import '@navette-js/panels/theme.css';
 
-.fi-sidebar {
+.nv-sidebar {
     @apply bg-gray-50 dark:bg-gray-950;
 }
 ```
@@ -52,7 +52,7 @@ panel.renderHook('panels::styles.after', () => '<link rel="stylesheet" href="/cs
 ```
 
 ```css
-.fi-panel-admin .fi-sidebar-item-btn {
+.nv-panel-admin .nv-sidebar-item-btn {
     border-radius: 9999px;
 }
 ```
@@ -67,15 +67,15 @@ Some hook classes are abbreviated to keep them short:
 
 | Abbreviation | Meaning |
 |---|---|
-| `fi-ac` | actions |
-| `fi-btn` | button |
-| `fi-ctn` | container |
-| `fi-fo` | forms |
-| `fi-in` | infolists |
-| `fi-no` | notifications |
-| `fi-sc` | schemas |
-| `fi-ta` | tables |
-| `fi-wi` | widgets |
+| `nv-ac` | actions |
+| `nv-btn` | button |
+| `nv-ctn` | container |
+| `nv-fo` | forms |
+| `nv-in` | infolists |
+| `nv-no` | notifications |
+| `nv-sc` | schemas |
+| `nv-ta` | tables |
+| `nv-wi` | widgets |
 | `-wrp` | wrapper |
 | `-ctn` | container |
 
@@ -92,7 +92,7 @@ import { views } from '@navette-js/support';
 views.overrideFrom(path.resolve('./views/vendor'));
 ```
 
-A file `views/vendor/<namespace>/<path>.ejs` then replaces the view of the same name. For example, `views/vendor/filament-panels/components/user-menu.ejs` replaces the user menu. The original views are in the `views` folder of each package (`packages/panels/views`, `packages/tables/views`…).
+A file `views/vendor/<namespace>/<path>.ejs` then replaces the view of the same name. For example, `views/vendor/navette-panels/components/user-menu.ejs` replaces the user menu. The original views are in the `views` folder of each package (`packages/panels/views`, `packages/tables/views`…).
 
 <Aside variant="warning">
 An overridden view no longer follows the changes of the framework, and an unescaped value in it opens an XSS hole: in EJS, `<%= value %>` escapes and `<%- html %>` does not. Prefer CSS hooks and render hooks when they are enough.

@@ -93,15 +93,15 @@ test('cursor pagination: previous / next cursors, forged cursors give the first 
     // The pagination shows previous / next buttons calling `setPage()` with the cursors.
     setTablePage(table, h, first.cursor!.next);
     const html = clean(await renderTable(table, h, adapter));
-    assert.match(html, /fi-pagination fi-simple/);
+    assert.match(html, /nv-pagination nv-simple/);
     assert.match(html, /rel="prev" wire:click="setPage\(&#39;[A-Za-z0-9_-]+&#39;, &#39;page&#39;\)"/);
-    assert.doesNotMatch(html, /fi-pagination-overview/);
+    assert.doesNotMatch(html, /nv-pagination-overview/);
 });
 
 test('openRecordUrlInNewTab(): row links get target="_blank" instead of SPA navigation', async () => {
     const table = new Table().columns([TextColumn.make('title')]).recordUrl((record: any) => `/tasks/${record.id}`, true);
     const html = clean(await renderTable(table, host(), adapter));
-    assert.match(html, /<a href="\/tasks\/1" target="_blank" class="fi-ta-col">/);
+    assert.match(html, /<a href="\/tasks\/1" target="_blank" class="nv-ta-col">/);
     const perRecord = new Table().columns([TextColumn.make('title')]).recordUrl((record: any) => `/tasks/${record.id}`).openRecordUrlInNewTab((record: any) => record.id === 2);
     const mixed = clean(await renderTable(perRecord, host(), adapter));
     assert.match(mixed, /<a href="\/tasks\/2" target="_blank"/);
@@ -134,38 +134,38 @@ test('reordering: column, condition, direction, paginated while reordering, call
     const paged = new Table().columns([TextColumn.make('title')]).reorderable('sort').paginatedWhileReordering().paginationPageOptions([3]);
     const ph = host({ isTableReordering: true, tableRecordsPerPage: 3, paginators: { page: 2 } });
     const html = clean(await renderTable(paged, ph, adapter));
-    assert.match(html, /fi-pagination/);
+    assert.match(html, /nv-pagination/);
     assert.equal((html.match(/x-sortable-item=/g) ?? []).length, 3);
     await saveTableOrder(paged, ph, adapter, ['7', '6', '5']);
     assert.deepEqual((await db('tasks').whereIn('id', [5, 6, 7]).orderBy('id').select('sort')).map((row) => row.sort), [6, 5, 4]);
     // The trigger can be customized.
     const custom = new Table().columns([TextColumn.make('title')]).reorderable('sort').reorderRecordsTriggerAction((action, isReordering) => action.button().label(isReordering ? 'Done' : 'Reorder tasks'));
-    assert.match(clean(await renderTable(custom, host(), adapter)), /wire:click="toggleTableReordering" class="fi-force-enabled fi-ac-btn-action fi-btn fi-size-md"><svg[^]*?<\/svg>Reorder tasks</);
+    assert.match(clean(await renderTable(custom, host(), adapter)), /wire:click="toggleTableReordering" class="nv-force-enabled nv-ac-btn-action nv-btn nv-size-md"><svg[^]*?<\/svg>Reorder tasks</);
     assert.match(clean(await renderTable(custom, host({ isTableReordering: true }), adapter)), />Done</);
 });
 
 test('header: description, custom header HTML, polling, lazy loading and loading skeleton', async () => {
     const table = new Table().columns([TextColumn.make('title')]).heading('Tasks').description('Everything to do <soon>');
     const html = clean(await renderTable(table, host(), adapter));
-    assert.match(html, /<h2 class="fi-ta-header-heading"> Tasks <\/h2><p class="fi-ta-header-description"> Everything to do &lt;soon&gt; <\/p>/);
+    assert.match(html, /<h2 class="nv-ta-header-heading"> Tasks <\/h2><p class="nv-ta-header-description"> Everything to do &lt;soon&gt; <\/p>/);
     const custom = clean(await renderTable(new Table().columns([TextColumn.make('title')]).heading('Hidden').header('<div class="my-header">Mine</div>'), host(), adapter));
     assert.match(custom, /<div class="my-header">Mine<\/div>/);
-    assert.doesNotMatch(custom, /fi-ta-header-heading/);
+    assert.doesNotMatch(custom, /nv-ta-header-heading/);
     assert.match(clean(await renderTable(new Table().columns([TextColumn.make('title')]).poll('5s'), host(), adapter)), /<div wire:poll\.5s wire:loading\.attr="aria-busy"/);
     assert.equal(new Table().poll().getPollingInterval(), '10s');
     assert.equal(new Table().poll('1s; alert(1)').getPollingInterval(), null);
     assert.doesNotMatch(clean(await renderTable(new Table().columns([TextColumn.make('title')]).poll('5s').reorderable('sort'), host({ isTableReordering: true }), adapter)), /wire:poll/);
     const lazy = new Table().columns([TextColumn.make('title')]).lazyLoaded();
     const waiting = clean(await renderTable(lazy, host({ isTableLoaded: false }), adapter));
-    assert.match(waiting, /wire:init="loadTable" class="fi-ta fi-loading"/);
-    assert.match(waiting, /fi-ta-table-loading-ctn/);
-    assert.doesNotMatch(waiting, /fi-ta-records|fi-ta-empty-state|fi-pagination/);
+    assert.match(waiting, /wire:init="loadTable" class="nv-ta nv-loading"/);
+    assert.match(waiting, /nv-ta-table-loading-ctn/);
+    assert.doesNotMatch(waiting, /nv-ta-records|nv-ta-empty-state|nv-pagination/);
     const loaded = clean(await renderTable(lazy, host({ isTableLoaded: true }), adapter));
     assert.doesNotMatch(loaded, /wire:init/);
     assert.match(loaded, /Write docs/);
     assert.equal(new Table().deferLoading().isLazyLoaded(), true);
     const skeleton = clean(await renderTable(new Table().columns([TextColumn.make('title')]).loadingSkeleton(), host(), adapter));
-    assert.match(skeleton, /wire:loading\.class\.delay\.default="fi-ta-content-loading"/);
+    assert.match(skeleton, /wire:loading\.class\.delay\.default="nv-ta-content-loading"/);
     assert.match(skeleton, /<tbody wire:loading\.attr\.delay\.default="inert"/);
 });
 
@@ -204,7 +204,7 @@ test('search: searchUsing(), table searchable() with extra columns, column lists
     assert.match(clean(await renderTable(base().searchOnBlur(), host(), adapter)), /wire:model\.live\.blur="tableSearch"/);
     assert.equal(new Table().searchDebounce('1s;x').getSearchDebounce(), '500ms');
     // A table with only extra search columns shows the search field.
-    assert.match(clean(await renderTable(extra, host(), adapter)), /fi-ta-search-field/);
+    assert.match(clean(await renderTable(extra, host(), adapter)), /nv-ta-search-field/);
 });
 
 test('sort: column lists and queries, default sort callback, default sort after the user sort, defaultKeySort(false), option label', async () => {
@@ -225,7 +225,7 @@ test('sort: column lists and queries, default sort callback, default sort after 
     assert.equal(getTableQuery(new Table().defaultKeySort(false), h(null)).keySort, false);
     assert.equal(new Table().getDefaultSortOptionLabel(), '-');
     const stacked = clean(await renderTable(new Table().columns([TextColumn.make('title').sortable()]).stackedOnMobile().defaultSortOptionLabel('No sort'), host(), adapter));
-    assert.match(stacked, /<select class="fi-select-input" x-model="column"><option value="">No sort<\/option>/);
+    assert.match(stacked, /<select class="nv-select-input" x-model="column"><option value="">No sort<\/option>/);
 });
 
 test('striped rows, pushColumns() and rowLoop', async () => {
@@ -235,7 +235,7 @@ test('striped rows, pushColumns() and rowLoop', async () => {
     assert.match(html, />#1\/3</);
     assert.match(html, />#3\/3</);
     const rows = html.match(/<tr wire:key="H\.table\.records\.[^"]+"[^>]*class="([^"]*)"/g) ?? [];
-    assert.deepEqual(rows.map((row) => row.includes('fi-striped')), [false, true, false]);
+    assert.deepEqual(rows.map((row) => row.includes('nv-striped')), [false, true, false]);
     assert.equal(getRowLoop(), null);
 });
 
@@ -278,32 +278,32 @@ test('column manager: groups in the state, sanitized order and toggles, reordera
 test('column manager markup: reorderable, live, modal layout, trigger action, reset position, columns', async () => {
     const columns = () => [TextColumn.make('title').toggleable(), TextColumn.make('priority')];
     const dropdown = clean(await renderTable(new Table().columns(columns()), host(), adapter));
-    assert.match(dropdown, /fi-ta-col-manager-dropdown/);
+    assert.match(dropdown, /nv-ta-col-manager-dropdown/);
     assert.match(dropdown, /isLive: false/);
-    assert.match(dropdown, /fi-ta-col-manager-actions-ctn/);
-    assert.doesNotMatch(dropdown, /x-sortable-handle aria-hidden="true" tabindex="-1" x-on:click\.stop class="fi-ta-col-manager-reorder-handle/);
+    assert.match(dropdown, /nv-ta-col-manager-actions-ctn/);
+    assert.doesNotMatch(dropdown, /x-sortable-handle aria-hidden="true" tabindex="-1" x-on:click\.stop class="nv-ta-col-manager-reorder-handle/);
     const reorderable = clean(await renderTable(new Table().columns(columns()).reorderableColumns().deferColumnManager(false).columnManagerColumns(2), host(), adapter));
     assert.match(reorderable, /isLive: true/);
     assert.match(reorderable, /x-on:end\.stop="reorderColumns\(\$event\.target\.sortable\.toArray\(\)\)"/);
-    assert.match(reorderable, /fi-ta-col-manager-reorder-handle/);
+    assert.match(reorderable, /nv-ta-col-manager-reorder-handle/);
     assert.match(reorderable, /x-bind:data-testid="'column-manager-' \+ column\.name \+ '-move-up'"/);
     assert.match(reorderable, /--cols-lg: 2;/);
-    assert.match(reorderable, /fi-dropdown-panel fi-width-2xl/);
-    assert.doesNotMatch(reorderable, /fi-ta-col-manager-actions-ctn/);
+    assert.match(reorderable, /nv-dropdown-panel nv-width-2xl/);
+    assert.doesNotMatch(reorderable, /nv-ta-col-manager-actions-ctn/);
     // Reorderable columns alone show the column manager, without checkboxes.
     const noToggles = clean(await renderTable(new Table().columns([TextColumn.make('title'), TextColumn.make('priority')]).reorderableColumns(), host(), adapter));
-    assert.match(noToggles, /fi-ta-col-manager/);
-    assert.doesNotMatch(noToggles, /fi-ta-col-manager-column-checkbox', column\.name\)"\s*\/?>/);
+    assert.match(noToggles, /nv-ta-col-manager/);
+    assert.doesNotMatch(noToggles, /nv-ta-col-manager-column-checkbox', column\.name\)"\s*\/?>/);
     const modal = clean(await renderTable(new Table().columns(columns()).columnManagerLayout('modal').columnManagerResetActionPosition('footer').columnManagerTriggerAction((action) => action.button().label('Columns')), host(), adapter));
-    assert.match(modal, /fi-ta-col-manager-modal/);
+    assert.match(modal, /nv-ta-col-manager-modal/);
     assert.match(modal, /x-on:apply-table-column-manager\.window="applyTableColumnManager\(\)"/);
-    assert.match(modal, /data-fi-modal-id="H-table-column-manager"/);
-    assert.match(modal, /x-on:click="\$dispatch\('open-modal', \{ id: &#039;H-table-column-manager&#039; \}\)" class="fi-force-enabled fi-ac-btn-action fi-btn fi-size-md"><svg[^]*?<\/svg>Columns</);
+    assert.match(modal, /data-nv-modal-id="H-table-column-manager"/);
+    assert.match(modal, /x-on:click="\$dispatch\('open-modal', \{ id: &#039;H-table-column-manager&#039; \}\)" class="nv-force-enabled nv-ac-btn-action nv-btn nv-size-md"><svg[^]*?<\/svg>Columns</);
     const slideOver = clean(await renderTable(new Table().columns(columns()).columnManagerTriggerAction((action) => action.slideOver().modalHeading('Pick columns')), host(), adapter));
-    assert.match(slideOver, /fi-modal-slide-over/);
+    assert.match(slideOver, /nv-modal-slide-over/);
     assert.match(slideOver, />Pick columns</);
     const footer = clean(await renderTable(new Table().columns(columns()).columnManagerResetActionPosition('footer').columnManagerMaxHeight('20rem').columnManagerWidth('md'), host(), adapter));
-    assert.match(footer, /fi-dropdown-panel fi-width-md fi-scrollable" style="max-height: 20rem;"/);
-    assert.match(footer, /fi-ta-col-manager-actions-ctn">\s*<button[^>]*>\s*Apply columns<\/button>\s*<button[^>]*wire:click="resetTableColumnManager" x-on:click="resetDeferredColumns">Reset</);
+    assert.match(footer, /nv-dropdown-panel nv-width-md nv-scrollable" style="max-height: 20rem;"/);
+    assert.match(footer, /nv-ta-col-manager-actions-ctn">\s*<button[^>]*>\s*Apply columns<\/button>\s*<button[^>]*wire:click="resetTableColumnManager" x-on:click="resetDeferredColumns">Reset</);
     assert.equal(new Table().columnManagerColumns(3).getColumnManagerWidth(), '4xl');
 });

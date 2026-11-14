@@ -1,0 +1,311 @@
+.nv-ta-ctn {
+    @apply relative flex rounded-xl bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10;
+
+    &:not(.nv-ta-ctn-with-header) {
+        @apply overflow-hidden;
+    }
+
+    &.nv-loading {
+        @apply animate-pulse;
+    }
+
+    & .nv-ta-header {
+        @apply flex flex-col gap-3 border-b border-gray-200 p-4 sm:px-6 dark:border-white/10;
+
+        &.nv-ta-header-adaptive-actions-position {
+            @apply sm:flex-row sm:items-center;
+
+            & .nv-ta-actions {
+                @apply sm:ms-auto;
+            }
+
+            &:not(:has(.nv-ta-header-heading)) {
+                &:not(:has(.nv-ta-header-description)) {
+                    & .nv-ta-actions {
+                        @apply ms-auto;
+                    }
+                }
+            }
+        }
+
+        & .nv-ta-actions {
+            /* The negative margins let the buttons overhang the header's vertical padding, so a header with actions matches the height of one without them. They are applied to the container instead of the buttons so wrapped rows of actions keep their gap, laddered so the largest button size present wins, and scoped to `sm` since the header stacks vertically below it. */
+            &:has(.nv-btn.nv-size-xs:not(.nv-dropdown-panel *)) {
+                @apply sm:-my-0.5;
+            }
+
+            &:has(.nv-btn.nv-size-sm:not(.nv-dropdown-panel *)) {
+                @apply sm:-my-1;
+            }
+
+            &:has(.nv-btn.nv-size-md:not(.nv-dropdown-panel *)) {
+                @apply sm:-my-1.5;
+            }
+
+            &:has(.nv-btn.nv-size-lg:not(.nv-dropdown-panel *)) {
+                @apply sm:-my-2;
+            }
+
+            &:has(.nv-btn.nv-size-xl:not(.nv-dropdown-panel *)) {
+                @apply sm:-my-2.5;
+            }
+        }
+
+        & .nv-ta-header-heading {
+            @apply text-base leading-6 font-semibold text-gray-950 dark:text-white;
+        }
+
+        & .nv-ta-header-description {
+            @apply mt-1 text-sm text-gray-600 dark:text-gray-400;
+        }
+    }
+
+    & .nv-ta-header-toolbar {
+        @apply flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-4 py-3 sm:px-6 dark:border-white/10;
+
+        & > * {
+            @apply flex min-h-9 items-center gap-x-4;
+        }
+
+        & > :nth-child(1) {
+            @apply shrink-0;
+        }
+
+        & > :nth-child(2) {
+            @apply ms-auto;
+        }
+
+        & .nv-ta-grouping-settings {
+            & .nv-dropdown {
+                &.sm\:nv-hidden {
+                    @apply sm:hidden;
+                }
+
+                & .nv-ta-grouping-settings-fields {
+                    @apply grid gap-y-6 p-6;
+
+                    & label {
+                        @apply grid gap-y-2 text-sm leading-6 font-medium text-gray-950 dark:text-white;
+                    }
+                }
+            }
+
+            & > .nv-ta-grouping-settings-fields {
+                @apply hidden items-center gap-x-3 sm:flex;
+            }
+        }
+
+        & .nv-ta-filters-dropdown {
+            & .nv-ta-filters {
+                @apply p-6;
+            }
+        }
+
+        & .nv-ta-col-manager-dropdown {
+            & .nv-ta-col-manager {
+                @apply p-6;
+            }
+        }
+    }
+
+    & .nv-ta-filters {
+        @apply grid gap-y-4;
+
+        &.nv-ta-filters-below-content {
+            @apply border-t border-gray-200 p-4 sm:px-6 dark:border-white/10;
+        }
+
+        & .nv-ta-filters-header {
+            @apply flex items-center justify-between;
+
+            & .nv-ta-filters-heading {
+                @apply text-base leading-6 font-semibold text-gray-950 dark:text-white;
+            }
+
+            & .nv-loading-indicator {
+                @apply text-gray-400 dark:text-gray-500;
+            }
+        }
+
+        & .nv-ta-filters-actions-ctn {
+            @apply flex gap-3;
+        }
+    }
+
+    & .nv-ta-filters-above-content-ctn {
+        @apply grid border-b border-gray-200 px-4 py-4 sm:px-6 dark:border-white/10;
+
+        & .nv-ta-filters-trigger-action-ctn {
+            @apply ms-auto;
+        }
+
+        &.nv-open {
+            & .nv-ta-filters-trigger-action-ctn {
+                @apply mt-3;
+            }
+
+            &:has(.nv-ta-filters-actions-ctn) {
+                & .nv-ta-filters-trigger-action-ctn {
+                    @apply -mt-7;
+                }
+            }
+        }
+    }
+
+    & .nv-ta-reorder-indicator {
+        @apply flex items-center gap-x-3 border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-sm leading-6 font-medium text-gray-700 sm:px-6 dark:border-white/10 dark:bg-white/5 dark:text-gray-200;
+
+        & .nv-loading-indicator {
+            @apply text-gray-400 dark:text-gray-500;
+        }
+    }
+
+    & .nv-ta-selection-indicator {
+        @apply flex flex-col justify-between gap-y-1 border-b border-gray-200 bg-gray-50 px-3 py-2 sm:flex-row sm:items-center sm:px-6 sm:py-1.5 dark:border-white/10 dark:bg-white/5;
+
+        & .nv-loading-indicator {
+            @apply text-gray-400 dark:text-gray-500;
+        }
+
+        & .nv-ta-selection-indicator-actions-ctn {
+            @apply flex gap-x-3;
+        }
+
+        & > * {
+            @apply flex gap-x-3;
+        }
+
+        & > :nth-child(1) {
+            @apply text-sm leading-6 font-medium text-gray-700 dark:text-gray-200;
+        }
+
+        & > :nth-child(2) {
+            @apply ms-auto;
+        }
+    }
+
+    & .nv-ta-filter-indicators {
+        @apply flex items-start justify-between gap-x-3 border-b border-gray-200 bg-gray-50 px-3 py-1.5 sm:px-6 dark:border-white/10 dark:bg-white/5;
+
+        & > :nth-child(1) {
+            @apply flex flex-col gap-x-3 gap-y-1 sm:flex-row;
+
+            & .nv-ta-filter-indicators-label {
+                @apply text-sm leading-6 font-medium whitespace-nowrap text-gray-700 dark:text-gray-200;
+            }
+
+            & .nv-ta-filter-indicators-badges-ctn {
+                @apply flex flex-wrap gap-1.5;
+            }
+        }
+
+        & > :nth-child(2).nv-icon-btn {
+            @apply -mt-1;
+        }
+    }
+
+    & .nv-pagination {
+        @apply border-t border-gray-200 px-3 py-3 sm:px-6 dark:border-white/10;
+    }
+
+    & .nv-ta-table-loading-ctn {
+        @apply flex h-32 items-center justify-center;
+    }
+
+    & .nv-ta-main {
+        @apply min-w-0 flex-1;
+    }
+
+    & .nv-ta-filters-trigger-action-ctn.lg\:nv-hidden {
+        @apply lg:hidden;
+    }
+
+    & .nv-ta-filters-before-content-ctn,
+    & .nv-ta-filters-after-content-ctn {
+        @apply absolute z-20 hidden w-screen max-w-[14rem]! shrink-0 rounded-lg border-gray-200 bg-white shadow-lg ring-1 ring-gray-950/5 transition lg:static lg:z-auto lg:shadow-none lg:ring-0 dark:border-white/10 dark:bg-gray-900 dark:ring-white/10;
+
+        & .nv-ta-filters {
+            @apply p-6 lg:py-4;
+        }
+
+        &.nv-open {
+            @apply block;
+        }
+
+        &.lg\:nv-open {
+            @apply lg:block;
+        }
+
+        &.nv-opacity-0 {
+            @apply opacity-0;
+        }
+
+        &.nv-width-3xs {
+            @apply max-w-3xs!;
+        }
+
+        &.nv-width-2xs {
+            @apply max-w-2xs!;
+        }
+
+        &.nv-width-xs {
+            @apply max-w-xs!;
+        }
+
+        &.nv-width-sm {
+            @apply max-w-sm!;
+        }
+
+        &.nv-width-md {
+            @apply max-w-md!;
+        }
+
+        &.nv-width-lg {
+            @apply max-w-lg!;
+        }
+
+        &.nv-width-xl {
+            @apply max-w-xl!;
+        }
+
+        &.nv-width-2xl {
+            @apply max-w-2xl!;
+        }
+
+        &.nv-width-3xl {
+            @apply max-w-3xl!;
+        }
+
+        &.nv-width-4xl {
+            @apply max-w-4xl!;
+        }
+
+        &.nv-width-5xl {
+            @apply max-w-5xl!;
+        }
+
+        &.nv-width-6xl {
+            @apply max-w-6xl!;
+        }
+
+        &.nv-width-7xl {
+            @apply max-w-7xl!;
+        }
+
+        &.nv-width-none {
+            @apply max-w-none!;
+        }
+
+        &.nv-width-container {
+            @apply container!;
+        }
+    }
+
+    & .nv-ta-filters-before-content-ctn {
+        @apply start-0 lg:rounded-s-xl lg:rounded-e-none lg:border-e;
+    }
+
+    & .nv-ta-filters-after-content-ctn {
+        @apply end-0 lg:rounded-s-none lg:rounded-e-xl lg:border-s;
+    }
+}

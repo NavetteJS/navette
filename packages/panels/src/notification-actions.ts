@@ -63,8 +63,8 @@ export const useNotificationsColorManager = (manager: ColorManager) => { colorMa
 type ColoredView = 'button' | 'button-outlined' | 'link' | 'icon-button' | 'badge' | 'dropdown-item';
 const actionColorClasses = (component: ColoredView, color: string): string[] => {
     if (colorManager) return color === 'gray' && (component === 'button' || component === 'dropdown-item') ? [] : colorManager.getComponentClasses(component, color);
-    if (component === 'link') return ['fi-color', `fi-color-${color}`, 'fi-text-color-600', 'dark:fi-text-color-300'];
-    return component === 'button' || component === 'button-outlined' ? [] : ['fi-color', `fi-color-${color}`];
+    if (component === 'link') return ['nv-color', `nv-color-${color}`, 'nv-text-color-600', 'dark:nv-text-color-300'];
+    return component === 'button' || component === 'button-outlined' ? [] : ['nv-color', `nv-color-${color}`];
 };
 
 /** Filament's default action label: the name, in words, capitalized (`undoEdit` → "Undo edit"). */
@@ -81,16 +81,16 @@ const eventData = (data: unknown): Record<string, unknown> | unknown[] => {
 };
 const text = (value: unknown, max: number): string | null => (typeof value === 'string' && value !== '' ? value.slice(0, max) : typeof value === 'number' ? String(value) : null);
 const viewOf = (view: unknown): NotificationActionView | null => {
-    if (view === 'filament::components.button.index' || view === 'button') return 'button';
-    if (view === 'filament::components.link' || view === 'link') return 'link';
-    if (view === 'filament::components.icon-button' || view === 'icon-button') return 'icon-button';
-    if (view === 'filament::components.badge' || view === 'badge') return 'badge';
+    if (view === 'navette::components.button.index' || view === 'button') return 'button';
+    if (view === 'navette::components.link' || view === 'link') return 'link';
+    if (view === 'navette::components.icon-button' || view === 'icon-button') return 'icon-button';
+    if (view === 'navette::components.badge' || view === 'badge') return 'badge';
     return null;
 };
 
 /**
  * Reads an action or an action group (`actions` key) in Filament's array format (`Action::toArray()`, `ActionGroup::toArray()`,
- * `FilamentNotificationAction.toJSON()`), as stored in the `notifications` table or sent from the browser. Untrusted: unknown
+ * `NavetteNotificationAction.toJSON()`), as stored in the `notifications` table or sent from the browser. Untrusted: unknown
  * values are dropped, URLs are checked when rendered. Groups nest two levels deep at most.
  */
 export function notificationActionFromArray(raw: unknown, mapUrl?: (url: string) => string, depth = 0): NotificationActionItem | null {
@@ -143,7 +143,7 @@ export function notificationActionFromArray(raw: unknown, mapUrl?: (url: string)
     return data;
 }
 
-const viewName = (view: NotificationActionView): string => (view === 'button' ? 'filament::components.button.index' : view === 'icon-button' ? 'filament::components.icon-button' : view === 'badge' ? 'filament::components.badge' : 'filament::components.link');
+const viewName = (view: NotificationActionView): string => (view === 'button' ? 'navette::components.button.index' : view === 'icon-button' ? 'navette::components.icon-button' : view === 'badge' ? 'navette::components.badge' : 'navette::components.link');
 const actionView = (action: NotificationActionData): NotificationActionView => action.view ?? (action.button ? 'button' : 'link');
 
 /** Writes an action or a group in Filament's array format (for the `notifications` table and broadcast messages). */
@@ -245,23 +245,23 @@ export function renderNotificationAction(action: NotificationActionData, options
     const extraClass = typeof action.extraAttributes?.class === 'string' ? [action.extraAttributes.class] : [];
     if (options.inGroup) {
         // Menu items are gray unless they have another color than the default one (like the panel menus).
-        const classes = cls(['fi-dropdown-list-item', 'fi-ac-grouped-action', { 'fi-disabled': disabled }, ...(color === 'primary' || color === 'gray' ? [] : actionColorClasses('dropdown-item', color)), ...extraClass]);
-        return `${opening}${onClick} role="menuitem" tabindex="-1" class="${e(classes)}"${trailing}>${before}<span class="fi-dropdown-list-item-label">${e(action.label)}</span>${after}</${tag}>`;
+        const classes = cls(['nv-dropdown-list-item', 'nv-ac-grouped-action', { 'nv-disabled': disabled }, ...(color === 'primary' || color === 'gray' ? [] : actionColorClasses('dropdown-item', color)), ...extraClass]);
+        return `${opening}${onClick} role="menuitem" tabindex="-1" class="${e(classes)}"${trailing}>${before}<span class="nv-dropdown-list-item-label">${e(action.label)}</span>${after}</${tag}>`;
     }
     if (view === 'button') {
-        const classes = cls(['fi-ac-btn-action', 'fi-btn', { 'fi-disabled': disabled }, `fi-size-${size}`, ...(action.outlined ? ['fi-outlined', ...actionColorClasses('button-outlined', color)] : actionColorClasses('button', color)), ...extraClass]);
+        const classes = cls(['nv-ac-btn-action', 'nv-btn', { 'nv-disabled': disabled }, `nv-size-${size}`, ...(action.outlined ? ['nv-outlined', ...actionColorClasses('button-outlined', color)] : actionColorClasses('button', color)), ...extraClass]);
         return `${opening}${onClick} class="${e(classes)}"${trailing}>${before}${e(action.label)}${after}</${tag}>`;
     }
     if (view === 'icon-button') {
-        const classes = cls(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': disabled }, `fi-size-${size}`, ...actionColorClasses('icon-button', color), ...extraClass]);
+        const classes = cls(['nv-ac-icon-btn-action', 'nv-icon-btn', { 'nv-disabled': disabled }, `nv-size-${size}`, ...actionColorClasses('icon-button', color), ...extraClass]);
         return `${opening}${onClick} title="${e(action.label)}" aria-label="${e(action.label)}" class="${e(classes)}"${trailing}>${iconHtml}</${tag}>`;
     }
     if (view === 'badge') {
-        const classes = cls(['fi-ac-badge-action', 'fi-badge', { 'fi-disabled': disabled }, `fi-size-${size}`, ...actionColorClasses('badge', color), ...extraClass]);
-        return `${opening}${onClick} class="${e(classes)}"${trailing}>${before}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(action.label)}</span></span>${after}</${tag}>`;
+        const classes = cls(['nv-ac-badge-action', 'nv-badge', { 'nv-disabled': disabled }, `nv-size-${size}`, ...actionColorClasses('badge', color), ...extraClass]);
+        return `${opening}${onClick} class="${e(classes)}"${trailing}>${before}<span class="nv-badge-label-ctn"><span class="nv-badge-label">${e(action.label)}</span></span>${after}</${tag}>`;
     }
-    const classes = cls(['fi-ac-link-action', 'fi-link', { 'fi-disabled': disabled }, `fi-size-${size}`, ...actionColorClasses('link', color), ...extraClass]);
-    return `${opening}${onClick} class="${e(classes)}"${trailing}>${before}<span class="fi-link-label">${e(action.label)}</span>${after}</${tag}>`;
+    const classes = cls(['nv-ac-link-action', 'nv-link', { 'nv-disabled': disabled }, `nv-size-${size}`, ...actionColorClasses('link', color), ...extraClass]);
+    return `${opening}${onClick} class="${e(classes)}"${trailing}>${before}<span class="nv-link-label">${e(action.label)}</span>${after}</${tag}>`;
 }
 
 /** Menu items of a group, one list per section (nested groups). */
@@ -287,26 +287,26 @@ export function renderNotificationActionGroup(group: NotificationActionGroupData
     if (!group.dropdown) return group.actions.map((item) => (isNotificationActionGroup(item) ? renderNotificationActionGroup(item, options) : renderNotificationAction(item, options))).join('');
     const lists = groupLists(group, options);
     if (!lists.length) return '';
-    const label = group.label ?? t('filament-actions::group.trigger.label');
+    const label = group.label ?? t('navette-actions::group.trigger.label');
     const color = group.color ?? 'primary';
     const glyph = safeNotificationIcon(group.icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical', iconSizeFor(group.view, group.size), []);
     const extra = extraAttributesHtml(group.extraAttributes, ['class']);
     const tooltip = tooltipAttribute(group.tooltip);
     const trigger = group.view === 'button'
-        ? `<button${tooltip} type="button" class="${cls(['fi-ac-btn-group', 'fi-btn', `fi-size-${group.size}`, ...actionColorClasses('button', color)])}"${extra}>${glyph}${e(label)}</button>`
+        ? `<button${tooltip} type="button" class="${cls(['nv-ac-btn-group', 'nv-btn', `nv-size-${group.size}`, ...actionColorClasses('button', color)])}"${extra}>${glyph}${e(label)}</button>`
         : group.view === 'icon-button'
-            ? `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" class="${cls(['fi-ac-icon-btn-group', 'fi-icon-btn', `fi-size-${group.size}`, ...actionColorClasses('icon-button', color)])}"${extra}>${glyph}</button>`
-            : `<button${tooltip} type="button" class="${cls(['fi-ac-link-group', 'fi-link', `fi-size-${group.size}`, ...actionColorClasses('link', color)])}"${extra}>${glyph}<span class="fi-link-label">${e(label)}</span></button>`;
-    const panelClasses = cls(['fi-dropdown-panel', group.width ? `fi-width-${group.width}` : null, { 'fi-scrollable': group.maxHeight !== null }]);
+            ? `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" class="${cls(['nv-ac-icon-btn-group', 'nv-icon-btn', `nv-size-${group.size}`, ...actionColorClasses('icon-button', color)])}"${extra}>${glyph}</button>`
+            : `<button${tooltip} type="button" class="${cls(['nv-ac-link-group', 'nv-link', `nv-size-${group.size}`, ...actionColorClasses('link', color)])}"${extra}>${glyph}<span class="nv-link-label">${e(label)}</span></button>`;
+    const panelClasses = cls(['nv-dropdown-panel', group.width ? `nv-width-${group.width}` : null, { 'nv-scrollable': group.maxHeight !== null }]);
     const style = group.maxHeight ? ` style="max-height: ${e(group.maxHeight)}"` : '';
-    const dropdown = `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${trigger}</div><div x-cloak x-float.placement.${group.placement ?? 'bottom-end'}.flip.teleport.offset="{ offset: ${group.offset ?? 8} }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="fi-dropdown-list" role="group">${items.join('')}</div>`).join('')}</div></div>`;
+    const dropdown = `<div x-data="navetteDropdown" class="nv-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="nv-dropdown-trigger">${trigger}</div><div x-cloak x-float.placement.${group.placement ?? 'bottom-end'}.flip.teleport.offset="{ offset: ${group.offset ?? 8} }" x-ref="panel" x-transition:enter-start="nv-opacity-0" x-transition:leave-end="nv-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="nv-dropdown-list" role="group">${items.join('')}</div>`).join('')}</div></div>`;
     // The dropdown's own `close()` hides the notification's: items closing the notification call `closeNotification()`, the
     // `close()` of the notification element, found outside of the (teleported) dropdown.
-    return hasCloseAction(group) ? `<div x-data="{ notificationElement: null, closeNotification(...args) { return Alpine.$data(this.notificationElement).close(...args) } }" x-init="notificationElement = $el.closest(&#039;.fi-no-notification&#039;)" style="display: contents">${dropdown}</div>` : dropdown;
+    return hasCloseAction(group) ? `<div x-data="{ notificationElement: null, closeNotification(...args) { return Alpine.$data(this.notificationElement).close(...args) } }" x-init="notificationElement = $el.closest(&#039;.nv-no-notification&#039;)" style="display: contents">${dropdown}</div>` : dropdown;
 }
 
 /** Actions of a notification: links, buttons and groups closing it, dispatching a Livewire event, or changing its read state. */
 export function notificationActionsHtml(actions: NotificationActionItem[] | undefined, options: { navigate?: boolean } = {}): string {
     const items = (actions ?? []).map((item) => (isNotificationActionGroup(item) ? renderNotificationActionGroup(item, options) : renderNotificationAction(item, options))).filter(Boolean);
-    return items.length ? `<div class="fi-ac fi-no-notification-actions">${items.join('')}</div>` : '';
+    return items.length ? `<div class="nv-ac nv-no-notification-actions">${items.join('')}</div>` : '';
 }

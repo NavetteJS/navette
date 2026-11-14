@@ -62,16 +62,16 @@ test('clusters: their pages and resources are served under their URL, in their s
         assert.equal(response.status, 302);
         assert.equal(response.headers.get('location'), '/settings/users');
         const html = await (await get('/settings/profile')).text();
-        assert.match(html, /<a href="\/settings" wire:navigate class="fi-breadcrumbs-item-label">\s*Settings\s*<\/a>/);
-        assert.match(html, /fi-page-has-sub-navigation/);
+        assert.match(html, /<a href="\/settings" wire:navigate class="nv-breadcrumbs-item-label">\s*Settings\s*<\/a>/);
+        assert.match(html, /nv-page-has-sub-navigation/);
         // The sub-navigation is a column before the content by default, with a group per navigation group.
         assert.match(html, /data-group-label="sub_navigation_People"/, 'grouped items under their label');
         assert.match(html, /<a href="\/settings\/profile" wire:navigate aria-current="page"/);
         // As tabs, a group is a dropdown.
         SettingsCluster.subNavigationPosition = 'top';
         const tabs = await (await get('/settings/profile')).text();
-        assert.match(tabs, /<button type="button" class="fi-tabs-item"><span class="fi-tabs-item-label">People<\/span><\/button>/);
-        assert.match(tabs, /<a href="\/settings\/profile" wire:navigate class="fi-tabs-item fi-active" aria-current="page">/);
+        assert.match(tabs, /<button type="button" class="nv-tabs-item"><span class="nv-tabs-item-label">People<\/span><\/button>/);
+        assert.match(tabs, /<a href="\/settings\/profile" wire:navigate class="nv-tabs-item nv-active" aria-current="page">/);
         assert.doesNotMatch(html, /settings\/secret/);
     } finally { server.close(); }
 });

@@ -244,7 +244,7 @@ export class OrdersOverview extends StatsOverviewWidget {
     placeholder(): string {
         const column = this.gridColumn();
 
-        return `<div role="status" aria-busy="true" class="fi-section ${column.classes.join(' ')}" style="${column.style} height: 6rem;"><div class="fi-section-content-ctn"><div class="fi-section-content">Loading the orders…</div></div></div>`;
+        return `<div role="status" aria-busy="true" class="nv-section ${column.classes.join(' ')}" style="${column.style} height: 6rem;"><div class="nv-section-content-ctn"><div class="nv-section-content">Loading the orders…</div></div></div>`;
     }
 
     getStats() {
@@ -401,7 +401,7 @@ export class Greeting extends Widget {
     render() {
         const { user } = this._ctx as PanelContext;
 
-        return this.wrap(`<section class="fi-section"><div class="fi-section-content-ctn"><div class="fi-section-content">Hello, ${e(user!.name)}!</div></div></section>`);
+        return this.wrap(`<section class="nv-section"><div class="nv-section-content-ctn"><div class="nv-section-content">Hello, ${e(user!.name)}!</div></div></section>`);
     }
 }
 ```

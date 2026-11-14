@@ -4,7 +4,7 @@ title: Overview
 
 ## Introduction
 
-Navette's interface is styled by a stylesheet compiled with [Tailwind CSS](https://tailwindcss.com), which targets semantic `fi-` classes in the markup. There are several levels of customization, from the simplest to the most powerful:
+Navette's interface is styled by a stylesheet compiled with [Tailwind CSS](https://tailwindcss.com), which targets semantic `nv-` classes in the markup. There are several levels of customization, from the simplest to the most powerful:
 
 1. [Colors](/styling/colors), set with one method of the panel.
 2. [Themes offered to users](#offering-themes-to-users), each with its own colors, font and CSS.
@@ -75,7 +75,7 @@ Create a CSS file that imports the theme of Navette and declares where your clas
 @source '../**/*.ts';
 @source '../../server.ts';
 
-.fi-sidebar-item-btn {
+.nv-sidebar-item-btn {
     border-radius: 9999px;
 }
 ```

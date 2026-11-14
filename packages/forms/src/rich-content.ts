@@ -37,7 +37,7 @@ export class TextColor {
     static getDefaults(): Record<string, TextColor> {
         return Object.fromEntries(Object.entries(Color).map(([name, palette]) => {
             const key = name.toLowerCase();
-            const translation = t(`filament-forms::components.rich_editor.actions.text_color.modal.form.color.options.${key}`);
+            const translation = t(`navette-forms::components.rich_editor.actions.text_color.modal.form.color.options.${key}`);
             return [key, TextColor.make(translation.includes('::') ? name : translation, (palette as any)[600], (palette as any)[400] ?? null)];
         }));
     }
@@ -99,10 +99,10 @@ export class MentionProvider {
             extraAttributes: this._extraAttributes,
             isSearchable: this.isSearchable(),
             items: this.isSearchable() ? [] : Object.entries(await this.getItems()).map(([id, label]) => ({ id, label })),
-            noOptionsMessage: this._messages.noItems ?? t('filament-forms::components.rich_editor.mentions.no_options_message'),
-            noSearchResultsMessage: this._messages.noSearchResults ?? t('filament-forms::components.rich_editor.mentions.no_search_results_message'),
-            searchPrompt: this._messages.searchPrompt ?? t('filament-forms::components.rich_editor.mentions.search_prompt'),
-            searchingMessage: this._messages.searching ?? t('filament-forms::components.rich_editor.mentions.searching_message'),
+            noOptionsMessage: this._messages.noItems ?? t('navette-forms::components.rich_editor.mentions.no_options_message'),
+            noSearchResultsMessage: this._messages.noSearchResults ?? t('navette-forms::components.rich_editor.mentions.no_search_results_message'),
+            searchPrompt: this._messages.searchPrompt ?? t('navette-forms::components.rich_editor.mentions.search_prompt'),
+            searchingMessage: this._messages.searching ?? t('navette-forms::components.rich_editor.mentions.searching_message'),
         };
     }
 }

@@ -2,8 +2,8 @@
 // bundle npm plugins here (`import ChartDataLabels from 'chartjs-plugin-datalabels'`) with esbuild or Vite.
 
 // Inline plugin, given to every chart widget (`new Chart(…, { plugins: [...] })`): draws a border around the chart area.
-window.filamentChartJsPlugins ??= [];
-window.filamentChartJsPlugins.push({
+window.navetteChartJsPlugins ??= [];
+window.navetteChartJsPlugins.push({
     id: 'navetteLabChartAreaBorder',
     afterDraw(chart) {
         const { ctx, chartArea } = chart;
@@ -20,8 +20,8 @@ window.filamentChartJsPlugins.push({
 });
 
 // Global plugin, registered with `Chart.register()` before the first chart is created.
-window.filamentChartJsGlobalPlugins ??= [];
-window.filamentChartJsGlobalPlugins.push({
+window.navetteChartJsGlobalPlugins ??= [];
+window.navetteChartJsGlobalPlugins.push({
     id: 'navetteLabGlobalPlugin',
     beforeInit(chart) { chart.canvas.dataset.labGlobalPlugin = 'registered'; },
 });

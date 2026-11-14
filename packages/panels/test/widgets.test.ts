@@ -29,12 +29,12 @@ test('dashboard widgets are ordered by sort, unsorted last', () => {
 
 test('stats heading and description are escaped; spans per breakpoint', async () => {
     const html = await mount(First).render();
-    assert.match(html, /<h3 class="fi-section-header-heading">Sales &lt;today&gt;<\/h3><p class="fi-section-header-description">Last 24 hours<\/p>/);
-    assert.match(html, /md:fi-grid-col-span xl:fi-grid-col-span/);
+    assert.match(html, /<h3 class="nv-section-header-heading">Sales &lt;today&gt;<\/h3><p class="nv-section-header-description">Last 24 hours<\/p>/);
+    assert.match(html, /md:nv-grid-col-span xl:nv-grid-col-span/);
     assert.match(html, /--col-span-md: span 2 \/ span 2; --col-span-xl: 1 \/ -1;/);
 });
 
 test('chart empty state can be customized', async () => {
     const html = await mount(Second).render();
-    assert.match(html, /Nothing yet<\/h2><p class="fi-empty-state-description">Come back tomorrow<\/p>/);
+    assert.match(html, /Nothing yet<\/h2><p class="nv-empty-state-description">Come back tomorrow<\/p>/);
 });

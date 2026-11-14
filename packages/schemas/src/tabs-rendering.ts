@@ -32,11 +32,11 @@ export const DEFERRED_BADGES_X_DATA = `{
  */
 export function deferredBadgePlaceholderHtml(indexJs: string): string {
     const d = `deferredBadges[${indexJs}]`;
-    return `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span>`
+    return `<span x-show="isLoadingDeferredBadges" x-cloak class="nv-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span>`
         + `<template x-if="${e(`! isLoadingDeferredBadges && ${d}?.badge != null`)}">`
-        + `<span x-bind:class="${e(`'fi-badge fi-size-sm ' + (${d}?.badgeColorClasses ?? '')`)}" x-bind:style="${e(`${d}?.badgeColorStyles ?? ''`)}" x-init="${e(tooltipInit(d))}">`
+        + `<span x-bind:class="${e(`'nv-badge nv-size-sm ' + (${d}?.badgeColorClasses ?? '')`)}" x-bind:style="${e(`${d}?.badgeColorStyles ?? ''`)}" x-init="${e(tooltipInit(d))}">`
         + `<template x-if="${e(`${d}?.badgeIconHtml && ${d}?.badgeIconPosition !== 'after'`)}"><span x-html="${e(`${d}.badgeIconHtml`)}"></span></template>`
-        + `<span class="fi-badge-label-ctn"><span class="fi-badge-label" x-text="${e(`${d}?.badge`)}"></span></span>`
+        + `<span class="nv-badge-label-ctn"><span class="nv-badge-label" x-text="${e(`${d}?.badge`)}"></span></span>`
         + `<template x-if="${e(`${d}?.badgeIconHtml && ${d}?.badgeIconPosition === 'after'`)}"><span x-html="${e(`${d}.badgeIconHtml`)}"></span></template>`
         + '</span></template>';
 }
@@ -44,10 +44,10 @@ export function deferredBadgePlaceholderHtml(indexJs: string): string {
 /** Placeholder of a lazy-loaded badge in the overflow dropdown (no icon, no size). */
 export function deferredDropdownBadgePlaceholderHtml(indexJs: string): string {
     const d = `deferredBadges[${indexJs}]`;
-    return `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-dropdown-list-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span>`
+    return `<span x-show="isLoadingDeferredBadges" x-cloak class="nv-dropdown-list-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span>`
         + `<template x-if="${e(`! isLoadingDeferredBadges && ${d}?.badge != null`)}">`
-        + `<span x-bind:class="${e(`'fi-badge ' + (${d}?.badgeColorClasses ?? '')`)}" x-bind:style="${e(`${d}?.badgeColorStyles ?? ''`)}" x-init="${e(tooltipInit(d))}">`
-        + `<span class="fi-badge-label-ctn"><span class="fi-badge-label" x-text="${e(`${d}?.badge`)}"></span></span>`
+        + `<span x-bind:class="${e(`'nv-badge ' + (${d}?.badgeColorClasses ?? '')`)}" x-bind:style="${e(`${d}?.badgeColorStyles ?? ''`)}" x-init="${e(tooltipInit(d))}">`
+        + `<span class="nv-badge-label-ctn"><span class="nv-badge-label" x-text="${e(`${d}?.badge`)}"></span></span>`
         + '</span></template>';
 }
 

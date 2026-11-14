@@ -54,7 +54,7 @@ class Reports extends Page { static slug = 'reports'; static navigationIcon = 'o
 
 test('CSP nonce: every inline script and style of a full page, an error page and a component update carries it', async () => {
     const panel = makePanel().pages([Dashboard, Reports]).navigationGroups([NavigationGroup.make('Insights').collapsed()])
-        .themes([{ id: 'ocean', label: 'Ocean', colors: { primary: Color.Blue }, css: '.fi-body { letter-spacing: 0 }' }, { id: 'forest', label: 'Forest' }])
+        .themes([{ id: 'ocean', label: 'Ocean', colors: { primary: Color.Blue }, css: '.nv-body { letter-spacing: 0 }' }, { id: 'forest', label: 'Forest' }])
         .setColors({ brand: '#0ea5e9' }).broadcasting()
         .middleware([(_req, res, next) => { useCspNonce(res, NONCE); res.setHeader('Content-Security-Policy', `script-src 'nonce-${NONCE}' 'unsafe-eval'`); next(); }], true)
         .unsavedChangesAlerts();
@@ -79,7 +79,7 @@ test('CSP nonce: every inline script and style of a full page, an error page and
         const updated = await call(`/${panel.getId()}/reports`, '.sidebar', 'refresh');
         assert.equal(updated.status, 200);
         const fragment = updateHtml(await updated.json());
-        assert.match(fragment, /fi-sidebar-nav/);
+        assert.match(fragment, /nv-sidebar-nav/);
         const updateTags = inlineTags(fragment);
         assert.ok(updateTags.length >= 1);
         for (const tag of updateTags) assert.match(tag, /nonce="/, tag);
@@ -90,12 +90,12 @@ test('CSP nonce: every inline script and style of a full page, an error page and
     assert.throws(() => useCspNonce({ locals: {} }, 'x" onload="alert(1)'), /Invalid CSP nonce/);
 });
 
-test('custom colors get the rules mapping their fi-color class to the component color variables', async () => {
+test('custom colors get the rules mapping their nv-color class to the component color variables', async () => {
     const panel = makePanel().pages([Dashboard]).setColors({ brand: '#0ea5e9' });
     await serve(panel, async ({ get }) => {
         const html = await (await get(`/${panel.getId()}`)).text();
-        assert.match(html, /\.fi-color-brand \{ --color-50:var\(--brand-50\); [^}]*--color-950:var\(--brand-950\); \}/);
-        assert.doesNotMatch(html, /\.fi-color-primary \{/, 'default colors are in the stylesheet');
+        assert.match(html, /\.nv-color-brand \{ --color-50:var\(--brand-50\); [^}]*--color-950:var\(--brand-950\); \}/);
+        assert.doesNotMatch(html, /\.nv-color-primary \{/, 'default colors are in the stylesheet');
     });
 });
 
@@ -137,10 +137,10 @@ test('tenant middleware run once the tenant is known; tenantSwitcher(false); HTM
     await serve(panel, async ({ get }) => {
         const html = await (await get(`/${panel.getId()}/1`)).text();
         assert.deepEqual(tenants, ['Alpha']);
-        assert.match(html, /<span class="fi-tenant-menu-trigger-tenant-name"> <b>Alpha<\/b> <\/span>/);
+        assert.match(html, /<span class="nv-tenant-menu-trigger-tenant-name"> <b>Alpha<\/b> <\/span>/);
         assert.match(html, /alt="[^"]*Alpha[^"]*"/);
         assert.doesNotMatch(html, /alt="[^"]*<b>/);
-        assert.match(html, /<span class="fi-dropdown-list-item-label"><b>Beta<\/b><\/span>/, 'the other tenant');
+        assert.match(html, /<span class="nv-dropdown-list-item-label"><b>Beta<\/b><\/span>/, 'the other tenant');
         assert.match(html, /href="\/[^"]+\/1\/billing"[^>]*>.*?Plans and invoices/s);
         panel.tenantSwitcher(false);
         const alone = await (await get(`/${panel.getId()}/1`)).text();
@@ -153,17 +153,17 @@ test('error notifications: the panel default, registered and hidden ones, a page
     class Quiet extends Page { static slug = 'quiet'; static hasErrorNotifications = false; }
     class Custom extends Page { static slug = 'custom'; protected setUpErrorNotifications(): void { this.registerErrorNotification('Page error', null, 500); } }
     const panel = makePanel().pages([Dashboard, Quiet, Custom]).registerErrorNotification('Not allowed', 'Ask an administrator.', 403).hiddenErrorNotification(404).disabledErrorNotification(419);
-    const notifications = (html: string) => new Function(`return ${html.match(/window\.filamentErrorNotifications = (.*)/)![1]}`)();
+    const notifications = (html: string) => new Function(`return ${html.match(/window\.navetteErrorNotifications = (.*)/)![1]}`)();
     await serve(panel, async ({ get }) => {
         const all = notifications(await (await get(`/${panel.getId()}`)).text());
         assert.deepEqual(all['403'], { title: 'Not allowed', body: 'Ask an administrator.', isHidden: false, isDisabled: false });
         assert.equal(all['404'].isHidden, true);
         assert.equal(all['419'].isDisabled, true);
         assert.equal(typeof all[''].title, 'string');
-        assert.doesNotMatch(await (await get(`/${panel.getId()}/quiet`)).text(), /filamentErrorNotifications/);
+        assert.doesNotMatch(await (await get(`/${panel.getId()}/quiet`)).text(), /navetteErrorNotifications/);
         assert.equal(notifications(await (await get(`/${panel.getId()}/custom`)).text())['500'].title, 'Page error');
         panel.errorNotifications(false);
-        assert.doesNotMatch(await (await get(`/${panel.getId()}`)).text(), /filamentErrorNotifications/);
+        assert.doesNotMatch(await (await get(`/${panel.getId()}`)).text(), /navetteErrorNotifications/);
     });
 });
 
@@ -180,13 +180,13 @@ test('navigation items: HTML labels, active icons, badge tooltips, new tabs, vis
     ]).sidebarWidth('18rem').collapsedSidebarWidth('5rem');
     await serve(panel, async ({ get }) => {
         const html = await (await get(`/${panel.getId()}/inbox`)).text();
-        assert.match(html, /<span class="fi-sidebar-item-label">\s*<em>Inbox<\/em>\s*<\/span>/);
+        assert.match(html, /<span class="nv-sidebar-item-label">\s*<em>Inbox<\/em>\s*<\/span>/);
         const inbox = html.slice(html.indexOf(`href="/${panel.getId()}/inbox"`) - 200, html.indexOf(`href="/${panel.getId()}/inbox"`) + 1500);
-        assert.match(inbox, /fi-sidebar-item-icon/);
-        assert.match(html, /<span x-tooltip="\{ content: &#39;Unread messages&#39;, theme: \$store\.theme, allowHTML: false \}" class="[^"]*fi-badge/);
+        assert.match(inbox, /nv-sidebar-item-icon/);
+        assert.match(html, /<span x-tooltip="\{ content: &#39;Unread messages&#39;, theme: \$store\.theme, allowHTML: false \}" class="[^"]*nv-badge/);
         assert.match(html, /<a href="https:\/\/docs\.example\.com" target="_blank"/);
         assert.doesNotMatch(html, /Admins only|>\s*Hidden\s*</);
-        assert.match(html, /<li data-cy="tagged" class="fi-sidebar-item/);
+        assert.match(html, /<li data-cy="tagged" class="nv-sidebar-item/);
         assert.match(html, /7 new/);
         assert.match(html, /--sidebar-width: 18rem;/);
         assert.match(html, /--sidebar-collapsed-width: 5rem;/);
@@ -195,7 +195,7 @@ test('navigation items: HTML labels, active icons, badge tooltips, new tabs, vis
         const item = views.flatMap((group) => group.items).find((candidate) => candidate.label === 'Inbox')!;
         assert.equal(item.icon, 's-inbox');
         assert.equal(item.isHtmlLabel, true);
-        assert.equal(views.flatMap((group) => group.items).find((candidate) => candidate.label === 'Tagged')!.badgeColorClasses.includes('fi-color-danger'), true);
+        assert.equal(views.flatMap((group) => group.items).find((candidate) => candidate.label === 'Tagged')!.badgeColorClasses.includes('nv-color-danger'), true);
     });
     assert.throws(() => panel.sidebarWidth('20rem; color: red'), /invalid CSS length/);
 });
@@ -214,13 +214,13 @@ test('navigation groups: collapsed, not collapsible by default, extra attributes
         assert.ok(html.indexOf('data-group-label="Sales"') < html.indexOf('data-group-label="People"'));
         assert.deepEqual(new Function(`return ${html.match(/ collapsedGroups = (JSON\.parse\('[^']*'\))/)![1]}`)(), ['Sales']);
         const sales = html.slice(html.indexOf('data-group-label="Sales"') - 300, html.indexOf('data-group-label="People"'));
-        assert.match(sales, /fi-collapsible/);
+        assert.match(sales, /nv-collapsible/);
         const people = html.slice(html.indexOf('data-group-label="People"') - 300, html.indexOf('data-group-label="People"') + 600);
-        assert.doesNotMatch(people, /fi-collapsible/, 'collapsibleNavigationGroups(false)');
+        assert.doesNotMatch(people, /nv-collapsible/, 'collapsibleNavigationGroups(false)');
         assert.match(html, /data-group-label="&lt;i&gt;Notes&lt;\/i&gt;"[^>]* data-group="notes"/);
-        assert.match(html, /<span class="fi-sidebar-group-label">\s*<i>Notes<\/i>\s*<\/span>/);
+        assert.match(html, /<span class="nv-sidebar-group-label">\s*<i>Notes<\/i>\s*<\/span>/);
         panel.topNavigation();
-        assert.match(await (await get(`/${panel.getId()}`)).text(), /<div x-data="filamentDropdown\(\{ isMenu: true \}\)" data-top="notes" class="fi-dropdown" >/);
+        assert.match(await (await get(`/${panel.getId()}`)).text(), /<div x-data="navetteDropdown\(\{ isMenu: true \}\)" data-top="notes" class="nv-dropdown" >/);
     });
 });
 
@@ -264,10 +264,10 @@ test('breadcrumbs: hidden with breadcrumbs(false), led by the navigation hierarc
     const panel = makePanel().pages([Dashboard, Reports, Child]).breadcrumbs(true, true);
     await serve(panel, async ({ get }) => {
         const html = await (await get(`/${panel.getId()}/reports/child`)).text();
-        const crumbs = [...html.matchAll(/class="fi-breadcrumbs-item-label"[^>]*>\s*([^<]*?)\s*</g)].map((match) => match[1]);
+        const crumbs = [...html.matchAll(/class="nv-breadcrumbs-item-label"[^>]*>\s*([^<]*?)\s*</g)].map((match) => match[1]);
         assert.deepEqual(crumbs, ['Insights', 'Reports', 'Child report']);
         panel.breadcrumbs(false);
-        assert.doesNotMatch(await (await get(`/${panel.getId()}/reports/child`)).text(), /fi-breadcrumbs/);
+        assert.doesNotMatch(await (await get(`/${panel.getId()}/reports/child`)).text(), /nv-breadcrumbs/);
     });
 });
 
@@ -279,29 +279,29 @@ test('user menu: groups, an action group, a POST item, a modal action, the logou
     ]).userMenuItems([ActionGroup.make([Action.make('help').url('/help'), Action.make('about').url('/about')])]);
     await serve(panel, async ({ get, call }) => {
         const html = await (await get(`/${panel.getId()}`)).text();
-        const menu = html.slice(html.indexOf('fi-user-menu'), html.indexOf('panels::user-menu.after') > 0 ? html.indexOf('panels::user-menu.after') : html.indexOf('</nav>'));
-        const lists = [...menu.matchAll(/<div class="fi-dropdown-list">([\s\S]*?)<\/div>\n/g)].map((match) => [...match[1].matchAll(/fi-dropdown-list-item-label">([^<]+)</g)].map((label) => label[1]));
+        const menu = html.slice(html.indexOf('nv-user-menu'), html.indexOf('panels::user-menu.after') > 0 ? html.indexOf('panels::user-menu.after') : html.indexOf('</nav>'));
+        const lists = [...menu.matchAll(/<div class="nv-dropdown-list">([\s\S]*?)<\/div>\n/g)].map((match) => [...match[1].matchAll(/nv-dropdown-list-item-label">([^<]+)</g)].map((label) => label[1]));
         assert.deepEqual(lists.filter((list) => list.length), [['Settings', 'Lock session'], ['Send feedback'], ['Help', 'About'], ['Sign out']].map((list) => list));
-        assert.match(menu, /<form action="\/lock" method="post" class="fi-ac-grouped-action"><input type="hidden" name="_token" value="[^"]+" autocomplete="off"><button role="menuitem" tabindex="-1" type="submit" class="fi-dropdown-list-item"/);
+        assert.match(menu, /<form action="\/lock" method="post" class="nv-ac-grouped-action"><input type="hidden" name="_token" value="[^"]+" autocomplete="off"><button role="menuitem" tabindex="-1" type="submit" class="nv-dropdown-list-item"/);
         assert.match(menu, new RegExp(`<form action="/${panel.getId()}/logout" method="post"`));
         assert.match(menu, /wire:click="mountAction\(&#39;feedback&#39;\)"|wire:click="mountAction\('feedback'\)"/);
-        assert.match(menu, /fi-theme-switcher/);
+        assert.match(menu, /nv-theme-switcher/);
 
         // The modal opens in the topbar's own action modals.
         const mounted = await (await call(`/${panel.getId()}`, '.topbar', 'mountAction', ['feedback'])).json();
-        assert.match(JSON.stringify(mounted.components[0].effects.partials), /fi-modal/);
+        assert.match(JSON.stringify(mounted.components[0].effects.partials), /nv-modal/);
         assert.match(JSON.stringify(JSON.parse(mounted.components[0].snapshot).data.mountedActions), /feedback/);
         // A URL item cannot be mounted.
         assert.equal((await call(`/${panel.getId()}`, '.topbar', 'mountAction', ['settings'])).status, 404);
 
         panel.themeSwitcher(false).userMenuPosition('sidebar');
         const sidebarHtml = await (await get(`/${panel.getId()}`)).text();
-        assert.doesNotMatch(sidebarHtml, /fi-theme-switcher/);
-        const footer = sidebarHtml.slice(sidebarHtml.indexOf('fi-sidebar-footer'));
+        assert.doesNotMatch(sidebarHtml, /nv-theme-switcher/);
+        const footer = sidebarHtml.slice(sidebarHtml.indexOf('nv-sidebar-footer'));
         assert.match(footer, /Send feedback/);
         assert.match(footer, /Lock session/);
         panel.userMenu(false);
-        assert.doesNotMatch(await (await get(`/${panel.getId()}`)).text(), /fi-user-menu/);
+        assert.doesNotMatch(await (await get(`/${panel.getId()}`)).text(), /nv-user-menu/);
     });
     // An action under the logout key replaces the item.
     const replaced = makePanel().pages([Dashboard]).userMenuItems({ logout: Action.make('logout').label('Leave').url('/bye').color('danger') });
@@ -328,6 +328,6 @@ test('SPA URL exceptions and other sites load normally; the simple page width; r
     const server = app.listen(0);
     try {
         const html = await (await fetch(`http://127.0.0.1:${(server.address() as any).port}/${guest.getId()}/login`)).text();
-        assert.match(html, /class="fi-simple-main fi-width-xl"/);
+        assert.match(html, /class="nv-simple-main nv-width-xl"/);
     } finally { server.close(); }
 });

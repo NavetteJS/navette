@@ -73,16 +73,16 @@ test('list tabs: hooks at the start and the end of the tabs, scoped to the resou
     const list = livewire((AlbumResource.getPages() as any).index).assertOk();
     await list;
     const html = list.html();
-    const tablist = html.slice(html.indexOf('class="fi-sc-tabs-tablist"'));
-    assert.ok(tablist.indexOf(`data-hook="${PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_START}"`) < tablist.indexOf('fi-tabs-item'));
-    assert.ok(tablist.indexOf(`data-hook="${PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_END}"`) > tablist.lastIndexOf('fi-tabs-item-label'));
+    const tablist = html.slice(html.indexOf('class="nv-sc-tabs-tablist"'));
+    assert.ok(tablist.indexOf(`data-hook="${PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_START}"`) < tablist.indexOf('nv-tabs-item'));
+    assert.ok(tablist.indexOf(`data-hook="${PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_END}"`) > tablist.lastIndexOf('nv-tabs-item-label'));
 });
 
 test('resource tabs (relation managers) and the related records page', async () => {
     const editPage = livewire((AlbumResource.getPages() as any).edit, { record: 1 }).assertOk();
     await editPage;
     const edit = editPage.html();
-    assert.match(edit, new RegExp(`data-hook="${PanelsRenderHook.RESOURCE_TABS_START}"[\\s\\S]*fi-tabs-item[\\s\\S]*data-hook="${PanelsRenderHook.RESOURCE_TABS_END}"`));
+    assert.match(edit, new RegExp(`data-hook="${PanelsRenderHook.RESOURCE_TABS_START}"[\\s\\S]*nv-tabs-item[\\s\\S]*data-hook="${PanelsRenderHook.RESOURCE_TABS_END}"`));
     const creditsPage = livewire((TrackResource.getPages() as any).credits, { album: 1, record: 1 }).assertOk().assertSee('Grace');
     await creditsPage;
     const credits = creditsPage.html();

@@ -17,10 +17,10 @@ test('extraAttributes(): merged onto the outer element of every rendering, class
     const action = Action.make('edit').label('Edit').action(() => {}).extraAttributes({ title: 'Edit this post', class: 'my-edit', 'data-x': 1 });
     const button = clean(await action.toHtml(ctx));
     assert.match(button, /^ ?<button [^>]*title="Edit this post"/);
-    assert.match(button, /class="fi-ac-btn-action fi-btn[^"]* my-edit"/);
+    assert.match(button, /class="nv-ac-btn-action nv-btn[^"]* my-edit"/);
     assert.match(button, /data-x="1"/);
-    assert.match(clean(await action.toLinkHtml(ctx, {}, 'k')), /<button [^>]*class="[^"]*fi-ac-link-action[^"]* my-edit"[^>]*title="Edit this post"/);
-    assert.match(clean(await action.toRecordGroupedHtml(ctx, {}, 'k')), /class="[^"]*fi-dropdown-list-item[^"]* my-edit"/);
+    assert.match(clean(await action.toLinkHtml(ctx, {}, 'k')), /<button [^>]*class="[^"]*nv-ac-link-action[^"]* my-edit"[^>]*title="Edit this post"/);
+    assert.match(clean(await action.toRecordGroupedHtml(ctx, {}, 'k')), /class="[^"]*nv-dropdown-list-item[^"]* my-edit"/);
     assert.match(clean(await Action.make('docs').url('/docs').extraAttributes({ target: '_self' }).toHtml(ctx)), /^<a [^>]*target="_self"/);
     // Without merge, a second call replaces the first; with merge, both apply.
     assert.doesNotMatch(clean(await Action.make('a').action(() => {}).extraAttributes({ title: 'one' }).extraAttributes({ 'data-two': '2' }).toHtml(ctx)), /title="one"/);
@@ -58,7 +58,7 @@ test('authorize(ability): policy through the host, hidden when denied; tooltip a
     const html = clean(await tooltip.toHtml(locked));
     assert.match(html, /x-tooltip="\{ content: &#039;This post is locked\.&#039;/);
     assert.match(html, /aria-disabled="true"/);
-    assert.match(html, /fi-disabled/);
+    assert.match(html, /nv-disabled/);
     assert.doesNotMatch(html, /wire:click|\sdisabled="disabled"/, 'with a tooltip, the button keeps the pointer but has no click');
     // Plain `false` has no message: hidden, unless `authorizationMessage()` gives one.
     assert.equal(await Action.make('p').action(() => {}).authorize('publish').authorizationTooltip().isVisible(ctx), false);
@@ -72,7 +72,7 @@ test('authorize(ability): policy through the host, hidden when denied; tooltip a
     assert.equal(await notify.isAuthorized(locked), false);
     assert.equal((await notify.getAuthorizationResponseWithMessage(locked)).message(), 'This post is locked.');
     // Row link and menu item show the disabled state too.
-    assert.match(clean(await tooltip.toLinkHtml(locked, {}, 'k')), /aria-disabled="true"[^>]*class="[^"]*fi-disabled/);
+    assert.match(clean(await tooltip.toLinkHtml(locked, {}, 'k')), /aria-disabled="true"[^>]*class="[^"]*nv-disabled/);
     assert.match(clean(await tooltip.toRecordGroupedHtml(locked, {}, 'k')), /x-tooltip=[^>]*aria-disabled="true"/);
 });
 
@@ -87,16 +87,16 @@ test('modal options: eyebrow, custom content, footer actions, icon color, slide-
         .extraModalWindowAttributes({ class: 'update-author-modal', 'data-window': 'w' }).extraModalOverlayAttributes({ class: 'overlay-x' })
         .cancelParentActionsOnClose('first');
     const html = clean(await action.toModalHtml(callCtx, 0, null, {}));
-    assert.match(html, /<p class="fi-modal-eyebrow"> Edit post <\/p> <h2 id="fi-lw1-action-0\.heading" class="fi-modal-heading"> My post/);
-    assert.match(html, /class="fi-color fi-color-danger fi-modal-icon-bg"/, 'modalIconColor() colors the icon');
+    assert.match(html, /<p class="nv-modal-eyebrow"> Edit post <\/p> <h2 id="nv-lw1-action-0\.heading" class="nv-modal-heading"> My post/);
+    assert.match(html, /class="nv-color nv-color-danger nv-modal-icon-bg"/, 'modalIconColor() colors the icon');
     assert.match(html, /<p class="custom">Custom<\/p>/);
     assert.match(html, /&lt;b&gt;escaped&lt;\/b&gt;/);
-    assert.match(html, /fi-modal-slide-over-from-start/);
-    assert.match(html, /fi-modal-click-through/);
+    assert.match(html, /nv-modal-slide-over-from-start/);
+    assert.match(html, /nv-modal-click-through/);
     assert.match(html, /aria-modal="false"/);
-    assert.doesNotMatch(html, /fi-modal-close-overlay/, 'a click-through modal has no backdrop');
+    assert.doesNotMatch(html, /nv-modal-close-overlay/, 'a click-through modal has no backdrop');
     assert.doesNotMatch(html, /x-on:click\.self/, 'and cannot be closed by clicking away');
-    assert.match(html, /data-window="w"[^>]*class="fi-modal-window[^"]* update-author-modal"/);
+    assert.match(html, /data-window="w"[^>]*class="nv-modal-window[^"]* update-author-modal"/);
     assert.match(html, /wire:click="callMountedAction\(JSON\.parse\('\{\\u0022another\\u0022:true\}'\)\)"/);
     assert.match(html, /<\/svg> Again <\/button>/);
     assert.match(html, />\s*Close\s*<\/button>/);
@@ -108,10 +108,10 @@ test('modal options: eyebrow, custom content, footer actions, icon color, slide-
     // Autofocus and overlay.
     const plain = clean(await Action.make('b').action(() => {}).schema([]).modalAutofocus(false).extraModalOverlayAttributes({ class: 'overlay-x' }).toModalHtml(callCtx, 0));
     assert.match(plain, /x-trap\.noreturn\.noautofocus="isTrapActive"/);
-    assert.match(plain, /class="fi-modal-close-overlay overlay-x"/);
+    assert.match(plain, /class="nv-modal-close-overlay overlay-x"/);
     // Removing the default buttons.
     const bare = clean(await Action.make('c').action(() => {}).modalHeading('Help').modalSubmitAction(false).modalCancelAction(false).toModalHtml(callCtx, 0));
-    assert.doesNotMatch(bare, /fi-modal-footer/);
+    assert.doesNotMatch(bare, /nv-modal-footer/);
     // Submit button customized.
     assert.match(clean(await Action.make('d').action(() => {}).schema([]).modalSubmitAction((submit) => submit.label('Send now')).toModalHtml(callCtx, 0)), /Send now/);
 });
@@ -142,8 +142,8 @@ test('modal behavior flags: has modal, unsaved changes alert, parents, transacti
 });
 
 test('defaultColor() / defaultSize() apply unless color() / size() were called; modifyWizardUsing()', async () => {
-    assert.match(clean(await Action.make('a').action(() => {}).defaultColor('danger').defaultSize('sm').toHtml(ctx)), /fi-size-sm[^"]*fi-color-danger|fi-color-danger[^"]*fi-size-sm/);
-    assert.match(clean(await Action.make('a').action(() => {}).color('success').size('lg').defaultColor('danger').defaultSize('sm').toHtml(ctx)), /fi-size-lg[^"]*fi-color-success/);
+    assert.match(clean(await Action.make('a').action(() => {}).defaultColor('danger').defaultSize('sm').toHtml(ctx)), /nv-size-sm[^"]*nv-color-danger|nv-color-danger[^"]*nv-size-sm/);
+    assert.match(clean(await Action.make('a').action(() => {}).color('success').size('lg').defaultColor('danger').defaultSize('sm').toHtml(ctx)), /nv-size-lg[^"]*nv-color-success/);
     let modified: any = null;
     Action.stepsRenderer = (steps) => ({ steps });
     const wizard = Action.make('w').action(() => {}).steps([1, 2]).modifyWizardUsing((w) => { modified = w; return { ...w, hidden: true }; });
@@ -158,7 +158,7 @@ test('ActionGroup: dropdownAutoPlacement(), dropdownMaxHeight(), dropdownFlip()'
     const auto = clean(await ActionGroup.make(items).dropdownAutoPlacement().toHtml(ctx));
     assert.match(auto, /x-float\.placement\.auto-placement\.teleport\.offset=/);
     assert.doesNotMatch(auto, /\.flip/);
-    assert.match(clean(await ActionGroup.make(items).dropdownMaxHeight('12rem').toHtml(ctx)), /fi-scrollable" style="max-height: 12rem"/);
+    assert.match(clean(await ActionGroup.make(items).dropdownMaxHeight('12rem').toHtml(ctx)), /nv-scrollable" style="max-height: 12rem"/);
     assert.match(clean(await ActionGroup.make(items).dropdownFlip(false).toHtml(ctx)), /x-float\.placement\.bottom-end\.teleport/);
     assert.match(clean(await ActionGroup.make(items).dropdownPlacement('nonsense').toHtml(ctx)), /x-float\.placement\.bottom-end\.flip/);
 });

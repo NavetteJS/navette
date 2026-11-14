@@ -116,7 +116,7 @@ test('database transactions wrap the creation, from beforeCreate() to afterCreat
     // The alert's script is sent with the page.
     page._effects = {};
     await page.render();
-    assert.match(page._effects.scripts['unsaved-data-changes-alert'], /^<script>setUpFilamentUnsavedDataChangesAlert\(\{ \$wire \}\)<\/script>$/);
+    assert.match(page._effects.scripts['unsaved-data-changes-alert'], /^<script>setUpNavetteUnsavedDataChangesAlert\(\{ \$wire \}\)<\/script>$/);
 });
 
 test('locked properties of parent classes stay locked in subclasses; scripts are sent until the browser has run them', async () => {

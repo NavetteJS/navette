@@ -1,0 +1,47 @@
+.nv-ta-row {
+    @apply [@media(hover:hover)]:transition-colors [@media(hover:hover)]:duration-75;
+
+    &.nv-clickable {
+        @apply hover:bg-gray-50 dark:hover:bg-white/5;
+    }
+
+    &.nv-striped {
+        @apply bg-gray-50 dark:bg-white/5;
+    }
+
+    &.nv-collapsed {
+        @apply hidden;
+    }
+
+    &.nv-ta-group-header-row {
+        & > td {
+            @apply bg-gray-50 dark:bg-white/5;
+        }
+    }
+
+    & .nv-ta-group-header-cell {
+        @apply px-3 sm:first-of-type:ps-6 sm:last-of-type:pe-6;
+    }
+
+    &.nv-selected {
+        &:not(.nv-striped) {
+            @apply bg-gray-50 dark:bg-white/5;
+        }
+
+        & > *:first-child {
+            @apply inset-shadow-[2px_0_0_0_var(--primary-600)] rtl:inset-shadow-[-2px_0_0_0_var(--primary-600)];
+
+            @variant dark {
+                @apply inset-shadow-[2px_0_0_0_var(--primary-500)] rtl:inset-shadow-[-2px_0_0_0_var(--primary-500)];
+            }
+        }
+    }
+}
+
+.nv-ta-reordering {
+    & .nv-ta-row {
+        &:not(.nv-ta-row-not-reorderable) {
+            @apply cursor-move;
+        }
+    }
+}
