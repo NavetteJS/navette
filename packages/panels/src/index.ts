@@ -3543,11 +3543,14 @@ export class ListRecords extends Page implements TableHost {
         for (let index = 0; index < keys.length; index += size) records.push(...(await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)))).filter((record) => record !== null));
         return records;
     }
-    /** A query of the selected records (`action.getSelectedRecordsQuery()`): the adapter's query builder, restricted to the selected keys. */
-    async getSelectedTableRecordsQuery(): Promise<any> {
+    /**
+     * Hands a query of the selected records (`action.getSelectedRecordsQuery(use)`) to `use`: the adapter's query builder,
+     * restricted to the selected keys.
+     */
+    async useSelectedTableRecordsQuery<T>(use: (query: any) => T | Promise<T>): Promise<T> {
         const adapter = this.getDataAdapterForTable();
         if (typeof adapter.newQuery !== 'function') throw new Error('getSelectedRecordsQuery() needs a data adapter with newQuery() (ObjectionAdapter).');
-        return adapter.newQuery({ keys: await this.getSelectedRecordKeys(), trashed: 'with' });
+        return use(adapter.newQuery({ keys: await this.getSelectedRecordKeys(), trashed: 'with' }));
     }
     /**
      * After an action that used the selected records: the success notification (`successNotificationTitle()`), or the failure

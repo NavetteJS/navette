@@ -327,8 +327,12 @@ export class Action implements Renderable {
         this._selection.used = true;
         return records;
     }
-    /** A query of the selected records (an Objection query builder with `ObjectionAdapter`), e.g. for one `update()` of all of them. */
-    async getSelectedRecordsQuery(): Promise<any> { return this.selectionHost('getSelectedTableRecordsQuery').getSelectedTableRecordsQuery(); }
+    /**
+     * Hands a query of the selected records (an Objection query builder with `ObjectionAdapter`) to `use`, and returns its result,
+     * e.g. `await action.getSelectedRecordsQuery((query) => query.patch({ status: 'archived' }))` for one update of all of them.
+     * (An Objection query runs when awaited: it is passed to a function instead of being returned.)
+     */
+    async getSelectedRecordsQuery<T>(use: (query: any) => T | Promise<T>): Promise<T> { return this.selectionHost('useSelectedTableRecordsQuery').useSelectedTableRecordsQuery(use); }
     /**
      * Reports that one selected record could not be processed. `key` groups failures sharing a `message` (a text, or a function of
      * the number of such failures and of the selected records); without a key, `missingBulkProcessingFailureNotificationMessage()` is used.
