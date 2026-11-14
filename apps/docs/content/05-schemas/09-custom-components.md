@@ -550,6 +550,22 @@ Each time the component is rendered on the server, the renderer receives the new
 
 Render only inside `host`, whose content is ignored when the page is updated, and keep child schemas and actions outside the renderer. If importing, mounting or `update()` fails, the component shows an accessible error message and the error is logged in the browser console. Clean up subscriptions, listeners and framework roots in `destroy()`.
 
+### Customizing the markup around the renderer
+
+A `JsComponent` has no view to replace: its `toHtml()` returns the renderer's host with its configuration, like Filament's `toEmbeddedHtml()`. To add your own markup, subclass it and build on `super.toHtml()`, keeping your content outside the host:
+
+```ts
+import { JsComponent } from '@navette-js/schemas';
+
+export class Chart extends JsComponent {
+    async toHtml(): Promise<string> {
+        return `<figure class="chart">${await super.toHtml()}<figcaption>Monthly revenue</figcaption></figure>`;
+    }
+}
+```
+
+Escape any value you insert with `e()` from `@navette-js/support`. Built-in components can be extended the same way.
+
 ### Building reusable JavaScript components
 
 To ship a component that renders with JavaScript, extend `JsComponent` and override `getRenderer()`, and `getRendererConfiguration()` for its configuration:

@@ -185,6 +185,18 @@ TextInput.make('email')
 
 The helper text is escaped. On text inputs, toggles, Markdown and code editors and sliders, it is also linked to the control with `aria-describedby`, so assistive technology reads it with the field.
 
+The ids a field links that way, its helper text and, when it has one, its validation error, are returned by `getDescriptionIds()`. An `aria-describedby` passed to [`extraInputAttributes()`](#adding-extra-html-attributes-to-the-input-element-of-a-field) replaces them. To describe the control with your own element as well, keep them by passing a function, which receives the [field context](#using-the-field-context):
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('email')
+    .helperText('Use your work email address.')
+    .extraInputAttributes(({ component }) => ({
+        'aria-describedby': ['email-policy', ...component.getDescriptionIds()].join(' '),
+    }))
+```
+
 ## Adding a hint next to the label
 
 A hint is displayed at the end of the label row. Use it for short, secondary information:

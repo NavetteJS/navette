@@ -320,6 +320,16 @@ const contentEditor = () => RichEditor.make('content').customBlocks([CallToActio
 const html = await contentEditor().getRenderer(post.content).mergeTags({ name: customer.name }).toHtml();
 ```
 
+`renderRichDocument(content)` is the short form of `getRenderer(content).toHtml()`, like Filament's `renderRichContent()`:
+
+```ts
+const html = await contentEditor().renderRichDocument(post.content);
+```
+
+<Aside variant="warning">
+`@navette-js/forms` also exports a lower-level function of the same name, `renderRichDocument(document, { linkProtocols, extensions })`, which turns a TipTap document into HTML **without** cleaning it: it is what the renderer calls once it has cleaned the content. Never pass it a document that could come from a user or another system; use the editor's method, `RichContentRenderer` or `richDocumentToHtml()` instead.
+</Aside>
+
 Otherwise, you may output the HTML in your own views as it is:
 
 ```html
