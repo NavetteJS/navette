@@ -128,9 +128,10 @@ try {
         const panel = group.locator('.fi-dropdown-panel');
         await panel.waitFor();
         assert.equal((await panel.locator('.fi-dropdown-header').innerText()).trim(), 'Tables');
-        // "Cards layout" is a child item of "Products lab": they form a list of their own, with their icons.
+        // "Cards layout" is a child item of "Products lab": they form a list of their own, with their icons; "Orders lab" follows in another list.
         const lists = panel.locator('.fi-dropdown-list');
-        assert.equal(await lists.count(), 1);
+        assert.equal(await lists.count(), 2);
+        assert.deepEqual((await lists.nth(1).locator('.fi-dropdown-list-item-label').allInnerTexts()).map((label) => label.trim()), ['Orders lab']);
         assert.deepEqual((await lists.first().locator('.fi-dropdown-list-item-label').allInnerTexts()).map((label) => label.trim()), ['Products lab', 'Cards layout']);
         assert.equal(await lists.first().locator('.fi-dropdown-list-item .fi-icon').count(), 2);
         await panel.getByRole('menuitem', { name: 'Cards layout' }).click();
