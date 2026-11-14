@@ -1,8 +1,8 @@
-// Filament's array format of actions and action groups (`Action::toArray()` / `fromArray()`), used by notifications: their
-// actions are stored in the notifications table, in the page state and in broadcast messages.
+// Array format of actions and action groups (`toArray()` / `fromArray()`), used by notifications: their actions are stored
+// in the notifications table, in the page state and in broadcast messages.
 import type { Action, ActionGroup } from './index.ts';
 
-/** Filament's array of an action. Values that cannot be computed without a component (functions returning promises) are left out. */
+/** Array of an action. Values that cannot be computed without a component (functions returning promises) are left out. */
 export type ActionArray = {
     name: string; alpineClickHandler: string | null; color: string | null; event: string | null; eventData: Record<string, unknown> | unknown[];
     dispatchDirection: 'self' | 'to' | false; dispatchToComponent: string | null; extraAttributes: Record<string, unknown>; icon: string | null;
@@ -10,7 +10,7 @@ export type ActionArray = {
     shouldMarkAsRead: boolean; shouldMarkAsUnread: boolean; shouldOpenUrlInNewTab: boolean; shouldPostToUrl: boolean; size: string;
     tooltip: string | null; url: string | null; view: 'button' | 'link' | 'icon-button' | 'badge' | null;
 };
-/** Filament's array of an action group: its `actions` key tells it apart from an action. */
+/** Array of an action group: its `actions` key tells it apart from an action. */
 export type ActionGroupArray = {
     actions: (ActionArray | ActionGroupArray)[]; color: string | null; dropdownMaxHeight: string | null; dropdownOffset: number | null; dropdownPlacement: string | null;
     dropdownWidth: string | null; extraAttributes: Record<string, unknown>; hasDropdown: boolean; icon: string | null; iconPosition: 'before' | 'after';
@@ -36,7 +36,8 @@ const labelFromName = (name: string): string => {
  * merged in order); a set computed asynchronously is ignored. A `getExtraAttributes()` returning an object directly also works.
  */
 const extraAttributesOf = (target: any): Record<string, unknown> => {
-    const sets: unknown[] = Array.isArray(target._extraAttributes) ? target._extraAttributes : target._extraAttributes ? [target._extraAttributes] : [];
+    // A copy: pushing the fallback below into the action's own list would make `getExtraAttributes()` call itself forever.
+    const sets: unknown[] = Array.isArray(target._extraAttributes) ? [...target._extraAttributes] : target._extraAttributes ? [target._extraAttributes] : [];
     if (!sets.length && typeof target.getExtraAttributes === 'function') sets.push(() => target.getExtraAttributes({}));
     const out: Record<string, unknown> = {};
     for (const set of sets) {
@@ -62,7 +63,7 @@ export function actionToArray(action: Action): ActionArray {
         iconSize: null,
         isOutlined: a._outlined === true,
         isDisabled: Boolean(now(a._disabled, false)),
-        // Filament's default label: the name in words (`undoEdit` becomes "Undo edit").
+        // Default label: the name in words (`undoEdit` becomes "Undo edit").
         label: str(now(a._label, null)) ?? labelFromName(a.getName()),
         shouldClose: a._shouldClose === true,
         shouldMarkAsRead: a._shouldMarkAsRead === true,
@@ -94,7 +95,7 @@ const ICON = /^[a-z0-9-]+(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
 const SIZE = /^(xs|sm|md|lg|xl)$/;
 
 /**
- * Rebuilds an action from its array (Filament's `Action::fromArray()`). The data may come from the database or the browser:
+ * Rebuilds an action from its array. The data may come from the database or the browser:
  * only well-formed names, colors, icons and sizes are kept; URLs are checked again when the action is rendered.
  */
 export function actionFromArray(ActionClass: typeof Action, raw: unknown): Action {
@@ -130,7 +131,7 @@ export function actionFromArray(ActionClass: typeof Action, raw: unknown): Actio
     return action;
 }
 
-/** Rebuilds an action group from its array (Filament's `ActionGroup::fromArray()`), nested groups included. */
+/** Rebuilds an action group from its array, nested groups included. */
 export function actionGroupFromArray(ActionClass: typeof Action, GroupClass: typeof ActionGroup, raw: unknown, depth = 0): ActionGroup {
     const data = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
     const items = (Array.isArray(data.actions) ? data.actions : []).slice(0, 20)

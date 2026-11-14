@@ -39,7 +39,7 @@ test('Notification action groups: a dropdown behind a link, items closing the no
         ]).tooltip('More'),
         ActionGroup.make([Action.make('a').url('/a'), Action.make('b').url('/b')]).dropdown(false),
     ])));
-    // Filament's default trigger in notifications: a small "Actions" link.
+    // Default trigger in notifications: a small "Actions" link.
     assert.match(out, /<div x-data="\{ notificationElement: null, closeNotification\(\.\.\.args\) \{ return Alpine\.\$data\(this\.notificationElement\)\.close\(\.\.\.args\) \} \}" x-init="notificationElement = \$el\.closest\('\.nv-no-notification'\)" style="display: contents"><div x-data="navetteDropdown" class="nv-dropdown"><div x-on:mousedown="if \(\$event\.button === 0\) toggle\(\$event\)" class="nv-dropdown-trigger"><button x-tooltip="[^"]*More[^"]*" type="button" class="nv-ac-link-group nv-link nv-size-sm[^"]*"><svg[\s\S]*?<span class="nv-link-label">Actions<\/span><\/button>/);
     assert.match(out, /<a href="\/posts\/1\/edit" role="menuitem" tabindex="-1" class="nv-dropdown-list-item nv-ac-grouped-action"><svg class="nv-icon nv-size-md"[\s\S]*?<span class="nv-dropdown-list-item-label">Edit<\/span><\/a>/);
     // The notification's close, not the dropdown's.
@@ -50,7 +50,7 @@ test('Notification action groups: a dropdown behind a link, items closing the no
     assert.match(out, /<a href="\/a" class="nv-ac-link-action nv-link nv-size-sm[^"]*"><span class="nv-link-label">A<\/span><\/a><a href="\/b"/);
 });
 
-test('Filament array format: Action / ActionGroup toArray() and fromArray(), checked when it comes from outside', () => {
+test('Notification array format: Action / ActionGroup toArray() and fromArray(), checked when it comes from outside', () => {
     const action = Action.make('view').label('View post').url('/posts/1').openUrlInNewTab().icon('o-eye').iconPosition('after').size('lg').tooltip('Open').outlined().button().color('success').close().markAsRead();
     const array = action.toArray();
     assert.equal(array.name, 'view');
@@ -70,7 +70,7 @@ test('Filament array format: Action / ActionGroup toArray() and fromArray(), che
     const forged = Action.fromArray({ name: 'a" onclick="x', color: 'red" x', icon: '../x', size: 'huge', view: 'evil', label: 'Ok' }).toArray();
     assert.deepEqual([forged.name, forged.color, forged.icon, forged.size, forged.view], ['action', 'primary', null, 'md', null]);
 
-    // The notification array keeps groups and the new keys, and reads them back.
+    // The notification array keeps groups and the trigger options, and reads them back.
     const items = Notification.make().actions([group]).getData().actions!;
     const stored = items.map(notificationActionToArray);
     assert.equal((stored[0] as any).triggerView, 'navette::components.button.index');
@@ -94,7 +94,7 @@ test('Extra attributes of notification actions: only harmless names, values esca
     assert.doesNotMatch(html(Notification.make().actions([withAttributes])), /onclick/);
 });
 
-test('Title and body: safe HTML and Markdown, sanitized like Filament', () => {
+test('Title and body: safe HTML and Markdown, sanitized', () => {
     const notification = Notification.make().title(raw('<strong>Order</strong> <em>#5</em> shipped<script>alert(1)</script>'))
         .body(markdownToHtml('**Tracking**: [follow](https://example.com/t/5) <img src=x onerror=alert(1)>')).getData();
     const out = renderNotification(notification);
@@ -125,6 +125,23 @@ test('getBroadcastMessage(): actions travel in the array format and come back wh
 test('extra attributes kept by extraAttributes() as a list of sets (static objects and functions) are serialized', () => {
     const action = Object.assign(Action.make('z').url('/z'), { _extraAttributes: [{ 'data-a': '1' }, () => ({ 'data-b': '2' }), async () => ({ 'data-c': '3' })] });
     assert.deepEqual(action.toArray().extraAttributes, { 'data-a': '1', 'data-b': '2' });
+});
+
+test('toArray() leaves the extra attributes of the action untouched (no self-referencing set, no stack overflow)', async () => {
+    const action = Action.make('view').url('/view');
+    for (let i = 0; i < 3; i++) assert.deepEqual(action.toArray().extraAttributes, {});
+    assert.equal((action as any)._extraAttributes.length, 0);
+    assert.deepEqual(await action.getExtraAttributes({} as any), {});
+    // Round trip through a notification (as in the database and the page state): `onclick` is still dropped.
+    const items = Notification.make().actions([
+        action,
+        { label: 'Flag', view: 'icon-button', icon: 'o-flag', dispatch: { event: 'flagged' }, extraAttributes: { 'data-test': 'flag', onclick: 'alert(1)' } },
+    ]).getData().actions!;
+    const rebuilt = Action.fromArray(notificationActionToArray(items[1]));
+    assert.deepEqual(await rebuilt.getExtraAttributes({} as any), { 'data-test': 'flag' });
+    assert.deepEqual(rebuilt.toArray().extraAttributes, { 'data-test': 'flag' });
+    assert.equal((rebuilt as any)._extraAttributes.length, 1);
+    assert.doesNotMatch(html(Notification.make().actions([rebuilt])), /onclick/);
 });
 
 test('notification action URLs: same-site paths and http(s) only', async () => {
