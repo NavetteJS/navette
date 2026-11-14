@@ -17,4 +17,13 @@ export class Throttle {
         return 0;
     }
     clear(key: string): void { this.hits.delete(key); }
+    /** Whether the next attempt would be refused, without recording one. */
+    tooManyAttempts(key: string, now = Date.now()): boolean { return this.availableIn(key, now) > 0; }
+    /** Seconds before another attempt is allowed (0: allowed now), without recording one. */
+    availableIn(key: string, now = Date.now()): number {
+        const recent = (this.hits.get(key) ?? []).filter((at) => at > now - this.windowMs);
+        return recent.length >= this.max ? Math.max(1, Math.ceil((recent[0] + this.windowMs - now) / 1000)) : 0;
+    }
+    /** Maximum attempts per window. */
+    getMaxAttempts(): number { return this.max; }
 }

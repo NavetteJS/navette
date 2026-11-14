@@ -63,7 +63,10 @@
             </div>
             <div class="fi-page-main-sub-navigation-mobile-menu-render-hook-ctn"><%- renderHook('panels::page.sub-navigation.module-menu.after', renderHookScopes) %></div>
         <% } %>
-        <header class="<%- cls(['fi-header', { 'fi-header-has-breadcrumbs': breadcrumbs.length }]) %>">
+        <% if (locals.header) { %>
+        <%- header %>
+        <% } else { %>
+        <header class="<%- cls(['fi-header', { 'fi-header-has-breadcrumbs': breadcrumbs.length, 'fi-header-has-subheading': locals.subheading }]) %>">
             <div>
                 <% if (breadcrumbs.length) { %>
                     <nav class="fi-breadcrumbs" aria-label="<%= t('filament::components/breadcrumbs.label') %>">
@@ -94,6 +97,11 @@
                     <%= heading %>
                 </h1>
                 <%- renderHook('panels::page.header.heading.after', renderHookScopes) %>
+                <% if (locals.subheading) { %>
+                <p class="fi-header-subheading">
+                    <%- subheading %>
+                </p>
+                <% } %>
             </div>
 
             <%# The container exists as soon as there is an action or either render hook outputs something. %>
@@ -101,7 +109,7 @@
                 <div class="fi-header-actions-ctn">
                     <%- beforeHeaderActions %>
                     <% if (headerActions.length) { %>
-                    <div class="fi-ac fi-align-start" wire:key="<%= livewireId %>.header-actions.<%- headerActionsKey %>">
+                    <div class="fi-ac fi-align-<%= locals.headerActionsAlignment ?? 'start' %>" wire:key="<%= livewireId %>.header-actions.<%- headerActionsKey %>">
                         <%- headerActions.join('') %>
                     </div>
                     <% } %>
@@ -109,6 +117,7 @@
                 </div>
             <% } %>
         </header>
+        <% } %>
 
         <div class="fi-page-main">
             <% if (subNavigation.length && subNavigationPosition === 'start') { %>
@@ -154,6 +163,9 @@
                 <%- renderHook('panels::page.sub-navigation.end.after', renderHookScopes) %>
             <% } %>
         </div>
+        <% if (locals.footer) { %>
+        <%- footer %>
+        <% } %>
     </div>
 
     <%- actionModals %>

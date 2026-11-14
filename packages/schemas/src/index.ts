@@ -42,6 +42,10 @@ async function resolvePlacement(entries: ColumnPlacement[], ctx: ComponentContex
     return result;
 }
 
+/** Whether an operation name or a component class of the list matches (`hiddenOn()` / `visibleOn()`). */
+function matchesOperationOrComponent(list: (string | Function)[], operation: string | null, livewire: unknown): boolean {
+    return list.some((target) => (typeof target === 'function' ? livewire instanceof (target as any) : operation !== null && operation === target));
+}
 export abstract class Component {
     private _grow = true;
     /** Inside a Flex: `false` keeps the natural width instead of filling the available space. */
@@ -72,10 +76,13 @@ export abstract class Component {
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     visible(condition: Lazy<boolean, ComponentContext> = true): this { this._visible = condition; return this; }
     key(key: string | null): this { this._keyName = key; return this; }
-    /** Hidden for the given operation(s) (`'create'`, `'edit'`…). */
-    hiddenOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.hidden(({ operation }) => operation !== null && list.includes(operation)); }
-    /** Visible only for the given operation(s). */
-    visibleOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.visible(({ operation }) => operation !== null && list.includes(operation)); }
+    /**
+     * Hidden for the given operation(s) (`'create'`, `'edit'`…), or in the given Livewire component classes: a form shared by a
+     * resource and a relation manager hides a field in the manager with `hiddenOn(CommentsRelationManager)`.
+     */
+    hiddenOn(targets: string | Function | (string | Function)[]): this { const list = ([] as (string | Function)[]).concat(targets); return this.hidden(({ operation, livewire }) => matchesOperationOrComponent(list, operation, livewire)); }
+    /** Visible only for the given operation(s) or Livewire component classes. */
+    visibleOn(targets: string | Function | (string | Function)[]): this { const list = ([] as (string | Function)[]).concat(targets); return this.visible(({ operation, livewire }) => matchesOperationOrComponent(list, operation, livewire)); }
     /** A number applies from the `lg` breakpoint; an object replaces the default entirely. Values may be closures. */
     columnSpan(span: ColumnSpan): this { this._columnSpan = typeof span === 'object' ? span : { default: 1, lg: span }; return this; }
     /** Starting grid column: a number applies from the `lg` breakpoint; an object sets it per breakpoint. Successive calls merge; `null` resets it. */

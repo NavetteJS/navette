@@ -11,6 +11,7 @@ import { readToken, signToken } from './auth.ts';
 import { Notification } from './notifications.ts';
 import { qrCodeDataUri } from './qr-code.ts';
 import { Throttle } from './throttle.ts';
+import { getCurrentPanel } from './plugins.ts';
 import { generateTotpSecret, totpUri, verifyTotp, type TotpAlgorithm } from './totp.ts';
 import { authenticationOptions, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type UserVerification } from './webauthn.ts';
 import type { AuthProvider, Panel, PanelContext, User } from './index.ts';
@@ -95,7 +96,7 @@ const fail = (livewire: any, path: string, message: string): never => { livewire
 
 /** "Current password" field: checked against the auth provider. Not saved. */
 function currentPasswordInput(name: string, label: string, attribute: string): TextInput {
-    return TextInput.make(name).label(label).validationAttribute(attribute).password().revealable().autocomplete('current-password').required().dehydrated(false)
+    return TextInput.make(name).label(label).validationAttribute(attribute).password().revealable(getCurrentPanel()?.arePasswordsRevealable() ?? true).autocomplete('current-password').required().dehydrated(false)
         .rule({
             name: 'current_password',
             passes: async (value, ctx) => { const { panel, user } = contextOf(ctx.livewire); return Boolean(user && (await panel.getAuth().attempt(user.email, String(value)))); },
@@ -128,9 +129,11 @@ export class MultiFactorChallenge {
         for (const provider of this.getProviders()) if (await provider.isEnabled(user, this.panel)) enabled.push(provider);
         return enabled;
     }
-    async hasEnabledProviders(user: User): Promise<boolean> {
-        for (const provider of this.getProviders()) if (await provider.isEnabled(user, this.panel)) return true;
-        return false;
+    async hasEnabledProviders(user: User): Promise<boolean> { return (await this.getFirstEnabledProvider(user)) !== null; }
+    /** The first enabled provider of the user, or `null`. */
+    async getFirstEnabledProvider(user: User): Promise<MultiFactorAuthenticationProvider | null> {
+        for (const provider of this.getProviders()) if (await provider.isEnabled(user, this.panel)) return provider;
+        return null;
     }
     async beforeChallenge(user: User, provider?: MultiFactorAuthenticationProvider): Promise<void> {
         const target = provider ?? (await this.getEnabledProviders(user))[0];
@@ -141,24 +144,40 @@ export class MultiFactorChallenge {
      * (only the picked provider's are shown and validated).
      */
     getFormComponents(user: User, enabled: MultiFactorAuthenticationProvider[]): Component[] {
-        const several = enabled.length > 1;
-        const picker = several ? [Section.make().compact().secondary().schema([
+        const picker = this.getProviderPickerFormComponent(user, enabled);
+        return [...(picker ? [picker] : []), ...this.getChallengeFormComponents(user, enabled)];
+    }
+    /**
+     * The picker of the provider to be challenged with (`provider` field), or `null` with a single enabled provider. Keep it in the
+     * same schema as `getChallengeFormComponents()`: it decides which provider's fields are shown.
+     */
+    getProviderPickerFormComponent(_user: User, enabled: MultiFactorAuthenticationProvider[]): Component | null {
+        if (enabled.length <= 1) return null;
+        return Section.make().compact().secondary().schema([
             Radio.make('provider').label(t('filament-panels::auth/pages/login.multi_factor.form.provider.label'))
                 .options(Object.fromEntries(enabled.map((provider) => [provider.getId(), provider.getLoginFormLabel()])))
                 .default(enabled[0].getId()).live().required().markAsRequired(false),
-        ])] : [];
-        return [
-            ...picker,
-            ...enabled.map((provider) => {
-                const group = Group.make(provider.getChallengeFormComponents(user, this.panel)).statePath(provider.getId());
-                return several ? group.visible(({ get }) => (get('provider') ?? enabled[0].getId()) === provider.getId()) : group;
-            }),
-        ];
+        ]);
+    }
+    /** The challenge fields of each enabled provider, under its id (only the picked provider's are shown and validated). */
+    getChallengeFormComponents(user: User, enabled: MultiFactorAuthenticationProvider[]): Component[] {
+        const several = enabled.length > 1;
+        return enabled.map((provider) => {
+            const group = Group.make(provider.getChallengeFormComponents(user, this.panel)).statePath(provider.getId());
+            return several ? group.visible(({ get }) => (get('provider') ?? enabled[0].getId()) === provider.getId()) : group;
+        });
     }
     private static limiter(): Throttle { return (this.throttle ??= new Throttle(this.maxAttempts)); }
     /** Records an attempt; returns 0 if allowed, otherwise the seconds to wait. */
-    hitRateLimiter(user: User): number { return (this.constructor as typeof MultiFactorChallenge).limiter().hit(`${this.panel.getId()}:${userKey(user)}`); }
-    clearRateLimiter(user: User): void { (this.constructor as typeof MultiFactorChallenge).limiter().clear(`${this.panel.getId()}:${userKey(user)}`); }
+    hitRateLimiter(user: User): number { return (this.constructor as typeof MultiFactorChallenge).limiter().hit(this.getRateLimiterKey(user)); }
+    clearRateLimiter(user: User): void { (this.constructor as typeof MultiFactorChallenge).limiter().clear(this.getRateLimiterKey(user)); }
+    /** Whether the user has no attempt left for now (shared with the login page's challenge): check it before each validation. */
+    isRateLimited(user: User): boolean { return (this.constructor as typeof MultiFactorChallenge).limiter().tooManyAttempts(this.getRateLimiterKey(user)); }
+    /** Seconds before the user may try again (0: now). */
+    getRateLimiterAvailableInSeconds(user: User): number { return (this.constructor as typeof MultiFactorChallenge).limiter().availableIn(this.getRateLimiterKey(user)); }
+    getMaxRateLimiterAttempts(): number { return (this.constructor as typeof MultiFactorChallenge).maxAttempts; }
+    /** Rate limiter key: per panel and user. */
+    getRateLimiterKey(user: User): string { return `${this.panel.getId()}:${userKey(user)}`; }
 }
 
 // ------------------------------------------------------------------ authenticator apps (TOTP)
@@ -330,7 +349,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
                 .rule({ name: 'totp', passes: async (value) => { const secret = await this.getSecret(user, panel); return secret !== null && this.verifyCode(value, secret, { preventReuse: true }); }, message: () => t(`${group}.code.messages.invalid`) })
                 .hidden(({ get }) => recoverable && Boolean(get('useRecoveryCode'))),
             TextInput.make('recoveryCode').label(t(`${group}.recovery_code.label`)).validationAttribute(t(`${group}.recovery_code.validation_attribute`))
-                .password().revealable().autocomplete('one-time-code').required()
+                .password().revealable(getCurrentPanel()?.arePasswordsRevealable() ?? true).autocomplete('one-time-code').required()
                 .rule({ name: 'recovery_code', passes: (value) => this.verifyRecoveryCode(value, user, panel), message: () => t(`${group}.recovery_code.messages.invalid`) })
                 .visible(({ get }) => recoverable && Boolean(get('useRecoveryCode'))),
         ];
@@ -446,7 +465,7 @@ export class AppAuthentication implements MultiFactorAuthenticationProvider {
                 .hidden(({ get }) => recoverable && Boolean(get('useRecoveryCode'))),
             ...(recoverable ? [
                 TextInput.make('recoveryCode').label(t(`${group}.modal.form.recovery_code.label`)).validationAttribute(t(`${group}.modal.form.recovery_code.validation_attribute`))
-                    .password().revealable().autocomplete('one-time-code').required()
+                    .password().revealable(getCurrentPanel()?.arePasswordsRevealable() ?? true).autocomplete('one-time-code').required()
                     .rule({ name: 'recovery_code', passes: (value, ctx) => this.verifyRecoveryCode(value, contextOf(ctx.livewire).user!, panel), message: () => t(`${group}.modal.form.recovery_code.messages.invalid`) })
                     .visible(({ get }) => Boolean(get('useRecoveryCode'))),
             ] : []),

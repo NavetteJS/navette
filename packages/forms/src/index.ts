@@ -260,6 +260,37 @@ export abstract class Field extends Component {
         });
     }
 
+    /**
+     * `unique` rule checked among the records the data adapter can see (tenant scope, soft deletes…), like Filament's
+     * `scopedUnique()`: in a multi-tenant panel, a value used by another tenant is accepted. `ignoreRecord` excludes the record being edited.
+     */
+    scopedUnique(options: { ignoreRecord?: boolean; column?: string; adapter?: { existsInScope?(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>; getKey?(record: any): string } } = {}): this {
+        return this.rule({
+            name: 'unique',
+            passes: async (value, ctx) => {
+                const host = ctx.livewire as any;
+                const adapter = options.adapter ?? host.getDataAdapter?.();
+                if (typeof adapter?.existsInScope !== 'function') throw new Error('scopedUnique(): the data adapter does not support existsInScope().');
+                const ignored = options.ignoreRecord ? (ctx.record && adapter.getKey ? adapter.getKey(ctx.record) : (host.getRecordKey?.() ?? null)) : null;
+                return !(await adapter.existsInScope(options.column ?? this._name!, value, ignored));
+            },
+            message: (a) => `The ${a} has already been taken.`,
+        });
+    }
+    /** `exists` rule checked among the records the data adapter can see (tenant scope, soft deletes…), like Filament's `scopedExists()`. */
+    scopedExists(options: { adapter?: { existsInScope?(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean> }; column?: string } = {}): this {
+        return this.rule({
+            name: 'exists',
+            passes: async (value, ctx) => {
+                const adapter = options.adapter ?? (ctx.livewire as any).getDataAdapter?.();
+                if (typeof adapter?.existsInScope !== 'function') throw new Error('scopedExists(): the data adapter does not support existsInScope().');
+                for (const item of Array.isArray(value) ? value : [value]) if (!(await adapter.existsInScope(options.column ?? this._name!, item, null))) return false;
+                return true;
+            },
+            message: (a) => `The selected ${a} is invalid.`,
+        });
+    }
+
     async getLabel(): Promise<string> { return (await evaluate(this._label, this.context())) ?? headline(this._name!); }
     isRequired(): Promise<boolean> { return evaluate(this._required, this.context()); }
     isDisabled(): Promise<boolean> { return evaluate(this._disabled, this.context()); }

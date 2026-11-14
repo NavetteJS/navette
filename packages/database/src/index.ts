@@ -65,6 +65,11 @@ export interface DataAdapter<T = any> {
     deleteMany(keys: (string | number)[]): Promise<number>;
     /** True if another record already has this value (`unique` rule). */
     exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
+    /**
+     * Like `exists()`, among the records the adapter can see: its tenant and column scopes and `modify` apply, soft-deleted
+     * records are left out (`scopedUnique()` / `scopedExists()` rules). Optional.
+     */
+    existsInScope?(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
     /** Runs `fn` in a database transaction (`panel.databaseTransactions()`); without it, `fn` runs as is. */
     transaction?<T>(fn: () => Promise<T>): Promise<T>;
     /** A copy limited to the records whose `column` equals `value` (nested resources); optional. */
@@ -341,6 +346,11 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async exists(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
         const q = this.query().where(column, value as any);
         if (exceptKey !== null) q.whereNot(this.keyColumn, exceptKey);
+        return (await q.resultSize()) > 0;
+    }
+    async existsInScope(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
+        const q = this.base('without').where(`${this.model.tableName}.${column}`, value as any);
+        if (exceptKey !== null) q.whereNot(`${this.model.tableName}.${this.keyColumn}`, exceptKey);
         return (await q.resultSize()) > 0;
     }
 }

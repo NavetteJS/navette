@@ -206,6 +206,8 @@ export class WireRuntime {
     register(name: string, cls: ComponentClass): this { this.registry.set(name, cls); if (!this.names.has(cls)) this.names.set(cls, name); cls.componentName = name; return this; }
     /** Name under which this runtime registered a class. A class shared by several runtimes (one per panel) keeps one name per runtime. */
     nameOf(cls: ComponentClass): string { return this.names.get(cls) ?? cls.componentName ?? ''; }
+    /** Class registered under a name, or `null`. */
+    classOf(name: string): ComponentClass | null { return this.registry.get(name) ?? null; }
 
     private make(name: string): Component {
         const cls = this.registry.get(name);

@@ -253,8 +253,8 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         const routeParams = Object.fromEntries(Object.entries(params).map(([key, value]) => [key, this.routeParam(value)]));
         const url = this.urlOf(routeParams);
         const name = componentNameOf(this.runtime, panel, this.componentClass);
-        // Relation managers and lazy widgets are loaded by the browser once visible (related records pages are not): a placeholder first, then `__lazyLoad`.
-        const lazy = this.componentClass.prototype instanceof RelationManager || this.componentClass.isLazy === true;
+        // Relation managers (unless `isLazyLoaded = false`) and lazy widgets are loaded by the browser once visible (related records pages are not): a placeholder first, then `__lazyLoad`.
+        const lazy = this.componentClass.prototype instanceof RelationManager ? (this.componentClass as any).isLazy() : this.componentClass.isLazy === true;
         try {
             const { result, pending, failedRules } = await this.inRequest(url, (ctx) => this.runtime.mountWithInstance(name, routeParams, { path: url.split('?')[0], method: 'GET', ctx, lazy }), query);
             this.snapshot = result.snapshot;

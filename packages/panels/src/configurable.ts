@@ -125,6 +125,8 @@ const baseOf = (cls: Function): Function => {
     const own = ownConfiguration(cls);
     return own ? (own instanceof ResourceConfiguration ? own.getResource() : own.getPage()) : cls;
 };
+/** The resource or page class configured by a registration's generated subclass (the class itself otherwise). */
+export const configuredBaseOf = (cls: Function): Function => baseOf(cls);
 const baseFor = (configuration: Configuration): Function => (configuration instanceof ResourceConfiguration ? configuration.getResource() : configuration.getPage());
 
 /** A subclass keeping the class's name (titles and labels may be derived from it). */

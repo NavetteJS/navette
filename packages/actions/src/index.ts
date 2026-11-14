@@ -96,6 +96,13 @@ export class Action implements Renderable {
     }
     /** Renders a `type="submit"` button that triggers the form's submit method, e.g. `.submit('authenticate')`. */
     submit(form: string | null): this { this._submit = form; return this; }
+    private _formId: string | null = null;
+    /** Id of the `<form>` a submit button belongs to when it is rendered outside of it (a page header): `form="<id>"`. */
+    formId(id: string | null): this { this._formId = id; return this; }
+    getFormId(): string | null { return this._formId; }
+    hasFormId(): boolean { return this._formId !== null; }
+    canSubmitForm(): boolean { return this._submit !== null; }
+    getFormToSubmit(): string | null { return this._submit; }
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     /** Navigation action, rendered as `<a href wire:navigate>`. */
     url(url: string | null | ((ctx: ComponentContext) => string | null)): this { if (typeof url === 'function') this._lazyUrl = url; else { this._url = url; this._lazyUrl = null; } return this; }
@@ -519,6 +526,7 @@ export class Action implements Renderable {
         const attributes = new Attributes()
             .merge({
                 type: isSubmit ? 'submit' : 'button',
+                form: isSubmit ? this._formId : null,
                 'wire:loading.attr': 'aria-disabled',
                 'wire:loading.class': 'fi-disabled',
                 'wire:target': this._livewireTarget ?? this._submit,

@@ -147,6 +147,11 @@ export abstract class Column<R = any> {
     hidden(condition: boolean | (() => boolean) = true): this { this._hidden = condition; return this; }
     visible(condition: boolean | (() => boolean) = true): this { this._visible = condition; return this; }
     isHidden(): boolean { return Boolean(typeof this._hidden === 'function' ? this._hidden() : this._hidden) || !(typeof this._visible === 'function' ? this._visible() : this._visible); }
+    protected _hiddenOn: Function[] = [];
+    /** Hidden in tables of these Livewire component classes: a table shared by a resource and a relation manager hides a column in the manager. */
+    hiddenOn(components: Function | Function[]): this { this._hiddenOn = ([] as Function[]).concat(components); return this; }
+    /** Whether the column is hidden in the table of this host component (`hiddenOn()`). */
+    isHiddenOn(host: unknown): boolean { return this._hiddenOn.some((component) => host instanceof (component as any)); }
 
     getLabel(): string { return this._label ?? headline(this.name.includes('.') ? this.name.split('.').slice(-2, -1)[0] : this.name); }
     isSortable(): boolean { return this._sortable; }
@@ -1468,6 +1473,8 @@ const FILTERS_LAYOUTS: FiltersLayout[] = ['dropdown', 'modal', 'above-content', 
 /** Widths accepted for the filters dropdown, modal or side panel. */
 const FILTERS_WIDTHS = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', 'full', 'screen-sm', 'screen-md', 'screen-lg', 'screen-xl', 'screen-2xl', 'screen'];
 export interface TableFilter {
+    /** Whether the filter is hidden in the table of this host component (`hiddenOn()`). */
+    isHiddenOn?(host: unknown): boolean;
     readonly name: string;
     getLabel(): string;
     /** Initial state (empty form). */
@@ -1531,6 +1538,10 @@ const filterValue = (value: unknown): string | null => ((typeof value === 'strin
 
 /** Shared options of the built-in filters: label, default state, indicators and custom query. */
 abstract class BaseFilter implements TableFilter {
+    protected _hiddenOn: Function[] = [];
+    /** Hidden in tables of these Livewire component classes (a filter of a shared table, hidden in a relation manager). */
+    hiddenOn(components: Function | Function[]): this { this._hiddenOn = ([] as Function[]).concat(components); return this; }
+    isHiddenOn(host: unknown): boolean { return this._hiddenOn.some((component) => host instanceof (component as any)); }
     readonly name: string;
     protected _label: string | null = null;
     protected _default: unknown = undefined;
@@ -2158,6 +2169,12 @@ export class Table<R = any> {
     getColumns(): Column<R>[] { return this._columns.filter((column) => !column.isHidden()); }
     getColumn(name: string): Column<R> | undefined { return this.getColumns().find((c) => c.name === name); }
     getFilters(): TableFilter[] { return this._filters; }
+    /** Removes the columns and filters hidden in this host component (`hiddenOn()`); called by the component building the table. */
+    withoutComponentsHiddenOn(host: unknown): this {
+        this._columns = this._columns.filter((column) => !(column as any).isHiddenOn?.(host));
+        this._filters = this._filters.filter((filter) => !filter.isHiddenOn?.(host));
+        return this;
+    }
     getDefaultSort(): { column: string; direction: SortDirection } | null { return this._defaultSort; }
     getRecordUrl(record: R): string | null { return this._recordUrl ? this._recordUrl(record) : null; }
     getPageOptions(): (number | 'all')[] { return this._pageOptions; }
