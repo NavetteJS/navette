@@ -155,6 +155,61 @@ static table(table: Table<Post>): Table<Post> {
 
 You may also move the "Reset" button next to "Apply" with `filtersResetActionPosition('footer')`.
 
+`filtersRemoveAllAction()` customizes the "Remove all filters" button displayed next to the [active filter indicators](#active-filter-indicators) in the same way (an icon button by default; `hidden()` removes it):
+
+```ts
+table.filtersRemoveAllAction((action) => action.button().label('Clear filters'))
+```
+
+## Customizing the filter's form field
+
+Built-in filters build their form field themselves: a select for `SelectFilter` and `TernaryFilter`, a checkbox (or toggle) for a `Filter` without schema. `modifyFormFieldUsing()` receives that field to change it, for example to use the JavaScript select:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('status')
+    .options(STATUSES)
+    .modifyFormFieldUsing((field) => field.native(false).placeholder('Any status'))
+```
+
+The function may return the field, or nothing.
+
+## Modifying the base query
+
+`query()` adds the filter's conditions, grouped with the other filters'. `baseQuery()` changes the table's base query instead, whatever the filter's state (except an unchecked checkbox filter), for example to include soft-deleted records or join a table that the filter's conditions need:
+
+```ts
+import { SelectFilter } from '@navette-js/tables';
+
+SelectFilter.make('country')
+    .options(COUNTRIES)
+    .baseQuery((query) => query.leftJoin('addresses', 'addresses.customer_id', 'customers.id').select('customers.*'))
+    .query((query, data) => { if (data.value) query.where('addresses.country', data.value); })
+```
+
+## Resolving records outside the filters
+
+As in Filament, when a row action (or a column action) runs, its record must still match the applied filters: a record that no longer matches, for example because another user changed it, is not found. `excludeWhenResolvingRecord()` leaves a filter out of that check, typically for a filter on a value that the action itself changes:
+
+```ts
+import { Filter } from '@navette-js/tables';
+
+Filter.make('in_stock')
+    .query((query) => query.where('qty', '>', 0))
+    .excludeWhenResolvingRecord()
+```
+
+The query builder accepts `excludeWhenResolvingRecord()` too.
+
+## Keeping the selection when filtering
+
+By default, changing the filters, the search or the column searches clears the selected records, and the selected records are restricted to the filtered records. `deselectAllRecordsWhenFiltered(false)` keeps the selection instead, as in Filament: the user can select records, search for others and add them to the selection. "Select all" then selects the listed keys (the deselected records are not tracked):
+
+```ts
+table.deselectAllRecordsWhenFiltered(false)
+```
+
 ## Active filter indicators
 
 When filters are applied, the badge of the filters button shows how many are active, and indicators are displayed above the table, which the user can remove individually:
@@ -174,7 +229,7 @@ SelectFilter.make('author_id')
     .indicator('Author')
 ```
 
-To hide the indicators, use `hiddenFilterIndicators()` on the table. The "Remove all" button clears every removable filter, the search and the column searches.
+To hide the indicators, use `hiddenFilterIndicators()` on the table. The "Remove all" button clears every removable filter, the search and the column searches; customize it with [`filtersRemoveAllAction()`](#customizing-the-filters-actions).
 
 ## Positioning filters
 

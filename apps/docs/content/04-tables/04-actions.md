@@ -135,6 +135,24 @@ new Table()
 
 `tableIcon()` sets the icon used when the action is displayed in a table row, and `groupedIcon()` the icon used in an [action group](#grouping-actions), when they should differ from `icon()`.
 
+### Modifying every record action
+
+`modifyUngroupedRecordActionsUsing()` on the table changes every record action that is not inside an [action group](#grouping-actions), for example to display them all as icon buttons:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .modifyUngroupedRecordActionsUsing((action) => action.iconButton())
+        .recordActions([
+            // ...
+        ]);
+}
+```
+
+The function applies to the actions given to `recordActions()`, whether it is declared before or after them.
+
 ### Opening a record action when a row is clicked
 
 You may open one of the record actions when the user clicks anywhere on a row, by passing its name to the table's [`recordAction()`](/tables/overview#opening-an-action-when-a-row-is-clicked) method.
@@ -267,7 +285,7 @@ Action.make('archive')
     })
 ```
 
-The function passed to `processSelectedRecords()` reports a failure by returning `false` or throwing. When every record succeeds, the success notification is sent; otherwise a warning (or a danger notification when nothing succeeded) gives the failure title and the messages. `DeleteBulkAction` uses the same notifications: with `authorizeIndividualRecords('delete')`, it deletes record by record instead of in one query.
+The function passed to `processSelectedRecords()` reports a failure by returning `false` or throwing, or with `action.reportBulkProcessingFailure()` (see below) to give its own message. When every record succeeds, the success notification is sent; otherwise a warning (or a danger notification when nothing succeeded) gives the failure title and the messages. `DeleteBulkAction` uses the same notifications: with `authorizeIndividualRecords('delete')`, it deletes record by record instead of in one query.
 
 ### Restoring and force-deleting records in bulk
 
@@ -321,6 +339,82 @@ new Table()
 ```
 
 `selectCurrentPageOnly()` makes "select all" select the records of the current page only.
+
+### Selecting groups only
+
+In a [grouped table](/tables/grouping), `selectGroupsOnly()` lets the user select records group by group: the "Select all" link and the page checkbox are removed, the group checkboxes stay:
+
+```ts
+table
+    .groups(['status'])
+    .selectGroupsOnly()
+```
+
+### Accessing the selected records from any table action
+
+Bulk actions are not the only ones that can work on the selection: a header, toolbar or record action with `accessSelectedRecords()` sends the selected records along with its click, and reads them with `action.getSelectedRecords()`. `selectable()` on the table shows the checkboxes even without bulk actions (and `selectable(false)` hides them despite bulk actions):
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Notification } from '@navette-js/panels';
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Product>): Table<Product> {
+    return table
+        .selectable()
+        .toolbarActions([
+            Action.make('compare')
+                .accessSelectedRecords()
+                .action(async ({ action }) => {
+                    const products = await action!.getSelectedRecords();
+                    Notification.make().title(`Comparing ${products.length} products`).send();
+                }),
+        ]);
+}
+```
+
+The selection is checked again on the server, like for bulk actions: only records the table can show, that are selectable, and within `maxSelectableRecords()`; by default, they are also [restricted to the current filters](/tables/filters/overview#keeping-the-selection-when-filtering). The records are loaded by chunks of `chunkSelectedRecords()` (100 by default); `fetchSelectedRecords(false)` returns their keys only, without loading them.
+
+Bulk actions access the selected records in the same way: `getSelectedRecords()` works in their `action()` function too.
+
+### Updating the selected records in one query
+
+`action.getSelectedRecordsQuery()` hands a query of the selected records (an Objection query builder with `ObjectionAdapter`) to a function, and returns what it returns. An Objection query runs as soon as it is awaited, so it is passed to a function instead of being returned:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('publish')
+    .accessSelectedRecords()
+    .action(async ({ action }) => {
+        await action!.getSelectedRecordsQuery((query) => query.patch({ is_published: 1 }));
+    })
+```
+
+### Reporting failures
+
+While processing the selected records, call `action.reportBulkProcessingFailure()` for each record that could not be processed. Failures reported with the same key share a message, a text or a function of the number of such failures and of the number of selected records. Once the action has run, the failure notification gives the failure title and the messages; when nothing failed, the success notification is sent:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+Action.make('ship')
+    .accessSelectedRecords()
+    .successNotificationTitle('Shipped')
+    .failureNotificationTitle((success, total) => `Shipped ${success} of ${total} orders`)
+    .missingBulkProcessingFailureNotificationMessage((count) => `${count} could not be shipped.`)
+    .action(async ({ action }) => {
+        for (const order of await action!.getSelectedRecords()) {
+            if (order.status === 'cancelled') {
+                action!.reportBulkProcessingFailure('cancelled', (count) => `${count} cancelled order(s) cannot be shipped.`);
+                continue;
+            }
+            await ship(order);
+        }
+    })
+```
+
+A failure reported without a key uses the `missingBulkProcessingFailureNotificationMessage()`. `reportCompleteBulkProcessingFailure()` reports that no record could be processed, and `reportBulkProcessingSuccessfulRecordsCount()` gives the number of processed records when you process them in one query.
 
 ## Header actions
 

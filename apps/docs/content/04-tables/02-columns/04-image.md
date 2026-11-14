@@ -266,3 +266,19 @@ ImageColumn.make<User>('avatar_url')
     .circular()
     .tooltip((record) => record.name)
 ```
+
+## Adding extra attributes to the images
+
+`extraImgAttributes()` adds HTML attributes to each `<img>` element. It accepts an object, or a function that receives the record and the image URL:
+
+```ts
+import { ImageColumn } from '@navette-js/tables';
+
+ImageColumn.make<Product>('photo_url')
+    .extraImgAttributes((record) => ({
+        loading: 'lazy',
+        title: record.name,
+    }))
+```
+
+Values are escaped. `src`, `srcset` and `alt` cannot be set this way (use the column's state and `alt()`), and event handler attributes such as `onerror` are dropped. Use `extraAttributes()` for the element around the images.

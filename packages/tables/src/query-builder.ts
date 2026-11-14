@@ -6,10 +6,11 @@ import type { ListQuery } from '@navette-js/database';
 import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette-js/forms';
 import { Block, Builder, colorsOf, iconActionButton, isItemKey, shortKey, writeState } from '@navette-js/forms/builder';
 import { Component, Group, Schema } from '@navette-js/schemas';
-import { Attributes, e, icons, isEnum, js, views, configured, type Enum } from '@navette-js/support';
+import { Attributes, e, icons, isEnum, js, views, configured, configureUsing, type Enum } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { createHash } from 'node:crypto';
 import type { FilterIndicator, FilterState, TableFilter, TableHost } from './index.ts';
+import { loadRelatedRecordOptions, type RelatedOptionsRequest } from './relationship-options.ts';
 
 const tr = (key: string, replace: Record<string, string | number> = {}) => t(`filament-query-builder::query-builder.${key}`, replace);
 const headline = (s: string) => s.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -276,6 +277,8 @@ export type RelationshipQueryModifier = (query: any) => void;
  * the browser only picks a constraint (by name) and one of its operators.
  */
 export class Constraint {
+    /** Default setup for every constraint of this class created afterwards by `make()`, e.g. `TextConstraint.configureUsing((c) => c.nullable())`. */
+    static configureUsing<T>(this: abstract new (...args: any[]) => T, configure: (instance: T) => void): void { configureUsing(this, configure); }
     readonly name: string;
     readonly type: ConstraintType;
     private _label: string | null = null;
@@ -331,13 +334,31 @@ export class Constraint {
     getOperators(): Operator[] { return [...(OPERATORS[this.type as keyof typeof OPERATORS] ?? []), ...(this._nullable ? [isFilledOperator] : [])]; }
     protected _operatorsOverride: Operator[] | null = null;
     protected _extraOperators: Operator[] = [];
+    protected _leadingOperators: Operator[] = [];
     /** Replaces the operators of the constraint. */
-    operators(operators: (QueryBuilderOperator | Operator)[]): this { this._operatorsOverride = operators.map(toOperator); return this; }
+    operators(operators: (QueryBuilderOperator | Operator)[]): this { this._operatorsOverride = operators.map(toOperator); this._leadingOperators = []; this._extraOperators = []; return this; }
     /** Adds operators after the default ones. */
-    pushOperators(operators: (QueryBuilderOperator | Operator)[]): this { this._extraOperators = [...this._extraOperators, ...operators.map(toOperator)]; return this; }
-    /** Operators offered to the user: the default ones, or those set with `operators()` / `pushOperators()`. */
+    pushOperators(operators: (QueryBuilderOperator | Operator)[]): this {
+        if (this._operatorsOverride) { this._operatorsOverride = [...this._operatorsOverride, ...operators.map(toOperator)]; return this; }
+        this._extraOperators = [...this._extraOperators, ...operators.map(toOperator)];
+        return this;
+    }
+    /**
+     * Adds operators before the default ones (each one first, in turn). An operator with the name of an existing one replaces it,
+     * as in Filament.
+     */
+    unshiftOperators(operators: (QueryBuilderOperator | Operator)[]): this {
+        for (const operator of operators.map(toOperator)) {
+            if (this._operatorsOverride) { this._operatorsOverride = [operator, ...this._operatorsOverride.filter((existing) => existing.name !== operator.name)]; continue; }
+            this._leadingOperators = [operator, ...this._leadingOperators.filter((existing) => existing.name !== operator.name)];
+            this._extraOperators = this._extraOperators.filter((existing) => existing.name !== operator.name);
+        }
+        return this;
+    }
+    /** Operators offered to the user: the default ones, or those set with `operators()`, `pushOperators()` and `unshiftOperators()`. */
     getAvailableOperators(): Operator[] {
-        const list = this._operatorsOverride ?? [...this.getOperators(), ...this._extraOperators];
+        const leading = new Set(this._leadingOperators.map((operator) => operator.name));
+        const list = this._operatorsOverride ?? [...this._leadingOperators, ...this.getOperators().filter((operator) => !leading.has(operator.name)), ...this._extraOperators];
         if (new Set(list.map((operator) => operator.name)).size !== list.length) throw new Error(`Constraint ${this.name}: two operators have the same name.`);
         return list;
     }
@@ -428,33 +449,79 @@ export class DateConstraint extends Constraint {
     }
 }
 
-/** Value picked from a fixed list; with `multiple()`, any of the picked values. */
+type SelectOptions = [string | number, string][] | Record<string, string>;
+const toPairs = (options: SelectOptions): [string, string][] => (Array.isArray(options) ? options : Object.entries(options)).map(([value, optionLabel]): [string, string] => [String(value), String(optionLabel)]);
+
+/**
+ * Value picked from a fixed list; with `multiple()`, any of the picked values. With `getSearchResultsUsing()`, the options are
+ * searched on the server instead: picked values are then bound query parameters, labelled by `getOptionLabelUsing()` /
+ * `getOptionLabelsUsing()`.
+ */
 export class SelectConstraint extends Constraint {
     private _options: [string, string][] = [];
     private _multiple = false;
     private _searchable = false;
+    private _native = true;
+    private _optionsLimit = 50;
+    private _searchResultsUsing: ((search: string) => SelectOptions | Promise<SelectOptions>) | null = null;
+    private _optionLabelUsing: ((value: string) => string | null | Promise<string | null>) | null = null;
+    private _optionLabelsUsing: ((values: string[]) => SelectOptions | Promise<SelectOptions>) | null = null;
+    /** Labels of the values cited by rules, loaded before indicators are computed (server-side search). */
+    private _loadedLabels = new Map<string, string>();
     static make(name: string): SelectConstraint { return configured(new SelectConstraint(name, 'select', icons.resolve('query-builder::constraints.select') ?? 'm-chevron-up-down')); }
     /** Options as `[value, label]` pairs, `{ value: label }` or an enum; only these values can filter. */
     options(options: [string | number, string][] | Record<string, string> | Enum<string | number>): this {
-        this._options = isEnum(options) ? options.options() : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
+        this._options = isEnum(options) ? options.options() : toPairs(options);
         return this;
     }
     getOptions(): [string, string][] { return this._options; }
     multiple(condition = true): this { this._multiple = condition; return this; }
     isMultiple(): boolean { return this._multiple; }
     searchable(condition = true): this { this._searchable = condition; return this; }
+    isSearchable(): boolean { return this._searchable || this._searchResultsUsing !== null; }
+    /** `false`: the JavaScript select, even without search. */
+    native(condition = true): this { this._native = condition; return this; }
+    /** Number of options listed at once by the JavaScript select (50 by default). */
+    optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
+    getOptionsLimit(): number { return this._optionsLimit; }
+    /** Options found on the server for a search term (implies `searchable()`). */
+    getSearchResultsUsing(callback: ((search: string) => SelectOptions | Promise<SelectOptions>) | null): this { this._searchResultsUsing = callback; return this; }
+    /** Label of a picked value, with `getSearchResultsUsing()`. */
+    getOptionLabelUsing(callback: ((value: string) => string | null | Promise<string | null>) | null): this { this._optionLabelUsing = callback; return this; }
+    /** Labels of several picked values (`multiple()`), with `getSearchResultsUsing()`. */
+    getOptionLabelsUsing(callback: ((values: string[]) => SelectOptions | Promise<SelectOptions>) | null): this { this._optionLabelsUsing = callback; return this; }
+    hasServerSideSearch(): boolean { return this._searchResultsUsing !== null; }
+    /** Before indicators: labels of the values cited by rules, from `getOptionLabelsUsing()` or `getOptionLabelUsing()`. */
+    async loadLabels(values: string[]): Promise<void> {
+        const unique = [...new Set(values)].slice(0, MAX_LIST_VALUES);
+        if (!this._searchResultsUsing || !unique.length) return;
+        if (this._optionLabelsUsing) { for (const [value, optionLabel] of toPairs(await this._optionLabelsUsing(unique))) this._loadedLabels.set(value, optionLabel); return; }
+        if (this._optionLabelUsing) for (const value of unique) { const optionLabel = await this._optionLabelUsing(value); if (optionLabel !== null && optionLabel !== undefined) this._loadedLabels.set(value, String(optionLabel)); }
+    }
+    /** The settings field: a select of the fixed options, or one searched on the server. */
+    private settingsField(field: string): Field {
+        const select = Select.make(field).label(tr(`operators.select.is.form.${field}.label`)).multiple(this._multiple).searchable(this.isSearchable()).native(this._native).optionsLimit(this._optionsLimit).required().columnSpanFull();
+        if (!this._searchResultsUsing) return select.options(this._options);
+        select.getSearchResultsUsing((search) => this._searchResultsUsing!(search));
+        if (this._optionLabelUsing) select.getOptionLabelUsing((value) => this._optionLabelUsing!(value));
+        if (this._optionLabelsUsing) select.getOptionLabelsUsing((values) => this._optionLabelsUsing!(values));
+        else if (this._optionLabelUsing) select.getOptionLabelsUsing(async (values) => (await Promise.all(values.map(async (value): Promise<[string, string] | null> => { const optionLabel = await this._optionLabelUsing!(value); return optionLabel === null || optionLabel === undefined ? null : [value, String(optionLabel)]; }))).filter((pair): pair is [string, string] => pair !== null));
+        return select;
+    }
     getOperators(): Operator[] {
         const field = this._multiple ? 'values' : 'value';
-        const known = (value: unknown) => (typeof value === 'string' || typeof value === 'number') && this._options.some(([option]) => option === String(value));
+        const serverSide = this._searchResultsUsing !== null;
+        // Fixed options: only declared values; server-side search: any scalar (a bound parameter, matching nothing when unknown).
+        const known = (value: unknown) => (typeof value === 'string' || typeof value === 'number') && (serverSide ? String(value) !== '' && String(value).length <= 255 : this._options.some(([option]) => option === String(value)));
         const is: Operator = {
             name: 'is', label: label('select', 'is'), defaults: () => ({ [field]: this._multiple ? [] : null }),
-            fields: () => [Select.make(field).label(tr(`operators.select.is.form.${field}.label`)).options(this._options).multiple(this._multiple).searchable(this._searchable).required().columnSpanFull()],
+            fields: () => [this.settingsField(field)],
             resolve: (settings, inverse, constraint) => {
                 const raw = settings[field];
                 // Forged or unknown values are dropped: only declared options remain (otherwise the rule has no effect).
                 const values = (Array.isArray(raw) ? raw : this._multiple ? [] : [raw]).filter(known).map(String);
                 if (!values.length) return null;
-                const labels = this._options.filter(([option]) => values.includes(option)).map(([, optionLabel]) => optionLabel);
+                const labels = serverSide ? values.map((value) => this._loadedLabels.get(value) ?? value) : this._options.filter(([option]) => values.includes(option)).map(([, optionLabel]) => optionLabel);
                 const condition: Condition = this._multiple
                     ? { kind: 'in', column: constraint.getColumn(), values: [...new Set(values)], negate: inverse }
                     : { kind: 'compare', column: constraint.getColumn(), operator: inverse ? '!=' : '=', value: values[0] };
@@ -502,6 +569,21 @@ export class IsRelatedToOperator {
     optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
     modifyRelationshipQueryUsing(callback: RelationshipQueryModifier | null): this { this._modifyQuery = callback; return this; }
     getModifyRelationshipQueryUsing(): RelationshipQueryModifier | null { return this._modifyQuery; }
+    private _labelFromRecord: ((record: any) => string | Promise<string>) | null = null;
+    /** Label of a related record computed from the record, instead of `titleAttribute()`. */
+    getOptionLabelFromRecordUsing(callback: ((record: any) => string | Promise<string>) | null): this { this._labelFromRecord = callback; return this; }
+    getOptionLabelFromRecordCallback(): ((record: any) => string | Promise<string>) | null { return this._labelFromRecord; }
+    /** As in Filament, `searchable()` without `preload()` searches the related records on the server instead of listing them. */
+    searchesOnServer(): boolean { return this._searchable && !this._preload; }
+    /** The settings select: every related record, or a search on the server. */
+    private settingsField(constraint: RelationshipConstraint, field: string): Field {
+        const select = Select.make(field).label(tr(`operators.relationship.is_related_to.form.${field}.label`)).multiple(this._multiple).searchable(this._searchable).optionsLimit(this._optionsLimit).required().columnSpanFull();
+        if (!this.searchesOnServer()) return select.options(async (ctx: any) => constraint.loadRelatedOptions(this, ctx?.livewire));
+        return select
+            .getSearchResultsUsing((search, ctx: any) => constraint.searchRelatedOptions(this, ctx?.livewire, search))
+            .getOptionLabelUsing(async (value, ctx: any) => (await constraint.findRelatedOptions(this, ctx?.livewire, [value]))[0]?.[1] ?? null)
+            .getOptionLabelsUsing((values, ctx: any) => constraint.findRelatedOptions(this, ctx?.livewire, values));
+    }
     /** Builds the query builder operator for the given constraint. */
     toOperator(constraint: RelationshipConstraint): Operator {
         const field = constraint.isMultiple() ? 'values' : 'value';
@@ -509,8 +591,7 @@ export class IsRelatedToOperator {
         const keys = (raw: unknown): Key[] => (Array.isArray(raw) ? raw : [raw]).filter((value): value is Key => typeof value === 'string' || typeof value === 'number').slice(0, MAX_LIST_VALUES);
         return {
             name: 'isRelatedTo', label: (inverse) => tr(`operators.relationship.is_related_to.label.${variant}.${inverse ? 'inverse' : 'direct'}`), defaults: () => ({ [field]: this._multiple ? [] : null }), onBaseQuery: true,
-            fields: () => [Select.make(field).label(tr(`operators.relationship.is_related_to.form.${field}.label`)).multiple(this._multiple).searchable(this._searchable)
-                .options(async (ctx: any) => constraint.loadRelatedOptions(this, ctx?.livewire)).required().columnSpanFull()],
+            fields: () => [this.settingsField(constraint, field)],
             resolve: (settings, inverse, c) => {
                 const selected = keys(settings[field]);
                 if (!selected.length) return null;
@@ -560,32 +641,25 @@ export class RelationshipConstraint extends Constraint {
         ];
     }
     getRelatedLabel(key: Key): string | null { return this._relatedLabels.get(String(key)) ?? null; }
-    /** Related model, found through the table model's relationship (declared, or the host's Objection adapter model). */
-    private relatedModel(host: unknown): any {
+    /** Options of the related records (all of them up to 1,000, a search, or some keys), with the operator's label callback. */
+    private relatedOptions(operator: IsRelatedToOperator, host: unknown, request: RelatedOptionsRequest): Promise<[string, string][]> {
         const model = this._model ?? modelOfHost(host);
         if (!model?.getRelation) throw new Error(`RelationshipConstraint ${this.name}: table model not found; declare it with model() on the constraint or the QueryBuilder.`);
-        return model.getRelation(this.getRelationshipName()).relatedModelClass;
-    }
-    private relatedQuery(operator: IsRelatedToOperator, host: unknown): { query: any; id: string; title: string } {
-        const related = this.relatedModel(host);
-        const title = operator.getTitleAttribute() ?? String(related.idColumn);
-        const query = related.query();
-        operator.getModifyRelationshipQueryUsing()?.(query);
-        return { query, id: `${related.tableName}.${related.idColumn}`, title: `${related.tableName}.${title}` };
+        return loadRelatedRecordOptions(model, this.getRelationshipName(), operator.getTitleAttribute(), { modify: operator.getModifyRelationshipQueryUsing(), labelFromRecord: operator.getOptionLabelFromRecordCallback(), ...request });
     }
     /** Select options: records of the related model, sorted by title. */
     async loadRelatedOptions(operator: IsRelatedToOperator, host: unknown): Promise<[string, string][]> {
-        const { query, id, title } = this.relatedQuery(operator, host);
-        // All options are loaded (no server-side search), capped.
-        const rows = await query.clearSelect().select({ __key: id, __title: title }).orderBy(title).limit(1000);
-        return rows.map((row: any): [string, string] => [String(row.__key), String(row.__title ?? row.__key)]);
+        // All options are loaded, capped (server-side search: see `searchRelatedOptions()`).
+        return this.relatedOptions(operator, host, { limit: 1000 });
     }
+    /** Server-side search of the related records (`searchable()` without `preload()`), at most `optionsLimit()` of them. */
+    searchRelatedOptions(operator: IsRelatedToOperator, host: unknown, search: string): Promise<[string, string][]> { return this.relatedOptions(operator, host, { search, limit: operator.getOptionsLimit() }); }
+    /** Labels of some related records, by key (also validates picked keys). */
+    findRelatedOptions(operator: IsRelatedToOperator, host: unknown, keys: string[]): Promise<[string, string][]> { return this.relatedOptions(operator, host, { keys: keys.map(String) }); }
     /** Loads labels of the keys cited by rules (for indicators such as "Author is Ada or Linus"). */
     async loadRelatedLabels(keys: Key[], host: unknown): Promise<void> {
         if (!this._selectable || !keys.length) return;
-        const { query, id, title } = this.relatedQuery(this._selectable, host);
-        const rows = await query.clearSelect().select({ __key: id, __title: title }).whereIn(id, keys.slice(0, MAX_LIST_VALUES));
-        for (const row of rows) this._relatedLabels.set(String(row.__key), String(row.__title ?? row.__key));
+        for (const [key, title] of await this.findRelatedOptions(this._selectable, host, keys.slice(0, MAX_LIST_VALUES).map(String))) this._relatedLabels.set(key, title);
     }
 }
 
@@ -928,7 +1002,13 @@ export class RuleBuilder extends Builder {
 // ------------------------------------------------------------------ filter
 /** Query builder table filter. */
 export class QueryBuilder implements TableFilter {
+    /** Default setup for every query builder created afterwards by `make()`, e.g. `QueryBuilder.configureUsing((filter) => filter.maxRules(20))`. */
+    static configureUsing(configure: (instance: QueryBuilder) => void): void { configureUsing(QueryBuilder, configure); }
     readonly name = 'queryBuilder';
+    private _excludeWhenResolvingRecord = false;
+    /** Row actions find their record even when it does not match the rules. */
+    excludeWhenResolvingRecord(condition = true): this { this._excludeWhenResolvingRecord = condition; return this; }
+    shouldExcludeWhenResolvingRecord(): boolean { return this._excludeWhenResolvingRecord; }
     private _constraints: Constraint[] = [];
     private _pickerColumns: number | null = null;
     private _model: any = null;
@@ -941,9 +1021,16 @@ export class QueryBuilder implements TableFilter {
     /** Maximum nesting depth of "or" groups: 1 forbids them (at most `MAX_NESTING_DEPTH`, 3). */
     maxNestingDepth(depth: number): this { this._maxNestingDepth = Math.min(MAX_NESTING_DEPTH, Math.max(1, Math.floor(depth))); return this; }
     getMaxNestingDepth(): number { return this._maxNestingDepth; }
-    /** Constraints, or `{ 'Group label': [constraints] }` to group them in the constraint picker. */
-    constraints(list: Constraint[] | Record<string, Constraint[]>): this {
-        const constraints = Array.isArray(list) ? list : Object.entries(list).flatMap(([group, items]) => items.map((constraint) => constraint.pickerGroup(group)));
+    /**
+     * Constraints. Like Filament's `['Group label' => [...]]`, `{ 'Group label': [constraints] }` (alone or among the list) groups
+     * constraints in the constraint picker; ungrouped constraints come first, then each group in order.
+     */
+    constraints(list: (Constraint | Record<string, Constraint[]>)[] | Record<string, Constraint[]>): this {
+        const entries = Array.isArray(list) ? list : [list];
+        const ungrouped = entries.filter((entry): entry is Constraint => entry instanceof Constraint);
+        const grouped = entries.filter((entry): entry is Record<string, Constraint[]> => !(entry instanceof Constraint) && isObject(entry))
+            .flatMap((groups) => Object.entries(groups).flatMap(([group, items]) => (Array.isArray(items) ? items : []).map((constraint) => constraint.pickerGroup(group))));
+        const constraints = [...ungrouped, ...grouped];
         if (new Set(constraints.map((c) => c.name)).size !== constraints.length) throw new Error('QueryBuilder: two constraints have the same name.');
         this._constraints = constraints;
         if (this._model) for (const constraint of constraints) if (!constraint.getModel()) constraint.model(this._model);
@@ -958,18 +1045,21 @@ export class QueryBuilder implements TableFilter {
     /** Before indicators: loads labels of the related records cited by rules (`RelationshipConstraint.selectable`). */
     async loadIndicatorData(state: FilterState, host: TableHost): Promise<void> {
         const keys = new Map<RelationshipConstraint, Key[]>();
+        const selectValues = new Map<SelectConstraint, string[]>();
         const walk = (rules: Rules) => {
             for (const rule of Object.values(rules)) {
                 if (rule.type === OR) { for (const group of Object.values(rule.data.groups as Record<string, { rules: Rules }>)) walk(group.rules); continue; }
                 const constraint = this._constraints.find((candidate) => candidate.name === rule.type);
-                if (!(constraint instanceof RelationshipConstraint) || !isObject(rule.data.settings)) continue;
+                if (!(constraint instanceof RelationshipConstraint || constraint instanceof SelectConstraint) || !isObject(rule.data.settings)) continue;
                 const raw = rule.data.settings.values ?? rule.data.settings.value;
                 const list = (Array.isArray(raw) ? raw : [raw]).filter((value): value is Key => typeof value === 'string' || typeof value === 'number');
-                keys.set(constraint, [...(keys.get(constraint) ?? []), ...list]);
+                if (constraint instanceof SelectConstraint) selectValues.set(constraint, [...(selectValues.get(constraint) ?? []), ...list.map(String)]);
+                else keys.set(constraint, [...(keys.get(constraint) ?? []), ...list]);
             }
         };
         walk(this.sanitizeState(state).rules as Rules);
         for (const [constraint, list] of keys) await constraint.loadRelatedLabels([...new Set(list)], host);
+        for (const [constraint, list] of selectValues) await constraint.loadLabels(list);
     }
     constraintPickerColumns(columns: number | null = 2): this { this._pickerColumns = columns; return this; }
     getConstraints(): Constraint[] { return this._constraints; }

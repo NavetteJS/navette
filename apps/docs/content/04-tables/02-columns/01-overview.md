@@ -458,6 +458,35 @@ TextColumn.make<Payment>('order.number')
 Navette escapes the URL in the HTML, but does not check its scheme. If it contains user-controlled data, make sure it cannot use a dangerous scheme such as `javascript:` or `data:`.
 </Aside>
 
+#### Opening URLs in a new tab
+
+Pass `true` as the second argument of `url()`, or use `openUrlInNewTab()`, to open the URL in a new tab (`target="_blank"`). Both also accept a function of the record:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<Product>('name')
+    .url((record) => `https://shop.example.com/products/${record.slug}`, true)
+
+TextColumn.make<Product>('website')
+    .url((record) => record.website)
+    .openUrlInNewTab()
+```
+
+### Disabling the click
+
+`disabledClick()` makes the cells of a column plain content: neither the column's own `url()` or `action()`, nor the row's record URL or record action, wrap them. It is useful for a column whose content has its own links or buttons:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('notes')
+    .markdown()
+    .disabledClick()
+```
+
+Editable columns (select, toggle, text input, checkbox) never wrap their cells.
+
 ### Triggering actions
 
 To run an action when the cell is clicked, pass an `Action` to the `action()` method. It is mounted with the record of the row, like a [record action](/tables/actions#record-actions): its visibility and authorization are checked again on the server:
@@ -479,9 +508,23 @@ You may also pass the name of one of the table's record actions, such as `action
 
 A column `url()` takes precedence over its action. The column's action takes precedence over the row's [record URL or record action](/tables/overview#record-urls-clickable-rows). Editable columns, such as the toggle column, are never clickable.
 
+## Adding a tooltip to the column header
+
+`headerTooltip()` shows a tooltip when the header label is hovered, for example to explain an abbreviation:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('mrr')
+    .label('MRR')
+    .headerTooltip('Monthly recurring revenue')
+```
+
+The tooltip text is escaped.
+
 ## Aligning column content
 
-You may align the content of a column, and its header, to the start, center or end using the `alignment()` method, or its shortcuts `alignCenter()` and `alignEnd()`:
+You may align the content of a column, and its header, to the start, center or end using the `alignment()` method, or its shortcuts `alignStart()`, `alignCenter()` and `alignEnd()`. `alignLeft()` and `alignRight()` align to the left or right whatever the text direction, and `alignJustify()` and `alignBetween()` are also available. Each shortcut accepts a boolean condition (`alignEnd(false)` removes the alignment):
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
@@ -504,6 +547,20 @@ new Table()
 ```
 
 Numbers are easier to compare when they are aligned to the end.
+
+### Vertical alignment
+
+When the cells of a row have different heights (a long description, a list), their content is vertically centered. `verticalAlignment()` changes it for one column: `start`, `center` or `end`, or the shortcuts `verticallyAlignStart()`, `verticallyAlignCenter()` and `verticallyAlignEnd()`:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('tags')
+    .listWithLineBreaks()
+    .verticallyAlignStart()
+```
+
+The cells get Filament's `fi-vertical-align-*` class.
 
 ## Grouping columns
 
@@ -546,7 +603,47 @@ new Table()
     ])
 ```
 
-The first argument is the label of the group, and `columns()` takes the columns inside it. A header row is added above the column headers, with one cell spanning each group.
+The first argument is the label of the group, and `columns()` takes the columns inside it; like in Filament, they may also be passed as the second argument of `make()`: `ColumnGroup.make('Details', [...])`. A header row is added above the column headers, with one cell spanning each group.
+
+The group's header cell can be customized:
+
+```ts
+import { ColumnGroup, TextColumn } from '@navette-js/tables';
+
+ColumnGroup.make('Shipping address', [
+    TextColumn.make('street'),
+    TextColumn.make('city'),
+])
+    .alignment('center') // or alignStart(), alignCenter(), alignEnd()
+    .wrapHeader()
+    .hiddenFrom('md')
+    .extraHeaderAttributes({ 'data-group': 'address' })
+```
+
+`wrapHeader()` lets a long label wrap, `visibleFrom()` and `hiddenFrom()` hide the group's header cell on some screen sizes (hide its columns too), and `extraHeaderAttributes()` adds HTML attributes to its `<th>`.
+
+## Adding extra HTML attributes
+
+Three methods add HTML attributes to a column:
+
+- `extraAttributes()`: the element holding the column's content (`.fi-ta-text`, `.fi-ta-icon`...),
+- `extraCellAttributes()`: each `<td>` cell,
+- `extraHeaderAttributes()`: the `<th>` header cell.
+
+They take an object; `extraAttributes()` and `extraCellAttributes()` also accept a function of the record. Classes and styles are added to the column's own; pass `true` as the second argument to merge with the attributes of an earlier call instead of replacing them:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make<Order>('status')
+    .extraAttributes((record) => ({ 'data-status': record.status }))
+    .extraCellAttributes({ class: 'whitespace-nowrap' })
+    .extraHeaderAttributes({ style: 'min-width: 8rem' })
+```
+
+<Aside variant="info">
+Unlike Filament, Navette escapes the values and checks the names: a value computed from a record cannot break out of its attribute, and event handler attributes (`onclick`...) are dropped. Alpine attributes (`x-tooltip`, `x-on:click`...) are kept: never build them from user input.
+</Aside>
 
 ## Hiding columns
 

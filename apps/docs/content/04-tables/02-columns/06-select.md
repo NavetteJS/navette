@@ -65,7 +65,42 @@ SelectColumn.make('country')
     .searchableOptions()
 ```
 
-The JavaScript select lists at most 50 options at a time: change it with `optionsLimit()`. `allowOptionsLabelsWrap(false)` truncates long labels, `position('top')` or `position('bottom')` forces the side where the dropdown opens, and `placeholder()` changes the empty option's text.
+The JavaScript select lists at most 50 options at a time: change it with `optionsLimit()`. `allowOptionsLabelsWrap(false)` (or Filament's name, `wrapOptionLabels(false)`) truncates long labels, `position('top')` or `position('bottom')` forces the side where the dropdown opens, and `placeholder()` changes the empty option's text.
+
+The search runs in the browser on the option labels; `searchOptionValues()` also searches the values, and `searchOptionLabels(false)` stops searching the labels.
+
+### Searching options on the server
+
+For a long list, compute the options of each search on the server with `getOptionsSearchResultsUsing()`. The function receives the search term and the record, and returns `{ value: label }` or `[value, label]` pairs. Pair it with `getOptionLabelUsing()`, which returns the label of a value: it displays the current value, and a value without label is refused when saving:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make<Order>('customer_id')
+    .getOptionsSearchResultsUsing(async (search) => Object.fromEntries(
+        (await Customer.query().where('name', 'like', `%${search}%`).limit(50)).map((customer) => [customer.id, customer.name]),
+    ))
+    .getOptionLabelUsing(async (value) => (await Customer.query().findById(value))?.name ?? null)
+```
+
+The search term comes from the browser: use it as a bound parameter, as above, never inside raw SQL.
+
+The messages of the JavaScript select can be changed:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make('customer_id')
+    // ...
+    .optionsSearchPrompt('Type a customer name')
+    .optionsSearchingMessage('Looking for customers...')
+    .noOptionsSearchResultsMessage('No customer found.')
+    .noOptionsMessage('No customers yet.')
+    .optionsLoadingMessage('Loading customers...')
+    .optionsSearchDebounce(500) // milliseconds before searching, 1000 by default
+```
+
+When the options depend on the record (a function passed to `options()`), the JavaScript select loads them again from the server when it opens. `rememberOptions()` computes them once per request, for every row.
 
 ## Disabling specific options
 
@@ -98,11 +133,24 @@ SelectColumn.make('author_id')
 
 The second argument is the column displayed as the option label. A third argument may modify the query of the related records, for example to list only active authors: `(query) => query.where('is_active', 1)`. The relationship must be declared in the Objection model's `relationMappings`.
 
-Up to 1,000 options are listed. When the value is saved, the server checks that it is the key of a related record that the (modified) query returns.
+Up to 1,000 options are listed. When the value is saved, the server checks that it is the key of a related record that the (modified) query returns. The options are computed once per request ([`rememberOptions()`](#searching-options-on-the-server) is on by default for relationships).
+
+With `searchableOptions()`, the related records are searched on the server instead of being listed (like Filament, without `preloadOptions()`): the search matches the title attribute, or the columns given to `searchableOptions(['first_name', 'last_name'])`, and returns at most `optionsLimit()` records. `preloadOptions()` lists them up front and searches them in the browser:
+
+```ts
+import { SelectColumn } from '@navette-js/tables';
+
+SelectColumn.make('author_id')
+    .optionsRelationship('author', 'last_name')
+    .searchableOptions(['first_name', 'last_name'])
+    .getOptionLabelFromRecordUsing((author) => `${author.first_name} ${author.last_name}`)
+```
+
+`getOptionLabelFromRecordUsing()` computes each option label from the related record instead of reading the title attribute. The search term is matched literally (its `%` and `_` are not wildcards) and as a bound parameter.
 
 ## Allowing HTML in the option labels
 
-`allowHtml()` displays the option labels as HTML in the JavaScript select. The labels are sanitized on the server with an allow-list; the native select shows their text only:
+`allowHtml()` (or Filament's name, `allowOptionsHtml()`) displays the option labels as HTML in the JavaScript select. The labels are sanitized on the server with an allow-list; the native select shows their text only:
 
 ```ts
 import { SelectColumn } from '@navette-js/tables';
@@ -197,3 +245,7 @@ The `update` ability covers the whole record. If only some users may change this
 <Aside variant="warning">
 Editable columns cannot save in a [table widget](/tables/overview#using-a-table-outside-a-resource) yet.
 </Aside>
+
+### Methods called by the JavaScript select
+
+The JavaScript select asks the server for the options, the search results and the label of the current value through the page's `callTableColumnMethod(column, recordKey, method)`. Only three read-only methods (`getOptionsForJs`, `getOptionsSearchResultsForJs` and `getOptionLabel`) of a declared and visible select column can be called this way, for a record within the data adapter's scope; anything else returns `null`.
