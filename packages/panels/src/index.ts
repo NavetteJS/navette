@@ -22,7 +22,7 @@ export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTim
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
 export { authenticationOptions, decodeCbor, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type AuthenticationResponseJSON, type RegistrationResponseJSON, type StoredCredential, type UserVerification } from './webauthn.ts';
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
-export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, importExportSchema, knexImportExportHistory, parseCsv, readSpreadsheet, runInBackground, useBackgroundRunner, type BackgroundTask, type ExportActionInstance, type ImportActionInstance, type ImportExportHistory } from './import-export.ts';
+export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, importExportSchema, knexImportExportHistory, parseCsv, readSpreadsheet, RowImportFailedError, runInBackground, TestableExport, TestableImport, useBackgroundRunner, type BackgroundTask, type ExportActionInstance, type ImportActionInstance, type ImportExportHistory } from './import-export.ts';
 export { buildXlsx, readXlsx } from './xlsx.ts';
 import { DownloadStore, type ImportExportHistory } from './import-export.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';

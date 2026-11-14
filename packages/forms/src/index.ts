@@ -35,8 +35,9 @@ const phpNumber = (n: number | null): string | number | null => {
     return `${mantissa.replace(/\.?0+$/, '')}E${exponent}`;
 };
 
-import { isBlank as blank, stringRule, parseRegex, type Rule } from './rules.ts';
+import { isBlank as blank, stringRule, parseRegex, reportFailedRule, type Rule } from './rules.ts';
 export type { Rule } from './rules.ts';
+export { recordFailedRules } from './rules.ts';
 const headline = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ (.)/g, (_, c) => ' ' + c.toLowerCase());
 
 export abstract class Field extends Component {
@@ -276,6 +277,7 @@ export abstract class Field extends Component {
         for (const rule of await this.getValidationRules()) {
             if (rule.name !== 'required' && !rule.implicit && blank(value)) continue;
             if (!(await rule.passes(value, this.context()))) {
+                reportFailedRule(this.getStatePath(), rule.name);
                 const custom = this._validationMessages[rule.name];
                 return [custom === undefined ? rule.message(attribute) : typeof custom === 'function' ? custom(attribute) : custom.replace(/:attribute/g, attribute)];
             }
@@ -3266,7 +3268,7 @@ export class FileUpload extends Field {
     async validate(): Promise<string[]> {
         if (!(await this.isDehydrated())) return [];
         const attribute = (await this.getLabel()).toLowerCase();
-        for (const rule of await this.getValidationRules()) if (!(await rule.passes(this.context().state, this.context()))) return [rule.message(attribute)];
+        for (const rule of await this.getValidationRules()) if (!(await rule.passes(this.context().state, this.context()))) { reportFailedRule(this.getStatePath(), rule.name); return [rule.message(attribute)]; }
         return [];
     }
     /** On save: temporary files are stored, unrecognized existing keys are dropped. */

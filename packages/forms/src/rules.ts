@@ -1,5 +1,18 @@
 // Validation rules written as strings (`'max:255'`, `'regex:/^[a-z]+$/'`), as in Laravel, and their messages.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ComponentContext } from '@navette-js/schemas';
+
+const failedRules = new AsyncLocalStorage<Record<string, string[]>>();
+/** Runs `fn` while recording the name of each validation rule that fails, by state path (read by the testing helpers). */
+export async function recordFailedRules<T>(fn: () => Promise<T>): Promise<{ result: T; failedRules: Record<string, string[]> }> {
+    const store: Record<string, string[]> = {};
+    return failedRules.run(store, async () => ({ result: await fn(), failedRules: store }));
+}
+/** Records a failed rule, when `recordFailedRules()` is running. */
+export function reportFailedRule(statePath: string, rule: string): void {
+    const store = failedRules.getStore();
+    if (store) (store[statePath] ??= []).push(rule);
+}
 
 /** `implicit`: the rule also runs on an empty value (required, accepted...); other rules are skipped when the value is empty. */
 export type Rule = { name: string; passes: (value: unknown, ctx: ComponentContext) => boolean | Promise<boolean>; message: (attribute: string) => string; implicit?: boolean };

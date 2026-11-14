@@ -1,6 +1,7 @@
 // Import and export actions: CSV and XLSX files, read and written during the request or in the background (queued()),
 // an optional history of runs, and a per-user download store.
 import { buildXlsx, readXlsx } from './xlsx.ts';
+import { AssertionError } from 'node:assert';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { Action } from '@navette-js/actions';
@@ -108,6 +109,28 @@ export abstract class Exporter {
     static getCompletedNotificationBody(count: number): string { return `Your export has completed and ${count.toLocaleString('en-US')} ${count === 1 ? 'row' : 'rows'} exported.`; }
     /** File name, without extension. */
     static getFileName(_count: number): string { return `export-${new Date().toISOString().slice(0, 10)}`; }
+    /**
+     * Row values of this exporter, without a table or a file (tests): `ProductExporter.test().export(record)`. Without a
+     * `columnMap`, the columns enabled by default; with one (`{ name: 'Name' }`), exactly those columns, in its order.
+     */
+    static test(columnMap: Record<string, string> | null = null): TestableExport { return new TestableExport(this, columnMap); }
+}
+/** Exports single records with an exporter's columns (see `Exporter.test()`). */
+export class TestableExport {
+    readonly columns: ExportColumn[];
+    /** Header row of the file: the labels of the selected columns. */
+    readonly labels: string[];
+    constructor(exporter: typeof Exporter, columnMap: Record<string, string> | null = null) {
+        const all = exporter.getColumns();
+        this.columns = columnMap === null ? all.filter((column) => column.isEnabledByDefault()) : Object.keys(columnMap).map((name) => {
+            const column = all.find((candidate) => candidate.name === name);
+            if (!column) throw new Error(`${exporter.name}: no export column named "${name}".`);
+            return column;
+        });
+        this.labels = this.columns.map((column) => columnMap?.[column.name] ?? column.getLabel());
+    }
+    /** Values of one record, in column order, as written to the file before CSV escaping. */
+    export(record: unknown): unknown[] { return this.columns.map((column) => column.getValue(record)); }
 }
 export type ExportActionInstance = Action & {
     exporter(exporter: typeof Exporter): ExportActionInstance;
@@ -218,22 +241,25 @@ export class ImportColumn {
     /** Writes the value into the record yourself, instead of the attribute with the column's name. */
     fillRecordUsing(fill: ((record: Record<string, unknown>, value: unknown) => void) | null): this { this._fill = fill; return this; }
     matches(header: string): boolean { const normalized = header.trim().toLowerCase(); return [this.name, this.getLabel(), ...this._guesses].some((candidate) => candidate.toLowerCase() === normalized); }
-    validate(value: string | null, row: Record<string, unknown>): string | null {
+    validate(value: string | null, row: Record<string, unknown>): string | null { return this.failedRule(value, row)?.message ?? null; }
+    /** First rule the value fails, with its message (`closure` for a function rule). */
+    failedRule(value: string | null, row: Record<string, unknown>): { rule: string; message: string } | null {
         const label = this.getLabel().toLowerCase();
         const blank = value === null || value.trim() === '';
         for (const rule of this._rules) {
-            if (typeof rule === 'function') { const message = rule(value, row); if (message) return message; continue; }
+            if (typeof rule === 'function') { const message = rule(value, row); if (message) return { rule: 'closure', message }; continue; }
             const [name, parameter = ''] = rule.split(':');
-            if (name === 'required' && blank) return `The ${label} field is required.`;
+            const fail = (message: string) => ({ rule: name, message });
+            if (name === 'required' && blank) return fail(`The ${label} field is required.`);
             if (blank) continue;
             const text = value!.trim();
-            if (name === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return `The ${label} field must be a valid email address.`;
-            if (name === 'numeric' && !Number.isFinite(Number(text))) return `The ${label} field must be a number.`;
-            if (name === 'integer' && !/^-?\d+$/.test(text)) return `The ${label} field must be an integer.`;
-            if (name === 'boolean' && !['0', '1', 'true', 'false', 'yes', 'no'].includes(text.toLowerCase())) return `The ${label} field must be true or false.`;
-            if (name === 'max' && text.length > Number(parameter)) return `The ${label} field must not be greater than ${parameter} characters.`;
-            if (name === 'min' && text.length < Number(parameter)) return `The ${label} field must be at least ${parameter} characters.`;
-            if (name === 'in' && !parameter.split(',').includes(text)) return `The selected ${label} is invalid.`;
+            if (name === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return fail(`The ${label} field must be a valid email address.`);
+            if (name === 'numeric' && !Number.isFinite(Number(text))) return fail(`The ${label} field must be a number.`);
+            if (name === 'integer' && !/^-?\d+$/.test(text)) return fail(`The ${label} field must be an integer.`);
+            if (name === 'boolean' && !['0', '1', 'true', 'false', 'yes', 'no'].includes(text.toLowerCase())) return fail(`The ${label} field must be true or false.`);
+            if (name === 'max' && text.length > Number(parameter)) return fail(`The ${label} field must not be greater than ${parameter} characters.`);
+            if (name === 'min' && text.length < Number(parameter)) return fail(`The ${label} field must be at least ${parameter} characters.`);
+            if (name === 'in' && !parameter.split(',').includes(text)) return fail(`The selected ${label} is invalid.`);
         }
         return null;
     }
@@ -241,7 +267,101 @@ export class ImportColumn {
     fill(record: Record<string, unknown>, value: unknown): void { if (this._fill) this._fill(record, value); else record[this.name] = value; }
 }
 /** Describes an import: its columns, how a row finds or creates its record, and hooks. */
+/** Thrown from an importer hook to fail the current row with this message (shown in the failed rows file). */
+export class RowImportFailedError extends Error {}
+
+type DataAdapterLike = { getKey(record: any): string; create(data: Record<string, unknown>): Promise<any>; update(key: string, data: Record<string, unknown>): Promise<any> };
+type RowResult = { record: any | null; errors: Record<string, { rule: string; message: string }>; failure: string | null };
+/**
+ * Imports one row (raw cell values by column name; only `mapped` columns are read): validation, then `resolveRecord()`,
+ * `beforeSave()`, create or update through the adapter, and `afterSave()`. A `RowImportFailedError` fails the row.
+ */
+async function importRow(importer: typeof Importer, columns: ImportColumn[], mapped: (column: ImportColumn) => boolean, raw: Record<string, string | null>, adapter: DataAdapterLike, livewire: unknown): Promise<RowResult> {
+    const errors: RowResult['errors'] = {};
+    for (const column of columns) {
+        if (!mapped(column)) continue;
+        const failed = column.failedRule(raw[column.name] ?? null, raw);
+        if (failed) errors[column.name] = failed;
+    }
+    if (Object.keys(errors).length) return { record: null, errors, failure: null };
+    try {
+        const record = await importer.resolveRecord(raw, { livewire });
+        const values: Record<string, unknown> = {};
+        for (const column of columns) if (mapped(column)) column.fill(values, column.cast(raw[column.name] ?? null));
+        await importer.beforeSave(values, record);
+        const saved = record ? await adapter.update(adapter.getKey(record), values) : await adapter.create(values);
+        await importer.afterSave(saved);
+        return { record: saved, errors, failure: null };
+    } catch (error) {
+        if (error instanceof RowImportFailedError) return { record: null, errors, failure: error.message };
+        throw error;
+    }
+}
+
+const fail = (message: string): never => { throw new AssertionError({ message }); };
+/** Imports single rows with an importer, without a file or an action (see `Importer.test()`). */
+export class TestableImport {
+    private result: RowResult | null = null;
+    private readonly importer: typeof Importer;
+    private readonly options: { adapter: DataAdapterLike; columnMap?: Record<string, string> | null; livewire?: unknown };
+    constructor(importer: typeof Importer, options: { adapter: DataAdapterLike; columnMap?: Record<string, string> | null; livewire?: unknown }) { this.importer = importer; this.options = options; }
+    /** Imports a row: its keys are file headers (the column names, unless `columnMap` maps columns to other headers). */
+    async import(row: Record<string, unknown>): Promise<this> {
+        const columns = this.importer.getColumns();
+        const map = this.options.columnMap ?? Object.fromEntries(columns.map((column) => [column.name, column.name]));
+        const raw: Record<string, string | null> = {};
+        for (const column of columns) {
+            const header = map[column.name];
+            const value = header === undefined ? undefined : row[header];
+            raw[column.name] = value === undefined || value === null ? null : String(value);
+        }
+        this.result = await importRow(this.importer, columns, (column) => map[column.name] !== undefined, raw, this.options.adapter, this.options.livewire ?? null);
+        return this;
+    }
+    private get outcome(): RowResult { if (!this.result) throw new Error('Call import() before asserting.'); return this.result; }
+    /** The saved record (`null` when the row failed). */
+    getRecord(): any | null { return this.outcome.record; }
+    /** Validation errors of the row: message by column name. */
+    errors(): Record<string, string> { return Object.fromEntries(Object.entries(this.outcome.errors).map(([column, error]) => [column, error.message])); }
+    /** The row was saved. */
+    assertImported(): this {
+        const { record, errors, failure } = this.outcome;
+        if (record === null) fail(`Failed asserting that the row was imported: ${failure ?? Object.values(errors).map((error) => error.message).join(' ')}`);
+        return this;
+    }
+    /** Validation errors: any (no argument), on some columns (`['price']`), or failing given rules (`{ price: 'min' }`). */
+    assertHasErrors(expected: string[] | Record<string, string | string[]> = []): this {
+        const errors = this.outcome.errors;
+        if (Array.isArray(expected) ? !expected.length : !Object.keys(expected).length) { if (!Object.keys(errors).length) fail('Failed asserting that the row has validation errors.'); return this; }
+        for (const [column, rules] of Array.isArray(expected) ? expected.map((column): [string, string[]] => [column, []]) : Object.entries(expected)) {
+            const error = errors[column];
+            if (!error) fail(`Failed asserting that the column [${column}] has a validation error.`);
+            for (const rule of [rules].flat()) if (rule !== error.rule && rule !== error.message) fail(`Failed asserting that the column [${column}] fails the [${rule}] rule: it failed [${error.rule}] (${error.message}).`);
+        }
+        return this;
+    }
+    /** No validation errors, or none on the given columns. */
+    assertHasNoErrors(columns: string[] = []): this {
+        const failed = Object.keys(this.outcome.errors).filter((column) => !columns.length || columns.includes(column));
+        if (failed.length) fail(`Failed asserting that the row has no validation errors: ${failed.map((column) => `[${column}] ${this.outcome.errors[column].message}`).join(', ')}.`);
+        return this;
+    }
+    /** The row failed with a `RowImportFailedError` (with this message, if given). */
+    assertHasRowFailure(message: string | null = null): this {
+        const failure = this.outcome.failure;
+        if (failure === null) fail('Failed asserting that the row failed to import.');
+        if (message !== null && failure !== message) fail(`Failed asserting that the row failed with [${message}]: it failed with [${failure}].`);
+        return this;
+    }
+    assertHasNoRowFailure(): this { if (this.outcome.failure !== null) fail(`Failed asserting that the row did not fail: ${this.outcome.failure}`); return this; }
+}
+
 export abstract class Importer {
+    /**
+     * Runs rows through this importer without a file (tests): `await ProductImporter.test({ adapter }).import({ sku: 'MUG-1' })`.
+     * `columnMap` maps column names to the row's keys (file headers); `livewire` is passed to `resolveRecord()`.
+     */
+    static test(options: { adapter: DataAdapterLike; columnMap?: Record<string, string> | null; livewire?: unknown }): TestableImport { return new TestableImport(this, options); }
     static getColumns(): ImportColumn[] { return []; }
     /**
      * Existing record a row updates, or `null` to create one (the default). For example, find a product by its SKU with the
@@ -432,20 +552,16 @@ export class ImportAction {
                         const raw: Record<string, string | null> = {};
                         for (const [column, index] of columnIndexes) raw[column.name] = index === -1 ? null : (cells[index] ?? null);
                         const fail = async (message: string) => { failures.push(csvLine([...cells, message])); if (history && importId !== null) await history.recordFailedImportRow(importId, raw, message); };
-                        const error = columns.map((column) => (columnIndexes.get(column) === -1 ? null : column.validate(raw[column.name], raw))).find((message) => message !== null);
-                        if (error) { await fail(error); continue; }
-                        try {
-                            const record = await importer!.resolveRecord(raw, { livewire });
-                            const values: Record<string, unknown> = {};
-                            for (const column of columns) if (columnIndexes.get(column) !== -1) column.fill(values, column.cast(raw[column.name]));
-                            await importer!.beforeSave(values, record);
-                            const saved = record ? await adapter.update(adapter.getKey(record), values) : await adapter.create(values);
-                            await importer!.afterSave(saved);
-                            imported++;
-                        } catch (failure) {
+                        let result: RowResult;
+                        try { result = await importRow(importer!, columns, (column) => columnIndexes.get(column) !== -1, raw, adapter, livewire); } catch (failure) {
                             console.error(failure);
                             await fail(t('filament-actions::import.failure_csv.system_error'));
+                            continue;
                         }
+                        // The first column error; a deliberate failure keeps its own message.
+                        const error = columns.map((column) => result.errors[column.name]?.message ?? null).find((message) => message !== null) ?? result.failure;
+                        if (error) { await fail(error); continue; }
+                        imported++;
                     }
                     if (history && importId !== null) await history.finishImport(importId, { processedRows: rows.length, successfulRows: imported });
                     const notification = Notification.make().title(t('filament-actions::import.notifications.completed.title')).body(importer!.getCompletedNotificationBody(imported, failures.length)).persistent();

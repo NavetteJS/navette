@@ -189,6 +189,8 @@ export class WireRuntime {
     passPropsToChild(childId: string, params: Record<string, unknown>): void { this.requestScope.getStore()?.childProps.set(childId, params); }
 
     private names = new Map<ComponentClass, string>();
+    /** Whether a component is registered under this name. */
+    has(name: string): boolean { return this.registry.has(name); }
     register(name: string, cls: ComponentClass): this { this.registry.set(name, cls); if (!this.names.has(cls)) this.names.set(cls, name); cls.componentName = name; return this; }
     /** Name under which this runtime registered a class. A class shared by several runtimes (one per panel) keeps one name per runtime. */
     nameOf(cls: ComponentClass): string { return this.names.get(cls) ?? cls.componentName ?? ''; }
@@ -245,7 +247,7 @@ export class WireRuntime {
         return (await this.mountWithInstance(name, params, request)).html;
     }
     /** Like mount(), but also returns the mounted instance (to read its title, for example). */
-    async mountWithInstance(name: string, params: Record<string, unknown> = {}, request: { path?: string; method?: string; ctx?: unknown; lazy?: boolean; key?: string } = {}): Promise<{ html: string; component: Component }> {
+    async mountWithInstance(name: string, params: Record<string, unknown> = {}, request: { path?: string; method?: string; ctx?: unknown; lazy?: boolean; key?: string } = {}): Promise<{ html: string; component: Component; snapshot: Snapshot; effects: Effects }> {
         const component = this.make(name);
         component._ctx = request.ctx ?? null;
         component._id = randomId();
@@ -271,11 +273,16 @@ export class WireRuntime {
         // Event listeners: the client calls `__dispatch(event, params)` when one fires.
         const listeners = Object.keys((component.constructor as ComponentClass).listeners ?? {});
         if (listeners.length) effects.listeners = listeners;
-        return { html: insertAttributesIntoHtmlRoot(html, { ...(request.key !== undefined ? { 'wire:key': request.key } : {}), 'wire:snapshot': JSON.stringify(snapshot), 'wire:effects': JSON.stringify(effects) }), component };
+        return { html: insertAttributesIntoHtmlRoot(html, { ...(request.key !== undefined ? { 'wire:key': request.key } : {}), 'wire:snapshot': JSON.stringify(snapshot), 'wire:effects': JSON.stringify(effects) }), component, snapshot, effects };
     }
 
     /** Component update request: hydrate, apply updates, run calls, render, dehydrate. */
     async update(snapshot: Snapshot, updates: Record<string, unknown>, calls: Call[], ctx: unknown = null): Promise<{ snapshot: Snapshot; effects: Effects }> {
+        const { snapshot: next, effects } = await this.updateWithInstance(snapshot, updates, calls, ctx);
+        return { snapshot: next, effects };
+    }
+    /** Like update(), but also returns the hydrated instance, as it was after the request (testing helpers read it). */
+    async updateWithInstance(snapshot: Snapshot, updates: Record<string, unknown>, calls: Call[], ctx: unknown = null): Promise<{ snapshot: Snapshot; effects: Effects; component: Component }> {
         if (!snapshot || typeof snapshot.data !== 'object' || typeof snapshot.memo !== 'object' || typeof snapshot.checksum !== 'string') throw new WireError(404, 'Invalid snapshot.');
         const expected = Buffer.from(this.checksum(snapshot)), given = Buffer.from(snapshot.checksum);
         if (expected.length !== given.length || !timingSafeEqual(expected, given)) throw new WireError(419, 'Invalid snapshot checksum.');
@@ -398,7 +405,7 @@ export class WireRuntime {
             const fresh = Object.fromEntries(Object.entries(effects.scripts as Record<string, string>).filter(([key]) => !known.has(key)));
             if (Object.keys(fresh).length) { effects.scripts = fresh; memo.scripts = [...known, ...Object.keys(fresh)]; } else delete effects.scripts;
         }
-        return { snapshot: this.snapshot(component, name, memo), effects };
+        return { snapshot: this.snapshot(component, name, memo), effects, component };
     }
 
     /** HTTP entry point; body: `{ _token, components: [{ snapshot, updates, calls }] }`. */
