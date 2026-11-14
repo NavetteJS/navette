@@ -209,29 +209,6 @@ export class Notification {
         await broadcastToUsers(users, NOTIFICATION_BROADCAST_EVENT, this.getBroadcastMessage(), options);
         return this;
     }
-    /** Rebuilds a notification from its data (`getBroadcastMessage()`), which may come from the browser: every value is checked. */
-    static fromArray(data: unknown): Notification {
-        const source = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
-        const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : null);
-        const name = (value: unknown) => (typeof value === 'string' && /^[a-z0-9-]+(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/.test(value) ? value : null);
-        const notification = new Notification();
-        const id = text(source.id, 100);
-        if (id && /^[A-Za-z0-9_-]+$/.test(id)) notification.data.id = id;
-        notification.data.title = text(source.title, 1000);
-        notification.data.body = text(source.body, 5000);
-        notification.data.status = typeof source.status === 'string' && Object.hasOwn(STATUS_ICON, source.status) ? source.status : null;
-        notification.data.icon = name(source.icon);
-        notification.data.iconColor = typeof source.iconColor === 'string' && /^[a-z]+$/.test(source.iconColor) ? source.iconColor : null;
-        notification.data.duration = source.duration === 'persistent' ? 'persistent' : typeof source.duration === 'number' && Number.isFinite(source.duration) ? Math.max(0, Math.min(source.duration, 3_600_000)) : 6000;
-        if (Array.isArray(source.actions)) {
-            notification.actions(source.actions.filter((action) => action && typeof action === 'object' && typeof (action as any).label === 'string').map((action: any) => ({
-                label: action.label.slice(0, 200), url: typeof action.url === 'string' ? action.url : null, openUrlInNewTab: action.openUrlInNewTab === true, close: action.close === true,
-                dispatch: action.dispatch && typeof action.dispatch.event === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(action.dispatch.event) ? { event: action.dispatch.event, data: action.dispatch.data && typeof action.dispatch.data === 'object' && !Array.isArray(action.dispatch.data) ? action.dispatch.data : {} } : null,
-                color: typeof action.color === 'string' ? action.color : null, button: action.button === true,
-            })));
-        }
-        return notification;
-    }
     /** Queues the notification for the browser of the current request. */
     send(): this {
         const store = requestStore.getStore();
