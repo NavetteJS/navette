@@ -359,4 +359,12 @@ The tenant of a request sent by a page is the tenant of the URL of that page, ch
 
 ### `unique` validation
 
-The `unique()` rule of a field checks the whole table, not only the records of the tenant. When a value only needs to be unique within a tenant, write your own rule.
+The `unique()` rule of a field checks the whole table, not only the records of the tenant. When a value only needs to be unique within a tenant, use `scopedUnique()`: it checks the records that the data adapter of the resource can see, so within the current tenant, and without the soft-deleted records. `scopedExists()` is the matching `exists` rule (as in Filament, it also accepts soft-deleted records):
+
+```ts
+TextInput.make('slug').scopedUnique({ ignoreRecord: true })
+Select.make('category_id').scopedExists({ adapter: new ObjectionAdapter(Category).scopedTo('team_id', currentTeamId), column: 'id' })
+```
+
+`ignoreRecord` excludes the record being edited. Without `adapter`, both rules use the adapter of the resource, so they check its own table: pass another adapter (an `ObjectionAdapter`, whose tenant and column scopes apply) to check another table, as for the category above. Both rules also accept `model` (an Objection model, queried as is), `column`, and `modifyQueryUsing` (a function receiving the query); `scopedUnique()` also accepts `ignorable` (another record to leave out).
+

@@ -120,6 +120,26 @@ It counts the records by month of `created_at` by default; pass `dateColumn` to 
 
 The state received from the browser goes through the same validation as on the list page: only the search, filters and tabs declared by the page are applied.
 
+### Using the table of the page in any widget
+
+`InteractsWithPageTable()` gives the same access to any kind of widget, a chart or a table widget for example. `getPageTableQuery()` returns the current query of the table (search, filters, tab, sort), for the data adapter, and `getPageTableRecords()` the records of the page the table shows:
+
+```ts
+import { ChartWidget, InteractsWithPageTable } from '@navette-js/panels';
+
+export class OrdersPerStatusChart extends InteractsWithPageTable(ChartWidget) {
+    static tablePage = () => OrderResource.getPages().index as any;
+
+    async getData() {
+        const orders = (await this.getPageTableRecords()) as Order[];
+        const counts = Map.groupBy(orders, (order) => order.status);
+        return { labels: [...counts.keys()], datasets: [{ label: 'Orders', data: [...counts.values()].map((list) => list.length) }] };
+    }
+}
+```
+
+`getPageTableAdapter()` returns the data adapter of the table, to run your own aggregates on `getPageTableQuery()`. Instead of `tablePage`, you may override `getTablePage()`.
+
 ### Accessing the total table records count
 
 The `count` returned by `aggregatePageTable()` is the number of records matching the table, across all its pages.

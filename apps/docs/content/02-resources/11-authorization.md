@@ -74,6 +74,18 @@ A [relation manager](/resources/managing-relationships#authorizing-relation-mana
 
 Navette checks the rights on every request that a page sends, not only when it is displayed. The record of an edit or View page is read again from the adapter and checked again each time, so a user who loses a right while the page is open cannot use it anymore. An action is checked when it is displayed, again when its modal opens, and again before it runs.
 
+### Skipping authorization for a resource
+
+`shouldSkipAuthorization` lets every signed-in user do everything on a resource, without calling its policy, nor the panel's `authorizeUsing()`:
+
+```ts
+export class NoteResource extends Resource {
+    static shouldSkipAuthorization = true;
+}
+```
+
+A user is still required, unless the panel [allows guests](/panels/users#setting-up-guest-access-to-a-panel). Use it only for resources whose records every user of the panel may manage.
+
 ## Checking an ability
 
 `Resource.can()` answers the same question as the checkpoints, with the panel hook described below:

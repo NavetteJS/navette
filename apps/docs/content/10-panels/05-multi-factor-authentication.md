@@ -447,6 +447,32 @@ class CompanyAppAuthentication extends AppAuthentication {
 
 Each method can also be registered twice with different settings, under another `id()`.
 
+## Challenging the user outside the login page
+
+`MultiFactorChallenge` runs the challenge of the sign-in. `panel.getMultiFactorChallenge()` returns it, to ask for a code before a sensitive action of your own:
+
+```ts
+const challenge = panel.getMultiFactorChallenge();
+
+if (await challenge.hasEnabledProviders(user)) {
+    const providers = await challenge.getEnabledProviders(user);
+    // Sends the email code, if the first provider is email authentication.
+    await challenge.beforeChallenge(user, providers[0]);
+    // The provider picker (with several providers) and the code fields, for a modal's schema.
+    const components = challenge.getFormComponents(user, providers);
+}
+```
+
+`getFirstEnabledProvider()`, `getProviderPickerFormComponent()` and `getChallengeFormComponents()` return the parts separately.
+
+Rate-limit the attempts the same way as the sign-in, by user: check `isRateLimited(user)` before verifying a code, call `hitRateLimiter(user)` after a wrong one, and `clearRateLimiter(user)` after a right one. `getRateLimiterAvailableInSeconds(user)` tells when the user may try again, and `getMaxRateLimiterAttempts()` how many attempts are allowed.
+
+```ts
+if (challenge.isRateLimited(user)) throw new Error(`Too many attempts. Try again in ${challenge.getRateLimiterAvailableInSeconds(user)} seconds.`);
+if (!(await verify(user, code))) { challenge.hitRateLimiter(user); return false; }
+challenge.clearRateLimiter(user);
+```
+
 ## Using the building blocks
 
 The pieces of the built-in methods are exported, to build your own flows (a confirmation before a sensitive action, an API sign-in…).

@@ -105,7 +105,7 @@
         <%- renderHook('panels::head.end', renderHookScopes) %>
     </head>
 
-    <body class="<%- cls(['fi-body', 'fi-panel-' + panelId, bodyClass]) %>">
+    <body <% if (locals.bodyAttributes) { %><%- bodyAttributes %> <% } %>class="<%- cls(['fi-body', 'fi-panel-' + panelId, bodyClass]) %>">
         <%- renderHook('panels::body.start', renderHookScopes) %>
         <%- body %>
 

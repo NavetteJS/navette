@@ -18,7 +18,7 @@ export type MountedActionState = { name: string; arguments: Record<string, unkno
 /** Evaluation context of an action's visibility and authorization on mount. */
 type ComponentContextLike = { livewire: any; component: any; operation: null; record: unknown; get: () => undefined; state: undefined; arguments: Record<string, unknown> };
 import { Checkbox, Field, RawJs, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
-import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, makeStateGetter, type SchemaHost } from '@navette-js/schemas';
+import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, Tab as SchemaTab, makeStateGetter, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
@@ -53,8 +53,8 @@ import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNot
 export { getCurrentPanel, getPluginId, PanelPlugin, type Plugin } from './plugins.ts';
 import { getCurrentPanel, getPluginId, runWithPanel, type Plugin } from './plugins.ts';
 export { PageConfiguration, ResourceConfiguration } from './configurable.ts';
-import { findConfiguration, getActiveConfiguration, isClosestNavigationUrl, getPanelConfigurations, PageConfiguration, resolvePageRegistration, resolveResourceRegistration, resolveUrlTarget, ResourceConfiguration, routeOrder, withConfiguration, withRequestConfiguration } from './configurable.ts';
-import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentResourceRegistration, parentChainOf, parentRegistrationOf, relatedResourceAdapter, relationManagerTabFromQuery, relationshipNameOf, resolveResourceReference, resourceUrl, scopeAdapterByForeignKey, withRelatedResource, type ResourceReference } from './nested-resources.ts';
+import { configuredBaseOf, findConfiguration, getActiveConfiguration, isClosestNavigationUrl, getPanelConfigurations, PageConfiguration, resolvePageRegistration, resolveResourceRegistration, resolveUrlTarget, ResourceConfiguration, routeOrder, withConfiguration, withRequestConfiguration } from './configurable.ts';
+import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentResourceRegistration, parentChainOf, parentRegistrationOf, relatedResourceAdapter, relationshipNameOf, resolveResourceReference, resourceUrl, scopeAdapterByForeignKey, withRelatedResource, type ResourceReference } from './nested-resources.ts';
 export { ParentResourceRegistration } from './nested-resources.ts';
 import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
 export { builtNavigationViews, NavigationBuilder, NavigationGroup, NavigationItem, navigationGroupKey, navigationLabelText, type NavigationContext, type NavigationGroupReference, type NavigationGroupView, type NavigationItemView, type NavigationLabel } from './navigation.ts';
@@ -64,6 +64,12 @@ import { MenuItemGroups, type MenuItem, type MenuItemInput } from './menus.ts';
 export { applyPanelMiddleware, type PanelMiddleware, type PanelMiddlewareEntry } from './middleware.ts';
 import { applyPanelMiddleware, middlewareFor, type PanelMiddleware, type PanelMiddlewareEntry } from './middleware.ts';
 import { rewriteSpaLinks } from './spa.ts';
+import { findComponentPanel, getComponentPanels, registerComponentPanel, resolveComponentPanel } from './component-panels.ts';
+export { WidgetConfiguration, type WidgetEntry } from './widget-configuration.ts';
+export { InteractsWithPageTable } from './page-table.ts';
+export { ContentTabPosition, RelationManagerConfiguration, type RelationManagerEntries, type RelationManagerEntry } from './relation-managers.ts';
+import { ContentTabPosition, managersOfEntry, RelationManagerConfiguration, relationManagerEntries, relationManagerTabFromQuery, type MountedManager, type RelationManagerEntries, type RelationManagerEntry } from './relation-managers.ts';
+import { WidgetConfiguration, widgetClassOf, widgetPropertiesOf, type WidgetEntry } from './widget-configuration.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, cspNonce, getResponseCspNonce, hasCustomHtmlSanitizerConfig, HtmlString, isEnum, isEnumCase, RenderHookRegistry, runWithCspNonce, sanitizeHtml, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, readRecordPath, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Enum, type EnumCase, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
@@ -295,7 +301,7 @@ export class Panel {
     getSessionCookieName(): string { return this._authGuard !== null ? `navette_${this._authGuard}_session` : `navette_${this._id}_session`; }
     /** Registers pages; a configuration (`SettingsPage.make('advanced')`) registers the page once more, with its options. */
     pages(pages: (typeof Page | PageConfiguration)[]): this {
-        for (const page of pages.map((entry) => resolvePageRegistration(this, entry))) { this.registerCluster(page); this._pages.push(page); }
+        for (const page of pages.map((entry) => resolvePageRegistration(this, entry))) { registerComponentPanel(page, this); this.registerCluster(page); this._pages.push(page); }
         return this;
     }
     /** Registers resources: their pages and navigation items. */
@@ -428,6 +434,19 @@ export class Panel {
      */
     guestAccess(condition = true): this { this._guestAccess = condition; return this; }
     allowsGuests(): boolean { return this._guestAccess; }
+    // --- resources, relation managers and authentication forms (D10)
+    private _globalSearchResourceOptIn = false;
+    /** Global search only covers resources that declare `static isGloballySearchable = true` themselves. */
+    globalSearchResourceOptIn(condition = true): this { this._globalSearchResourceOptIn = condition; return this; }
+    isGlobalSearchResourceOptIn(): boolean { return this._globalSearchResourceOptIn; }
+    private _readOnlyRelationManagersOnViewPages = true;
+    /** `false`: relation managers on view pages keep their create, edit, delete… actions (read-only by default). */
+    readOnlyRelationManagersOnResourceViewPagesByDefault(condition = true): this { this._readOnlyRelationManagersOnViewPages = condition; return this; }
+    hasReadOnlyRelationManagersOnResourceViewPagesByDefault(): boolean { return this._readOnlyRelationManagersOnViewPages; }
+    private _revealablePasswords = true;
+    /** `false`: the password inputs of the authentication pages have no "show password" button. */
+    revealablePasswords(condition = true): this { this._revealablePasswords = condition; return this; }
+    arePasswordsRevealable(): boolean { return this._revealablePasswords; }
     /** Authorization decision: the panel hook first, then the given rule. Without a user: `false`, unless the panel allows guests. */
     async authorize(user: User | null, ability: string, subject: { resource?: unknown; record?: unknown; page?: typeof Page; widget?: typeof Widget; rule?: (() => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>) | null } = {}): Promise<boolean> {
         return (await this.inspect(user, ability, subject)).allowed();
@@ -455,10 +474,10 @@ export class Panel {
         if (resource) return resource.can('viewAny', user);
         return this.authorize(user, 'access', { page: PageClass, rule: () => PageClass.canAccess(user!) });
     }
-    private _widgets: (typeof Widget)[] = [];
+    private _widgets: WidgetEntry[] = [];
     /** Panel widgets (dashboard, custom pages): registered as components, displayed through a page's `getHeaderWidgets()`. */
-    widgets(widgets: (typeof Widget)[]): this { this._widgets.push(...widgets); return this; }
-    getWidgets(): (typeof Widget)[] { return this._widgets; }
+    widgets(widgets: WidgetEntry[]): this { this._widgets.push(...widgets); return this; }
+    getWidgets(): WidgetEntry[] { return this._widgets; }
     maxContentWidth(width: string): this { this._maxContentWidth = contentWidth(width); return this; }
     private _simplePageMaxContentWidth: string | null = null;
     /** Width of simple pages (login, registration…): `lg` by default. A page's own `static maxContentWidth` wins. */
@@ -1758,8 +1777,9 @@ export class Page extends BasePage {
      * URL of the page in the current panel (or `options.panel`): `{record}`-style parameters of the slug are filled from
      * `parameters`, the others go to the query string. `options.configuration` targets a registration (`null`: the default one).
      */
-    static getUrl(parameters: Record<string, string | number> = {}, options: { configuration?: string | null; panel?: Panel } = {}): string {
-        const panel = options.panel ?? getCurrentPanel();
+    static getUrl(parameters: Record<string, string | number> = {}, options: { configuration?: string | null; panel?: Panel | string; tenant?: unknown } = {}): string {
+        const panel = options.panel !== undefined ? findComponentPanel(this, options.panel) : getCurrentPanel() ?? resolveComponentPanel(this) ?? null;
+        if (panel && options.tenant !== undefined) { const tenant = options.tenant; return panel.withTenant(tenant, () => runWithPanel(panel, () => this.getUrl(parameters, { configuration: options.configuration, panel }))); }
         const target = resolveUrlTarget(this, options.configuration, panel ?? undefined);
         if (!panel) throw new Error(`${this.name}.getUrl() was called outside a panel request: pass options.panel.`);
         const query = new URLSearchParams();
@@ -1803,6 +1823,25 @@ export class Page extends BasePage {
     getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
     getHeaderActions(): Action[] { return []; }
     getPageClasses(): string[] { return []; }
+    /** Alignment of the header actions: `start` (default), `center`, `end`, `between`… (Filament's `$headerActionsAlignment`). */
+    static headerActionsAlignment: string | null = null;
+    getHeaderActionsAlignment(): string | null { return (this.constructor as typeof Page).headerActionsAlignment; }
+    /** Text under the heading: a string is escaped, an `HtmlString` is inserted as is. */
+    static subheading: string | null = null;
+    getSubheading(): string | HtmlString | null { return (this.constructor as typeof Page).subheading; }
+    /**
+     * Custom header replacing the default one (breadcrumbs, heading, actions): trusted HTML, typically a view,
+     * `views.render('app::reports.header', { page: this })`. `null` keeps the default header.
+     */
+    getHeader(): string | HtmlString | null | Promise<string | HtmlString | null> { return null; }
+    /** Custom footer, rendered after the page content: trusted HTML, or `null` for none. */
+    getFooter(): string | HtmlString | null | Promise<string | HtmlString | null> { return null; }
+    /** Maximum width of this page's content (`'full'`, `'4xl'`…), instead of the panel's `maxContentWidth()`. */
+    static maxContentWidth: string | null = null;
+    getMaxContentWidth(): string | null { return (this.constructor as typeof Page).maxContentWidth; }
+    /** Extra attributes of the `<body>` element on this page (`class` is added to the body's classes). */
+    static extraBodyAttributes: Record<string, string | number | boolean | null> = {};
+    getExtraBodyAttributes(): Record<string, string | number | boolean | null> { return (this.constructor as typeof Page).extraBodyAttributes; }
     /** Page sub-navigation: its cluster's pages, for a page in a cluster; empty otherwise. */
     getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> {
         const cluster = (this.constructor as typeof Page).cluster;
@@ -1841,7 +1880,7 @@ export class Page extends BasePage {
         return own ?? resource?.subNavigationPosition ?? clusterOf(this.constructor)?.subNavigationPosition ?? this.panel.getSubNavigationPosition();
     }
     /** Widgets shown below the page content. */
-    getFooterWidgets(): (typeof Widget)[] { return []; }
+    getFooterWidgets(): WidgetEntry[] { return []; }
     getFooterWidgetsColumns(): number | Record<string, number> { return 2; }
     /** Footer widget grid, in the page's `footerWidgets` schema. */
     protected async renderFooterWidgets(): Promise<string> {
@@ -1851,8 +1890,9 @@ export class Page extends BasePage {
         return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'footerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getFooterWidgetsColumns(), 'footerWidgets')}${liberate(PanelsRenderHook.PAGE_FOOTER_WIDGETS_END)}</div>`;
     }
     /** Widgets shown above the page content, with the data passed to each (widget properties). */
-    getHeaderWidgets(): (typeof Widget)[] { return []; }
-    getHeaderWidgetsColumns(): number { return 2; }
+    getHeaderWidgets(): WidgetEntry[] { return []; }
+    /** Header widget grid columns: a number (from `lg`), or one number per breakpoint (`{ md: 2, xl: 4 }`). */
+    getHeaderWidgetsColumns(): number | Record<string, number> { return 2; }
     getWidgetData(): Record<string, unknown> { return {}; }
     /** Header widget grid, in the page's `headerWidgets` schema. */
     protected async renderHeaderWidgets(): Promise<string> {
@@ -1862,19 +1902,21 @@ export class Page extends BasePage {
         return `<div x-data="filamentSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'headerWidgets' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_START)}${await this.renderWidgetsGrid(widgets, this.getHeaderWidgetsColumns(), 'headerWidgets')}${liberate(PanelsRenderHook.PAGE_HEADER_WIDGETS_END)}</div>`;
     }
     /** Widgets the current user is allowed to see. */
-    protected async filterVisibleWidgets(candidates: (typeof Widget)[]): Promise<(typeof Widget)[]> {
+    protected async filterVisibleWidgets(candidates: WidgetEntry[]): Promise<WidgetEntry[]> {
         const viewer = (this._ctx as PanelContext).user;
-        const widgets: (typeof Widget)[] = [];
-        for (const widget of candidates) if (await this.panel.authorize(viewer, 'view', { widget, rule: () => widget.canView(viewer!) })) widgets.push(widget);
+        const widgets: WidgetEntry[] = [];
+        for (const entry of candidates) { const widget = widgetClassOf(entry); if (await this.panel.authorize(viewer, 'view', { widget, rule: () => widget.canView(viewer!) })) widgets.push(entry); }
         return widgets;
     }
     /** Widget grid of a schema: each widget is a child component, lazy-loaded by default. */
-    protected async renderWidgetsGrid(widgets: (typeof Widget)[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
+    protected async renderWidgetsGrid(widgets: WidgetEntry[], columns: number | Record<string, number>, schemaKey: string): Promise<string> {
         const items: string[] = [];
-        for (const [index, widget] of widgets.entries()) {
+        for (const [index, entry] of widgets.entries()) {
+            const widget = widgetClassOf(entry);
             const componentName = (this as any)._runtime.nameOf(widget);
             const key = `${schemaKey}.${componentName}-${index}`;
-            const child = await this.mountChild(componentName, this.getWidgetData(), `${this.id}.${key}`, { lazy: widget.isLazy });
+            // Properties of a configuration (`Widget.make({...})`) come after the page's widget data.
+            const child = await this.mountChild(componentName, { ...this.getWidgetData(), ...widgetPropertiesOf(entry) }, `${this.id}.${key}`, { lazy: widget.isLazy });
             items.push(`<div class="fi-sc-liberated" wire:key="${e(`${this.id}.${key}`)}" x-data="filamentSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})">${child}</div>`);
         }
         const grid = new Attributes().grid(typeof columns === 'number' ? { lg: columns } : columns).class(['fi-sc', 'fi-sc-has-gap']);
@@ -1900,7 +1942,11 @@ export class Page extends BasePage {
         const ctx = { livewire: this as any, component: null as any, operation: null, record: this.getActionRecord(), get: makeStateGetter(null, ''), state: undefined };
         const headerActions: string[] = [];
         for (const action of this.getHeaderActions()) if (await action.isVisible(ctx)) headerActions.push(await action.toHtml(ctx));
+        const subheading = this.getSubheading();
+        const html = (value: string | HtmlString | null) => (value === null || value === undefined ? null : String(value));
         return views.render('filament-panels::pages.page', {
+            header: html(await this.getHeader()), footer: html(await this.getFooter()), headerActionsAlignment: this.getHeaderActionsAlignment() ?? 'start',
+            subheading: subheading === null || subheading === undefined || String(subheading) === '' ? null : subheading instanceof HtmlString ? subheading.toString() : e(subheading),
             heading: this.getHeading(), headerWidgets: await this.renderHeaderWidgets(), content: await this.renderContent(), footerWidgets: await this.renderFooterWidgets(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(),
             subNavigation: (await this.getSubNavigation()).map((item) => ({ ...item, badgeColorClasses: sharedColors.getComponentClasses('badge', item.badgeColor ?? 'primary') })), subNavigationPosition: this.getSubNavigationPosition(),
             breadcrumbs: await this.getRenderedBreadcrumbs(), headerActions, pageClasses: this.getPageClasses(), actionModals: this.rendersActionModalsInPage() ? await this.renderActionModals() : '',
@@ -1945,7 +1991,7 @@ export class Dashboard extends Page {
     filters: Record<string, unknown> | null = null;
     /** Dashboard widgets. Defaults to the panel's (`panel.widgets([...])`). */
     /** The panel's widgets, ordered by their `sort` (stable). */
-    getWidgets(): (typeof Widget)[] { return [...this.panel.getWidgets()].map((widget, index) => ({ widget, index })).sort((a, b) => (a.widget.sort ?? Infinity) - (b.widget.sort ?? Infinity) || a.index - b.index).map(({ widget }) => widget); }
+    getWidgets(): WidgetEntry[] { return [...this.panel.getWidgets()].map((widget, index) => ({ widget, index })).sort((a, b) => (widgetClassOf(a.widget).sort ?? Infinity) - (widgetClassOf(b.widget).sort ?? Infinity) || a.index - b.index).map(({ widget }) => widget); }
     /** Grid columns: a number (at the `lg` breakpoint), or one number per breakpoint. */
     getColumns(): number | Record<string, number> { return 2; }
     hasFiltersForm(): boolean { return typeof (this as any).filtersFormSchema === 'function'; }
@@ -2075,15 +2121,27 @@ export class Register extends SimplePage {
         if (!this.panel.getLoginPage()) return null;
         return `${e(t('filament-panels::auth/pages/register.actions.login.before'))} ${authLink(this.panel.getLoginUrl(), t('filament-panels::auth/pages/register.actions.login.label'))}`;
     }
+    /**
+     * The registration form. To add a field, override it and reuse the default components:
+     * `schema.components([this.getNameFormComponent(), this.getEmailFormComponent(), TextInput.make('company'), this.getPasswordFormComponent(), this.getPasswordConfirmationFormComponent()])`.
+     */
     formSchema(schema: Schema): Schema {
+        return schema.components([this.getNameFormComponent(), this.getEmailFormComponent(), this.getPasswordFormComponent(), this.getPasswordConfirmationFormComponent()]);
+    }
+    /** Name field (override it to change one field without redefining the form). */
+    protected getNameFormComponent(): SchemaComponent { return TextInput.make('name').label(t('filament-panels::auth/pages/register.form.name.label')).required().maxLength(255).autofocus(); }
+    /** Email field: unique among the users. */
+    protected getEmailFormComponent(): SchemaComponent {
         const auth = this.panel.getAuth();
-        return schema.components([
-            TextInput.make('name').label(t('filament-panels::auth/pages/register.form.name.label')).required().maxLength(255).autofocus(),
-            TextInput.make('email').label(t('filament-panels::auth/pages/register.form.email.label')).email().required().maxLength(255)
-                .rule({ name: 'unique', passes: async (value) => !(await auth.findByEmail!(String(value))), message: (attribute) => `The ${attribute} has already been taken.` }),
-            passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/register.form.password.label')).password().revealable().required()),
-            TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/register.form.password_confirmation.label')).password().revealable().required().dehydrated(false),
-        ]);
+        return TextInput.make('email').label(t('filament-panels::auth/pages/register.form.email.label')).email().required().maxLength(255)
+            .rule({ name: 'unique', passes: async (value) => !(await auth.findByEmail!(String(value))), message: (attribute) => `The ${attribute} has already been taken.` });
+    }
+    /** Password field: at least 8 characters, confirmed by the confirmation field. */
+    protected getPasswordFormComponent(): SchemaComponent {
+        return passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/register.form.password.label')).password().revealable(this.panel.arePasswordsRevealable()).required());
+    }
+    protected getPasswordConfirmationFormComponent(): SchemaComponent {
+        return TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/register.form.password_confirmation.label')).password().revealable(this.panel.arePasswordsRevealable()).required().dehydrated(false);
     }
     contentSchema(schema: Schema): Schema {
         return schema.components(formContent('register', [Action.make('register').label(t('filament-panels::auth/pages/register.form.actions.register.label')).submit('register')], { before: PanelsRenderHook.AUTH_REGISTER_FORM_BEFORE, after: PanelsRenderHook.AUTH_REGISTER_FORM_AFTER }));
@@ -2172,8 +2230,8 @@ export class ResetPassword extends SimplePage {
     formSchema(schema: Schema): Schema {
         return schema.components([
             TextInput.make('email').label(t('filament-panels::auth/pages/password-reset/reset-password.form.email.label')).disabled().autofocus(),
-            passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/password-reset/reset-password.form.password.label')).password().autocomplete('new-password').revealable().required()),
-            TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/password-reset/reset-password.form.password_confirmation.label')).password().autocomplete('new-password').revealable().required().dehydrated(false),
+            passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/password-reset/reset-password.form.password.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required()),
+            TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/password-reset/reset-password.form.password_confirmation.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required().dehydrated(false),
         ]);
     }
     contentSchema(schema: Schema): Schema {
@@ -2266,22 +2324,38 @@ export class EditProfile extends SimplePage {
             Section.make(t(`${group}.password.heading`)).description(t(`${group}.password.description`)).schema(password),
         ]);
     }
-    /** Fields of the form: name, email, new password, its confirmation, current password. */
+    /**
+     * Fields of the form: name, email, new password, its confirmation, current password. Each comes from its own method, to
+     * change one field (`getPasswordFormComponent()`) or to compose another form in `formSchema()`.
+     */
     protected getFormComponents(): SchemaComponent[] {
+        return [this.getNameFormComponent(), this.getEmailFormComponent(), this.getPasswordFormComponent(), this.getPasswordConfirmationFormComponent(), this.getCurrentPasswordFormComponent()];
+    }
+    protected getNameFormComponent(): SchemaComponent { return TextInput.make('name').label(t('filament-panels::auth/pages/edit-profile.form.name.label')).required().maxLength(255).autofocus(); }
+    /** Email field: unique among the users (the user's own address excepted). */
+    protected getEmailFormComponent(): SchemaComponent {
         const { panel, user } = this._ctx as PanelContext;
         const auth = panel.getAuth();
-        return [
-            TextInput.make('name').label(t('filament-panels::auth/pages/edit-profile.form.name.label')).required().maxLength(255).autofocus(),
-            TextInput.make('email').label(t('filament-panels::auth/pages/edit-profile.form.email.label')).email().required().maxLength(255).live()
-                .rule({ name: 'unique', passes: async (value) => { const other = await auth.findByEmail?.(String(value)); return !other || String(other.id) === String(user?.id); }, message: (attribute) => `The ${attribute} has already been taken.` }),
-            passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/edit-profile.form.password.label')).password().revealable().autocomplete('new-password').live()),
-            TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/edit-profile.form.password_confirmation.label')).password().autocomplete('new-password').revealable().required()
-                .visible(({ get }) => !blankValue(get('password'))).dehydrated(false),
-            TextInput.make('currentPassword').label(t('filament-panels::auth/pages/edit-profile.form.current_password.label')).helperText(t('filament-panels::auth/pages/edit-profile.form.current_password.below_content'))
-                .password().autocomplete('current-password').revealable().required()
-                .rule({ name: 'current_password', passes: async (value) => Boolean(user && (await auth.attempt(user.email, String(value)))), message: () => 'The password is incorrect.' })
-                .visible(({ get }) => !blankValue(get('password')) || get('email') !== user?.email).dehydrated(false),
-        ];
+        return TextInput.make('email').label(t('filament-panels::auth/pages/edit-profile.form.email.label')).email().required().maxLength(255).live()
+            .rule({ name: 'unique', passes: async (value) => { const other = await auth.findByEmail?.(String(value)); return !other || String(other.id) === String(user?.id); }, message: (attribute) => `The ${attribute} has already been taken.` });
+    }
+    /** New password (optional): at least 8 characters, confirmed. */
+    protected getPasswordFormComponent(): SchemaComponent {
+        return passwordRules('passwordConfirmation', 'password confirmation').reduce((input, rule) => input.rule(rule), TextInput.make('password').label(t('filament-panels::auth/pages/edit-profile.form.password.label')).password().revealable(this.panel.arePasswordsRevealable()).autocomplete('new-password').live());
+    }
+    /** Confirmation of the new password, shown once one is typed. */
+    protected getPasswordConfirmationFormComponent(): SchemaComponent {
+        return TextInput.make('passwordConfirmation').label(t('filament-panels::auth/pages/edit-profile.form.password_confirmation.label')).password().autocomplete('new-password').revealable(this.panel.arePasswordsRevealable()).required()
+            .visible(({ get }) => !blankValue(get('password'))).dehydrated(false);
+    }
+    /** Current password, required to change the password or the email address. Keep it when you redefine the form. */
+    protected getCurrentPasswordFormComponent(): SchemaComponent {
+        const { panel, user } = this._ctx as PanelContext;
+        const auth = panel.getAuth();
+        return TextInput.make('currentPassword').label(t('filament-panels::auth/pages/edit-profile.form.current_password.label')).helperText(t('filament-panels::auth/pages/edit-profile.form.current_password.below_content'))
+            .password().autocomplete('current-password').revealable(this.panel.arePasswordsRevealable()).required()
+            .rule({ name: 'current_password', passes: async (value) => Boolean(user && (await auth.attempt(user.email, String(value)))), message: () => 'The password is incorrect.' })
+            .visible(({ get }) => !blankValue(get('password')) || get('email') !== user?.email).dehydrated(false);
     }
     contentSchema(schema: Schema): Schema {
         const { panel, user } = this._ctx as PanelContext;
@@ -2441,7 +2515,7 @@ export class Login extends SimplePage {
             TextInput.make('email').label(t('filament-panels::auth/pages/login.form.email.label')).email().required().autocomplete().autofocus(),
             TextInput.make('password').label(t('filament-panels::auth/pages/login.form.password.label'))
                 .hint(this.panel.hasPasswordReset() ? new HtmlString(`<a href="${e(this.panel.getRequestPasswordResetUrl())}" class="${[...sharedColors.getComponentClasses('link', 'primary'), 'fi-link', 'fi-size-md'].join(' ')}" tabindex="-1" ><span class="fi-link-label"> ${e(t('filament-panels::auth/pages/login.actions.request_password_reset.label'))} </span></a>`) : null)
-                .password().revealable().autocomplete('current-password').required(),
+                .password().revealable(this.panel.arePasswordsRevealable()).autocomplete('current-password').required(),
             Checkbox.make('remember').label(t('filament-panels::auth/pages/login.form.remember.label')),
         ]);
     }
@@ -2583,7 +2657,14 @@ const lcfirst = (s: string) => s.replace(/^./, (c) => c.toLowerCase());
 
 /** Resource: a model with its pages, table and navigation. */
 export abstract class Resource {
-    static panel: Panel;
+    /**
+     * Panel of the resource. A resource may be registered in several panels: this is the panel of the current request when the
+     * resource is registered there, otherwise (outside a request) the last panel it was registered in. `getUrl(..., { panel })` targets another one.
+     */
+    static get panel(): Panel { return resolveComponentPanel(this) as Panel; }
+    static set panel(panel: Panel) { registerComponentPanel(this, panel); }
+    /** Panels the resource is registered in. */
+    static getPanels(): Panel[] { return getComponentPanels(this); }
     static slug = '';
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
@@ -2620,8 +2701,15 @@ export abstract class Resource {
     static hasViewPage = false;
     /** Who can do what on this resource. Without a policy, any signed-in user can do everything. */
     static policy: Policy | null = null;
+    /**
+     * `true`: no authorization at all for this resource (Filament's `$shouldSkipAuthorization`): every ability is granted to
+     * any user who can use the panel, without asking the policy nor the panel's `authorizeUsing()` hook.
+     */
+    static shouldSkipAuthorization = false;
+    static skipsAuthorization(): boolean { return this.shouldSkipAuthorization; }
     /** Whether the user has this ability (on this record, if any). */
     static can(ability: string, user: User | null, record: unknown = null): Promise<boolean> {
+        if (this.skipsAuthorization()) return Promise.resolve(user !== null || this.panel.allowsGuests());
         const rule = this.policy?.[ability];
         return this.panel.authorize(user, ability, { resource: this, record, rule: rule ? () => rule(user!, record) : null });
     }
@@ -2631,12 +2719,12 @@ export abstract class Resource {
         return this.panel.inspect(user, ability, { resource: this, record, rule: rule ? () => rule(user!, record) : null });
     }
     /** Resource widgets, registered as components. */
-    static widgets: (typeof Widget)[] = [];
+    static widgets: WidgetEntry[] = [];
     /** Widgets shown above the table on the list page. */
-    static headerWidgets: (typeof Widget)[] = [];
+    static headerWidgets: WidgetEntry[] = [];
     /** Relation managers shown below the edit form (and the view page), or groups of them (`RelationGroup`). */
-    static relations: (typeof RelationManager | RelationGroup)[] = [];
-    static getRelations(): (typeof RelationManager | RelationGroup)[] { return this.relations; }
+    static relations: RelationManagerEntries = [];
+    static getRelations(): RelationManagerEntries { return this.relations; }
     /** Tabs of the list page. */
     static tabs(): Record<string, Tab> { return {}; }
     /** Simple resource: a single page, with create and edit in modals. */
@@ -2670,8 +2758,12 @@ export abstract class Resource {
     /** Attributes given to the record of a singular resource when the first save creates it (`{ group: 'site' }`). */
     static getSingularRecordAttributes(): Record<string, unknown> { return {}; }
 
+    static getModelLabel(): string { return this.modelLabel; }
     static getPluralModelLabel(): string { return this.pluralModelLabel ?? plural(this.modelLabel); }
-    static getTitleCasePluralModelLabel(): string { return this.getPluralModelLabel().split(' ').map(ucfirst).join(' '); }
+    /** `false`: the model labels are used as written in titles and the menu ("eBook", not "EBook"). */
+    static hasTitleCaseModelLabel = true;
+    static getTitleCaseModelLabel(): string { return this.hasTitleCaseModelLabel ? this.getModelLabel().split(' ').map(ucfirst).join(' ') : this.getModelLabel(); }
+    static getTitleCasePluralModelLabel(): string { return this.hasTitleCaseModelLabel ? this.getPluralModelLabel().split(' ').map(ucfirst).join(' ') : this.getPluralModelLabel(); }
     /** Class of the options of the resource's registrations (`ResourceConfiguration` or a subclass): enables `make()`. */
     static configurationClass: typeof ResourceConfiguration | null = null;
     /** A registration of this resource with its own options: `panel.resources([OrderResource.make('archived').archived()])`. */
@@ -2688,8 +2780,15 @@ export abstract class Resource {
      * URL of a page: `getUrl('edit', 12)`, or with named parameters `getUrl('edit', { record: 12, project: 3 })` (a nested
      * resource needs its parent's key, under the parent's route parameter name; other parameters go to the query string).
      * `options.configuration` targets a registration (`null`: the default one); without it, the active one.
+     * `options.panel` (a panel or its id) targets another panel the resource is registered in, `options.tenant` another tenant.
      */
-    static getUrl(page: string = 'index', record?: string | number | Record<string, unknown>, parameters: Record<string, unknown> = {}, options: { configuration?: string | null } = {}): string {
+    static getUrl(page: string = 'index', record?: string | number | Record<string, unknown>, parameters: Record<string, unknown> = {}, options: { configuration?: string | null; panel?: Panel | string; tenant?: unknown } = {}): string {
+        if (options.panel !== undefined || options.tenant !== undefined) {
+            const panel = options.panel !== undefined ? findComponentPanel(this, options.panel) : this.panel;
+            if (!getComponentPanels(this).includes(panel)) throw new Error(`${this.name} is not registered in panel "${panel.getId()}".`);
+            const url = () => this.getUrl(page, record, parameters, { configuration: options.configuration });
+            return runWithPanel(panel, () => (options.tenant !== undefined ? panel.withTenant(options.tenant, url) : url()));
+        }
         const target = resolveUrlTarget(this, options.configuration);
         if (target !== this) return target.getUrl(page, record, parameters);
         if (this.isSingular) return singularResourceUrl(this, page);
@@ -2734,7 +2833,11 @@ export abstract class Resource {
     static isGloballySearchable = true;
     /** `false`: the search term is matched as a whole instead of word by word. */
     static shouldSplitGlobalSearchTerms = true;
-    static canGloballySearch(): boolean { return this.isGloballySearchable && this.getGloballySearchableAttributes().length > 0 && !parentRegistrationOf(this); }
+    static canGloballySearch(): boolean {
+        // `panel.globalSearchResourceOptIn()`: only resources declaring `static isGloballySearchable = true` themselves are searched.
+        const optedIn = !this.panel?.isGlobalSearchResourceOptIn?.() || Object.hasOwn(configuredBaseOf(this), 'isGloballySearchable');
+        return this.isGloballySearchable && optedIn && this.getGloballySearchableAttributes().length > 0 && !parentRegistrationOf(this);
+    }
     /** Position of this resource's group in the results; without one, after the others in registration order. */
     static globalSearchSort: number | null = null;
     /** Maximum results rendered per resource. */
@@ -2775,7 +2878,7 @@ export abstract class Resource {
     /** Attribute used as a record's title. */
     static recordTitleAttribute: string | null = null;
     /** Without a title attribute: the model label in title case ("Leave Request"). */
-    static getRecordTitle(record: any): string { return this.recordTitleAttribute ? String(record?.[this.recordTitleAttribute] ?? '') : this.modelLabel.split(' ').map(ucfirst).join(' '); }
+    static getRecordTitle(record: any): string { return this.recordTitleAttribute ? String(record?.[this.recordTitleAttribute] ?? '') : this.getTitleCaseModelLabel(); }
 
     /** Generated resource pages: list, create, edit. */
     static getPages(): Record<string, typeof Page> {
@@ -2859,6 +2962,12 @@ export abstract class Widget extends BasePage {
     /** Loaded when it becomes visible. */
     static isLazy = true;
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
+    /**
+     * This widget with properties of its own (public properties of the widget), for a page or dashboard:
+     * `getHeaderWidgets() { return [OrdersChart.make({ status: 'paid' })]; }`. List the properties in `static locked`
+     * when the browser must not change them.
+     */
+    static make<W extends typeof Widget>(this: W, properties: Record<string, unknown> = {}): WidgetConfiguration<W> { return new WidgetConfiguration(this, properties); }
     /** Restricts the widget to some users: returning `false` removes it from the page and refuses to load it. */
     static canView(_user: User): boolean | Promise<boolean> { return true; }
     async boot(): Promise<void> {
@@ -3428,7 +3537,7 @@ export abstract class TableWidget extends Widget implements TableHost {
         const WidgetClass = this.constructor as typeof TableWidget;
         return WidgetClass.heading ?? WidgetClass.name.replace(/Widget$/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
     }
-    getTable(): Table<any> { return this.table(new Table().heading(this.getTableHeading()).paginationMode('simple')); }
+    getTable(): Table<any> { return this.table(new Table().heading(this.getTableHeading()).paginationMode('simple')).withoutComponentsHiddenOn(this); }
     mount(): void {
         const table = this.getTable();
         this.tableRecordsPerPage = table.getDefaultPageOption();
@@ -3503,85 +3612,214 @@ export class EmbeddedTable extends SchemaComponent {
  */
 export class RelationGroup {
     private _label: string;
-    private _managers: (typeof RelationManager)[];
+    private _managers: (typeof RelationManager | RelationManagerConfiguration)[];
     private _icon: string | null = null;
-    private _badge: string | number | null | (() => string | number | null | Promise<string | number | null>) = null;
+    private _badge: string | number | null | ((ownerRecord: any) => string | number | null | Promise<string | number | null>) = null;
     private _badgeColor = 'primary';
-    constructor(label: string, managers: (typeof RelationManager)[]) { this._label = label; this._managers = managers; }
-    static make(label: string, managers: (typeof RelationManager)[]): RelationGroup { return new RelationGroup(label, managers); }
+    private _badgeTooltip: string | null = null;
+    private _lazyLoadedBadge = false;
+    private _tab: ((ownerRecord: any, pageClass: typeof Page) => SchemaTab) | null = null;
+    constructor(label: string, managers: (typeof RelationManager | RelationManagerConfiguration)[]) { this._label = label; this._managers = managers; }
+    static make(label: string, managers: (typeof RelationManager | RelationManagerConfiguration)[]): RelationGroup { return new RelationGroup(label, managers); }
     icon(name: string | null): this { this._icon = name; return this; }
-    badge(badge: string | number | null | (() => string | number | null | Promise<string | number | null>)): this { this._badge = badge; return this; }
+    /** Badge of the group's tab; a function receives the owner record. */
+    badge(badge: string | number | null | ((ownerRecord: any) => string | number | null | Promise<string | number | null>)): this { this._badge = badge; return this; }
     badgeColor(color: string): this { this._badgeColor = color; return this; }
+    badgeTooltip(tooltip: string | null): this { this._badgeTooltip = tooltip; return this; }
+    /** Loads the badge after the page is displayed (for an expensive count). */
+    lazyLoadedBadge(condition = true): this { this._lazyLoadedBadge = condition; return this; }
+    isBadgeLazyLoaded(): boolean { return this._lazyLoadedBadge; }
+    /** The group's tab, built by a function of the owner record: `.tab((owner) => Tab.make('Blog posts').badge(…))`. */
+    tab(tab: ((ownerRecord: any, pageClass: typeof Page) => SchemaTab) | null): this { this._tab = tab; return this; }
     getLabel(): string { return this._label; }
     getIcon(): string | null { return this._icon; }
-    getManagers(): (typeof RelationManager)[] { return this._managers; }
-    async getBadge(): Promise<string | number | null> { return typeof this._badge === 'function' ? this._badge() : this._badge; }
+    getManagers(): (typeof RelationManager | RelationManagerConfiguration)[] { return this._managers; }
+    async getBadge(ownerRecord: any = null): Promise<string | number | null> { return typeof this._badge === 'function' ? this._badge(ownerRecord) : this._badge; }
     getBadgeColor(): string { return this._badgeColor; }
-}
-/** A tab of a record page's relation managers: a manager, a group of them, or the page's own content. */
-type RelationTab = { key: string; label: string; icon: string | null; badge: string | number | null; badgeColor: string; managers: (typeof RelationManager)[]; isContent: boolean };
-/** Relation manager tabs of a record page: only the active tab's managers are mounted, as lazy child components. */
-class RelationManagerTabs extends SchemaComponent {
-    private content: SchemaComponent[] = [];
-    constructor(content: SchemaComponent[] = []) { super(); this._keyName = 'relationManagerTabs'; this.content = content; }
-    /** With content (the form or infolist), it is the first tab: `hasCombinedRelationManagerTabsWithContent()`. */
-    getChildSchemas(): Schema[] { return this.content.length ? [childSchema(this, this.content)] : []; }
-    getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
-    getLazyLoadedTabBadges(): Record<string, unknown> { return {}; }
-    getDeferredTabBadges(): Record<string, unknown> { return {}; }
-    /** Tabs the user can see on this record: managers and groups whose `canViewForRecord()` allows it. */
-    private async tabs(page: EditRecord | ViewRecord): Promise<RelationTab[]> {
-        const owner = (page as any)._record;
-        const PageClass = page.constructor as typeof Page;
-        const visible = async (manager: typeof RelationManager) => Boolean(await manager.canViewForRecord(owner, PageClass));
-        const tabs: RelationTab[] = [];
-        if (this.content.length) tabs.push({ key: '-1', label: page.getContentTabLabel(), icon: page.getContentTabIcon(), badge: null, badgeColor: 'primary', managers: [], isContent: true });
-        for (const [index, entry] of page.getRelationManagers().entries()) {
-            if (entry instanceof RelationGroup) {
-                const managers: (typeof RelationManager)[] = [];
-                for (const manager of entry.getManagers()) if (await visible(manager)) managers.push(manager);
-                if (managers.length) tabs.push({ key: String(index), label: entry.getLabel(), icon: entry.getIcon(), badge: await entry.getBadge(), badgeColor: entry.getBadgeColor(), managers, isContent: false });
-            } else if (await visible(entry)) {
-                tabs.push({ key: String(index), label: entry.getTitle(), icon: entry.getIcon(), badge: await entry.getBadge(owner, PageClass), badgeColor: entry.getBadgeColor(), managers: [entry], isContent: false });
-            }
-        }
-        return tabs;
+    getBadgeTooltip(): string | null { return this._badgeTooltip; }
+    /** Tab of the group: `tab()`'s, otherwise one with the group's label, icon and badge. */
+    getTabComponent(ownerRecord: any, pageClass: typeof Page): SchemaTab {
+        if (this._tab) return this._tab(ownerRecord, pageClass);
+        const tab = SchemaTab.make(this._label).icon(this._icon).badgeColor(this._badgeColor).badgeTooltip(this._badgeTooltip);
+        return this._lazyLoadedBadge ? tab : tab.badge(() => this.getBadge(ownerRecord));
     }
-    async isVisible(): Promise<boolean> { return (await super.isVisible()) && (this.content.length > 0 || (await this.tabs(this.livewire as any)).length > 0); }
+}
+
+/** What a tab of the relation manager tabs shows: managers (mounted when the tab is active), or its own schema. */
+type RelationTabInfo = { managers: MountedManager[]; lazyBadge: (() => Promise<{ badge: string | number | null; color: string; tooltip: string | null }>) | null };
+const relationTabInfo = new WeakMap<SchemaTab, RelationTabInfo>();
+/** The record pages' relation tabs API, shared by the edit and view pages. */
+type RelationTabsHost = (EditRecord | ViewRecord) & { _record: any; recordKey: string; activeRelationManager: string };
+
+/** Tab of a relation manager entry (a manager, a manager with properties, or a group) of a record page. */
+function relationEntryTab(page: RelationTabsHost, entry: RelationManagerEntry): SchemaTab {
+    const owner = page._record;
+    const PageClass = page.constructor as typeof Page;
+    const managers = managersOfEntry(entry);
+    const visible = async () => { for (const { manager } of managers) if (await manager.canViewForRecord(owner, PageClass)) return true; return false; };
+    let tab: SchemaTab;
+    let lazyBadge: RelationTabInfo['lazyBadge'] = null;
+    if (entry instanceof RelationGroup) {
+        tab = entry.getTabComponent(owner, PageClass);
+        if (entry.isBadgeLazyLoaded()) lazyBadge = async () => ({ badge: await entry.getBadge(owner), color: entry.getBadgeColor(), tooltip: entry.getBadgeTooltip() });
+    } else {
+        const manager = managers[0].manager;
+        tab = manager.getTabComponent(owner, PageClass);
+        if (manager.shouldLazyLoadBadge(owner, PageClass)) lazyBadge = async () => ({ badge: await manager.getBadge(owner, PageClass), color: manager.getBadgeColor(), tooltip: manager.getBadgeTooltip() });
+    }
+    // Only managers the user can see for this record are mounted: a tab without any is hidden.
+    relationTabInfo.set(tab, { managers, lazyBadge });
+    return tab.hidden(async () => !(await visible()));
+}
+
+/** Tab of a relation manager entry of a record page (by key), or `null`. */
+function recordPageRelationManagerTab(page: RelationTabsHost, key: string | number): SchemaTab | null {
+    const entry = relationManagerEntries(page.getRelationManagers()).find(([entryKey]) => entryKey === String(key))?.[1];
+    return entry ? relationEntryTab(page, entry) : null;
+}
+function recordPageRelationManagerTabs(page: RelationTabsHost, except: string[] = []): Record<string, SchemaTab> {
+    const tabs: Record<string, SchemaTab> = {};
+    for (const [key, entry] of relationManagerEntries(page.getRelationManagers())) if (!except.includes(key)) tabs[key] = relationEntryTab(page, entry);
+    return tabs;
+}
+/**
+ * Order of the keys of a tabs object. A JavaScript object lists integer-like keys (`'0'`, `'1'`… of a list of relations) before
+ * the others, whatever their insertion order: the default tabs carry their real order under this symbol.
+ */
+const TAB_ORDER = Symbol('tabOrder');
+/** Tabs by key, in their order. */
+function orderedTabEntries(tabs: Record<string, SchemaTab>): [string, SchemaTab][] {
+    const order = (tabs as any)[TAB_ORDER] as string[] | undefined;
+    const keys = order ? [...order.filter((key) => key in tabs), ...Object.keys(tabs).filter((key) => !order.includes(key))] : Object.keys(tabs);
+    return keys.map((key) => [key, tabs[key]] as [string, SchemaTab]);
+}
+/** Combined tabs: the content tab (`''`) before or after the relation managers. */
+function recordPageTabComponents(page: RelationTabsHost): Record<string, SchemaTab> {
+    const managers = page.getRelationManagerTabComponents(['']);
+    const content = page.getContentTabComponent();
+    const order = page.getContentTabPosition() === ContentTabPosition.After ? [...Object.keys(managers), ''] : ['', ...Object.keys(managers)];
+    return Object.defineProperty({ ...managers, '': content }, TAB_ORDER, { value: order, enumerable: false });
+}
+/** Content of a record page with its relation manager tabs (always present: hidden when the page has none). */
+function withRecordPageRelationTabs(page: RelationTabsHost, content: Schema): Schema {
+    const components = content.getComponents();
+    const hasManagers = relationManagerEntries(page.getRelationManagers()).length > 0;
+    if (page.hasCombinedRelationManagerTabsWithContent()) {
+        // Without other tabs than the content, the content is shown as is.
+        const keys = Object.keys(page.getTabComponents());
+        if (hasManagers || keys.some((key) => key !== '')) return content.components([new RelationManagerTabs(true)]);
+    }
+    if (!hasManagers) return content.components([...components, new RelationManagerTabs().key(null).hidden()]);
+    return content.components([...components, new RelationManagerTabs()]);
+}
+/**
+ * Initial tab of a record page: the content tab for combined tabs, otherwise the first relation manager; the URL may name
+ * another one (`?relation=comments`), which is then kept in the URL as the user switches tabs.
+ */
+function selectInitialRelationTab(page: RelationTabsHost): void {
+    const PageClass = page.constructor as any;
+    const combined = page.hasCombinedRelationManagerTabsWithContent();
+    const extraKeys = combined ? orderedTabEntries(page.getTabComponents()).map(([key]) => key) : [];
+    const initial = combined ? (extraKeys[0] ?? '') : (relationManagerEntries(page.getRelationManagers())[0]?.[0] ?? '0');
+    const queryKey: string | null = PageClass.relationManagerQueryStringKey ?? null;
+    page.activeRelationManager = relationManagerTabFromQuery(page, queryKey, extraKeys) ?? initial;
+    if (queryKey !== null) ((page as any)._effects as Record<string, unknown>).url = { ...(((page as any)._effects.url as Record<string, unknown>) ?? {}), activeRelationManager: { as: queryKey, use: PageClass.relationManagerQueryStringHistory ? 'push' : 'replace', alwaysShow: false, except: initial } };
+}
+/** Relation manager tabs of a record page: a manager's tab mounts its managers (lazy child components) only while it is active. */
+class RelationManagerTabs extends SchemaComponent {
+    private combined: boolean;
+    private tabs: [string, SchemaTab][] | null = null;
+    constructor(combined = false) { super(); this._keyName = 'relationManagerTabs'; this.combined = combined; }
+    private page(): RelationTabsHost { return this.livewire as unknown as RelationTabsHost; }
+    /** Tabs by key: `getTabComponents()` with combined tabs, the relation managers' otherwise. */
+    getTabs(): [string, SchemaTab][] {
+        const page = this.page();
+        return (this.tabs ??= orderedTabEntries(this.combined ? page.getTabComponents() : page.getRelationManagerTabComponents()).filter((entry): entry is [string, SchemaTab] => entry[1] instanceof SchemaTab));
+    }
+    /** The tabs are child components (their schemas hold the content tab and custom tabs). */
+    getChildSchemas(): Schema[] { return [childSchema(this, this.getTabs().map(([key, tab]) => tab.key(`${slug(key) || 'content'}::tab`)))]; }
+    getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
+    getDeferredTabBadges(): Record<string, unknown> { return {}; }
+    /** Badges loaded after the page is displayed (`isBadgeLazyLoaded`, `lazyLoadedBadge()`). */
+    async getLazyLoadedTabBadges(): Promise<Record<string, unknown>> {
+        const badges: Record<string, unknown> = {};
+        for (const [key, tab] of await this.visibleTabs()) {
+            const loader = relationTabInfo.get(tab)?.lazyBadge;
+            if (!loader) continue;
+            const { badge, color, tooltip } = await loader();
+            badges[key] = { badge: badge === null || badge === '' ? null : String(badge), badgeColorClasses: this.page().panel.colors.getComponentClasses('badge', color).join(' '), badgeColorStyles: '', badgeTooltip: tooltip, badgeIconHtml: null, badgeIconPosition: 'before' };
+        }
+        return badges;
+    }
+    private async visibleTabs(): Promise<[string, SchemaTab][]> {
+        this.getChildSchemas();
+        const visible: [string, SchemaTab][] = [];
+        for (const [key, tab] of this.getTabs()) if (await tab.isVisible()) visible.push([key, tab]);
+        return visible;
+    }
+    async isVisible(): Promise<boolean> { return (await super.isVisible()) && (await this.visibleTabs()).length > 0; }
     async toHtml(): Promise<string> {
-        const page = this.livewire as unknown as EditRecord;
-        const tabs = await this.tabs(page);
+        const page = this.page();
+        const tabs = await this.visibleTabs();
         if (!tabs.length) return '';
         const key = this.getKey()!;
         const id = page.id;
-        const active = tabs.find((tab) => tab.key === String(page.activeRelationManager)) ?? tabs[0];
-        const tabId = (tab: RelationTab) => `fi-sc-tab-${createHash('md5').update(`${key}.${tab.key}`).digest('hex')}`;
-        const header = tabs.map((tab) => {
-            const isActive = tab === active;
-            const iconHtml = tab.icon ? icon(tab.icon) : '';
-            const badgeHtml = tab.badge !== null && tab.badge !== undefined && tab.badge !== '' ? uiBadge({ color: tab.badgeColor, size: 'sm' }, e(String(tab.badge))) : '';
-            return `<button id="${tabId(tab)}" role="tab" aria-controls="${key}.${tab.key}" aria-selected="${isActive ? 'true' : 'false'}" x-bind:aria-selected="isTabSelected('${tab.key}')" tabindex="${isActive ? '0' : '-1'}" x-bind:tabindex="getTabIndex('${tab.key}')" data-tab-key="${tab.key}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab('${tab.key}', $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected('${tab.key}') }" type="button" wire:click="$set('activeRelationManager', '${tab.key}')" class="${cls(['fi-tabs-item', { 'fi-active': isActive }])}">${iconHtml}<span class="fi-tabs-item-label">${e(tab.label)}</span>${badgeHtml}</button>`;
-        });
+        const [activeKey] = tabs.find(([tabKey]) => tabKey === String(page.activeRelationManager)) ?? tabs[0];
+        const q = (k: string) => e(js(k));
+        const tabId = (k: string) => `fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}`;
+        const hasLazyBadges = tabs.some(([, tab]) => relationTabInfo.get(tab)?.lazyBadge);
+        const header: string[] = [];
+        for (const [k, tab] of tabs) {
+            const isActive = k === activeKey;
+            const iconHtml = tab.getIcon() ? icon(tab.getIcon()!) : '';
+            const info = relationTabInfo.get(tab);
+            let badgeHtml = '';
+            if (info?.lazyBadge) {
+                const d = `deferredBadges[${q(k)}]`;
+                badgeHtml = `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="! isLoadingDeferredBadges &amp;&amp; ${d}?.badge != null"><span x-bind:class="'fi-badge fi-size-sm ' + (${d}?.badgeColorClasses ?? '')" x-init="let tooltip = ${d}?.badgeTooltip; if (tooltip) { window.tippy?.($el, { content: tooltip, theme: $store.theme }) }"><span class="fi-badge-label-ctn"><span class="fi-badge-label" x-text="${d}?.badge"></span></span></span></template>`;
+            } else {
+                const badge = await tab.getBadge();
+                if (badge) badgeHtml = uiBadge({ color: badge.color, size: 'sm', attributes: badge.tooltip ? { 'x-tooltip': `{ content: ${js(badge.tooltip)}, theme: $store.theme, allowHTML: false }` } : {} }, e(badge.label));
+            }
+            const iconBefore = tab.getIconPosition() === 'before' ? iconHtml : '', iconAfter = tab.getIconPosition() === 'after' ? iconHtml : '';
+            header.push(`<button id="${tabId(k)}" role="tab" aria-controls="${e(`${key}.${k}`)}" aria-selected="${isActive ? 'true' : 'false'}" x-bind:aria-selected="isTabSelected(${q(k)})" tabindex="${isActive ? '0' : '-1'}" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeRelationManager', ${q(k)})" class="${cls(['fi-tabs-item', { 'fi-active': isActive }])}">${iconBefore}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${iconAfter}${badgeHtml}</button>`);
+        }
         const panels: string[] = [];
-        for (const tab of tabs) {
+        const PageClass = page.constructor as typeof Page;
+        for (const [k, tab] of tabs) {
+            const info = relationTabInfo.get(tab);
+            const isActive = k === activeKey;
             let content = '';
-            if (tab.isContent) {
-                // The form or infolist: always rendered, so that its state and actions stay in the page.
-                content = (await this.getChildSchemas()[0]?.toHtml()) ?? '';
-            } else if (tab === active) {
+            if (!info) {
+                // The content tab (form or infolist) and custom tabs: always rendered, so that their state and actions stay in the page.
+                content = await tab.toHtml();
+            } else if (isActive) {
                 const parts: string[] = [];
-                for (const manager of tab.managers) {
+                for (const [index, { manager, properties }] of info.managers.entries()) {
+                    if (!(await manager.canViewForRecord(page._record, PageClass))) continue;
                     const componentName = (page as any)._runtime.nameOf(manager);
-                    const childKey = `${key}.${tab.key}.${componentName}`;
-                    const child = await page.mountChild(componentName, { ownerRecord: page.recordKey }, `${id}.${childKey}`, { lazy: true });
+                    const childKey = `${key}.${k}.${componentName}${info.managers.length > 1 ? `-${index}` : ''}`;
+                    // `ownerRecord` and `pageClass` come last: properties of a registration cannot replace them.
+                    const child = await page.mountChild(componentName, { ...properties, ownerRecord: page.recordKey, pageClass: (page as any)._runtime.nameOf(PageClass) }, `${id}.${childKey}`, { lazy: manager.isLazy() });
                     parts.push(`<div wire:partial="schema-component::${e(childKey)}" x-data="filamentSchemaComponent(${e(js({ key: childKey, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${id}.${childKey}`)}" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${child}</div></div>`);
                 }
                 content = `<div class="fi-grid fi-sc fi-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));">${parts.join('')}</div>`;
             }
-            const isActive = tab === active;
-            panels.push(`<div aria-labelledby="${tabId(tab)}" id="${key}.${tab.key}" role="tabpanel" tabindex="0" wire:key="${id}.${key}.${tab.key}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected('${tab.key}') }" x-on:expand="revealTab('${tab.key}')" x-data="filamentSchemaComponent(${e(js({ key: `${key}.${tab.key}`, exposedMethods: [], path: '', containerPath: '' }))})" class="${cls(['fi-sc-tabs-tab', { 'fi-active': isActive && tab.isContent }])}">${content}</div>`);
+            panels.push(`<div aria-labelledby="${tabId(k)}" id="${e(`${key}.${k}`)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${key}.${k}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js({ key: `${key}.${k}`, exposedMethods: [], path: '', containerPath: '' }))})" class="${cls(['fi-sc-tabs-tab', { 'fi-active': isActive && !info }])}">${content}</div>`);
         }
-        const activeIndex = tabs.indexOf(active);
+        const activeIndex = tabs.findIndex(([k]) => k === activeKey);
+        const lazyBadgeData = hasLazyBadges ? ` x-data="{
+ deferredBadges: {},
+ isLoadingDeferredBadges: true,
+ async init() {
+ try {
+ const badges = await this.$getLazyLoadedTabBadges()
+ this.deferredBadges = badges ?? {}
+ } finally {
+ this.isLoadingDeferredBadges = false
+ }
+ },
+ }"` : '';
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${activeIndex + 1},
  hasTabPanels: true,
@@ -3589,8 +3827,8 @@ class RelationManagerTabs extends SchemaComponent {
  isVertical: false,
  livewireId: ${e(js(id))},
  livewireProperty: 'activeRelationManager',
- tab: '${active.key}',
- })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${active.key}" /><div x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_TABS_START, page.getRenderHookScopes())}${header.join('')}${renderHook(PanelsRenderHook.RESOURCE_TABS_END, page.getRenderHookScopes())}</div></div>${panels.join('')}</div>`;
+ tab: ${q(activeKey)},
+ })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${e(activeKey)}" /><div${lazyBadgeData} x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_TABS_START, page.getRenderHookScopes())}${header.join('')}${renderHook(PanelsRenderHook.RESOURCE_TABS_END, page.getRenderHookScopes())}</div></div>${panels.join('')}</div>`;
     }
 }
 /** List page tab: restricts the table query and can show a badge. */
@@ -3953,7 +4191,7 @@ export class ListRecords extends Page implements TableHost {
     }
 
     get resource(): typeof Resource { return (this.constructor as typeof ListRecords).resource; }
-    getHeaderWidgets(): (typeof Widget)[] { return this.resource.headerWidgets ?? []; }
+    getHeaderWidgets(): WidgetEntry[] { return this.resource.headerWidgets ?? []; }
     /** The table state is passed to widgets, which can rerun the same query. */
     getWidgetData(): Record<string, unknown> { return Object.fromEntries(PAGE_TABLE_PROPERTIES.map((property) => [property, (this as any)[property]])); }
     protected rendersActionModalsInPage(): boolean { return false; }
@@ -4114,7 +4352,7 @@ export class ListRecords extends Page implements TableHost {
         const resource = this.resource;
         const table = new Table().pluralModelLabel(resource.getPluralModelLabel());
         // Simple resource: the row opens the edit modal; otherwise it links to the edit page.
-        return resource.table(resource.isSimple ? table.recordAction('edit') : table.recordUrl((record) => resource.getUrl(resource.hasViewPage ? 'view' : 'edit', resource.adapter.getKey(record))));
+        return resource.table(resource.isSimple ? table.recordAction('edit') : table.recordUrl((record) => resource.getUrl(resource.hasViewPage ? 'view' : 'edit', resource.adapter.getKey(record)))).withoutComponentsHiddenOn(this);
     }
     async renderTable(): Promise<string> {
         const resource = this.resource;
@@ -4311,6 +4549,8 @@ export class TableSelectComponent extends ListRecords {
 /** Options of the attach and associate selects when a manager's search methods are called directly. */
 const defaultRecordSelectOptions: RecordSelectOptions = { modifyQuery: null, searchColumns: null, limit: 50, allowsDuplicates: false };
 
+/** Abilities a read-only relation manager refuses. */
+const READ_ONLY_ABILITIES = new Set(['create', 'update', 'delete', 'deleteAny', 'forceDelete', 'forceDeleteAny', 'restore', 'restoreAny', 'replicate', 'reorder']);
 /**
  * Table of records related to another one: a child component of the edit page, loaded when it becomes visible.
  * Subclasses declare `relationship`, `adapterFor()`, `table()` and `form()`.
@@ -4353,6 +4593,33 @@ export class RelationManager extends ListRecords {
     static badgeColor = 'primary';
     static getBadge(_ownerRecord: any, _pageClass: typeof Page): string | number | null | Promise<string | number | null> { return this.badge; }
     static getBadgeColor(): string { return this.badgeColor; }
+    /** Tooltip of the tab's badge. */
+    static badgeTooltip: string | null = null;
+    static getBadgeTooltip(): string | null { return this.badgeTooltip; }
+    /** `true`: the badge is loaded after the page is displayed (for an expensive count). */
+    static isBadgeLazyLoaded: boolean | null = null;
+    /** Whether the badge is lazy loaded for this record and page (Filament's `isBadgeLazyLoaded()` method). */
+    static shouldLazyLoadBadge(_ownerRecord: any, _pageClass: typeof Page): boolean { return this.isBadgeLazyLoaded ?? false; }
+    /**
+     * The manager's tab: a `Tab` (from `@navette-js/schemas`) with its title, icon and badge. Override it to change them:
+     * `return Tab.make('Blog posts').badge(count).badgeColor('info')`.
+     */
+    static getTabComponent(ownerRecord: any, pageClass: typeof Page): SchemaTab {
+        const tab = SchemaTab.make(this.getTitle()).icon(this.getIcon()).badgeColor(this.getBadgeColor()).badgeTooltip(this.getBadgeTooltip());
+        return this.shouldLazyLoadBadge(ownerRecord, pageClass) ? tab : tab.badge(() => this.getBadge(ownerRecord, pageClass));
+    }
+    /** `false`: the manager is mounted with the page instead of when it becomes visible. */
+    static isLazyLoaded: boolean | null = null;
+    static isLazy(): boolean { return this.isLazyLoaded ?? true; }
+    /** Properties given to every instance (`make({...})` adds its own). */
+    static getDefaultProperties(): Record<string, unknown> { return {}; }
+    /**
+     * This manager with properties of its own, mapped to its public properties: `CommentsManager.make({ status: 'approved' })`
+     * in `static relations`. List them in `static locked` so that the browser cannot change them.
+     */
+    static make(this: any, properties: Record<string, unknown> | string = {}): any {
+        return typeof properties === 'string' ? super.make(properties) : new RelationManagerConfiguration(this, properties);
+    }
     /**
      * Whether the manager is shown for this record and page (all by default). Hide it here rather than by denying `viewAny`,
      * which would forbid the whole page.
@@ -4361,15 +4628,36 @@ export class RelationManager extends ListRecords {
 
     /** Owner record key: set on mount by the page, never writable from the browser. */
     ownerRecord = '';
-    static locked = ['ownerRecord'];
+    /** Component name of the record page showing the manager: set on mount, never writable from the browser. */
+    pageClass = '';
+    static locked = ['ownerRecord', 'pageClass'];
+    /** Class of the record page showing the manager, or `null` (mounted on its own). */
+    getPageClass(): typeof Page | null { return this.pageClass ? (((this as any)._runtime?.classOf?.(this.pageClass) as typeof Page | null) ?? null) : null; }
+    /**
+     * Read-only mode: on a view page (unless `panel.readOnlyRelationManagersOnResourceViewPagesByDefault(false)`), the actions
+     * that change the relationship (create, edit, delete, attach, detach, associate, dissociate, restore, reorder…) are hidden
+     * and refused. Override it to decide yourself.
+     */
+    isReadOnly(): boolean {
+        const PageClass = this.getPageClass();
+        if (!PageClass || !this.panel.hasReadOnlyRelationManagersOnResourceViewPagesByDefault()) return false;
+        return PageClass === ViewRecord || PageClass.prototype instanceof ViewRecord;
+    }
     _facade: any = null;
-    /** What ListRecords expects from a resource, provided here by the relation manager. */
+    /** What ListRecords expects from a resource, provided here by the relation manager (rebuilt if `boot()` read it before the owner was set). */
     get resource(): any {
         const manager = this.constructor as typeof RelationManager;
-        return (this._facade ??= withRelatedResource({
+        if (this._facade && this._facade.__owner !== this.ownerRecord) this._facade = null;
+        return (this._facade ??= Object.assign(withRelatedResource({
             isSimple: true, slug: '', modelLabel: manager.modelLabel, relations: [], adapter: manager.adapterFor(this.ownerRecord),
-            can: (ability: string, user: User | null, record: unknown = null) => { const rule = manager.policy?.[ability]; return this.panel.authorize(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null }); },
-            inspect: (ability: string, user: User | null, record: unknown = null) => { const rule = manager.policy?.[ability]; return this.panel.inspect(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null }); },
+            can: (ability: string, user: User | null, record: unknown = null) => {
+                if (READ_ONLY_ABILITIES.has(ability) && this.isReadOnly()) return Promise.resolve(false);
+                const rule = manager.policy?.[ability]; return this.panel.authorize(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null });
+            },
+            inspect: (ability: string, user: User | null, record: unknown = null) => {
+                if (READ_ONLY_ABILITIES.has(ability) && this.isReadOnly()) return Promise.resolve(AuthorizationResponse.deny());
+                const rule = manager.policy?.[ability]; return this.panel.inspect(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null });
+            },
             getPluralModelLabel: () => manager.pluralModelLabel ?? plural(manager.modelLabel),
             getTitleCasePluralModelLabel: () => (manager.pluralModelLabel ?? plural(manager.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (manager.recordTitleAttribute ? String(record?.[manager.recordTitleAttribute] ?? '') : manager.modelLabel),
@@ -4380,12 +4668,12 @@ export class RelationManager extends ListRecords {
                 return pivot.length ? form.components([...form.getComponents(), ...pivot]) : form;
             },
             pivotFieldNames: () => manager.pivotForm(Schema.make(this)).filter((component): component is Field => component instanceof Field).map((field) => field.getName()),
-        }, manager.getRelatedResource(), this.ownerRecord));
+        }, manager.getRelatedResource(), this.ownerRecord), { __owner: this.ownerRecord }));
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
         // As in Filament, the manager's class name prefixes its query string parameters (`?commentsRelationManagerPage=2`).
-        const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()).queryStringIdentifier(lcfirst(manager.name)));
+        const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()).queryStringIdentifier(lcfirst(manager.name))).withoutComponentsHiddenOn(this);
         // With a related resource, rows link to its view or edit page.
         if (manager.getRelatedResource()) return linkRelatedRecords(table, this.resource);
         // If there is an "edit" row action, clicking the row opens it.
@@ -4533,7 +4821,8 @@ export class ManageRelatedRecords extends ListRecords {
     /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
-        return (this._facade ??= withRelatedResource({
+        if (this._facade && this._facade.__owner !== this.recordKey) this._facade = null;
+        return (this._facade ??= Object.assign(withRelatedResource({
             isSimple: true, hasViewPage: false, slug: page.parentResource.slug, modelLabel: page.modelLabel, relations: [], recordTitleAttribute: page.recordTitleAttribute, adapter: page.adapterFor(this.recordKey),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.authorize(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
             inspect: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.inspect(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
@@ -4541,10 +4830,10 @@ export class ManageRelatedRecords extends ListRecords {
             getTitleCasePluralModelLabel: () => (page.pluralModelLabel ?? plural(page.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (page.recordTitleAttribute ? String(record?.[page.recordTitleAttribute] ?? '') : page.modelLabel),
             table: (table: Table) => page.table(table), form: (schema: Schema) => page.form(schema), infolist: (schema: Schema) => page.infolist(schema), getUrl: () => '',
-        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}));
+        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}), { __owner: this.recordKey }));
     }
     getTable(): Table {
-        const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).queryStringIdentifier(lcfirst(this.related.name)));
+        const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).queryStringIdentifier(lcfirst(this.related.name))).withoutComponentsHiddenOn(this);
         return this.related.getRelatedResource() ? linkRelatedRecords(table, this.resource) : table;
     }
     getHeaderActions(): Action[] { return []; }
@@ -4589,6 +4878,22 @@ function fontOf(font: { family: string; url?: string }): { family: string; url: 
     return font.url ? { family: font.family, url: font.url } : { family: font.family, url: `https://fonts.bunny.net/css?family=${encodeURIComponent(font.family.toLowerCase().replace(/ /g, '-'))}:400,500,600,700&display=swap`, preconnect: 'https://fonts.bunny.net' };
 }
 
+/** Value at a dotted path of form data (`address.city`). */
+function getDataPath(data: unknown, path: string): unknown { return path.split('.').reduce((node: any, segment) => (node && typeof node === 'object' ? node[segment] : undefined), data); }
+/** Writes a value at a dotted path of form data, creating the objects on the way. */
+function setDataPath(data: Record<string, unknown>, path: string, value: unknown): void {
+    const segments = path.split('.');
+    if (segments.some((segment) => !/^[A-Za-z0-9_-]+$/.test(segment))) return;
+    let node: any = data;
+    for (const segment of segments.slice(0, -1)) node = (node[segment] && typeof node[segment] === 'object') ? node[segment] : (node[segment] = {});
+    node[segments[segments.length - 1]] = value;
+}
+/** Refills some paths of a page's form data from a record (`refreshFormData()` of the edit and view pages). */
+function refillFormData(schema: Schema, data: Record<string, unknown>, record: Record<string, unknown>, statePaths: string[]): void {
+    const fresh: Record<string, unknown> = {};
+    fillSchemaFromRecord(schema, fresh, record);
+    for (const path of statePaths) setDataPath(data, path, getDataPath(fresh, path) ?? getDataPath(record, path) ?? null);
+}
 function emptyToNull(data: Record<string, unknown>): Record<string, unknown> { return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v === '' ? null : v])); }
 
 /** Base class for a resource's form pages. */
@@ -4628,6 +4933,10 @@ abstract class ResourceFormPage extends Page {
     abstract getOperation(): 'create' | 'edit';
     abstract getSubmitMethod(): string;
     abstract getFormActions(): Action[];
+    /** The button submitting the form (create or save): also used as a wizard's last step button. */
+    abstract getSubmitFormAction(): Action;
+    /** "Cancel": back to the previous page. */
+    getCancelFormAction(): Action { return this.cancelAction(); }
     protected getRecord(): unknown { return null; }
 
     /** Two columns from `lg` by default; the resource may decide otherwise. */
@@ -4647,7 +4956,7 @@ abstract class ResourceFormPage extends Page {
     /** Step shown on open (1-based). */
     protected getStartStep(): number { return 1; }
     protected getWizardComponent(steps: Step[]): Wizard {
-        const [submit] = this.getFormActions();
+        const submit = this.getSubmitFormAction();
         return Wizard.make(steps).startOnStep(this.getStartStep()).cancelAction(this.cancelAction())
             .submitAction(submit.submit(null).action(this.getSubmitMethod()))
             .alpineSubmitHandler(`$wire.${this.getSubmitMethod()}()`).skippable(this.hasSkippableSteps()).contained(false);
@@ -4691,18 +5000,24 @@ export class CreateRecord extends ResourceFormPage {
     async mount(): Promise<void> { await this.beforeFill(); fillSchema(this.getSchema('form'), this.data); await this.afterFill(); this.rememberData(); }
     getOperation(): 'create' { return 'create'; }
     getSubmitMethod(): string { return 'create'; }
-    getTitle(): string { return t('filament-panels::resources/pages/create-record.title', { label: this.resource.modelLabel.split(' ').map(ucfirst).join(' ') }); }
+    getTitle(): string { return t('filament-panels::resources/pages/create-record.title', { label: this.resource.getTitleCaseModelLabel() }); }
     getBreadcrumbs(): { label: string; url: string | null }[] {
         return [{ label: this.resource.getTitleCasePluralModelLabel(), url: this.resource.getUrl() }, { label: t('filament-panels::resources/pages/create-record.breadcrumb'), url: null }];
     }
     getPageClasses(): string[] { return ['fi-resource-create-record-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`]; }
+    /**
+     * Form buttons: create, "create & create another" (unless `canCreateAnother` is `false`) and cancel. To show them in the
+     * page header instead, return `[]` here and `[this.getCreateFormAction().formId('form')]` from `getHeaderActions()`.
+     */
     getFormActions(): Action[] {
-        return [
-            Action.make('create').label(t('filament-panels::resources/pages/create-record.form.actions.create.label')).submit('create').keyBindings(['mod+s']),
-            Action.make('createAnother').label(t('filament-panels::resources/pages/create-record.form.actions.create_another.label')).color('gray').action('createAnother').keyBindings(['mod+shift+s']),
-            this.cancelAction(),
-        ];
+        return [this.getCreateFormAction(), ...(this.canCreateAnother() ? [this.getCreateAnotherFormAction()] : []), this.getCancelFormAction()];
     }
+    /** `false`: no "Create & create another" button. */
+    static canCreateAnother = true;
+    canCreateAnother(): boolean { return (this.constructor as typeof CreateRecord).canCreateAnother; }
+    getCreateFormAction(): Action { return Action.make('create').label(t('filament-panels::resources/pages/create-record.form.actions.create.label')).submit('create').keyBindings(['mod+s']); }
+    getCreateAnotherFormAction(): Action { return Action.make('createAnother').label(t('filament-panels::resources/pages/create-record.form.actions.create_another.label')).color('gray').action('createAnother').keyBindings(['mod+shift+s']); }
+    getSubmitFormAction(): Action { return this.getCreateFormAction(); }
     // --- lifecycle hooks, to override in a subclass (none can be called from the browser)
     /** Transforms validated data before creation (add the author, compute a field…). */
     protected mutateFormDataBeforeCreate(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
@@ -4733,7 +5048,7 @@ export class CreateRecord extends ResourceFormPage {
         if (another === true) { this.data = {}; fillSchema(this.getSchema('form'), this.data); this.rememberData(); return; }
         this.redirect(this.getRedirectUrl(record), true);
     }
-    createAnother(): Promise<void> { return this.create(true); }
+    createAnother(): Promise<void> { return this.canCreateAnother() ? this.create(true) : Promise.resolve(); }
 }
 
 // The prebuilt record actions (create, edit, view, replicate, delete, restore, force-delete, attach, associate…) live in ./record-actions.ts.
@@ -4752,7 +5067,7 @@ const trashedFilterValue = (livewire: any): string | null => {
 export class EditRecord extends ResourceFormPage {
     static callable = ['save'];
     recordKey = '';
-    /** Active relation manager tab (index in `Resource.relations`). */
+    /** Active tab: a key of `getRelationManagers()` (`'0'`… for a list), `''` for the content tab of combined tabs. */
     activeRelationManager = '0';
     /**
      * Previous page, captured on first display from the Referer header: only a same-site URL is accepted,
@@ -4760,18 +5075,32 @@ export class EditRecord extends ResourceFormPage {
      */
     previousUrl = '';
     protected getCancelUrl(): string { return this.previousUrl; }
-    /** Relation managers of this page: the resource's by default (`static relationManagers` on the page replaces them). */
-    getRelationManagers(): (typeof RelationManager | RelationGroup)[] { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
-    /** `true`: the form becomes the first tab, next to the relation managers. */
+    /**
+     * Relation managers of this page: the resource's by default (`static relationManagers` on the page replaces them), a list
+     * or an object whose keys name the tabs. Override it to choose them per record or per user.
+     */
+    getRelationManagers(): RelationManagerEntries { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
+    /** `true`: the form becomes a tab (key `''`), next to the relation managers. */
     hasCombinedRelationManagerTabsWithContent(): boolean { return false; }
     getContentTabLabel(): string { return t('filament-panels::resources/pages/edit-record.content.tab.label'); }
     getContentTabIcon(): string | null { return null; }
-    protected withRelationManagers(content: Schema): Schema {
-        const components = content.getComponents();
-        if (!this.getRelationManagers().length) return content.components([...components, new RelationManagerTabs().key(null).hidden()]);
-        if (this.hasCombinedRelationManagerTabsWithContent()) return content.components([new RelationManagerTabs(components)]);
-        return content.components([...components, new RelationManagerTabs()]);
-    }
+    /** The content tab (the form) of combined tabs: change its label or icon here. */
+    getContentTabComponent(): SchemaTab { return SchemaTab.make(this.getContentTabLabel()).icon(this.getContentTabIcon()).schema(this.getContentComponents()); }
+    /** Position of the content tab among combined tabs: before the relation managers (`null`, default) or after them. */
+    getContentTabPosition(): ContentTabPosition | null { return null; }
+    /** Tabs of combined tabs, by key: the content tab (`''`) and the relation managers. Override it to add your own tabs or reorder them. */
+    getTabComponents(): Record<string, SchemaTab> { return recordPageTabComponents(this as any); }
+    /** Tabs of the relation managers, by key (except some keys). */
+    getRelationManagerTabComponents(except: string[] = []): Record<string, SchemaTab> { return recordPageRelationManagerTabs(this as any, except); }
+    /** Tab of one relation manager entry (a key of `getRelationManagers()`), to place among your own tabs; `null` for an unknown key. */
+    getRelationManagerTabComponent(key: string | number): SchemaTab | null { return recordPageRelationManagerTab(this as any, key); }
+    /** Query string key of the active tab (`?relation=comments`); `null` keeps it out of the URL. */
+    static relationManagerQueryStringKey: string | null = 'relation';
+    /** `true`: switching tabs adds a browser history entry (back and forward move between tabs). */
+    static relationManagerQueryStringHistory = false;
+    protected withRelationManagers(content: Schema): Schema { return withRecordPageRelationTabs(this as any, content); }
+    /** Components of the page content without the relation managers: the form and its actions. */
+    getContentComponents(): SchemaComponent[] { return super.contentSchema(Schema.make(this)).getComponents(); }
     contentSchema(schema: Schema): Schema {
         // The tabs are always present: hidden (empty column) when the page has no relation manager.
         return this.withRelationManagers(super.contentSchema(schema));
@@ -4804,10 +5133,9 @@ export class EditRecord extends ResourceFormPage {
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
-        // Combined tabs: the form's tab is open first, unless the URL names a relation manager (`?relation=tasks`).
-        if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
-        this.activeRelationManager = relationManagerTabFromQuery(this) ?? this.activeRelationManager;
         await this.hydrate();
+        // Combined tabs: the form's tab is open first, unless the URL names a relation manager (`?relation=tasks`).
+        selectInitialRelationTab(this as any);
         await this.beforeFill();
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
         await loadSchemaRelationships(this.getSchema('form'), this.data, this._record);
@@ -4843,8 +5171,21 @@ export class EditRecord extends ResourceFormPage {
     }
     getSubNavigation(): SubNavigationItem[] { return this.resource.getRecordSubNavigation(this); }
     getPageClasses(): string[] { return ['fi-resource-edit-record-page', `fi-resource-${this.resource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
-    getFormActions(): Action[] {
-        return [Action.make('save').label(t('filament-panels::resources/pages/edit-record.form.actions.save.label')).submit('save').keyBindings(['mod+s']), this.cancelAction()];
+    /**
+     * Form buttons: save and cancel. To show them in the page header instead, return `[]` here and
+     * `[this.getSaveFormAction().formId('form'), ...]` from `getHeaderActions()`.
+     */
+    getFormActions(): Action[] { return [this.getSaveFormAction(), this.getCancelFormAction()]; }
+    getSaveFormAction(): Action { return Action.make('save').label(t('filament-panels::resources/pages/edit-record.form.actions.save.label')).submit('save').keyBindings(['mod+s']); }
+    getSubmitFormAction(): Action { return this.getSaveFormAction(); }
+    /**
+     * Refills some form fields from the record, reloaded from the database (after an action changed it): `refreshFormData(['status'])`.
+     * The other fields keep what the user typed.
+     */
+    async refreshFormData(statePaths: string[]): Promise<void> {
+        this._record = (await this.getDataAdapter().find(this.recordKey)) ?? this._record;
+        refillFormData(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }), statePaths);
+        this.rememberData();
     }
     // --- lifecycle hooks, to override in a subclass (none can be called from the browser)
     /** Transforms the record's values before filling the form. */
@@ -4885,16 +5226,45 @@ export class ViewRecord extends Page {
     static resource: typeof Resource;
     static locked = ['recordKey'];
     recordKey = '';
-    /** Active relation manager tab (index in `Resource.relations`). */
+    /** Active tab: a key of `getRelationManagers()` (`'0'`… for a list), `''` for the content tab of combined tabs. */
     activeRelationManager = '0';
     _record: any = null;
     get resource(): typeof Resource { return (this.constructor as typeof ViewRecord).resource; }
     getDataAdapter(): DataAdapter { return this.resource.adapter; }
+    /** State of the disabled form shown when the resource has no infolist. */
+    data: Record<string, unknown> = {};
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
-        if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
-        this.activeRelationManager = relationManagerTabFromQuery(this) ?? this.activeRelationManager;
         await this.hydrate();
+        selectInitialRelationTab(this as any);
+        if (!this.hasInfolist()) await this.fillForm();
+    }
+    /** Whether the resource defines an infolist; without one, the view page shows the resource's form, disabled. */
+    hasInfolist(): boolean { return this.getSchema('infolist').getComponents().length > 0; }
+    /** The resource's form, every field disabled (shown when the resource has no infolist). */
+    formSchema(schema: Schema): Schema {
+        const form = this.resource.form(schema.columns(2).operation('view').record(this._record));
+        for (const component of form.getFlatComponents()) if (component instanceof Field) component.disabled();
+        return form;
+    }
+    /** Fills the disabled form from the record, with the fill hooks. */
+    protected async fillForm(): Promise<void> {
+        await this.beforeFill();
+        fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
+        await loadSchemaRelationships(this.getSchema('form'), this.data, this._record);
+        await this.afterFill();
+    }
+    // --- hooks around filling the disabled form (to override; none can be called from the browser)
+    /** Before the form is filled. */
+    protected beforeFill(): void | Promise<void> {}
+    /** Transforms the record's values before filling the form; remove there what the browser must not receive. */
+    protected mutateFormDataBeforeFill(data: Record<string, unknown>): Record<string, unknown> | Promise<Record<string, unknown>> { return data; }
+    /** After the form is filled. */
+    protected afterFill(): void | Promise<void> {}
+    /** Refills some fields of the disabled form from the record, reloaded from the database: `refreshFormData(['status'])`. */
+    async refreshFormData(statePaths: string[]): Promise<void> {
+        this._record = (await this.getDataAdapter().find(this.recordKey)) ?? this._record;
+        if (!this.hasInfolist()) refillFormData(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }), statePaths);
     }
     /** The record is reloaded on every request, as on the edit page. */
     async hydrate(): Promise<void> {
@@ -4906,21 +5276,33 @@ export class ViewRecord extends Page {
     getActionMountContext(): Record<string, unknown> { return { recordKey: this.recordKey }; }
     protected getActionRecord(): unknown { return this._record; }
     infolistSchema(schema: Schema): Schema { return this.resource.infolist(schema.columns(2).operation('view').record(this._record)); }
-    /** Relation managers of this page: the resource's by default (`static relationManagers` on the page replaces them). */
-    getRelationManagers(): (typeof RelationManager | RelationGroup)[] { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
-    /** `true`: the infolist becomes the first tab, next to the relation managers. */
+    /**
+     * Relation managers of this page: the resource's by default (`static relationManagers` on the page replaces them), a list
+     * or an object whose keys name the tabs. Override it to choose them per record or per user.
+     */
+    getRelationManagers(): RelationManagerEntries { return (this.constructor as any).relationManagers ?? this.resource.getRelations(); }
+    /** `true`: the infolist becomes a tab (key `''`), next to the relation managers. */
     hasCombinedRelationManagerTabsWithContent(): boolean { return false; }
     getContentTabLabel(): string { return t('filament-panels::resources/pages/view-record.content.tab.label'); }
     getContentTabIcon(): string | null { return null; }
-    protected withRelationManagers(content: Schema): Schema {
-        const components = content.getComponents();
-        if (!this.getRelationManagers().length) return content.components([...components, new RelationManagerTabs().key(null).hidden()]);
-        if (this.hasCombinedRelationManagerTabsWithContent()) return content.components([new RelationManagerTabs(components)]);
-        return content.components([...components, new RelationManagerTabs()]);
-    }
-    contentSchema(schema: Schema): Schema {
-        return this.withRelationManagers(schema.components([EmbeddedSchema.make('infolist')]));
-    }
+    /** The content tab (the infolist) of combined tabs: change its label or icon here. */
+    getContentTabComponent(): SchemaTab { return SchemaTab.make(this.getContentTabLabel()).icon(this.getContentTabIcon()).schema(this.getContentComponents()); }
+    /** Position of the content tab among combined tabs: before the relation managers (`null`, default) or after them. */
+    getContentTabPosition(): ContentTabPosition | null { return null; }
+    /** Tabs of combined tabs, by key: the content tab (`''`) and the relation managers. Override it to add your own tabs or reorder them. */
+    getTabComponents(): Record<string, SchemaTab> { return recordPageTabComponents(this as any); }
+    /** Tabs of the relation managers, by key (except some keys). */
+    getRelationManagerTabComponents(except: string[] = []): Record<string, SchemaTab> { return recordPageRelationManagerTabs(this as any, except); }
+    /** Tab of one relation manager entry (a key of `getRelationManagers()`), to place among your own tabs; `null` for an unknown key. */
+    getRelationManagerTabComponent(key: string | number): SchemaTab | null { return recordPageRelationManagerTab(this as any, key); }
+    /** Query string key of the active tab (`?relation=comments`); `null` keeps it out of the URL. */
+    static relationManagerQueryStringKey: string | null = 'relation';
+    /** `true`: switching tabs adds a browser history entry (back and forward move between tabs). */
+    static relationManagerQueryStringHistory = false;
+    protected withRelationManagers(content: Schema): Schema { return withRecordPageRelationTabs(this as any, content); }
+    /** Components of the page content without the relation managers: the infolist (or the disabled form). */
+    getContentComponents(): SchemaComponent[] { return [EmbeddedSchema.make(this.hasInfolist() ? 'infolist' : 'form')]; }
+    contentSchema(schema: Schema): Schema { return this.withRelationManagers(schema.components(this.getContentComponents())); }
     /** Defaults to a link to the edit page. */
     getHeaderActions(): Action[] { return [this.editAction()]; }
     protected editAction(): Action {
@@ -5287,7 +5669,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (!resource.isScopedToTenant) continue;
             const adapter = resource.adapter as any;
             if (typeof adapter?.scopeToTenant !== 'function') throw new Error(`Resource ${resource.name}: its adapter does not support tenant scoping (scopeToTenant).`);
-            adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => { const tenant = panel.getTenant(); return tenant ? panel.getTenantUrlKey(tenant) : null; });
+            // A resource registered in several panels: the tenant is the one of the panel serving the request.
+            adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => { const current = getCurrentPanel() ?? panel; const tenant = current.hasTenancy() ? current.getTenant() : null; return tenant ? current.getTenantUrlKey(tenant) : null; });
         }
     }
     const router = express.Router();
@@ -5346,13 +5729,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtime.register(name('database-notifications'), DatabaseNotifications);
     runtime.register(name('table-select'), TableSelectComponent);
     runtime.register('navette.notifications', Notifications);
-    for (const [index, widget] of panel.getWidgets().entries()) runtime.register(name(`widgets.panel.${index}`), widget);
+    for (const [index, widget] of panel.getWidgets().entries()) runtime.register(name(`widgets.panel.${index}`), widgetClassOf(widget));
     // Component names follow the resource's URL path (a nested resource's includes its parents'): two resources never share one.
     const componentPath = (resource: typeof Resource) => nestedRoutePath(resource).replace(/[{}]/g, '').replace(/\//g, '.');
-    for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${componentPath(resource)}.${index}`), widget);
+    for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${componentPath(resource)}.${index}`), widgetClassOf(widget));
     for (const resource of panel.getResources()) {
         const managers = new Set<typeof RelationManager>();
-        const add = (entries: (typeof RelationManager | RelationGroup)[] | undefined) => { for (const entry of entries ?? []) for (const manager of entry instanceof RelationGroup ? entry.getManagers() : [entry]) managers.add(manager); };
+        const add = (entries: RelationManagerEntries | undefined) => { for (const [, entry] of relationManagerEntries(entries)) for (const { manager } of managersOfEntry(entry)) managers.add(manager); };
         add(resource.getRelations());
         for (const page of Object.values(resource.getPages())) add((page as any).relationManagers);
         for (const manager of managers) runtime.register(name(`relation-managers.${componentPath(resource)}.${relationshipNameOf(manager)}`), manager);
@@ -5371,6 +5754,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // `bootUsing()`: before every request of the panel (its pages, their updates).
     const panelBase = panel.getBaseUrl();
     const belongsToPanel = (path: string) => panelBase === '/' || path === panelBase || path.startsWith(`${panelBase}/`) || path.startsWith(`${livewire}/`);
+    // Everything the panel serves runs as part of this panel (`getCurrentPanel()`): a resource or page registered in several
+    // panels takes its URLs and authorization from it.
+    router.use((req, _res, next) => (belongsToPanel(req.path) ? runWithPanel(panel, () => next()) : next()));
     // `panel.middleware()`: every request of the panel but component updates (only the persistent ones run there). A
     // nonce they set with `useCspNonce()` applies to the rest of the request.
     router.use((req, res, next) => {
@@ -5477,7 +5863,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
                 header: panel.hasTopbar() && ctx.user ? (await runtime.mount(name('simple-user-menu'), {}, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-0" ') : null,
             })
             : views.render('filament-panels::layout.index', {
-                slot, maxContentWidth: panel.getMaxContentWidth(), renderHookScopes, hasNavigation, hasTopNavigation: panel.hasTopNavigation(),
+                slot, maxContentWidth: (mounted.component as any).getMaxContentWidth?.() ?? panel.getMaxContentWidth(), renderHookScopes, hasNavigation, hasTopNavigation: panel.hasTopNavigation(),
                 isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), isSidebarFullyCollapsibleOnDesktop: panel.isSidebarFullyCollapsibleOnDesktop(),
                 topbar: panel.hasTopbar() ? (await runtime.mount(name('topbar'), { path: req.path }, request)).replace(/^s*<div /, '<div wire:key="lw-1-0-1" ') : null,
                 sidebar: hasNavigation ? (await runtime.mount(name('sidebar'), { path: req.path }, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-1" ') : '',
@@ -5485,10 +5871,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const bodyClass = options.layout === 'index' ? cls([{ 'fi-body-has-navigation': hasNavigation, 'fi-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'fi-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'fi-body-has-topbar': panel.hasTopbar(), 'fi-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
         // Failed component requests show a notification (not in development, where the error dialog helps).
         const errorNotifications = process.env.NODE_ENV === 'development' ? null : typeof (mounted.component as any).getErrorNotifications === 'function' ? (mounted.component as any).getErrorNotifications() : panel.hasErrorNotifications() ? panel.getErrorNotifications() : null;
+        // The page's own body attributes (`extraBodyAttributes`): `class` joins the body's classes.
+        const { class: extraBodyClass, ...extraBodyAttributes } = ((mounted.component as any).getExtraBodyAttributes?.() ?? {}) as Record<string, AttrValue>;
+        const bodyAttributes = Object.keys(extraBodyAttributes).length ? new Attributes(Object.fromEntries(Object.entries(extraBodyAttributes).filter(([attribute]) => /^[a-zA-Z_:@][a-zA-Z0-9_:.@-]*$/.test(attribute)))).toHtml() : '';
         res.send(spaLinks(views.render('filament-panels::layout.base', {
             sidebarWidth: panel.getSidebarWidth(), collapsedSidebarWidth: panel.getCollapsedSidebarWidth(), errorNotifications,
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
-            bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
+            bodyClass: cls([bodyClass, typeof extraBodyClass === 'string' ? extraBodyClass : null]) || null, bodyAttributes, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
             assetStyles: NavetteAsset.renderStyles(null, { panel: panel.getId() }), assetScripts: NavetteAsset.renderScripts(null, { panel: panel.getId(), spa: panel.hasSpaMode() }), scriptData: NavetteAsset.renderScriptData(null, { panel: panel.getId() }),

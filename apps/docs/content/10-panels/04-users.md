@@ -234,6 +234,45 @@ The pages are `Login`, `Register`, `RequestPasswordReset`, `ResetPassword`, `Ema
 
 You can add content around the forms with the `panels::auth.*` [render hooks](/advanced/render-hooks).
 
+### Reusing the fields of the registration and profile forms
+
+`Register` and `EditProfile` build their form from one method per field: `getNameFormComponent()`, `getEmailFormComponent()`, `getPasswordFormComponent()` and `getPasswordConfirmationFormComponent()` (and `getCurrentPasswordFormComponent()` on the profile page). Reuse them to add fields without rewriting the built-in ones, or override one of them to change a single field:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { EditProfile, Register } from '@navette-js/panels';
+import type { Schema } from '@navette-js/schemas';
+
+class CompanyRegister extends Register {
+    formSchema(schema: Schema): Schema {
+        return schema.components([
+            this.getNameFormComponent(),
+            this.getEmailFormComponent(),
+            TextInput.make('company').required(),
+            this.getPasswordFormComponent(),
+            this.getPasswordConfirmationFormComponent(),
+        ]);
+    }
+}
+
+class Profile extends EditProfile {
+    // Without the password fields: the password is changed elsewhere.
+    protected getFormComponents() {
+        return [this.getNameFormComponent(), this.getEmailFormComponent(), this.getCurrentPasswordFormComponent()];
+    }
+}
+```
+
+Keep the current password field on the profile page: it is required to change the email address.
+
+### Hiding the password reveal button
+
+The password inputs of the authentication pages have a button showing the password as it is typed. Remove it on every authentication page of a panel:
+
+```ts
+panel.revealablePasswords(false)
+```
+
 ## Sending emails
 
 Password reset and email verification send emails. By default, they are written to the console, which is enough during development. In production, give the panel a mailer: an object with a `send(message)` method.

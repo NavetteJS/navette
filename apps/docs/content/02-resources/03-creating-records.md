@@ -232,6 +232,22 @@ class CreateTask extends CreateRecord {
 
 To create records from a modal on another page, use the [create action](/actions/create).
 
+### Moving the form buttons to the header
+
+The buttons under the form are returned by `getFormActions()`: `getCreateFormAction()`, `getCreateAnotherFormAction()` and `getCancelFormAction()`. To show the create button in the page header instead, return it from `getHeaderActions()` with `formId('form')`, which makes it submit the form from outside, and remove the form buttons:
+
+```ts
+class CreateTask extends CreateRecord {
+    getHeaderActions() {
+        return [this.getCreateFormAction().formId('form')];
+    }
+
+    getFormActions() {
+        return [];
+    }
+}
+```
+
 ## Custom page content
 
 The page renders the schema returned by `contentSchema()`: a form wrapping the resource form and its buttons. You may override it, or use the [render hooks](/advanced/render-hooks) of the page, to add content above or below the form.

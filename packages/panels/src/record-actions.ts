@@ -657,6 +657,7 @@ function excludeKeys(query: any, keys: string[]): void {
 export class AttachAction extends RecordSelectAction {
     static make(name: string | null = null): AttachAction {
         const action = new AttachAction(name ?? 'attach').setUpRecordSelect('attach');
+        action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.schema((schema: Schema) => [action.getRecordSelect(), ...managerOf(schema.livewire).pivotForm(schema)])
             .action(async (ctx) => {
                 if (!(await action.relate(ctx as Context))) { await sendActionFailure(action, ctx as Context); action.halt(); }
@@ -670,10 +671,14 @@ export class AttachAction extends RecordSelectAction {
     canAttachAnother(): boolean { return this.canRelateAnother(); }
 }
 
+/** A relation manager in read-only mode (on a view page): attach, detach, associate and dissociate are hidden. */
+const isReadOnlyRelationManager = (livewire: any): boolean => typeof livewire?.isReadOnly === 'function' && Boolean(livewire.isReadOnly());
+
 /** Gives existing records to the owner of a one-to-many relation manager (their foreign key). */
 export class AssociateAction extends RecordSelectAction {
     static make(name: string | null = null): AssociateAction {
         const action = new AssociateAction(name ?? 'associate').setUpRecordSelect('associate');
+        action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.schema(() => [action.getRecordSelect()])
             .action(async (ctx) => {
                 if (!(await action.relate(ctx as Context))) { await sendActionFailure(action, ctx as Context); action.halt(); }
@@ -691,6 +696,7 @@ export class AssociateAction extends RecordSelectAction {
 export class DetachAction extends CustomizableAction {
     static make(name: string | null = null): DetachAction {
         const action = new DetachAction(name ?? 'detach');
+        action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::detach.single.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire, record }) => t('filament-actions::detach.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
@@ -710,6 +716,7 @@ export class DetachAction extends CustomizableAction {
 export class DetachBulkAction extends CustomizableAction {
     static make(name: string | null = null): DetachBulkAction {
         const action = new DetachBulkAction(name ?? 'detach');
+        action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::detach.multiple.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire }) => t('filament-actions::detach.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))
@@ -732,6 +739,7 @@ export class DetachBulkAction extends CustomizableAction {
 export class DissociateAction extends CustomizableAction {
     static make(name: string | null = null): DissociateAction {
         const action = new DissociateAction(name ?? 'dissociate');
+        action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::dissociate.single.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire, record }) => t('filament-actions::dissociate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
@@ -751,6 +759,7 @@ export class DissociateAction extends CustomizableAction {
 export class DissociateBulkAction extends CustomizableAction {
     static make(name: string | null = null): DissociateBulkAction {
         const action = new DissociateBulkAction(name ?? 'dissociate');
+        action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::dissociate.multiple.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
             .modalHeading(({ livewire }) => t('filament-actions::dissociate.multiple.modal.heading', { label: livewire.resource.getPluralModelLabel() }))

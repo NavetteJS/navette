@@ -203,6 +203,41 @@ export class AuditLogResource extends Resource {
 }
 ```
 
+## Requiring resources to opt in to global search
+
+Every resource with a record title is globally searchable by default. With `globalSearchResourceOptIn()`, the panel only searches the resources that declare `isGloballySearchable` themselves:
+
+```ts
+panel.globalSearchResourceOptIn()
+
+export class PostResource extends Resource {
+    static isGloballySearchable = true;
+}
+```
+
+## Customizing the global search results
+
+`getGlobalSearchResults()` returns the results of a resource for a search. Override it to search another way, a search engine for example. Each result has a title, a URL, details and actions:
+
+```ts
+import { Resource, type GlobalSearchResult, type User } from '@navette-js/panels';
+
+export class PostResource extends Resource {
+    static async getGlobalSearchResults(search: string, user: User | null): Promise<GlobalSearchResult[]> {
+        const hits = await searchEngine.search('posts', search, { limit: 10 });
+        return hits.map((hit) => ({
+            title: hit.title,
+            url: this.getUrl('edit', hit.id),
+            details: { Author: hit.author },
+            actions: [],
+            record: hit,
+        }));
+    }
+}
+```
+
+The results are shown as they are returned: check there that the user may open each record, as the default implementation does through `getGlobalSearchResultUrl()`.
+
 ## Disabling search term splitting
 
 By default, the search term is split into words, and each word must appear in one of the searchable attributes. Set `shouldSplitGlobalSearchTerms` to `false` to match the term as a whole:

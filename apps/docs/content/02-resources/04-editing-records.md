@@ -177,6 +177,41 @@ class EditExpense extends EditRecord {
 
 An action with a modal is mounted on the page and receives the record as `record`. See [actions](/actions/overview).
 
+### Moving the save button to the header
+
+The buttons under the form are returned by `getFormActions()`: `getSaveFormAction()` and `getCancelFormAction()`. To show the save button in the page header, return it from `getHeaderActions()` with `formId('form')`, which makes it submit the form from outside:
+
+```ts
+class EditTask extends EditRecord {
+    getHeaderActions() {
+        return [this.getSaveFormAction().formId('form'), ...super.getHeaderActions()];
+    }
+
+    getFormActions() {
+        return [];
+    }
+}
+```
+
+## Refreshing the form data
+
+When an action changes the record in the database, `refreshFormData()` reloads some fields from it, without touching what the user typed in the others:
+
+```ts
+class EditInvoice extends EditRecord {
+    getHeaderActions() {
+        return [
+            Action.make('approve').action(async () => {
+                await approveInvoice(this.getRecord());
+                await this.refreshFormData(['status', 'approved_at']);
+            }),
+        ];
+    }
+}
+```
+
+The values go through `mutateFormDataBeforeFill()`, like when the page is opened.
+
 ## Adding edit pages to resource sub-navigation
 
 When the resource declares a [sub-navigation](/resources/overview#resource-sub-navigation) with `recordSubNavigation`, the edit page displays it, with its own item active:

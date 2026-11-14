@@ -216,13 +216,14 @@ export abstract class Field extends FieldBase {
     async shouldUniqueValidationIgnoreRecordByDefault(): Promise<boolean> { return Boolean(await evaluate(this._uniqueIgnoresRecordByDefault, this.context())); }
     /**
      * The value must exist in the database, applying the model's scopes (tenant, soft deletes, `modifyQueryUsing`): `model`
-     * is an Objection model (the form's model by default), `column` the column (the field name by default).
+     * is an Objection model (the form's model by default), `adapter` a data adapter whose scopes apply (`new ObjectionAdapter(Category).scopedTo('team_id', id)`;
+     * the form's adapter by default), `column` the column (the field name by default).
      */
-    scopedExists(options: { model?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
+    scopedExists(options: { model?: Lazy<any, ComponentContext>; adapter?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
         return this.rule({
             name: 'exists',
             passes: async (value, ctx) => {
-                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'with');
+                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'with', options.adapter ?? null);
                 const column = (await evaluate(options.column ?? null, ctx)) ?? this._name!;
                 const values = Array.isArray(value) ? value : [value];
                 for (const item of values) {
@@ -239,11 +240,11 @@ export abstract class Field extends FieldBase {
      * The value must not exist in the database, applying the model's scopes (`modifyQueryUsing` may change the query): the
      * record being edited is ignored unless `ignoreRecord: false`; `ignorable` ignores another record.
      */
-    scopedUnique(options: { model?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; ignorable?: Lazy<any, ComponentContext>; ignoreRecord?: boolean | null; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
+    scopedUnique(options: { model?: Lazy<any, ComponentContext>; adapter?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; ignorable?: Lazy<any, ComponentContext>; ignoreRecord?: boolean | null; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
         return this.rule({
             name: 'unique',
             passes: async (value, ctx) => {
-                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'without');
+                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'without', options.adapter ?? null);
                 const column = (await evaluate(options.column ?? null, ctx)) ?? this._name!;
                 const ignoreRecord = options.ignoreRecord ?? (await this.shouldUniqueValidationIgnoreRecordByDefault());
                 const ignorable = ignoreRecord && !options.ignorable ? ctx.record : await evaluate(options.ignorable ?? null, ctx);
@@ -294,6 +295,7 @@ export abstract class Field extends FieldBase {
             message: (a) => `The ${a} has already been taken.`,
         });
     }
+
 
     isRequired(): Promise<boolean> { return evaluate(this._required, this.context()); }
 
@@ -850,13 +852,13 @@ function normalizeOptions(options: GroupedOptions): (OptionGroup | [string, stri
     });
 }
 /**
- * Query of a model for `scopedExists()` / `scopedUnique()`: the form's data adapter applies its scopes (tenant, column
- * scopes, `modify`, soft deletes); an explicit model is queried as is.
+ * Query of a model for `scopedExists()` / `scopedUnique()`: the given data adapter, or else the form's, applies its scopes
+ * (tenant, column scopes, `modify`, soft deletes); an explicit model is queried as is.
  */
-async function scopedQueryOf(ctx: ComponentContext, explicit: Lazy<any, ComponentContext>, trashed: 'with' | 'without'): Promise<{ model: any; query: () => any }> {
+async function scopedQueryOf(ctx: ComponentContext, explicit: Lazy<any, ComponentContext>, trashed: 'with' | 'without', explicitAdapter: Lazy<any, ComponentContext> = null): Promise<{ model: any; query: () => any }> {
     const model = await evaluate(explicit, ctx);
     if (model) return { model, query: () => model.query() };
-    const adapter = (ctx.livewire as any).getDataAdapter?.();
+    const adapter = (await evaluate(explicitAdapter, ctx)) ?? (ctx.livewire as any).getDataAdapter?.();
     if (adapter && typeof adapter.scopedQuery === 'function' && adapter.model) return { model: adapter.model, query: () => adapter.scopedQuery(trashed) };
     const formModel = modelOfForm(ctx, null);
     return { model: formModel, query: () => formModel.query() };

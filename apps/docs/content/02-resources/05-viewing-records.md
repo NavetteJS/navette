@@ -46,6 +46,26 @@ The header of the View page contains an "Edit" button, shown to users who may up
 The View page always renders the infolist, so define `infolist()` on the resource: when it is missing, the page does not fall back to a disabled copy of the form.
 </Aside>
 
+### Showing the form when there is no infolist
+
+A resource with a View page but without `infolist()` shows its form on the View page, with every field disabled. Its data is filled from the record with the same hooks as on the edit page:
+
+```ts
+class ViewUser extends ViewRecord {
+    protected beforeFill() {}
+
+    // Remove here what the browser must not receive.
+    protected mutateFormDataBeforeFill(data: Record<string, unknown>) {
+        const { api_token, ...rest } = data;
+        return rest;
+    }
+
+    protected afterFill() {}
+}
+```
+
+`refreshFormData(['status'])` reloads some fields from the record, after an action changed it.
+
 ## Viewing records in modals
 
 When a resource has no View page (a [simple resource](/resources/overview#simple-modal-resources), for example), `ViewAction` opens the infolist of the resource in a modal instead of following a link:
@@ -113,7 +133,7 @@ The actions receive the record of the page as `record`. An action that changes d
 
 ## Relation managers on the View page
 
-The [relation managers](/resources/managing-relationships) of the resource are displayed under the infolist, in tabs, like on the edit page. Their own policy decides what the user may do in them.
+The [relation managers](/resources/managing-relationships) of the resource are displayed under the infolist, in tabs, like on the edit page. They are [read-only](/resources/managing-relationships#read-only-mode) there by default: their create, edit, delete, attach and detach actions are hidden.
 
 ## Adding view pages to resource sub-navigation
 
