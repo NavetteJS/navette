@@ -220,7 +220,7 @@ abstract class Entry extends Component {
     protected _openUrlInNewTab: Lazy<boolean, ComponentContext> = false;
     protected _tooltip: PerItem<string | null> = null;
     protected _emptyTooltip: string | null = null;
-    protected _inlineLabel: Lazy<boolean, ComponentContext> = false;
+    // `inlineLabel()` comes from the schema component: an entry inherits it from its layout component or schema.
     protected _alignment: Lazy<string | null, ComponentContext> = null;
     protected _hiddenJs: string | null = null;
     protected _visibleJs: string | null = null;
@@ -257,8 +257,8 @@ abstract class Entry extends Component {
     tooltip(tooltip: PerItem<string | null>): this { this._tooltip = tooltip; return this; }
     /** Tooltip shown on the content when the state is empty. */
     emptyTooltip(tooltip: string | null): this { this._emptyTooltip = tooltip; return this; }
-    /** Label next to the content instead of above it (from the `sm` breakpoint). */
-    inlineLabel(condition: Lazy<boolean, ComponentContext> = true): this { this._inlineLabel = condition; return this; }
+    /** Label next to the content instead of above it (from the `sm` breakpoint); `null` follows the layout component or schema. */
+    inlineLabel(condition: Lazy<boolean | null, ComponentContext> = true): this { return super.inlineLabel(condition); }
     /** Content alignment: `start`, `center`, `end`, `left`, `right`, `justify` or `between`. */
     alignment(alignment: Lazy<string | null, ComponentContext>): this { this._alignment = alignment; return this; }
     alignStart(): this { return this.alignment('start'); }
@@ -334,7 +334,7 @@ abstract class Entry extends Component {
         const label = await this.getLabel();
         const hasLabel = label !== '';
         const isLabelHidden = Boolean(await evaluate(this._hiddenLabel, ctx));
-        const hasInlineLabel = Boolean(await evaluate(this._inlineLabel, ctx));
+        const hasInlineLabel = await this.hasInlineLabel();
         const alignment = await this.getAlignment();
         const url = await evaluate(this._url, ctx);
         const href = typeof url === 'string' && url.trim() !== '' && isSafeUrl(url) ? url : null;

@@ -643,14 +643,16 @@ export class TextInput extends Field {
     integer(): this { this._numeric = 'integer'; return this.rule({ name: 'integer', passes: (v) => /^-?\d+$/.test(String(v).trim()), message: (a) => `The ${a} field must be an integer.` }); }
     private _step: number | 'any' | null = null;
     /** Input `step` of a numeric field, overriding the one implied by `numeric()` or `integer()`. */
-    step(step: number | 'any' | null): this { this._step = step; return this; }
-    minValue(value: number): this { this._minValue = value; return this.rule({ name: 'min', passes: (v) => Number(v) >= value, message: (a) => `The ${a} field must be at least ${value}.` }); }
-    maxValue(value: number): this { this._maxValue = value; return this.rule({ name: 'max', passes: (v) => Number(v) <= value, message: (a) => `The ${a} field must not be greater than ${value}.` }); }
+    step(step: Lazy<number | 'any' | null, ComponentContext>): this { return this.setLazy('_step', step); }
+    /** Minimum value (`min` attribute and rule); a function may return it. */
+    minValue(value: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_minValue', value); return this.rule({ name: 'min', passes: (v, ctx) => { last = (ctx.component as any)._minValue as number | null; return last === null || Number(v) >= last; }, message: (a) => `The ${a} field must be at least ${last}.` }); }
+    /** Maximum value (`max` attribute and rule); a function may return it. */
+    maxValue(value: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_maxValue', value); return this.rule({ name: 'max', passes: (v, ctx) => { last = (ctx.component as any)._maxValue as number | null; return last === null || Number(v) <= last; }, message: (a) => `The ${a} field must not be greater than ${last}.` }); }
     /** Label shown before the input (e.g. `$`); `isInline`: inside the input instead of a separate box. */
-    prefix(label: string | null, isInline = false): this { this._prefix = label; this._prefixInline = isInline; return this; }
+    prefix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._prefixInline = isInline; return this.setLazy('_prefix', label); }
     private _suffix: string | null = null;
     /** Label shown after the input ("hours", "kg"…). */
-    suffix(label: string | null, isInline = false): this { this._suffix = label; this._suffixInline = isInline; return this; }
+    suffix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._suffixInline = isInline; return this.setLazy('_suffix', label); }
     private _prefixInline = false;
     private _suffixInline = false;
     private _prefixIcon: string | null = null;
@@ -659,10 +661,10 @@ export class TextInput extends Field {
     private _suffixIconColor: string | null = null;
     private _prefixActions: Action[] = [];
     private _suffixActions: Action[] = [];
-    prefixIcon(icon: string | null, isInline = false): this { this._prefixIcon = icon; this._prefixInline = isInline; return this; }
-    suffixIcon(icon: string | null, isInline = false): this { this._suffixIcon = icon; this._suffixInline = isInline; return this; }
-    prefixIconColor(color: string | null): this { this._prefixIconColor = color; return this; }
-    suffixIconColor(color: string | null): this { this._suffixIconColor = color; return this; }
+    prefixIcon(icon: Lazy<string | null, ComponentContext>, isInline = false): this { this._prefixInline = isInline; return this.setLazy('_prefixIcon', icon); }
+    suffixIcon(icon: Lazy<string | null, ComponentContext>, isInline = false): this { this._suffixInline = isInline; return this.setLazy('_suffixIcon', icon); }
+    prefixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_prefixIconColor', color); }
+    suffixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_suffixIconColor', color); }
     /**
      * Icon button before the input, running an action. The action gets the field's `state`, and `set(name, value)` to change a
      * field of the same form.
@@ -674,16 +676,16 @@ export class TextInput extends Field {
     /** Affix actions, mounted through the schema component. */
     getActions(): Action[] { return [...this.getHintActions(), ...this._prefixActions, ...this._suffixActions]; }
     /** Exact length: `minlength` and `maxlength`, and the matching rule. */
-    length(length: number): this { this.minLength(length); this.maxLength(length); return this; }
+    length(length: Lazy<number | null, ComponentContext>): this { this.minLength(length); this.maxLength(length); return this; }
     private _datalist: string[] = [];
     /** Suggestions offered by the browser while typing (`<datalist>`). */
-    datalist(options: string[]): this { this._datalist = options.map(String); return this; }
+    datalist(options: Lazy<string[], ComponentContext>): this { return this.setLazy('_datalist', options, (list) => (list ?? []).map(String)); }
     private _readOnly = false;
     /** The value is shown and sent, but cannot be changed (`readonly`). */
-    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     private _copyable: { message: string | null; duration: number } | null = null;
     /** A button after the input copies its value (the browser only allows it on HTTPS or `localhost`). */
-    copyable(condition = true, copyMessage: string | null = null, copyMessageDuration = 2000): this { this._copyable = condition ? { message: copyMessage, duration: copyMessageDuration } : null; return this; }
+    copyable(condition: Lazy<boolean, ComponentContext> = true, copyMessage: string | null = null, copyMessageDuration = 2000): this { return this.setLazy('_copyable', condition, (on) => (on ? { message: copyMessage, duration: copyMessageDuration } : null)); }
     private _trim = false;
     /** Removes the spaces around the value before it is validated and saved. */
     trim(condition = true): this { this._trim = condition; return this; }
@@ -694,18 +696,18 @@ export class TextInput extends Field {
     private _inputMode: string | null = null;
     private _autocapitalize: string | null = null;
     /** Virtual keyboard: `none`, `text`, `decimal`, `numeric`, `tel`, `search`, `email` or `url`. */
-    inputMode(mode: string | null): this { this._inputMode = mode; return this; }
+    inputMode(mode: Lazy<string | null, ComponentContext>): this { return this.setLazy('_inputMode', mode); }
     /** `none`, `sentences`, `words` or `characters` (`true` / `false` for `on` / `off`). */
-    autocapitalize(mode: string | boolean | null = true): this { this._autocapitalize = mode === true ? 'on' : mode === false ? 'off' : mode; return this; }
-    type(type: string): this { this._type = type; return this; }
-    password(condition = true): this { this._isPassword = condition; return this; }
-    revealable(condition = true): this { this._isRevealable = condition; return this; }
+    autocapitalize(mode: Lazy<string | boolean | null, ComponentContext> = true): this { return this.setLazy('_autocapitalize', mode, (value) => (value === true ? 'on' : value === false ? 'off' : value)); }
+    type(type: Lazy<string | null, ComponentContext>): this { return this.setLazy('_type', type); }
+    password(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_isPassword', condition, Boolean); }
+    revealable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_isRevealable', condition, Boolean); }
     /** `true` → "on", `false` → "off", a string as is. */
-    autocomplete(value: string | boolean = true): this { this._autocomplete = value === true ? 'on' : value === false ? 'off' : value; return this; }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    autocomplete(value: Lazy<string | boolean | null, ComponentContext> = true): this { return this.setLazy('_autocomplete', value, (item) => (item === true ? 'on' : item === false ? 'off' : item)); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
     private _mask: string | null = null;
-    /** Alpine input mask (`(999) 999-9999`): guides typing in the browser, with no validation value. */
-    mask(pattern: string | null): this { this._mask = pattern; return this; }
+    /** Alpine input mask (`(999) 999-9999`): guides typing in the browser, with no validation value. A function may return it. */
+    mask(pattern: Lazy<string | null, ComponentContext>): this { return this.setLazy('_mask', pattern); }
     /** Phone number: digits, spaces and common punctuation. */
     tel(): this { this._type = 'tel'; return this.rule({ name: 'tel', passes: (v) => /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/.test(String(v)), message: (a) => `The ${a} field format is invalid.` }); }
     email(condition = true): this {
@@ -713,8 +715,10 @@ export class TextInput extends Field {
         this._type = 'email'; return this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
     /** Web address: `url` input type, a valid http(s) value is required. */
     url(): this { this._type = 'url'; return this.rule({ name: 'url', passes: (v) => { try { return ['http:', 'https:'].includes(new URL(String(v)).protocol); } catch { return false; } }, message: (a) => `The ${a} field must be a valid URL.` }); }
-    maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
-    minLength(length: number): this { this._minLength = length; return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    /** Maximum length (`maxlength` attribute and rule); a function may return it. */
+    maxLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_maxLength', length); return this.rule({ name: 'max', passes: (v, ctx) => { last = (ctx.component as any)._maxLength as number | null; return last === null || String(v).length <= last; }, message: (a) => `The ${a} field must not be greater than ${last} characters.` }); }
+    /** Minimum length (`minlength` attribute and rule); a function may return it. */
+    minLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_minLength', length); return this.rule({ name: 'min', passes: (v, ctx) => { last = (ctx.component as any)._minLength as number | null; return last === null || String(v).length >= last; }, message: (a) => `The ${a} field must be at least ${last} characters.` }); }
 
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
@@ -877,18 +881,18 @@ export class Select extends Field {
     minItems(count: number | null): this { this._minItems = count; return this; }
     /** Number of options shown at once in the JavaScript select (50 by default). */
     optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
-    searchDebounce(ms: number): this { this._searchDebounce = Math.max(0, Math.floor(ms)); return this; }
-    loadingMessage(message: string): this { this._messages.loading = message; return this; }
-    noSearchResultsMessage(message: string): this { this._messages.noSearchResults = message; return this; }
-    searchPrompt(message: string): this { this._messages.searchPrompt = message; return this; }
-    searchingMessage(message: string): this { this._messages.searching = message; return this; }
-    noOptionsMessage(message: string): this { this._messages.noOptions = message; return this; }
-    prefix(label: string | null, isInline = false): this { this._affixes.prefix = label; this._affixes.prefixInline = isInline; return this; }
-    suffix(label: string | null, isInline = false): this { this._affixes.suffix = label; this._affixes.suffixInline = isInline; return this; }
-    prefixIcon(name: string | null, isInline = false): this { this._affixes.prefixIcon = name; this._affixes.prefixInline = isInline; return this; }
-    suffixIcon(name: string | null, isInline = false): this { this._affixes.suffixIcon = name; this._affixes.suffixInline = isInline; return this; }
-    prefixIconColor(color: string | null): this { this._affixes.prefixIconColor = color; return this; }
-    suffixIconColor(color: string | null): this { this._affixes.suffixIconColor = color; return this; }
+    searchDebounce(ms: Lazy<number, ComponentContext>): this { return this.setLazy('_searchDebounce', ms, (value) => Math.max(0, Math.floor(Number(value) || 0))); }
+    loadingMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.loading', message); }
+    noSearchResultsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.noSearchResults', message); }
+    searchPrompt(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.searchPrompt', message); }
+    searchingMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.searching', message); }
+    noOptionsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.noOptions', message); }
+    prefix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.prefixInline = isInline; return this.setLazy('_affixes.prefix', label); }
+    suffix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.suffixInline = isInline; return this.setLazy('_affixes.suffix', label); }
+    prefixIcon(name: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.prefixInline = isInline; return this.setLazy('_affixes.prefixIcon', name); }
+    suffixIcon(name: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.suffixInline = isInline; return this.setLazy('_affixes.suffixIcon', name); }
+    prefixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_affixes.prefixIconColor', color); }
+    suffixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_affixes.suffixIconColor', color); }
     prefixAction(action: Action, isInline = false): this { this._affixes.prefixActions = [...this._affixes.prefixActions, action]; this._affixes.prefixInline = isInline; return this; }
     suffixAction(action: Action, isInline = false): this { this._affixes.suffixActions = [...this._affixes.suffixActions, action]; this._affixes.suffixInline = isInline; return this; }
     prefixActions(actions: Action[]): this { this._affixes.prefixActions = actions; return this; }
@@ -945,7 +949,7 @@ export class Select extends Field {
     /** Disables an option depending on the context (e.g. already picked in another row). */
     disableOptionWhen(condition: (value: string, ctx: ComponentContext) => boolean): this { this._disableOptionWhen = condition; return this; }
     /** Sends the state to the server as soon as it changes. */
-    placeholder(label: string | null): this { this._placeholder = label; return this; }
+    placeholder(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', label); }
     private _selectablePlaceholder = true;
     /** `false`: the native select has no empty option. */
     selectablePlaceholder(condition = true): this { this._selectablePlaceholder = condition; return this; }
@@ -1043,7 +1047,7 @@ export class Select extends Field {
     createOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._createOptionForm = schema; return this; }
     /** Saves the option from the validated modal data; returns the value (key) of the created option. */
     createOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => string | number | null | Promise<string | number | null>) | null): this { this._createOptionUsing = callback; return this; }
-    createOptionModalHeading(heading: string | null): this { this._createOptionModalHeading = heading; return this; }
+    createOptionModalHeading(heading: Lazy<string | null, ComponentContext>): this { return this.setLazy('_createOptionModalHeading', heading); }
     /** Customizes the create action (label, icon, modal width…). */
     createOptionAction(modify: ((action: Action) => Action | void) | null): this { this._modifyCreateOptionAction = modify; return this; }
     /**
@@ -1054,7 +1058,7 @@ export class Select extends Field {
     updateOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => unknown) | null): this { this._updateOptionUsing = callback; return this; }
     /** Initial data of the "Edit" modal (the context carries the current field state in `state`). */
     fillEditOptionActionFormUsing(callback: ((ctx: ComponentContext) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null): this { this._fillEditOptionForm = callback; return this; }
-    editOptionModalHeading(heading: string | null): this { this._editOptionModalHeading = heading; return this; }
+    editOptionModalHeading(heading: Lazy<string | null, ComponentContext>): this { return this.setLazy('_editOptionModalHeading', heading); }
     editOptionAction(modify: ((action: Action) => Action | void) | null): this { this._modifyEditOptionAction = modify; return this; }
     /** Same form for creating and editing. */
     manageOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { return this.createOptionForm(schema).editOptionForm(schema); }
@@ -1767,26 +1771,26 @@ abstract class TemporalField extends Field {
     native(condition = true): this { this._native = condition; return this; }
     isNative(): boolean { return this._native; }
     /** Display format of the JavaScript picker, in PHP's notation (`'d/m/Y'`, `'M j, Y H:i'`). */
-    displayFormat(format: string | null): this { this._displayFormat = format; return this; }
+    displayFormat(format: Lazy<string | null, ComponentContext>): this { return this.setLazy('_displayFormat', format); }
     /** Format of the saved value, in PHP's notation (`'Y-m-d'` by default for dates, `'Y-m-d H:i:s'` with a time). */
     format(format: string | null): this { this._format = format; return this; }
     /** First day of the week in the JavaScript picker: 0 (Sunday) to 6. */
-    firstDayOfWeek(day: number): this { this._firstDayOfWeek = Math.min(6, Math.max(0, Math.floor(day))); return this; }
+    firstDayOfWeek(day: Lazy<number, ComponentContext>): this { return this.setLazy('_firstDayOfWeek', day, (value) => Math.min(6, Math.max(0, Math.floor(Number(value) || 0)))); }
     weekStartsOnMonday(): this { return this.firstDayOfWeek(1); }
     weekStartsOnSunday(): this { return this.firstDayOfWeek(0); }
     /** Dates that cannot be picked (`YYYY-MM-DD`), also rejected on the server. */
     disabledDates(dates: Lazy<string[], ComponentContext>): this { this._disabledDates = dates; return this; }
-    closeOnDateSelection(condition = true): this { this._closeOnDateSelection = condition; return this; }
+    closeOnDateSelection(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_closeOnDateSelection', condition, Boolean); }
     /** Locale of the JavaScript picker's month and day names (`'fr'`). */
-    locale(locale: string | null): this { this._locale = locale; return this; }
+    locale(locale: Lazy<string | null, ComponentContext>): this { return this.setLazy('_locale', locale); }
     /** Shows and edits the value in this time zone, while it is saved in UTC (date-time pickers). */
     timezone(timezone: string | null): this { if (timezone !== null) new Intl.DateTimeFormat('en', { timeZone: timezone }); this._timezone = timezone; return this; }
-    hoursStep(step: number): this { this._hoursStep = step; return this; }
-    minutesStep(step: number): this { this._minutesStep = step; return this; }
-    secondsStep(step: number): this { this._secondsStep = step; return this; }
+    hoursStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_hoursStep', step); }
+    minutesStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_minutesStep', step); }
+    secondsStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_secondsStep', step); }
     /** Date focused when the JavaScript picker opens on an empty field. */
-    defaultFocusedDate(date: string | null): this { this._defaultFocusedDate = date; return this; }
-    placeholder(text: string | null): this { this._temporalPlaceholder = text; return this; }
+    defaultFocusedDate(date: Lazy<string | null, ComponentContext>): this { return this.setLazy('_defaultFocusedDate', date); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_temporalPlaceholder', text); }
 
     private static resolveLimit(date: string): string {
         const day = (offset: number) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
@@ -1959,9 +1963,9 @@ export class Radio extends Field {
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Helper text per value, under the option label. */
-    descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
+    descriptions(descriptions: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_descriptions', descriptions, (value) => value ?? {}); }
     /** Options side by side. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
     /** Options that cannot be picked; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
@@ -1995,21 +1999,21 @@ export class Textarea extends Field {
     private _rows: number | null = null;
     private _maxLength: number | null = null;
     static make(name: string): Textarea { return configured(new Textarea(name)); }
-    rows(rows: number): this { this._rows = rows; return this; }
-    maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
+    rows(rows: Lazy<number | null, ComponentContext>): this { return this.setLazy('_rows', rows); }
+    maxLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_maxLength', length); return this.rule({ name: 'max', passes: (v, ctx) => { last = (ctx.component as any)._maxLength as number | null; return last === null || String(v).length <= last; }, message: (a) => `The ${a} field must not be greater than ${last} characters.` }); }
     private _minLength: number | null = null;
     private _placeholder: string | null = null;
     private _readOnly = false;
     private _autosize = false;
     private _grammarly = true;
     private _trim = false;
-    minLength(length: number): this { this._minLength = length; return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    minLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_minLength', length); return this.rule({ name: 'min', passes: (v, ctx) => { last = (ctx.component as any)._minLength as number | null; return last === null || String(v).length >= last; }, message: (a) => `The ${a} field must be at least ${last} characters.` }); }
     /** Exact length. */
-    length(length: number): this { this.minLength(length); return this.maxLength(length); }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
-    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    length(length: Lazy<number | null, ComponentContext>): this { this.minLength(length); return this.maxLength(length); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     /** The textarea grows with its content. */
-    autosize(condition = true): this { this._autosize = condition; return this; }
+    autosize(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_autosize', condition, Boolean); }
     /** Stops the Grammarly extension from analyzing the content. */
     disableGrammarly(condition = true): this { this._grammarly = !condition; return this; }
     /** Removes the spaces around the value before it is validated and saved. */
@@ -2042,11 +2046,11 @@ export class TagsInput extends Field {
     private _suggestions: string[] = [];
     private _splitKeys: string[] = [];
     static make(name: string): TagsInput { return configured(new TagsInput(name)); }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
     /** Values suggested while typing. */
-    suggestions(suggestions: string[]): this { this._suggestions = suggestions.map(String).slice(0, 1000); return this; }
+    suggestions(suggestions: Lazy<string[], ComponentContext>): this { return this.setLazy('_suggestions', suggestions, (list) => (list ?? []).map(String).slice(0, 1000)); }
     /** Keys that confirm the current tag, besides Enter (`['Tab', ',']`). */
-    splitKeys(keys: string[]): this { this._splitKeys = keys; return this; }
+    splitKeys(keys: Lazy<string[], ComponentContext>): this { return this.setLazy('_splitKeys', keys, (list) => list ?? []); }
     private _separator: string | null = null;
     private _tagPrefix: string | null = null;
     private _tagSuffix: string | null = null;
@@ -2056,12 +2060,12 @@ export class TagsInput extends Field {
     /** Saves the tags as one string joined with this separator (`'a,b,c'`) instead of a list. */
     separator(separator: string | null = ','): this { this._separator = separator; return this; }
     /** Text shown before / after each tag (not saved). */
-    tagPrefix(prefix: string | null): this { this._tagPrefix = prefix; return this; }
-    tagSuffix(suffix: string | null): this { this._tagSuffix = suffix; return this; }
+    tagPrefix(prefix: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagPrefix', prefix); }
+    tagSuffix(suffix: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagSuffix', suffix); }
     /** Tags can be reordered by dragging. */
     reorderable(condition = true): this { this._reorderable = condition; return this; }
     /** Badge color of the tags (`primary` by default). */
-    color(color: string | null): this { this._tagColor = color; return this; }
+    color(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagColor', color); }
     /** Rules applied to each tag (e.g. a maximum length); the message names the tag. */
     nestedRecursiveRules(rules: (Rule | string)[]): this { this._tagRules = rules.map((rule) => (typeof rule === 'string' ? stringRule(rule, { numeric: false, name: this._name ?? '' }) : rule)).filter((rule): rule is Rule => rule !== null); return this; }
     getDefaultState(): unknown { return this.resolvedDefault() ?? []; }
@@ -2116,13 +2120,13 @@ export class Toggle extends Field {
     private _offColor: string | null = null;
     private _inline = true;
     /** Icons inside the switch's knob. */
-    onIcon(icon: string | null): this { this._onIcon = icon; return this; }
-    offIcon(icon: string | null): this { this._offIcon = icon; return this; }
+    onIcon(icon: Lazy<string | null, ComponentContext>): this { return this.setLazy('_onIcon', icon); }
+    offIcon(icon: Lazy<string | null, ComponentContext>): this { return this.setLazy('_offIcon', icon); }
     /** Colors when on (`primary` by default) and off (`gray`). */
-    onColor(color: string | null): this { this._onColor = color; return this; }
-    offColor(color: string | null): this { this._offColor = color; return this; }
+    onColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_onColor', color); }
+    offColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_offColor', color); }
     /** `false`: the label goes above the switch instead of beside it. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     async toHtml(): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const on = this.context().state === true;
@@ -2148,9 +2152,9 @@ export class ToggleButtons extends Field {
     static make(name: string): ToggleButtons { return configured(new ToggleButtons(name)); }
     /** Sends the state to the server as soon as it changes. */
     /** Color per value (e.g. from an enum). */
-    colors(colors: Record<string, string>): this { this._colors = colors; return this; }
+    colors(colors: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_colors', colors, (value) => value ?? {}); }
     /** Icon per value. */
-    icons(icons: Record<string, string>): this { this._icons = icons; return this; }
+    icons(icons: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_icons', icons, (value) => value ?? {}); }
     /** Options as pairs, `{ value: label }`, or an enum (its colors and icons are used unless `colors()` / `icons()` set others). */
     options(options: Options | Enum<string | number>): this {
         this._options = optionPairs(options);
@@ -2161,9 +2165,9 @@ export class ToggleButtons extends Field {
         return this;
     }
     /** Buttons side by side. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     /** Buttons joined into a single group. */
-    grouped(condition = true): this { this._grouped = condition; return this; }
+    grouped(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_grouped', condition, Boolean); }
     private _multiple = false;
     private _tooltips: Record<string, string> = {};
     private _size: string | null = null;
@@ -2174,13 +2178,13 @@ export class ToggleButtons extends Field {
     /** Several buttons can be selected: the state is a list of values. */
     multiple(condition = true): this { this._multiple = condition; return this; }
     /** Tooltip per value. */
-    tooltips(tooltips: Record<string, string>): this { this._tooltips = tooltips; return this; }
+    tooltips(tooltips: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_tooltips', tooltips, (value) => value ?? {}); }
     /** Button size: `xs`, `sm`, `md` (default), `lg` or `xl`. */
-    size(size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | null): this { this._size = size; return this; }
+    size(size: Lazy<'xs' | 'sm' | 'md' | 'lg' | 'xl' | null, ComponentContext>): this { return this.setLazy('_size', size); }
     /** Icons only: the labels stay for screen readers. */
-    hiddenButtonLabels(condition = true): this { this._labelsHidden = condition; return this; }
+    hiddenButtonLabels(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_labelsHidden', condition, Boolean); }
     /** Buttons stretch to the width of the field. */
-    fullWidth(condition = true): this { this._fullWidth = condition; return this; }
+    fullWidth(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_fullWidth', condition, Boolean); }
     /** Number of columns the buttons are spread over (from `lg`), when not inline. */
     columns(columns: number | null): this { this._columns = columns; return this; }
     /** Options that cannot be selected; they are refused on the server too. */
@@ -2342,7 +2346,7 @@ export class RichEditor extends Field {
     extensions(urls: string[]): this { this._jsExtensions = [...this._jsExtensions, ...urls]; return this; }
     /** Saves the content as the editor's JSON document instead of HTML. */
     json(condition = true): this { this._json = condition; return this; }
-    placeholder(text: string | null): this { this._richPlaceholder = text; return this; }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_richPlaceholder', text); }
     /** Where files attached in the editor are stored (`FileUpload.storage` by default); without storage, attaching is off. */
     fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
     fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
@@ -2651,7 +2655,7 @@ export class Checkbox extends Field {
     static make(name: string): Checkbox { return configured(new Checkbox(name)); }
     getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     /** `false`: the label goes above the checkbox instead of beside it. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     async toHtml(): Promise<string> {
         const input = new Attributes(this.getExtraInputAttributes())
             .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), [this.wireModel()]: this.getStatePath() })
@@ -2668,7 +2672,7 @@ export class CheckboxList extends Field {
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Number of columns the options are spread over (from `lg`). */
-    columns(columns: number | null): this { this._optionColumns = columns; return this; }
+    columns(columns: Lazy<number | null, ComponentContext>): this { return this.setLazy('_optionColumns', columns); }
     private _descriptions: Record<string, string> = {};
     private _searchable = false;
     private _bulkToggleable = false;
@@ -2682,15 +2686,15 @@ export class CheckboxList extends Field {
     private _modifySelectAll: ActionModifier = null;
     private _modifyDeselectAll: ActionModifier = null;
     /** Helper text per value, under the option label. */
-    descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
+    descriptions(descriptions: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_descriptions', descriptions, (value) => value ?? {}); }
     /** A search field filters the options in the browser. */
     searchable(condition = true): this { this._searchable = condition; return this; }
     private _searchPrompt = 'Search';
     private _noSearchResultsMessage = 'No search results.';
-    searchPrompt(prompt: string): this { this._searchPrompt = prompt; return this; }
-    noSearchResultsMessage(message: string): this { this._noSearchResultsMessage = message; return this; }
+    searchPrompt(prompt: Lazy<string, ComponentContext>): this { return this.setLazy('_searchPrompt', prompt); }
+    noSearchResultsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_noSearchResultsMessage', message); }
     /** Milliseconds to wait after typing before filtering the options (1000 by default). */
-    searchDebounce(milliseconds: number): this { this._searchDebounce = Math.max(0, Math.floor(milliseconds)); return this; }
+    searchDebounce(milliseconds: Lazy<number, ComponentContext>): this { return this.setLazy('_searchDebounce', milliseconds, (value) => Math.max(0, Math.floor(Number(value) || 0))); }
     /** "Select all" / "Deselect all" links. */
     bulkToggleable(condition = true): this { this._bulkToggleable = condition; return this; }
     /** Customizes the "Select all" link (label, icon, color; it is handled in the browser, so it has no modal). */
@@ -2820,8 +2824,8 @@ export class KeyValue extends Field {
     private _valueLabel: string | null = null;
     private _reorderable = false;
     static make(name: string): KeyValue { return configured(new KeyValue(name)); }
-    keyLabel(label: string): this { this._keyLabel = label; return this; }
-    valueLabel(label: string): this { this._valueLabel = label; return this; }
+    keyLabel(label: Lazy<string, ComponentContext>): this { return this.setLazy('_keyLabel', label); }
+    valueLabel(label: Lazy<string, ComponentContext>): this { return this.setLazy('_valueLabel', label); }
     reorderable(condition = true): this { this._reorderable = condition; return this; }
     private _addable = true;
     private _deletable = true;
@@ -2839,12 +2843,12 @@ export class KeyValue extends Field {
     editableKeys(condition = true): this { this._editableKeys = condition; return this; }
     /** `false`: values cannot be changed. */
     editableValues(condition = true): this { this._editableValues = condition; return this; }
-    keyPlaceholder(text: string | null): this { this._keyPlaceholder = text; return this; }
-    valuePlaceholder(text: string | null): this { this._valuePlaceholder = text; return this; }
-    addActionLabel(label: string | null): this { this._addLabel = label; return this; }
-    deleteActionLabel(label: string | null): this { this._deleteLabel = label; return this; }
+    keyPlaceholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_keyPlaceholder', text); }
+    valuePlaceholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_valuePlaceholder', text); }
+    addActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addLabel', label); }
+    deleteActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_deleteLabel', label); }
     private _reorderLabel: string | null = null;
-    reorderActionLabel(label: string | null): this { this._reorderLabel = label; return this; }
+    reorderActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_reorderLabel', label); }
     private _modifyAdd: ActionModifier = null;
     private _modifyDelete: ActionModifier = null;
     private _modifyReorder: ActionModifier = null;
@@ -2952,12 +2956,12 @@ export class MarkdownEditor extends Field {
     getToolbarButtons(): (string | string[])[] { return this._toolbarButtons; }
     hasToolbarButton(name: string): boolean { return this._toolbarButtons.some((group) => (Array.isArray(group) ? group.includes(name) : group === name)); }
     /** Minimum height of the editing area (`10rem` by default). */
-    minHeight(height: string | null): this { this._minHeight = cssLength(height); return this; }
-    maxHeight(height: string | null): this { this._maxHeight = cssLength(height); return this; }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    minHeight(height: Lazy<string | null, ComponentContext>): this { return this.setLazy('_minHeight', height, cssLength); }
+    maxHeight(height: Lazy<string | null, ComponentContext>): this { return this.setLazy('_maxHeight', height, cssLength); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
     /** Sends the state to the server while typing (`debounce` in milliseconds), or on blur with `onBlur`. */
-    maxLength(length: number): this { return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
-    minLength(length: number): this { return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    maxLength(length: Lazy<number, ComponentContext>): this { let last: number | null = null; return this.rule({ name: 'max', passes: async (v, ctx) => { last = await evaluate(length, ctx); return String(v).length <= last; }, message: (a) => `The ${a} field must not be greater than ${last} characters.` }); }
+    minLength(length: Lazy<number, ComponentContext>): this { let last: number | null = null; return this.rule({ name: 'min', passes: async (v, ctx) => { last = await evaluate(length, ctx); return String(v).length >= last; }, message: (a) => `The ${a} field must be at least ${last} characters.` }); }
     hydrateState(value: unknown): unknown { return typeof value === 'string' ? value : null; }
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'string', passes: (v) => typeof v === 'string', message: (a) => `The ${a} field must be a string.` }];
@@ -3273,7 +3277,7 @@ export class Hidden extends Field {
     constructor(name: string) { super(name); this._columnSpan = { default: 'hidden' }; }
     static make(name: string): Hidden { return configured(new Hidden(name)); }
     async toHtml(): Promise<string> {
-        const attributes = new Attributes().merge({ id: this.getId(), type: 'hidden', 'wire:model': this.getStatePath(), ...this._extraAttributes }).class(['fi-fo-hidden']);
+        const attributes = new Attributes().merge({ id: this.getId(), type: 'hidden', [this.wireModel()]: this.getStatePath(), ...this._extraAttributes }).class(['fi-fo-hidden']);
         return `<input ${attributes.toHtml()} />`;
     }
 }
@@ -3295,7 +3299,7 @@ export class OneTimeCodeInput extends Field {
     getLength(): number { return this._length; }
     /** Submits the form as soon as the last digit is typed. */
     submitOnCompletion(condition = true): this { this._submitOnCompletion = condition; return this; }
-    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     hydrateState(value: unknown): unknown { return value === null || value === undefined ? null : String(value); }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();

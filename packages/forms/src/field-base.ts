@@ -1,7 +1,7 @@
 // Field base: label, helper text, hint, content slots, extra attributes, saving options and the field wrapper markup.
 // `Field` (index.ts) adds the state shaping and the validation rules.
 import { HtmlString, cls, e, evaluate, js, views, type Lazy } from '@navette-js/support';
-import { Component, Icon as SchemaIcon, JsContent, Text, renderInlineItems, renderSlot, resolveAttributeEntries, type ComponentContext, type ComponentSlot, type InlineItem } from '@navette-js/schemas';
+import { Component, Icon as SchemaIcon, JsContent, Text, readStatePath, renderInlineItems, renderSlot, resolveAttributeEntries, writeStatePath, type ComponentContext, type ComponentSlot, type InlineItem } from '@navette-js/schemas';
 import type { Action } from '@navette-js/actions';
 
 const headline = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ (.)/g, (_, c) => ' ' + c.toLowerCase());
@@ -35,6 +35,41 @@ export abstract class FieldBase extends Component {
 
     abstract getId(): string;
     abstract isRequired(): Promise<boolean>;
+
+    /** Properties set with a function (`placeholder(({ get }) => …)`): evaluated with the field context before it renders or validates. */
+    private _lazyProperties: Record<string, (ctx: ComponentContext) => unknown> = {};
+    constructor() {
+        super();
+        // \`toHtml()\` and \`validate()\` see the values of the properties set with functions (the instance's own wrappers are
+        // copied along with the instance by \`cloneComponentTree()\`).
+        for (const name of ['toHtml', 'validate']) {
+            const original = (this as any)[name];
+            if (typeof original !== 'function') continue;
+            (this as any)[name] = function (this: FieldBase, ...args: unknown[]) { return this.withLazyProperties(() => original.apply(this, args)); };
+        }
+    }
+    /**
+     * Stores a setter's value: a function is kept and evaluated with the field context when the field renders or validates
+     * (the property keeps its previous value until then); `transform` shapes the value (`true` → `'on'`…).
+     */
+    protected setLazy<T>(property: string, value: Lazy<T, ComponentContext>, transform: ((value: T) => unknown) | null = null): this {
+        if (typeof value === 'function') {
+            const callback = value as (ctx: ComponentContext) => T | Promise<T>;
+            this._lazyProperties[property] = transform ? async (ctx) => transform(await callback(ctx)) : callback;
+        } else {
+            delete this._lazyProperties[property];
+            writeStatePath(this, property, transform ? transform(value) : value);
+        }
+        return this;
+    }
+    /** Runs \`fn\` with the properties set by functions evaluated (restored afterwards). `a.b` properties are nested. */
+    protected async withLazyProperties<T>(fn: () => Promise<T>): Promise<T> {
+        const entries = Object.entries(this._lazyProperties);
+        if (!entries.length) return fn();
+        const previous: Record<string, unknown> = {};
+        for (const [property, callback] of entries) { previous[property] = readStatePath(this, property); writeStatePath(this, property, await callback(this.context())); }
+        try { return await fn(); } finally { for (const [property, value] of Object.entries(previous)) writeStatePath(this, property, value); }
+    }
 
     /** Label: a string, an `HtmlString` or `JsContent` (computed in the browser), or a function returning one. */
     label(label: Lazy<string | HtmlString | null, ComponentContext>): this { this._label = label; return this; }
