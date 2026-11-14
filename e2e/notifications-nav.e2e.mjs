@@ -104,6 +104,15 @@ try {
         await page.keyboard.press('Escape');
     });
 
+    await step('a notification sent from the mount() of a page is shown on that page, once', async () => {
+        const response = await page.goto(`${BASE}/lab/welcome`);
+        assert.equal(response.status(), 200);
+        await flash('Welcome back').waitFor();
+        await page.goto(`${BASE}/lab/fields`);
+        await page.waitForLoadState('networkidle');
+        assert.equal(await flash('Welcome back').count(), 0);
+    });
+
     await step('collapsed sidebar: a group with an icon opens a dropdown of its items', async () => {
         await page.goto(`${BASE}/lab/fields`);
         await page.waitForLoadState('networkidle');

@@ -27,6 +27,7 @@ import { LabRelations } from './lab-relations.ts';
 import { LabRelationBrands, LabRelationProducts } from './lab-prebuilt-actions.ts';
 import { labPluginExamples } from './lab-plugins.ts';
 import { LabActionsPage } from './lab-actions.ts';
+import { LabWelcomePage } from './lab-welcome.ts';
 import {
     BulkActionGroup, Count, Filter, Group, IconColumn, Indicator, NumberConstraint, Panel as TablePanel, QueryBuilder, SelectColumn, SelectFilter, Split, Stack, Sum,
     TernaryFilter, TextColumn, TextConstraint, ToggleColumn, type Table,
@@ -390,7 +391,7 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.
         // Action features (policy messages, rate limits, links, modal options), tabs, JavaScript widgets, notification actions and
         // private files labs: left out of the parity screenshots.
-        .pages([LabWidgetsDashboard, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabActionsPage, LabTabsPage, LabJsWidgetsDashboard, LabUiPage])])
+        .pages([LabWidgetsDashboard, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabActionsPage, LabTabsPage, LabJsWidgetsDashboard, LabUiPage, LabWelcomePage])])
         .widgets([...labWidgets, ...(process.env.NAVETTE_NO_THEMES ? [] : labJsWidgets)])
         .renderHook('panels::scripts.before', () => '<script src="/js/lab-chart-plugins.js"></script>')
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])

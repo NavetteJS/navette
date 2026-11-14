@@ -5993,7 +5993,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
 
     type DocumentOptions = { title: string; component: string; layout: 'simple' | 'index'; params?: Record<string, unknown> };
     // A page renders entirely with the request theme's colors, for the request's tenant.
-    const document = (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => panel.withTheme(req, () => panel.withTenant(ctx.tenant ?? null, () => renderDocument(req, res, ctx, options)));
+    // `Notification.send()` works while the page renders: the notifications component of the layout shows what `mount()` sent,
+    // and what is left (the page redirected) waits in the browser's mailbox for the next page.
+    const document = async (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => {
+        const { pending } = await runInRequest(ctx.mailbox, () => panel.withTheme(req, () => panel.withTenant(ctx.tenant ?? null, () => renderDocument(req, res, ctx, options))));
+        if (pending.length) publish(ctx.mailbox, pending);
+    };
     const renderDocument = async (req: Request, res: Response, ctx: PanelContext, options: DocumentOptions) => {
         const request = { path: req.path, method: req.method, ctx };
         const mounted = await runtime.mountWithInstance(options.component, options.params ?? {}, request);
