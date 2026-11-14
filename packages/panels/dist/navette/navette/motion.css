@@ -78,24 +78,3 @@
     .nv-ta-content-ctn { transition: opacity 0.2s var(--nv-out); }
     html[data-nv-busy] .nv-ta-content-ctn { opacity: 0.6; }
 }
-
-/* --- activity pill: visible while a request takes a while (added by motion.js) */
-.nv-busy {
-    position: fixed; top: 0.75rem; left: 50%; z-index: 60; display: flex; align-items: center; gap: 0.5rem;
-    padding: 0.4rem 0.8rem; border-radius: 9999px; font-size: 0.8125rem; font-weight: 500; pointer-events: none;
-    color: var(--gray-700); background: color-mix(in oklab, white 82%, transparent);
-    box-shadow: 0 6px 24px rgb(0 0 0 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.06);
-    backdrop-filter: blur(14px) saturate(1.6); -webkit-backdrop-filter: blur(14px) saturate(1.6);
-    opacity: 0; transform: translate(-50%, -150%); transition: transform 0.4s var(--nv-spring), opacity 0.25s var(--nv-out);
-}
-.dark .nv-busy { color: var(--gray-200); background: color-mix(in oklab, var(--gray-900) 78%, transparent); box-shadow: 0 6px 24px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.08); }
-html[data-nv-busy] .nv-busy { opacity: 1; transform: translate(-50%, 0); }
-.nv-busy::before {
-    content: ''; width: 0.875rem; height: 0.875rem; border-radius: 9999px; border: 2px solid color-mix(in oklab, currentColor 22%, transparent);
-    border-top-color: var(--primary-500, currentColor); animation: nv-spin-always 0.7s linear infinite;
-}
-@keyframes nv-spin-always { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-    .nv-busy { transition: opacity 0.2s linear; transform: translate(-50%, 0); }
-    .nv-busy::before { animation-duration: 1.6s; }
-}

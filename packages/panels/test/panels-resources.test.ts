@@ -150,7 +150,7 @@ test('one resource in two panels over HTTP: each panel serves the resource with 
         assert.match(await get('/admin/authors'), /href="\/admin\/authors\/1"/);
         // Page options: body attributes and content width of the page, subheading, alignment, footer, widget properties and columns.
         const report = await get('/admin/report');
-        assert.match(report, /<body data-report="yes" class="nv-body nv-panel-admin [^"]*report-body">/);
+        assert.match(report, /<body data-report="yes" class="nv-body nv-panel-admin [^"]*report-body"[^>]*>/);
         assert.match(report, /nv-main nv-width-full/);
         assert.match(report, /<p class="nv-header-subheading">\s*Monthly &lt;figures&gt;\s*<\/p>/);
         assert.match(report, /nv-ac nv-align-end/);

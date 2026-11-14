@@ -37,6 +37,7 @@ export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTim
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
 export { authenticationOptions, decodeCbor, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type AuthenticationResponseJSON, type RegistrationResponseJSON, type StoredCredential, type UserVerification } from './webauthn.ts';
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
+export { PAGE_LOADING_DELAY, renderPageLoadingIndicator, type PageLoadingIndicator } from './page-loading.ts';
 export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ExportFake, ExportFormat, ExportQuery, importExportSchema, knexImportExportHistory, parseCsv, runInBackground, startsLikeFormula, TestableExport, useBackgroundRunner, type BackgroundTask, type DispatchedExport, type ExportActionInstance, type ExportColumnContext, type ExportFormatValue, type ExportRun, type ImportExportHistory } from './import-export.ts';
 export { decodeCsv, guessCsvDelimiter, ImportAction, ImportColumn, Importer, ImportFake, ImportValidationError, readSpreadsheet, RowImportFailedError, TestableImport, type DispatchedImport, type ImportActionInstance, type ImportColumnContext, type ImportFileRule, type ImportRowContext, type ImportRule, type ImportRun, type RowStatus, type SpreadsheetReadOptions, type TestableImportOptions } from './imports.ts';
 export { DiskDownloadStore, registerDownloader, sendDownload, type Downloader, type DownloadPutOptions, type DownloadStorage, type StoredDownload } from './downloads.ts';
@@ -85,6 +86,7 @@ import { WidgetConfiguration, widgetClassOf, widgetPropertiesOf, type WidgetEntr
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, cspNonce, getResponseCspNonce, hasCustomHtmlSanitizerConfig, HtmlString, isEnum, isEnumCase, RenderHookRegistry, runWithCspNonce, sanitizeHtml, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, readRecordPath, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Enum, type EnumCase, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
+import { normalizePageLoadingIndicator, PAGE_LOADING_DELAY, renderPageLoadingIndicator, type PageLoadingIndicator } from './page-loading.ts';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import { Model as DatabaseModel, transaction as databaseTransaction, type DataAdapter } from '@navette-js/database';
@@ -209,6 +211,8 @@ export class Panel {
     private _favicon: string | null = null;
     private _theme: string | null = null;
     private _motion = true;
+    private _pageLoadingIndicator: PageLoadingIndicator = 'content';
+    private _pageLoadingDelay = PAGE_LOADING_DELAY;
     private _themes: Theme[] = [];
     private _font = { family: 'Inter Variable', url: null as string | null, preconnect: null as string | null };
     private _login: typeof Login | null = null;
@@ -267,11 +271,26 @@ export class Panel {
     theme(url: string | null): this { this._theme = url; return this; }
     getTheme(): string | null { return this._theme; }
     /**
-     * Navette's motion and loading indicators (springs, activity dot, spinner for deferred areas).
+     * Navette's motion and loading indicators (springs, fades, spinner for deferred areas).
      * `motion(false)` renders the plain interface without them.
      */
     motion(enabled = true): this { this._motion = enabled; return this; }
     hasMotion(): boolean { return this._motion; }
+    /**
+     * Overlay shown while the next page loads (SPA navigations, links, forms and redirects): `'content'` (default) covers
+     * the content area only, not the sidebar nor the topbar; `'screen'` covers the whole viewport; `false` shows nothing.
+     * It appears after `delay` milliseconds, so fast navigations do not flash.
+     */
+    pageLoadingIndicator(indicator: PageLoadingIndicator | boolean = 'content', options: { delay?: number } = {}): this {
+        this._pageLoadingIndicator = normalizePageLoadingIndicator(indicator);
+        if (options.delay !== undefined) {
+            if (!Number.isFinite(options.delay) || options.delay < 0) throw new Error('The page loading delay must be a positive number of milliseconds.');
+            this._pageLoadingDelay = options.delay;
+        }
+        return this;
+    }
+    getPageLoadingIndicator(): PageLoadingIndicator { return this._pageLoadingIndicator; }
+    getPageLoadingDelay(): number { return this._pageLoadingDelay; }
     /** Themes offered to the user; the first one is the default. */
     themes(themes: Theme[]): this {
         for (const theme of themes) if (!/^[a-z0-9-]{1,40}$/.test(theme.id)) throw new Error(`Invalid theme id: ${theme.id}`);
@@ -5893,7 +5912,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // CSP nonce set before the panel (`useCspNonce(res, nonce)`): every inline script and style of the panel carries it.
     router.use((_req, res, next) => { let nonce: string | null; try { nonce = getResponseCspNonce(res); } catch (error) { return next(error); } runWithCspNonce(nonce, () => next()); });
     // Front-end files: the compiled CSS and JavaScript (versioned URLs, cached for a year) and, under `navette/`, the optional
-    // sheets and scripts (motion, calendar, security keys, broadcasting), revalidated on every request.
+    // sheets and scripts (motion, page loading, calendar, security keys, broadcasting), revalidated on every request.
     router.use(express.static(dir('../dist/navette'), {
         maxAge: '1y',
         setHeaders: (res, file) => { if (/[\\/]dist[\\/]navette[\\/]navette[\\/]/.test(file)) res.setHeader('Cache-Control', 'public, max-age=0'); },
@@ -6025,7 +6044,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const bodyAttributes = Object.keys(extraBodyAttributes).length ? new Attributes(Object.fromEntries(Object.entries(extraBodyAttributes).filter(([attribute]) => /^[a-zA-Z_:@][a-zA-Z0-9_:.@-]*$/.test(attribute)))).toHtml() : '';
         res.send(spaLinks(views.render('navette-panels::layout.base', {
             sidebarWidth: panel.getSidebarWidth(), collapsedSidebarWidth: panel.getCollapsedSidebarWidth(), errorNotifications,
-            renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
+            renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), pageLoading: renderPageLoadingIndicator(panel.getPageLoadingIndicator(), panel.getPageLoadingDelay()), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass: cls([bodyClass, typeof extraBodyClass === 'string' ? extraBodyClass : null]) || null, bodyAttributes, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),

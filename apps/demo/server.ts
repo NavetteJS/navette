@@ -185,6 +185,8 @@ if (!process.env.NAVETTE_NO_LAB) app.use(LAB_PRIVATE_FILES_URL, labPrivateFiles(
 if (!process.env.NAVETTE_NO_LAB) app.use(panelRouter(labPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 // Fourth panel (`/lab-nav`): navigation, menus and a strict Content-Security-Policy; left out of the parity screenshots.
 if (!process.env.NAVETTE_NO_LAB && !process.env.NAVETTE_NO_THEMES) app.use(panelRouter((await import('./lab-navigation.ts')).labNavigationPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
+// Page loading overlay lab (`/lab-loading…`): one small panel per `pageLoadingIndicator()` setting; left out of the parity screenshots.
+if (!process.env.NAVETTE_NO_LAB && !process.env.NAVETTE_NO_THEMES) for (const loadingPanel of (await import('./lab-page-loading.ts')).pageLoadingLabPanels({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) })) app.use(panelRouter(loadingPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 // The admin panel is at the root: URLs that nothing answered get its 404 page.
 app.use(panelNotFound(panel));
