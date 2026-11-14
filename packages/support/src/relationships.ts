@@ -157,15 +157,15 @@ export function relationExpression(paths: string[]): Record<string, unknown> {
 }
 
 /**
- * Loads the relationships of dot-notation names on one record when they are missing, like Laravel's `loadMissing()`: for an
- * Objection model instance, the relationship part of each name is fetched (`$fetchGraph`, already loaded relations are kept).
+ * Loads the relationships of names on one record when they are missing, like Laravel's `loadMissing()`: for an Objection
+ * model instance, the relationship part of each name (`author` for `author.name`, or the name itself when it is a relationship) is fetched (`$fetchGraph`, already loaded relations are kept).
  * Other records are left as they are (their nested objects are read directly).
  */
 export async function loadMissingRelationships(record: unknown, names: string[]): Promise<void> {
     if (!isModelInstance(record)) return;
     const model = record.constructor;
-    const missing = names.map((name) => relationshipPathOf(name)).filter((path): path is string => path !== null)
-        .map((path) => relationshipSegments(model, path))
+    // `author.name` loads `author`; `comments` (a relationship itself, e.g. a repeatable entry) loads `comments`.
+    const missing = names.filter((name) => isIdentifierPath(name)).map((name) => relationshipSegments(model, name))
         .filter((segments) => segments.length > 0)
         .filter((segments) => {
             // Already loaded down to the last relationship: nothing to fetch.

@@ -297,7 +297,11 @@ abstract class Entry extends Component {
             if (record && this._name!.includes('.')) {
                 state = record[this._name!.replace(/\./g, '_')];
                 if (state === undefined) { await loadMissingRelationships(record, [this._name!]); state = readRecordPath(record, this._name!); }
-            } else state = record?.[this._name!];
+            } else {
+                state = record?.[this._name!];
+                // A relationship named like the entry (`RepeatableEntry.make('comments')`) is loaded when missing.
+                if (state === undefined && record) { await loadMissingRelationships(record, [this._name!]); state = record[this._name!]; }
+            }
         }
         return state === null || state === undefined ? (this._default ?? state) : state;
     }

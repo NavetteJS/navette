@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database';
-import { TextEntry } from '@navette-js/infolists';
+import { RepeatableEntry, TextEntry } from '@navette-js/infolists';
 import { type Schema } from '@navette-js/schemas';
 import { IconColumn, TextColumn, TextInputColumn, type Table } from '@navette-js/tables';
 import { ExportAction, ExportColumn, Exporter, Panel, Resource, type User } from '../src/index.ts';
@@ -59,6 +59,7 @@ class ArticleResource extends Resource {
             TextEntry.make('comments_sum_rating').sum('comments', 'rating'),
             TextEntry.make('comments_min_rating').min('comments', 'rating'),
             TextEntry.make('comments_max_rating').max('comments', 'rating'),
+            RepeatableEntry.make('comments').label('All comments').schema([TextEntry.make('body').label('Comment body')]),
         ]);
     }
 }
@@ -98,7 +99,12 @@ test('list page: an editable relationship column saves the related record', asyn
 });
 
 test('view page: relationship entries are loaded on demand, and so are aggregates', async () => {
-    await livewire(pages.view, { record: '1' }).assertSee(['Grace Hopper', 'Brilliant', 'Clear', '4', '8']);
+    await livewire(pages.view, { record: '1' }).assertSee(['Grace Hopper', 'Brilliant', 'Clear', '4', '8', 'All comments', 'Comment body']);
+    // The repeatable entry loads the relationship it is named after: one item per comment.
+    const tester = livewire(pages.view, { record: '1' });
+    await tester.assertSee('All comments');
+    const html = tester.html();
+    assert.equal((html.match(/Comment body/g) ?? []).length, 2);
     await livewire(pages.view, { record: '3' }).assertSee('Anonymous').assertDontSee('Grace Hopper');
 });
 
