@@ -197,6 +197,9 @@ test('importer: hooks in order, options, custom messages, validation errors from
     const columnMap = { sku: 'sku', price: 'price' };
     (await ItemImporter.test({ adapter, columnMap }).import({ sku: 'N-1', price: '1' })).assertHasErrors({ name: 'required' });
     (await ItemImporter.test({ adapter, columnMap }).import({ sku: 'H-1', price: '6' })).assertImported();
+    // Nothing to write (a blank, ignored price): the record is kept as is.
+    const unchanged = await ItemImporter.test({ adapter, columnMap: { sku: 'sku', price: 'price' } }).import({ sku: 'H-1', price: '' });
+    assert.equal(unchanged.assertImported().getRecord().price, 6);
     // Options reach resolveRecord(): an unknown SKU is skipped, not created.
     const skipped = await ItemImporter.test({ adapter, options: { updateOnly: true } }).import({ name: 'Ghost', sku: 'G-1' });
     skipped.assertSkipped();

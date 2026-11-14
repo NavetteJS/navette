@@ -420,7 +420,8 @@ export async function importRow(importer: typeof Importer, columns: ImportColumn
         await importer.afterFill(ctx);
         await importer.beforeSave(ctx.values, existingKey === null ? null : record, ctx);
         await (existingKey === null ? importer.beforeCreate(ctx) : importer.beforeUpdate(ctx));
-        const saved = existingKey === null ? await adapter.create(ctx.values) : await adapter.update(existingKey, ctx.values);
+        // An update without any attribute to write (only relationships, or every cell blank and ignored) keeps the record as is.
+        const saved = existingKey === null ? await adapter.create(ctx.values) : Object.keys(ctx.values).length ? await adapter.update(existingKey, ctx.values) : record;
         if (!saved) throw new RowImportFailedError('The record could not be saved.');
         ctx.record = saved;
         for (const column of filled) await column.saveRelationships(saved, data[column.name], columnCtx(column), model);
