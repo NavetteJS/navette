@@ -4045,10 +4045,11 @@ export class RelationManager extends ListRecords {
     /** Identifier of this manager in action links (`?actionComponent=comments&tableAction=view&tableActionRecord=12`); `null`: none. */
     getDefaultActionUrlIdentifier(): string | null { return null; }
     _facade: any = null;
-    /** What ListRecords expects from a resource, provided here by the relation manager. */
+    /** What ListRecords expects from a resource, provided here by the relation manager (rebuilt if `boot()` read it before the owner was set). */
     get resource(): any {
         const manager = this.constructor as typeof RelationManager;
-        return (this._facade ??= withRelatedResource({
+        if (this._facade && this._facade.__owner !== this.ownerRecord) this._facade = null;
+        return (this._facade ??= Object.assign(withRelatedResource({
             isSimple: true, slug: '', modelLabel: manager.modelLabel, relations: [], adapter: manager.adapterFor(this.ownerRecord),
             can: (ability: string, user: User | null, record: unknown = null) => {
                 if (READ_ONLY_ABILITIES.has(ability) && this.isReadOnly()) return Promise.resolve(false);
@@ -4064,7 +4065,7 @@ export class RelationManager extends ListRecords {
                 return pivot.length ? form.components([...form.getComponents(), ...pivot]) : form;
             },
             pivotFieldNames: () => manager.pivotForm(Schema.make(this)).filter((component): component is Field => component instanceof Field).map((field) => field.getName()),
-        }, manager.getRelatedResource(), this.ownerRecord));
+        }, manager.getRelatedResource(), this.ownerRecord), { __owner: this.ownerRecord }));
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
@@ -4164,14 +4165,15 @@ export class ManageRelatedRecords extends ListRecords {
     /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
-        return (this._facade ??= withRelatedResource({
+        if (this._facade && this._facade.__owner !== this.recordKey) this._facade = null;
+        return (this._facade ??= Object.assign(withRelatedResource({
             isSimple: true, hasViewPage: false, slug: page.parentResource.slug, modelLabel: page.modelLabel, relations: [], recordTitleAttribute: page.recordTitleAttribute, adapter: page.adapterFor(this.recordKey),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.authorize(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => page.pluralModelLabel ?? plural(page.modelLabel),
             getTitleCasePluralModelLabel: () => (page.pluralModelLabel ?? plural(page.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (page.recordTitleAttribute ? String(record?.[page.recordTitleAttribute] ?? '') : page.modelLabel),
             table: (table: Table) => page.table(table), form: (schema: Schema) => page.form(schema), infolist: (schema: Schema) => page.infolist(schema), getUrl: () => '',
-        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}));
+        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}), { __owner: this.recordKey }));
     }
     getTable(): Table {
         const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel())).withoutComponentsHiddenOn(this);

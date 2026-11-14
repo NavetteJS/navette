@@ -4,11 +4,12 @@ export type ColumnInfo = { name: string; type: string; nullable: boolean };
 
 /** `blog post` → `BlogPost`. */
 export const studly = (value: string): string => value.replace(/[^A-Za-z0-9]+(.)?/g, (_m, c: string | undefined) => (c ? c.toUpperCase() : '')).replace(/^./, (c) => c.toUpperCase());
-const snake = (value: string) => value.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
-const plural = (value: string) => (/[^aeiou]y$/.test(value) ? value.slice(0, -1) + 'ies' : /(s|x|z|ch|sh)$/.test(value) ? value + 'es' : value + 's');
+export const snake = (value: string) => value.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+export const plural = (value: string) => (/[^aeiou]y$/.test(value) ? value.slice(0, -1) + 'ies' : /(s|x|z|ch|sh)$/.test(value) ? value + 'es' : value + 's');
+const camel = (value: string) => studly(value).replace(/^./, (c) => c.toLowerCase());
 /** `BlogPost` → `blog_posts`. */
 export const tableName = (model: string) => plural(snake(model));
-const headline = (column: string) => column.replace(/_id$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+export const headline = (column: string) => column.replace(/_id$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 /** Columns never edited in a form. */
 const SKIPPED = new Set(['id', 'created_at', 'updated_at', 'deleted_at', 'password', 'remember_token', 'email_verified_at']);
@@ -49,13 +50,22 @@ function tableColumn(column: ColumnInfo): string {
     }
 }
 
+/**
+ * Options of a generated resource: `simple` (a single page, create and edit in modals), `view` (a view page and its infolist),
+ * `softDeletes` (trashed filter, restore and force-delete actions), `nested` (the parent resource it is nested in).
+ */
+export type ResourceOptions = { simple?: boolean; view?: boolean; softDeletes?: boolean; nested?: string | null };
+
 /** Resource and model. Without known columns (no `--generate`), the form and table are placeholders to fill in. */
-export function generateResource(model: string, table: string, columns: ColumnInfo[] | null): { model: string; resource: string } {
+export function generateResource(model: string, table: string, columns: ColumnInfo[] | null, options: ResourceOptions = {}): { model: string; resource: string } {
     const editable = (columns ?? []).filter((column) => !SKIPPED.has(column.name));
     const titleAttribute = editable.find((column) => ['name', 'title', 'label', 'subject'].includes(column.name))?.name ?? null;
     const kinds = new Set(editable.map(kindOf));
     const formImports = ['TextInput', ...(kinds.has('boolean') ? ['Toggle'] : []), ...(kinds.has('date') ? ['DatePicker'] : []), ...(kinds.has('dateTime') ? ['DateTimePicker'] : []), ...(kinds.has('longText') ? ['Textarea'] : [])];
-    const tableImports = ['TextColumn', ...(kinds.has('boolean') ? ['IconColumn'] : []), 'type Table'];
+    const tableImports = ['TextColumn', ...(kinds.has('boolean') ? ['IconColumn'] : []), ...(options.softDeletes ? ['TrashedFilter'] : []), 'type Table'];
+    const panelImports = ['DeleteBulkAction', ...(options.softDeletes ? ['ForceDeleteBulkAction', 'RestoreBulkAction'] : []), 'Resource'];
+    const entryImports = options.view ? ['TextEntry'] : [];
+    const parent = options.nested ? studly(options.nested).replace(/Resource$/, '') + 'Resource' : null;
     const timestamps = (columns ?? []).some((column) => column.name === 'created_at');
     const modelCode = `import { Model } from '@navette-js/database';
 
@@ -69,18 +79,29 @@ ${timestamps ? `
     const fields = editable.length ? editable.map((column) => `                ${formField(column)},`).join('\n') : `                TextInput.make('name').required().maxLength(255),`;
     const cols = editable.length ? editable.filter((column) => kindOf(column) !== 'longText' || editable.length < 4).slice(0, 6).map((column) => `                ${tableColumn(column)},`).join('\n') : `                TextColumn.make('name').searchable().sortable(),`;
     const createdColumn = timestamps ? `\n                TextColumn.make('created_at').dateTime().sortable().toggleable(true, { isToggledHiddenByDefault: true }),` : '';
+    const entries = editable.length ? editable.slice(0, 8).map((column) => `                TextEntry.make('${column.name}'),`).join('\n') : `                TextEntry.make('name'),`;
+    const infolist = options.view ? `
+
+    static infolist(schema: Schema): Schema {
+        return schema.components([
+${entries}
+        ]);
+    }` : '';
     const resourceCode = `import { ObjectionAdapter } from '@navette-js/database';
 import { ${formImports.join(', ')} } from '@navette-js/forms';
-import { DeleteBulkAction, Resource } from '@navette-js/panels';
+${entryImports.length ? `import { ${entryImports.join(', ')} } from '@navette-js/infolists';\n` : ''}import { ${panelImports.join(', ')} } from '@navette-js/panels';
 import type { Schema } from '@navette-js/schemas';
 import { ${tableImports.join(', ')} } from '@navette-js/tables';
 import { ${model} } from '../../models/${model}.ts';
-
+${parent ? `import { ${parent} } from './${parent}.ts';\n` : ''}
 export class ${model}Resource extends Resource {
     static slug = '${table.replace(/_/g, '-')}';
     static modelLabel = '${snake(model).replace(/_/g, ' ')}';
     static navigationIcon = 'o-rectangle-stack';
-${titleAttribute ? `    static recordTitleAttribute = '${titleAttribute}';\n` : ''}    static adapter = new ObjectionAdapter(${model});
+${titleAttribute ? `    static recordTitleAttribute = '${titleAttribute}';\n` : ''}${parent ? `    // Nested in ${parent}: served at /<parent>/{record}/${table.replace(/_/g, '-')}; list its records with a relation manager of ${parent}
+    // (\`static relatedResource = () => ${model}Resource\`, \`npx navette make:relation-manager ${parent} ${camel(table)} --related-resource=${model}Resource\`).
+    static parentResource = () => ${parent};
+` : ''}${options.simple ? '    // A single page: records are created and edited in modals.\n    static isSimple = true;\n' : ''}${options.view ? '    // A view page: table rows open it, with the infolist below.\n    static hasViewPage = true;\n' : ''}    static adapter = new ObjectionAdapter(${model}${options.softDeletes ? `, { softDeletes: 'deleted_at' }` : ''});
 
     static form(schema: Schema): Schema {
         return schema.components([
@@ -92,9 +113,12 @@ ${fields}
         return table
             .columns([
 ${cols}${createdColumn}
-            ])
-            .groupedBulkActions([DeleteBulkAction.make()]);
-    }
+            ])${options.softDeletes ? `
+            // Deleted records: shown with the trashed filter, restored or deleted for good from their edit page or in bulk.
+            .filters([TrashedFilter.make()])
+            .groupedBulkActions([DeleteBulkAction.make(), ForceDeleteBulkAction.make(), RestoreBulkAction.make()]);` : `
+            .groupedBulkActions([DeleteBulkAction.make()]);`}
+    }${infolist}
 }
 `;
     return { model: modelCode, resource: resourceCode };
@@ -456,3 +480,5 @@ Translations live in \`lang/<locale>/${id}.json\` (keys \`${id}::${id}.title\`, 
 `;
     return { id, className, files };
 }
+export type { GeneratorName, GeneratorOverride, GeneratorOverrides } from './overrides.ts';
+export * from './panel-generators.ts';
