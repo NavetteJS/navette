@@ -163,6 +163,24 @@ formSchema(schema: Schema): Schema {
 }
 ```
 
+## Saving relationships
+
+Fields that write a relationship, such as a `Select` or `CheckboxList` with `relationship()`, a `Repeater` with `relationship()`, or a layout component saving to a singular relationship, are left out of `getSchemaState()`: they are saved once the record exists. On a resource page, the page does it; in your own component, call `saveSchemaRelationships(form, record)` after creating or updating the record:
+
+```ts
+import { getSchemaState, saveSchemaRelationships, validateSchema } from '@navette-js/forms';
+
+async create(): Promise<void> {
+    const form = this.getSchema('form');
+    this._errors = await validateSchema(form);
+    if (Object.keys(this._errors).length) return;
+    const post = await Post.query().insert(await getSchemaState(form));
+    await saveSchemaRelationships(form, post);
+}
+```
+
+When editing, give the form the record (see [setting a form record](#setting-a-form-record)) before validating it, so that relationship fields load and validate against it, and call `saveSchemaRelationships(form, post)` after saving the record's own attributes.
+
 ## Saving form data to individual properties
 
 Without a state path, each field keeps its value in the public property of the same name. Only the schema named `form` gets the `data` state path; give the schema another name, or call `statePath(null)`:

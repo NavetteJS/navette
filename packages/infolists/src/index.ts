@@ -1,6 +1,7 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl, NavetteTimezone, getRegisteredRichContent } from '@navette-js/support';
+import { encodeJson, JsonFlags } from './json-flags.ts';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { loadMissingRelationships, loadRelationshipAggregates, normalizeRelationshipAggregates, readRecordPath, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregateFunction } from '@navette-js/support';
 import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
@@ -464,7 +465,7 @@ export class TextEntry extends Entry {
         return (state) => {
             const date = parseDate(state);
             if (!date) return String(state);
-            const zone = timezone ?? this._timezone ?? 'UTC';
+            const zone = timezone ?? this.getTimezone();
             return kind === 'since' ? since(date) : kind === 'iso' ? formatIsoDate(date, format, zone) : formatPhpDate(date, format, zone);
         };
     }
@@ -500,7 +501,9 @@ export class TextEntry extends Entry {
     isoTimeTooltip(format: string | null = null, timezone: string | null = null): this { return this.dateTooltipFor('iso', format ?? 'LT', timezone); }
     sinceTooltip(timezone: string | null = null): this { return this.dateTooltipFor('since', '', timezone); }
     /** IANA time zone in which dates are displayed (`UTC` by default). */
+    /** Time zone dates are displayed in; defaults to `NavetteTimezone.get()` (`UTC` unless configured). */
     timezone(timezone: string | null): this { this._timezone = timezone; return this; }
+    getTimezone(): string { return this._timezone ?? NavetteTimezone.get(); }
 
     /**
      * Formatted number. `numeric(2)`: two decimal places. Options: `decimalPlaces`, `maxDecimalPlaces`, `locale` (`en-US` by default),
@@ -639,6 +642,9 @@ export class TextEntry extends Entry {
     async toHtml(): Promise<string> {
         const record = this.context().record as any;
         let state = await this.getState();
+        // A rich content attribute the record registers (`registerRichContent()`): rendered with its configuration, as prose.
+        const richContent = this._state ? null : getRegisteredRichContent(record, this._name!);
+        if (richContent) state = richContent.isEmpty() ? null : new HtmlString(sanitize(await richContent.toHtml()));
         if (typeof state === 'string' && this._separator) {
             const parts = state.split(this._separator);
             state = parts.length === 1 && parts[0].trim() === '' ? [] : parts;
@@ -674,7 +680,7 @@ export class TextEntry extends Entry {
             const iconHtml = renderIcon(resolveItem(this._icon, record, item) ?? this.enumCaseOf(record, item)?.getIcon() ?? null, { size: size === 'md' || size === 'lg' ? size : 'sm', attributes: new Attributes().class(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${safeName(iconColor)}`] : []) });
             const isCopyable = Boolean(resolveItem(this._copyable, record, item));
             const tooltip = resolveItem(this._tooltip, record, item);
-            let attributes: AttrMap = { class: cls(['fi-in-text-item', { 'fi-prose': this._prose || this._markdown }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
+            let attributes: AttrMap = { class: cls(['fi-in-text-item', { 'fi-prose': this._prose || this._markdown || richContent !== null }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
             if (!this._badge) {
                 attributes = withClass(attributes, [`fi-size-${size}`, fontClass(resolveItem(this._weight, record, item), FONT_WEIGHTS)]);
                 if (this._lineClamp) attributes = withStyle(attributes, [`--line-clamp: ${this._lineClamp}`]);
@@ -972,8 +978,6 @@ export class KeyValueEntry extends Entry {
     }
 }
 
-/** Pretty-printed JSON: four-space indent, with `/` and non-ASCII characters escaped. */
-const phpPrettyJson = (value: unknown): string => (JSON.stringify(value, null, 4) ?? 'null').replace(/\//g, '\\/').replace(/[\u0080-￿]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 /** Background and text colors of the default themes (github-light / github-dark-high-contrast). */
 const PHIKI_DEFAULT_STYLE = 'background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;';
 /**
@@ -988,6 +992,7 @@ export class CodeEntry extends Entry {
     private _copyable = false;
     private _copyMessage: string | null = null;
     private _copyMessageDuration = 2000;
+    private _jsonFlags: Lazy<number, ComponentContext> = JsonFlags.PRETTY_PRINT;
     static make(name: string): CodeEntry { return configured(new CodeEntry(name)); }
     /** Shiki grammar (`php`, `json`, `javascript`, `ts`…), also used in the `language-…` class; `html` by default, `json` for an array. */
     grammar(grammar: string | null): this { this._grammar = grammar; return this; }
@@ -998,13 +1003,19 @@ export class CodeEntry extends Entry {
     copyable(condition = true): this { this._copyable = condition; return this; }
     copyMessage(message: string | null): this { this._copyMessage = message; return this; }
     copyMessageDuration(milliseconds: number): this { this._copyMessageDuration = milliseconds; return this; }
+    /**
+     * `json_encode()` flags used when the state is an array or an object (`JsonFlags.PRETTY_PRINT` by default, which,
+     * like PHP, escapes `/` and non-ASCII characters). Combine them with `|`: `JsonFlags.PRETTY_PRINT | JsonFlags.UNESCAPED_SLASHES`.
+     */
+    jsonFlags(flags: Lazy<number, ComponentContext>): this { this._jsonFlags = flags; return this; }
+    async getJsonFlags(): Promise<number> { return Number(await evaluate(this._jsonFlags, this.context())) || 0; }
     async toHtml(): Promise<string> {
         let state = await this.getState();
         if (state === null || state === undefined || (typeof state === 'string' && state.trim() === '') || (Array.isArray(state) && !state.length)) {
             return this.wrapEmbeddedHtml(`<div class="fi-in-code">${this._placeholder !== null ? `<p class="fi-in-placeholder">${e(this._placeholder)}</p>` : ''}</div>`);
         }
         let grammar = this._grammar;
-        if (typeof state === 'object') { state = phpPrettyJson(state); grammar ??= 'json'; }
+        if (typeof state === 'object') { state = encodeJson(state, await this.getJsonFlags()); grammar ??= 'json'; }
         const code = String(state);
         const language = (grammar ?? 'html').replace(/[^a-zA-Z0-9_+#-]/g, '');
         const light = (this._lightTheme ?? 'github-light').replace(/[^a-zA-Z0-9_-]/g, ''), dark = (this._darkTheme ?? 'github-dark-high-contrast').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -1152,3 +1163,5 @@ export class RepeatableEntry extends Entry {
         return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['fi-in-table-repeatable']))}><table><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
     }
 }
+
+export { encodeJson, JsonFlags } from './json-flags.ts';

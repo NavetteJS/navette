@@ -41,8 +41,21 @@ CodeEntry.make('code')
 ```
 
 <Aside variant="tip">
-If your code entry's state is an array or an object, it is automatically converted to an indented JSON string, and the grammar is set to `json`. Like PHP's `json_encode()`, the conversion escapes slashes and non-ASCII characters: `é` is displayed as `é`.
+If your code entry's state is an array or an object, it is automatically converted to an indented JSON string, and the grammar is set to `json`. Like PHP's `json_encode()`, the conversion escapes slashes and non-ASCII characters: `é` is displayed as `é`. You can customize the conversion with the `jsonFlags()` method.
 </Aside>
+
+### Customizing the JSON conversion
+
+`jsonFlags()` takes PHP-compatible `json_encode()` flags, exported as `JsonFlags` and combined with `|`. The default is `JsonFlags.PRETTY_PRINT` (four-space indentation):
+
+```ts
+import { CodeEntry, JsonFlags } from '@navette-js/infolists';
+
+CodeEntry.make('settings')
+    .jsonFlags(JsonFlags.PRETTY_PRINT | JsonFlags.UNESCAPED_SLASHES | JsonFlags.UNESCAPED_UNICODE)
+```
+
+The supported flags are `PRETTY_PRINT`, `UNESCAPED_SLASHES` (keep `/` as is), `UNESCAPED_UNICODE` (keep non-ASCII characters as is), `HEX_TAG`, `HEX_AMP`, `HEX_APOS` and `HEX_QUOT` (write `<` `>`, `&`, `'` and `"` as `\u…` sequences), and `FORCE_OBJECT` (encode lists as objects). Pass `0` for compact JSON on one line. Like the other options, `jsonFlags()` also accepts a function receiving the [context object](/schemas/overview#component-utility-injection). The same encoder is exported as `encodeJson(value, flags)`.
 
 ## Changing the code's theme (highlighting)
 

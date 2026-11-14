@@ -22,7 +22,8 @@ import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, For
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
-import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
+import { getTableSelectDataAdapter, getTableSelectDefinition, isFileUploadForSchemas, type TableSelectDefinition } from '@navette-js/forms';
+import { fileUploadSchemasOf } from './upload-restriction.ts';
 import { componentViewData } from './view-helpers.ts';
 import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
 export { Notification, Notifications, type NotificationActionData, type NotificationActionGroupData, type NotificationActionInput, type NotificationActionItem, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
@@ -1156,6 +1157,17 @@ abstract class BasePage extends Component implements SchemaHost {
         return (this as any)[`${name}Schema`](schema);
     }
     contentSchema(schema: Schema): Schema { return schema.components([]); }
+    /**
+     * Temporary uploads (`_startUpload` / `_finishUpload`) are only accepted for a visible `FileUpload`, `RichEditor` or
+     * `MarkdownEditor` of this component's schemas (Filament's `RestrictsFileUploadsToSchemaComponents`, here on by default).
+     * Set `static restrictFileUploadsToSchemaComponents = false` on a component that receives uploads another way.
+     */
+    static restrictFileUploadsToSchemaComponents = true;
+    shouldRestrictFileUploadsToSchemaComponents(): boolean { return (this.constructor as typeof BasePage).restrictFileUploadsToSchemaComponents !== false; }
+    /** Schemas whose upload fields may receive files: every `<name>Schema()` builder and the forms of the mounted actions. */
+    async getFileUploadSchemas(): Promise<Schema[]> { return fileUploadSchemasOf(this); }
+    /** Whether an upload name sent by the browser targets an upload field of this component's schemas. */
+    async isFileUploadForSchemaComponent(name: string): Promise<boolean> { return isFileUploadForSchemas(await this.getFileUploadSchemas(), name); }
     /**
      * Live form field (`live()`): runs the `afterStateUpdated()` hooks of the updated field and of the components holding it
      * (a repeater, then its item field), and their partial rendering options.

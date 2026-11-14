@@ -601,6 +601,23 @@ Render only inside `host`, whose content is ignored when the page is updated, an
 
 If importing, mounting or `update()` fails, the field shows an accessible error message, the field value is unchanged, and the error is logged in the browser console with the renderer URL. Handle errors in your component's rendering and event handlers with your framework's own error handling.
 
+### Customizing the markup around the renderer
+
+A `JsField` has no view to replace: its `toHtml()` returns the field already wrapped (label, helper text, error) around the renderer's host, like Filament's `toEmbeddedHtml()`. To add your own markup, subclass it and build on `super.toHtml()`, keeping your content outside the renderer's host:
+
+```ts
+import { JsField } from '@navette-js/forms';
+import { e } from '@navette-js/support';
+
+export class MapField extends JsField {
+    async toHtml(): Promise<string> {
+        return `<div class="map-field">${await super.toHtml()}<p class="map-field-credits">${e('Map data © OpenStreetMap')}</p></div>`;
+    }
+}
+```
+
+The returned markup already includes the field wrapper: do not call `wrap()` again around it. The same applies to every built-in field, whose `toHtml()` can be extended the same way.
+
 ### Building reusable fields
 
 To ship a field that renders with JavaScript, extend `JsField` and override `getRenderer()`. Your field is then used without a renderer URL:
