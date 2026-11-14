@@ -36,7 +36,7 @@ static table(table: Table<Product>): Table<Product> {
 }
 ```
 
-The file is built during the request: there is no queue. Large exports are refused (see [limiting the number of rows](#limiting-the-number-of-rows)).
+The files are built during the request, or [in the background](#running-exports-in-the-background). Large exports are refused (see [limiting the number of rows](#limiting-the-number-of-rows)).
 
 ## Creating an exporter
 
@@ -57,26 +57,140 @@ export class ProductExporter extends Exporter {
 }
 ```
 
-A column reads the attribute with its name; a name with dots reads a loaded relationship (`brand.name`). `state()` computes the value yourself, and `formatStateUsing()` formats it:
+A column reads the attribute with its name; a name with dots reads a loaded relationship (`brand.name`). `state()` computes the value yourself, from the record and the [context](#using-export-options):
 
 ```ts
 import { ExportColumn } from '@navette-js/panels';
 
-ExportColumn.make('full_name')
-    .state((record) => `${record.first_name} ${record.last_name}`)
+ExportColumn.make('amount_including_vat')
+    .state((record) => record.amount * (1 + record.vat_rate))
 ```
 
-### Disabling a column by default
+### Configuring the default column selection
 
 `enabledByDefault(false)` leaves a column unchecked in the modal.
+
+`enableVisibleTableColumnsByDefault()` on the action only checks the columns visible in the table (and enabled by default), matched by name; the user may still check the others:
+
+```ts
+ExportAction.make()
+    .exporter(ProductExporter)
+    .enableVisibleTableColumnsByDefault()
+```
+
+### Hiding a column
+
+A column marked `hidden()` (or `visible(false)`) is not offered in the modal and never written. The condition may be a function of the context, without a record (the options, for instance):
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('cost_price')
+    .hidden(({ options }) => !options.includeCosts)
+```
+
+### Configuring the column selection layout
+
+The column checkboxes are laid out in 2 columns. `columnMappingColumns()` changes it:
+
+```ts
+ExportAction.make()
+    .exporter(ProductExporter)
+    .columnMappingColumns(3)
+```
 
 ### Disabling the column selection
 
 `columnMapping(false)` removes the column checkboxes: every column is exported, and the modal only asks for confirmation.
 
+## Formatting the values
+
+`formatStateUsing()` formats the value of a column; it receives the value, the record and the context:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('status')
+    .formatStateUsing((state) => statusLabels[state])
+```
+
+A column whose value is a list is written with its values separated by commas, each value formatted. `listAsJson()` writes the list as a JSON array instead:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('tags')
+    .listAsJson()
+```
+
+### Limiting the text
+
+`limit()` keeps at most a number of characters (100 by default), and `words()` a number of words, followed by `...` (or the second argument):
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('description')
+    .limit(50)
+
+ExportColumn.make('summary')
+    .words(10, '…')
+```
+
+### Adding a prefix or a suffix
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('domain')
+    .prefix('https://')
+    .suffix('.com')
+```
+
+These methods also accept a function of the context: `limit(({ options }) => options.descriptionLimit ?? 100)`.
+
+## Using export options
+
+`getOptionsFormComponents()` adds components to the modal; their values are the export's options:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+import { Exporter } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getOptionsFormComponents() {
+        return [
+            TextInput.make('descriptionLimit')
+                .label('Limit the length of the description column content')
+                .integer(),
+        ];
+    }
+}
+```
+
+`options()` on the action passes static options (or a function of `{ livewire }`); the values of the form override them:
+
+```ts
+ExportAction.make()
+    .exporter(ProductExporter)
+    .options({ descriptionLimit: 250 })
+```
+
+The functions of the columns receive the options in their context:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('description')
+    .limit(({ options }) => Number(options.descriptionLimit ?? 100))
+
+ExportColumn.make('description')
+    .formatStateUsing((state, record, { options }) => String(state).slice(0, Number(options.descriptionLimit ?? 100)))
+```
+
 ## Modifying the export query
 
-`modifyQuery()` changes the query of the exported records, for example to load relationships:
+`modifyQuery()` changes the query of the exported records, for example to load relationships. It receives the options too:
 
 ```ts
 import { Exporter } from '@navette-js/panels';
@@ -88,7 +202,17 @@ export class ProductExporter extends Exporter {
 }
 ```
 
+`modifyQueryUsing()` on the action changes it for one action, after the exporter's:
+
+```ts
+ExportAction.make()
+    .exporter(ProductExporter)
+    .modifyQueryUsing((query, { options }) => query.where('is_active', options.isActive ?? true))
+```
+
 ## Customizing the file name and the notification
+
+`getFileName(count, run)` returns the name of the files, without extension; `fileName()` on the action sets it for one action (a text, or a function of the export run):
 
 ```ts
 import { Exporter } from '@navette-js/panels';
@@ -98,11 +222,23 @@ export class ProductExporter extends Exporter {
         return `products-${new Date().toISOString().slice(0, 10)}`;
     }
 
+    static getCompletedNotificationTitle(): string {
+        return 'Your product export is ready';
+    }
+
     static getCompletedNotificationBody(count: number): string {
         return `Your product export has completed and ${count} rows exported.`;
     }
 }
 ```
+
+```ts
+ExportAction.make()
+    .exporter(ProductExporter)
+    .fileName((run) => `products-${run.id}`)
+```
+
+`modifyCompletedNotification(notification, run)` changes anything else (its icon, its actions…), or returns another notification. The run gives the `columnMap` (column name → label) and the `options` of the export.
 
 ## Limiting the number of rows
 
@@ -116,30 +252,144 @@ ExportAction.make()
     .maxRows(50000)
 ```
 
-## Downloading the file
+## Changing the chunk size
 
-The file is kept by the panel for 24 hours, and only the user who exported it can download it. By default it is kept in memory: it is lost when the server restarts and is not shared between server processes. Give the panel your own `DownloadStore` with `downloads()` to change the retention:
+Records are read 100 at a time; between chunks, the process handles other requests. `chunkSize()` changes it:
 
 ```ts
-import { DownloadStore, Panel } from '@navette-js/panels';
-
-Panel.make()
-    .downloads(new DownloadStore({ ttl: 60 * 60 * 1000, maxFiles: 100 }))
+ExportAction.make()
+    .exporter(ProductExporter)
+    .chunkSize(250)
 ```
 
-## Customizing the export formats
+## Configuring the export formats
 
-By default, both a CSV and an XLSX file are offered. `formats()` keeps only some of them:
+By default, both a CSV and an XLSX file are offered. `formats()` keeps only some of them; `getFormats()` on the exporter sets the default of every action using it:
 
 ```ts
-import { ExportAction } from '@navette-js/panels';
+import { ExportAction, ExportFormat } from '@navette-js/panels';
 
 ExportAction.make()
     .exporter(ProductExporter)
-    .formats(['xlsx'])
+    .formats([ExportFormat.Xlsx]) // or ['xlsx']
 ```
 
-In the XLSX file, every cell is text: a value starting with `=` is never evaluated as a formula.
+### Changing the CSV delimiter
+
+`getCsvDelimiter()` on the exporter returns the delimiter of the CSV file (one character):
+
+```ts
+import { Exporter } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getCsvDelimiter(): string {
+        return ';';
+    }
+}
+```
+
+## Customizing XLSX files
+
+In the XLSX file, every cell is text: a value starting with `=` is never evaluated as a formula. Without styles, the header row is bold.
+
+### Styling XLSX rows
+
+`getXlsxCellStyle()` returns the style of the cells, and `getXlsxHeaderCellStyle()` the style of the header cells (the cell style by default). An `XlsxStyle` sets fonts, colors and alignment, like OpenSpout's `Style` in Filament:
+
+```ts
+import { Exporter, XlsxColor, XlsxStyle } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getXlsxCellStyle(): XlsxStyle {
+        return new XlsxStyle().setFontSize(12).setFontName('Consolas');
+    }
+
+    static getXlsxHeaderCellStyle(): XlsxStyle {
+        return new XlsxStyle()
+            .setFontBold()
+            .setFontItalic()
+            .setFontSize(14)
+            .setFontName('Consolas')
+            .setFontColor(XlsxColor.rgb(255, 255, 77))
+            .setBackgroundColor(XlsxColor.rgb(0, 0, 0))
+            .setCellAlignment('center')
+            .setCellVerticalAlignment('center');
+    }
+}
+```
+
+`XlsxStyle` also has `setFontUnderline()`, `setFontStrikethrough()` and `setShouldWrapText()`. Colors are `RRGGBB` strings; `XlsxColor` has constants such as `XlsxColor.BLACK`.
+
+### Styling XLSX columns
+
+`makeXlsxRow()` (and `makeXlsxHeaderRow()`, for the header) builds each row. It receives the values, the row's style and the names of the exported columns, in order, and returns the cells, values or `XlsxCell`s with their own style, applied on top of the row's (`XlsxStyle.merge()` merges two styles):
+
+```ts
+import { Exporter, XlsxCell, XlsxStyle, type XlsxRowInput } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static makeXlsxRow(values: unknown[], style: XlsxStyle | null, columns: string[]): XlsxRowInput {
+        return {
+            cells: values.map((value, index) => (columns[index] === 'name' ? XlsxCell.fromValue(value, new XlsxStyle().setFontUnderline()) : value)),
+            style,
+        };
+    }
+}
+```
+
+### Customizing the XLSX writer
+
+`getXlsxWriterOptions()` returns the column widths (in characters; columns are numbered from 1), like OpenSpout's `Options`:
+
+```ts
+import { Exporter, XlsxOptions } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getXlsxWriterOptions(): XlsxOptions {
+        return new XlsxOptions()
+            .setColumnWidth(10, 1)
+            .setColumnWidthForRange(12, 2, 3);
+    }
+}
+```
+
+`setDefaultColumnWidth()` and `setDefaultRowHeight()` set the defaults of the sheet.
+
+## Downloading the files
+
+The files are kept by the panel for 24 hours, and only the user who exported them can download them. By default they are written on the disk, in `storage/downloads/<panel id>` relative to the working directory (or in the directory of the `NAVETTE_DOWNLOADS` environment variable, then the panel id): they survive restarts and are shared by the processes using the same directory. Expired files are removed as new files are stored, and when they are requested. Keep this directory private: never serve it statically.
+
+Give the panel a `DiskDownloadStore` to change the directory, the lifetime or the maximum number of files, a `DownloadStore` to keep them in memory (tests), or your own store implementing `DownloadStorage` (`put()`, `get()`, and optionally `delete()` and `prune()`, any of them asynchronous):
+
+```ts
+import { DiskDownloadStore, Panel } from '@navette-js/panels';
+
+Panel.make()
+    .downloads(new DiskDownloadStore({ directory: '/var/lib/my-app/downloads', ttl: 60 * 60 * 1000, maxFiles: 1000 }))
+```
+
+Call `prune()` from a scheduled task to remove expired files without waiting for new ones.
+
+### Customizing how the files are sent
+
+`getDownloader(format)` returns how a file of a format is sent: a function receiving the stored file and the Express response. The default one sends the file as an attachment, never cached:
+
+```ts
+import { Exporter, sendDownload, type Downloader, type ExportFormatValue } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getDownloader(format: ExportFormatValue): Downloader {
+        if (format !== 'csv') return sendDownload;
+        return (file, res) => {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.attachment(file.name);
+            res.send(file.content);
+        };
+    }
+}
+```
+
+The downloader is found by the exporter's name when the file is requested: after a restart, until an export action of this exporter has been used again, files are sent with the default downloader.
 
 ## Running exports in the background
 
@@ -151,7 +401,7 @@ ExportAction.make()
     .queued()
 ```
 
-The panel must have database notifications (`databaseNotifications()`): without them, the export runs during the request. 
+The panel must have database notifications (`databaseNotifications()`): without them, the export runs during the request.
 
 Queued work runs one task at a time in the Node process, after the response. It is lost if the process stops. To run it elsewhere (BullMQ, a worker process…), give Navette your own runner: each task is a function to run.
 
@@ -179,9 +429,11 @@ Panel.make()
 
 You can then list the runs in a resource of your own. To store them elsewhere, implement the `ImportExportHistory` interface: `startImport()`, `finishImport()`, `recordFailedImportRow()`, `startExport()`, `finishExport()`.
 
+To test an exporter, see [testing exports](/testing/exports).
+
 ## Security
 
-- The action is authorized with the `viewAny` ability of the resource's policy. Only the records of the table's query are exported: [scope your data adapter](/tables/filters/overview#security) to restrict what a user can see.
-- Only the declared columns can be exported, whatever the browser sends.
-- Cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return (except numbers) are prefixed with `'`, so that spreadsheet software does not run them as formulas.
-
+- The action is authorized with the `viewAny` ability of the resource's policy. Records are not authorized one by one: only the records of the table's query are exported, so [scope your data adapter](/tables/filters/overview#security), or the query with `modifyQueryUsing()`, to restrict what a user can see.
+- Only the declared, visible columns can be exported, and only the components of the options form give options, whatever the browser sends.
+- CSV cells starting with `=`, `+`, `-`, `@`, a tab or a carriage return (except numbers) are prefixed with `'`, so that spreadsheet software does not run them as formulas; XLSX cells are always text. `preventFormulaInjection()` on a column also prefixes its values in the XLSX file; `preventFormulaInjection(false)` writes its CSV cells as they are.
+- The files are only sent to the user who exported them, through a random token, until they expire.

@@ -28,11 +28,15 @@ export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTim
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
 export { authenticationOptions, decodeCbor, generateChallenge, registrationOptions, verifyAuthentication, verifyRegistration, WebAuthnError, type AuthenticationResponseJSON, type RegistrationResponseJSON, type StoredCredential, type UserVerification } from './webauthn.ts';
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
-export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, importExportSchema, knexImportExportHistory, parseCsv, readSpreadsheet, RowImportFailedError, runInBackground, TestableExport, TestableImport, useBackgroundRunner, type BackgroundTask, type ExportActionInstance, type ImportActionInstance, type ImportExportHistory } from './import-export.ts';
+export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ExportFake, ExportFormat, ExportQuery, importExportSchema, knexImportExportHistory, parseCsv, runInBackground, startsLikeFormula, TestableExport, useBackgroundRunner, type BackgroundTask, type DispatchedExport, type ExportActionInstance, type ExportColumnContext, type ExportFormatValue, type ExportRun, type ImportExportHistory } from './import-export.ts';
+export { decodeCsv, guessCsvDelimiter, ImportAction, ImportColumn, Importer, ImportFake, ImportValidationError, readSpreadsheet, RowImportFailedError, TestableImport, type DispatchedImport, type ImportActionInstance, type ImportColumnContext, type ImportFileRule, type ImportRowContext, type ImportRule, type ImportRun, type RowStatus, type SpreadsheetReadOptions, type TestableImportOptions } from './imports.ts';
+export { DiskDownloadStore, registerDownloader, sendDownload, type Downloader, type DownloadPutOptions, type DownloadStorage, type StoredDownload } from './downloads.ts';
+export { XlsxCell, XlsxColor, XlsxOptions, XlsxStyle, type XlsxRowInput } from './xlsx.ts';
 export { buildXlsx, readXlsx } from './xlsx.ts';
 import { fillFiltersSchema, isFilterAction, normalizeFilterValuesFromQueryString, readQueryStringProperty, sanitizeFilterState } from './dashboard-filters.ts';
 export { FilterAction, isFilterAction } from './dashboard-filters.ts';
-import { DownloadStore, type ImportExportHistory } from './import-export.ts';
+import { type ImportExportHistory } from './import-export.ts';
+import { DiskDownloadStore, downloaderOf, type DownloadStorage } from './downloads.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
@@ -216,14 +220,17 @@ export class Panel {
     /** Where per-browser data is kept (persisted table filters, search and sort): in memory by default. */
     sessionStore(store: SessionStore): this { this._sessionStore = store; return this; }
     getSessionStore(): SessionStore { return (this._sessionStore ??= new MemorySessionStore()); }
-    private _downloads: DownloadStore | null = null;
-    /** Where files offered for download (exports, failed import rows) are kept: in memory by default. */
-    downloads(store: DownloadStore): this { this._downloads = store; return this; }
+    private _downloads: DownloadStorage | null = null;
+    /**
+     * Where files offered for download (exports, failed import rows) are kept. By default, on the disk, for 24 hours, in
+     * `storage/downloads/<panel id>` (or `$NAVETTE_DOWNLOADS/<panel id>`), relative to the working directory.
+     */
+    downloads(store: DownloadStorage): this { this._downloads = store; return this; }
     private _importExportHistory: ImportExportHistory | null = null;
     /** Records each import and export run (`knexImportExportHistory(db)`): who, which file, how many rows, failed import rows. */
     importExportHistory(store: ImportExportHistory | null): this { this._importExportHistory = store; return this; }
     getImportExportHistory(): ImportExportHistory | null { return this._importExportHistory; }
-    getDownloads(): DownloadStore { return (this._downloads ??= new DownloadStore()); }
+    getDownloads(): DownloadStorage { return (this._downloads ??= new DiskDownloadStore({ directory: join(process.env.NAVETTE_DOWNLOADS ?? join('storage', 'downloads'), this._id.replace(/[^A-Za-z0-9_-]/g, '-')) })); }
     getDownloadUrl(token: string): string { return this.getBaseUrl(`downloads/${encodeURIComponent(token)}`); }
     private _pages: (typeof Page)[] = [];
     private _resources: (typeof Resource)[] = [];
@@ -5142,13 +5149,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     router.get(panel.getBaseUrl('downloads/:token'), async (req, res) => {
         const ctx = await context(req, res);
         if (!ctx.user || ctx.denied) return forbidden(req, res);
-        const file = panel.getDownloads().get(String(req.params.token), ctx.user.id);
+        const file = await panel.getDownloads().get(String(req.params.token), ctx.user.id);
         if (!file) return renderErrorPage(panel, req, res, 404);
-        res.setHeader('Content-Type', file.type);
-        res.setHeader('Content-Disposition', `attachment; filename="${file.name.replace(/[^A-Za-z0-9._-]/g, '_')}"`);
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Cache-Control', 'private, no-store');
-        res.send(file.content);
+        await downloaderOf(file)(file, res);
     });
 
     if (LoginPage) {

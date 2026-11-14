@@ -33,7 +33,7 @@ class ProductImporter extends Importer {
             ImportColumn.make('sku').rules(['required']).example('ABC-1'),
         ];
     }
-    static async resolveRecord(data: Record<string, unknown>) { return (await Product.query().findOne({ sku: data.sku })) ?? null; }
+    static async resolveRecord(data: Record<string, unknown>) { return (await Product.query().findOne({ sku: data.sku })) ?? {}; }
 }
 class Products extends Resource {
     static slug = 'products';

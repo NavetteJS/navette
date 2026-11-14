@@ -52,6 +52,18 @@ try {
         await page.getByText('Import completed').waitFor({ timeout: 10000 });
         assert.equal(db.prepare("select name from products where sku = 'E2E-3'").get()?.name, 'E2E Chair');
     });
+    await step('with the "only update" option of the importer, a row of an unknown SKU is skipped', async () => {
+        const file = path.join(tmpDir, 'lab-products-update.csv');
+        fs.writeFileSync(file, 'name,sku,price\nE2E Lamp v2,E2E-1,13\nE2E Ghost,E2E-404,1\n');
+        await openImport(file);
+        await modal().getByLabel('Only update existing products').check();
+        await modal().getByRole('button', { name: 'Import' }).click();
+        await page.getByText('Import completed').waitFor({ timeout: 10000 });
+        // A skipped row counts as successful, as in Filament.
+        await page.getByText('2 rows imported').waitFor({ timeout: 5000 });
+        assert.equal(db.prepare("select name from products where sku = 'E2E-1'").get()?.name, 'E2E Lamp v2');
+        assert.equal(db.prepare("select count(*) as count from products where sku = 'E2E-404'").get().count, 0);
+    });
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));
 } finally {
     await browser.close();

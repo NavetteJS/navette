@@ -155,6 +155,8 @@ if (existsSync(storage)) app.use('/storage', express.static(storage, { dotfiles:
 // New uploads: the runtime's temporary folder, and the public folder for saved files (`NAVETTE_UPLOADS`, served under /storage).
 const uploads = process.env.NAVETTE_UPLOADS ?? file('./storage');
 mkdirSync(path.join(uploads, 'public'), { recursive: true });
+// Files offered for download (exports, failed import rows): kept on the disk, next to the uploads, for 24 hours.
+process.env.NAVETTE_DOWNLOADS ??= path.join(uploads, 'downloads');
 app.use('/storage', express.static(path.join(uploads, 'public'), { dotfiles: 'deny', index: false }));
 // Files saved by upload fields and attached in the editors.
 FileUpload.storage = new LocalFileStorage(path.join(uploads, 'public'), '/storage');

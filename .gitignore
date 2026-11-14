@@ -13,3 +13,6 @@ apps/starter/data.sqlite
 apps/docs/dist/
 # End-to-end runs: disposable database copies and uploads.
 e2e/.tmp/
+# Files offered for download by panels run from the repository (exports, failed import rows), wherever they run from.
+/storage/
+storage/downloads/

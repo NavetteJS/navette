@@ -366,6 +366,13 @@ test('imports: an uploaded CSV through the import action, and Importer.test()', 
     assert.ok(await db('posts').where('title', 'Echo').first());
     assert.equal(await db('posts').where('title', 'Forbidden').first(), undefined);
 
+    // A file with duplicate headers is refused by the upload field.
+    await livewire(pages.index)
+        .mountAction(TestAction.make('import').table())
+        .fillForm({ file: UploadedFile.fake().createWithContent('dupes.csv', 'Views,Views\n1,2\n') })
+        .callMountedAction()
+        .assertHasFormErrors(['file']);
+
     const adapter = PostResource.adapter;
     const imported = await PostImporter.test({ adapter }).import({ title: 'Foxtrot', views: '7' });
     imported.assertImported().assertHasNoErrors();
@@ -432,4 +439,41 @@ test('more helpers: column searches, toggled columns, descriptions, links, dotte
     const image = UploadedFile.fake().image('cover.png', 4, 3);
     assert.equal(image.content.subarray(1, 4).toString('latin1'), 'PNG');
     assert.equal(UploadedFile.fake().create('big.pdf', 2).content.length, 2048);
+});
+
+test('ImportAction.fake() and ExportAction.fake() through the page: requests recorded, nothing processed', async () => {
+    const imports = ImportAction.fake();
+    const exports = ExportAction.fake();
+    try {
+        const before = (await db('posts').count({ count: '*' }).first())!.count;
+        await livewire(pages.index)
+            .mountAction(TestAction.make('import').table())
+            .fillForm({ file: UploadedFile.fake().createWithContent('posts.csv', 'Post title,Views\nHotel,5\n') })
+            .fillForm({ columnMap: { title: 'Post title', views: 'Views' } })
+            .callMountedAction()
+            .assertHasNoFormErrors();
+        imports.assertDispatched(PostImporter, (run, columnMap) => run.totalRows === 1 && run.fileName === 'posts.csv' && columnMap.title === 'Post title').assertDispatchedTimes(PostImporter);
+        assert.equal((await db('posts').count({ count: '*' }).first())!.count, before, 'no row was imported');
+        // A required column left unmapped: a form error, nothing requested.
+        const rejected = ImportAction.fake();
+        await livewire(pages.index)
+            .mountAction(TestAction.make('import').table())
+            .fillForm({ file: UploadedFile.fake().createWithContent('posts.csv', 'Post title,Views\nHotel,5\n') })
+            .fillForm({ columnMap: { title: null, views: 'Views' } })
+            .callMountedAction()
+            .assertHasFormErrors(['columnMap.title']);
+        rejected.assertNothingDispatched();
+
+        const tester = livewire(pages.index);
+        await tester.filterTable('status', 'draft').callAction(TestAction.make('export').table(), { columns: ['title'] }).assertHasNoFormErrors();
+        assert.deepEqual(tester.getDownloads(), [], 'no file was built');
+        await exports.assertDispatched(PostExporter, async (run, query, columnMap) => {
+            const titles = (await query.getRecords()).map((post: any) => post.title);
+            return run.totalRows === titles.length && titles.length > 0 && columnMap.title === 'Title' && Object.keys(columnMap).length === 1;
+        });
+        exports.assertDispatchedTimes(PostExporter);
+    } finally {
+        ImportAction.fake().restore();
+        exports.restore();
+    }
 });

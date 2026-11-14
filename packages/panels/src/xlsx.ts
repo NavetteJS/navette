@@ -1,5 +1,6 @@
 // Minimal XLSX writer: one worksheet of text cells (inline strings), zipped with Node's zlib. Cells are never formulas, so
-// spreadsheet software does not evaluate them; numbers stay text, as in Filament's export.
+// spreadsheet software does not evaluate them; numbers stay text, as in Filament's export. Cells and rows may be styled
+// (fonts, colors, alignment) and columns sized, like OpenSpout's `Style` and `Options` used by Filament.
 import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib';
 
 /** Escapes a value for XML; characters not allowed in XML 1.0 are dropped. */
@@ -11,17 +12,134 @@ function columnName(index: number): string {
     return name;
 }
 
-/** Workbook with a single sheet: the first row is bold (header). */
-export function buildXlsx(rows: unknown[][], sheetName = 'Sheet1'): Buffer {
-    const sheetRows = rows.map((row, r) => `<row r="${r + 1}">${row.map((cell, c) => `<c r="${columnName(c)}${r + 1}" t="inlineStr"${r === 0 ? ' s="1"' : ''}><is><t xml:space="preserve">${xml(cell === null || cell === undefined ? '' : String(cell)).slice(0, 32767)}</t></is></c>`).join('')}</row>`).join('');
+/** A color of an XLSX style: `XlsxColor.rgb(255, 255, 77)`, or a constant (`XlsxColor.BLACK`). Colors are `RRGGBB` strings. */
+export class XlsxColor {
+    static readonly BLACK = '000000';
+    static readonly WHITE = 'FFFFFF';
+    static readonly RED = 'FF0000';
+    static readonly DARK_RED = 'C00000';
+    static readonly ORANGE = 'FFC000';
+    static readonly YELLOW = 'FFFF00';
+    static readonly LIGHT_GREEN = '92D040';
+    static readonly GREEN = '00B050';
+    static readonly LIGHT_BLUE = '00B0E0';
+    static readonly BLUE = '0070C0';
+    static readonly DARK_BLUE = '002060';
+    static readonly PURPLE = '7030A0';
+    static rgb(red: number, green: number, blue: number): string {
+        const channel = (value: number) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+        return `${channel(red)}${channel(green)}${channel(blue)}`.toUpperCase();
+    }
+}
+const colorOf = (color: string) => { const hex = color.replace(/^#/, '').toUpperCase(); if (!/^[0-9A-F]{6}$/.test(hex)) throw new Error(`Invalid XLSX color: ${color} (expected RRGGBB).`); return hex; };
+/**
+ * Style of XLSX cells (Filament: OpenSpout's `Style`): `new XlsxStyle().setFontBold().setFontSize(14).setBackgroundColor(XlsxColor.rgb(0, 0, 0))`.
+ * Only the properties that were set are applied.
+ */
+export class XlsxStyle {
+    fontBold?: boolean;
+    fontItalic?: boolean;
+    fontUnderline?: boolean;
+    fontStrikethrough?: boolean;
+    fontSize?: number;
+    fontName?: string;
+    fontColor?: string;
+    backgroundColor?: string;
+    cellAlignment?: 'left' | 'center' | 'right' | 'justify';
+    cellVerticalAlignment?: 'top' | 'center' | 'bottom' | 'justify';
+    shouldWrapText?: boolean;
+    setFontBold(condition = true): this { this.fontBold = condition; return this; }
+    setFontItalic(condition = true): this { this.fontItalic = condition; return this; }
+    setFontUnderline(condition = true): this { this.fontUnderline = condition; return this; }
+    setFontStrikethrough(condition = true): this { this.fontStrikethrough = condition; return this; }
+    setFontSize(size: number): this { this.fontSize = size; return this; }
+    setFontName(name: string): this { this.fontName = name; return this; }
+    /** `RRGGBB`, e.g. `XlsxColor.rgb(255, 255, 77)`. */
+    setFontColor(color: string): this { this.fontColor = colorOf(color); return this; }
+    setBackgroundColor(color: string): this { this.backgroundColor = colorOf(color); return this; }
+    setCellAlignment(alignment: 'left' | 'center' | 'right' | 'justify'): this { this.cellAlignment = alignment; return this; }
+    setCellVerticalAlignment(alignment: 'top' | 'center' | 'bottom' | 'justify'): this { this.cellVerticalAlignment = alignment; return this; }
+    setShouldWrapText(condition = true): this { this.shouldWrapText = condition; return this; }
+    /** A copy of `base` with the properties set on `style` on top (Filament: OpenSpout's `StyleMerger`). */
+    static merge(style: XlsxStyle | null, base: XlsxStyle | null): XlsxStyle {
+        const merged = new XlsxStyle();
+        for (const source of [base, style]) if (source) for (const [key, value] of Object.entries(source)) if (value !== undefined) (merged as any)[key] = value;
+        return merged;
+    }
+}
+/** A cell with its own style (`makeXlsxRow()`): `XlsxCell.fromValue(value, style)`. */
+export class XlsxCell {
+    readonly value: unknown;
+    readonly style: XlsxStyle | null;
+    constructor(value: unknown, style: XlsxStyle | null = null) { this.value = value; this.style = style; }
+    static fromValue(value: unknown, style: XlsxStyle | null = null): XlsxCell { return new XlsxCell(value, style); }
+}
+/** Options of the XLSX writer (Filament: OpenSpout's `Options`): column widths, in characters. Columns are numbered from 1. */
+export class XlsxOptions {
+    readonly columnWidths: { width: number; start: number; end: number }[] = [];
+    defaultColumnWidth: number | null = null;
+    defaultRowHeight: number | null = null;
+    /** Width of the given columns: `setColumnWidth(10, 1)` (first column), `setColumnWidth(20, 2, 4)`. */
+    setColumnWidth(width: number, ...columns: number[]): this { for (const column of columns) this.columnWidths.push({ width, start: column, end: column }); return this; }
+    /** Width of the columns from `start` to `end`. */
+    setColumnWidthForRange(width: number, start: number, end: number): this { this.columnWidths.push({ width, start, end }); return this; }
+    setDefaultColumnWidth(width: number | null): this { this.defaultColumnWidth = width; return this; }
+    setDefaultRowHeight(height: number | null): this { this.defaultRowHeight = height; return this; }
+}
+/** One row of `buildXlsx()`: its cells (values or `XlsxCell`s) and the style of the cells without their own. */
+export type XlsxRowInput = unknown[] | { cells: unknown[]; style?: XlsxStyle | null };
+
+/** Fonts, fills and cell formats of the workbook, each style written once. */
+class StyleSheet {
+    private fonts = ['<font><sz val="11"/><name val="Calibri"/></font>', '<font><b/><sz val="11"/><name val="Calibri"/></font>'];
+    private fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
+    private formats = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>', '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'];
+    private indexOf(list: string[], entry: string): number { const index = list.indexOf(entry); if (index >= 0) return index; list.push(entry); return list.length - 1; }
+    /** Index of the cell format of a style (`null`: the default one). */
+    format(style: XlsxStyle | null): number {
+        if (!style) return 0;
+        const hasFont = [style.fontBold, style.fontItalic, style.fontUnderline, style.fontStrikethrough, style.fontSize, style.fontName, style.fontColor].some((value) => value !== undefined);
+        const font = hasFont ? this.indexOf(this.fonts, `<font>${style.fontBold ? '<b/>' : ''}${style.fontItalic ? '<i/>' : ''}${style.fontStrikethrough ? '<strike/>' : ''}${style.fontUnderline ? '<u/>' : ''}<sz val="${Number(style.fontSize ?? 11)}"/>${style.fontColor ? `<color rgb="FF${style.fontColor}"/>` : ''}<name val="${xml(style.fontName ?? 'Calibri')}"/></font>`) : 0;
+        const fill = style.backgroundColor ? this.indexOf(this.fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${style.backgroundColor}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+        const alignment = style.cellAlignment || style.cellVerticalAlignment || style.shouldWrapText !== undefined
+            ? `<alignment${style.cellAlignment ? ` horizontal="${style.cellAlignment}"` : ''}${style.cellVerticalAlignment ? ` vertical="${style.cellVerticalAlignment}"` : ''}${style.shouldWrapText !== undefined ? ` wrapText="${style.shouldWrapText ? 1 : 0}"` : ''}/>` : '';
+        return this.indexOf(this.formats, `<xf numFmtId="0" fontId="${font}" fillId="${fill}" borderId="0" xfId="0"${font ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${alignment ? ' applyAlignment="1">' + alignment + '</xf>' : '/>'}`);
+    }
+    toXml(): string {
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="${this.fonts.length}">${this.fonts.join('')}</fonts><fills count="${this.fills.length}">${this.fills.join('')}</fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${this.formats.length}">${this.formats.join('')}</cellXfs></styleSheet>`;
+    }
+}
+
+/**
+ * Workbook with a single sheet. By default the first row is bold (header). `headerStyle` and `cellStyle` replace the style of
+ * the header row and of the other rows; a row may also be `{ cells, style }`, and a cell an `XlsxCell` with its own style.
+ */
+export function buildXlsx(rows: XlsxRowInput[], sheetName = 'Sheet1', options: { headerStyle?: XlsxStyle | null; cellStyle?: XlsxStyle | null; writerOptions?: XlsxOptions | null } = {}): Buffer {
+    const styles = new StyleSheet();
+    const sheetRows = rows.map((input, r) => {
+        const { cells, style } = Array.isArray(input) ? { cells: input, style: null } : { cells: input.cells, style: input.style ?? null };
+        const rowStyle = style ?? (r === 0 ? options.headerStyle ?? null : options.cellStyle ?? null);
+        // Without any style, the header keeps its bold default format.
+        const rowFormat = rowStyle ? styles.format(rowStyle) : r === 0 && options.headerStyle === undefined ? 1 : 0;
+        return `<row r="${r + 1}">${cells.map((cell, c) => {
+            const own = cell instanceof XlsxCell ? cell : null;
+            const value = own ? own.value : cell;
+            const format = own?.style ? styles.format(XlsxStyle.merge(own.style, rowStyle)) : rowFormat;
+            return `<c r="${columnName(c)}${r + 1}" t="inlineStr"${format ? ` s="${format}"` : ''}><is><t xml:space="preserve">${xml(value === null || value === undefined ? '' : String(value)).slice(0, 32767)}</t></is></c>`;
+        }).join('')}</row>`;
+    }).join('');
+    const writer = options.writerOptions ?? null;
+    const format = writer && (writer.defaultColumnWidth !== null || writer.defaultRowHeight !== null) ? `<sheetFormatPr${writer.defaultColumnWidth !== null ? ` defaultColWidth="${Number(writer.defaultColumnWidth)}"` : ''} defaultRowHeight="${Number(writer.defaultRowHeight ?? 15)}"${writer.defaultRowHeight !== null ? ' customHeight="1"' : ''}/>` : '';
+    const widths = writer?.columnWidths.filter((entry) => entry.start >= 1 && entry.end >= entry.start && entry.end <= 16384) ?? [];
+    const cols = widths.length ? `<cols>${widths.map((entry) => `<col min="${Math.floor(entry.start)}" max="${Math.floor(entry.end)}" width="${Number(entry.width)}" customWidth="1"/>`).join('')}</cols>` : '';
     const files: [string, string][] = [
         ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
         ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
         ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(sheetName.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31)) || 'Sheet1'}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
         ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
-        ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>'],
-        ['xl/worksheets/sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`],
+        ['xl/worksheets/sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${format}${cols}<sheetData>${sheetRows}</sheetData></worksheet>`],
     ];
+    files.splice(4, 0, ['xl/styles.xml', styles.toXml()]);
     return zip(files.map(([name, content]) => [name, Buffer.from(content, 'utf8')]));
 }
 
