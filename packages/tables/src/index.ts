@@ -2345,7 +2345,7 @@ export async function getTableRecords<R>(table: Table<R>, host: TableHost, adapt
     // The page size comes from the browser: only a declared option is accepted.
     const requested = host.tableRecordsPerPage === 'all' || (host.tableRecordsPerPage as unknown) === 'all' ? 'all' : Number(host.tableRecordsPerPage);
     const option = options.includes(requested as any) ? requested : options[0];
-    ensureRelationshipSupport(adapter, getTableQuery(table, host));
+    ensureRelationshipSupport(adapter, { aggregates: table.getColumns().flatMap((c) => c.getRelationshipAggregates()) });
     if (!table.isPaginated() || option === 'all') return adapter.paginate({ ...getTableQuery(table, host), page: 1, perPage: MAX_UNPAGINATED_RECORDS });
     return adapter.paginate({ ...getTableQuery(table, host), page: Number(host.paginators.page) || 1, perPage: option as number });
 }
@@ -2534,7 +2534,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     const grouping = reordering ? null : getTableGrouping(table, host);
     // Groups only: no pagination and no record rows, just one summary row per group.
     const groupsOnly = grouping !== null && table.isGroupsOnly();
-    ensureRelationshipSupport(adapter, getTableQuery(table, host));
+    ensureRelationshipSupport(adapter, { aggregates: table.getColumns().flatMap((c) => c.getRelationshipAggregates()) });
     const page = reordering
         ? await adapter.paginate({ ...getTableQuery(table, host), sort: { column: reorderColumn!, direction: 'asc' }, page: 1, perPage: REORDER_LIMIT })
         : groupsOnly ? await adapter.paginate({ ...getTableQuery(table, host), page: 1, perPage: GROUPS_ONLY_LIMIT }) : await getTableRecords(table, host, adapter);
