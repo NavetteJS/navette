@@ -27,6 +27,7 @@ import { calendarPages } from './pages/calendar.ts';
 import { liveNotificationsAssets, LiveNotificationsPage } from './pages/live-notifications.ts';
 import { appPanel, demoAuthProvider } from './app-panel.ts';
 import { labPanel } from './lab-panel.ts';
+import { labPrivateAttachments } from './lab-rich-editor-options.ts';
 import { shopWidgets } from './widgets/shop.ts';
 import { welcomeWidgets } from './widgets/welcome.ts';
 import { STATUSES } from './resources/OrderResource.ts';
@@ -158,6 +159,9 @@ mkdirSync(path.join(uploads, 'public'), { recursive: true });
 app.use('/storage', express.static(path.join(uploads, 'public'), { dotfiles: 'deny', index: false }));
 // Files saved by upload fields and attached in the editors.
 FileUpload.storage = new LocalFileStorage(path.join(uploads, 'public'), '/storage');
+// Private rich editor attachments of the lab: served only through signed temporary URLs.
+const labPrivate = labPrivateAttachments(path.join(uploads, 'private'), key);
+app.use(labPrivate.path, labPrivate.handler);
 ProductResource.mediaRoot = path.join(uploads, 'public');
 AuthorResource.exportRoot = path.join(uploads, 'public');
 PostResource.mediaRoot = path.join(uploads, 'public');

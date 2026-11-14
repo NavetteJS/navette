@@ -17,7 +17,7 @@ const dir = mkdtempSync(path.join(tmpdir(), 'navette-rich-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 const host = (data: Record<string, unknown>, files: TemporaryUpload[] = []) => ({
     id: 'lw', _errors: {} as Record<string, string[]>, data, componentFileAttachments: {} as Record<string, unknown>, getSchema() { return null as any; }, dispatch() {},
-    _runtime: { uploads: { resolve: (value: unknown) => files.find((file) => `livewire-file:${file.id}` === value) ?? null, remove() {} } },
+    _runtime: { uploadPrefix: '/livewire', uploads: { resolve: (value: unknown) => files.find((file) => `livewire-file:${file.id}` === value) ?? null, remove() {}, temporaryUrl: (id: string, prefix: string) => `${prefix}/preview-file/${id}` } },
 });
 const form = (livewire: any, components: any[]) => Schema.make(livewire).key('form').statePath('data').components(components);
 const tools = (html: string) => [...html.matchAll(/data-rich-editor-tool="([A-Za-z0-9]+)"/g)].map((match) => match[1]).filter((tool) => !/^(grid|table[A-Z])/.test(tool));
@@ -46,7 +46,7 @@ test('RichEditor: json() stores the document', async () => {
     assert.equal(JSON.stringify(field.hydrateState(JSON.stringify(saved))), JSON.stringify(saved));
 });
 
-test('RichEditor: attachments are checked, stored and given a URL', async () => {
+test('RichEditor: attachments are checked, shown through a temporary URL, and stored when the form is saved', async () => {
     const png = path.join(dir, 'a.tmp');
     writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     const pdf = path.join(dir, 'b.tmp');
@@ -57,12 +57,20 @@ test('RichEditor: attachments are checked, stored and given a URL', async () => 
     const storage = new LocalFileStorage(path.join(dir, 'store'), '/files');
     const schema = form(livewire, [RichEditor.make('body').fileAttachmentsStorage(storage).fileAttachmentsDirectory('editor')]);
     const field = schema.getFlatComponents()[0] as RichEditor;
-    assert.match(String(await field.getUploadedFileAttachmentTemporaryUrl({ attachment: 'up1' })), /^\/files\/editor\/[0-9a-f-]+\.png$/);
+    assert.equal(await field.getUploadedFileAttachmentTemporaryUrl({ attachment: 'up1' }), '/livewire/preview-file/img1');
     assert.equal(await field.getUploadedFileAttachmentTemporaryUrl({ attachment: 'up2' }), null);
     assert.equal(await field.getUploadedFileAttachmentTemporaryUrl({ attachment: '../x' }), null);
-    // Used once: the reference is consumed.
-    assert.equal(await field.getUploadedFileAttachmentTemporaryUrl({ attachment: 'up1' }), null);
+    // Not stored yet: the URL can be asked again.
+    assert.equal(await field.getUploadedFileAttachmentTemporaryUrl({ attachment: 'up1' }), '/livewire/preview-file/img1');
     assert.match(await schema.toHtml(), /canAttachFiles: true/);
+    // Saving stores the upload: its `data-id` becomes the stored key, with the storage URL.
+    livewire.data.body = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'image', attrs: { id: 'up1', src: '/livewire/preview-file/img1' } }] }] };
+    const saved = String((await getSchemaState(schema)).body);
+    const key = /data-id="(editor\/[0-9a-f-]+\.png)"/.exec(saved)?.[1];
+    assert.ok(key, saved);
+    assert.match(saved, new RegExp(`src="/files/${key}"`));
+    assert.equal((livewire.data.body as any).content[0].content[0].attrs.id, key);
+    assert.equal(String((await getSchemaState(schema)).body), saved, 'stored once');
 });
 
 test('MarkdownEditor: attach button only with a storage; the uploaded image is stored once', async () => {

@@ -6,6 +6,8 @@ import Image from '@tiptap/extension-image';
 import { Color, HtmlString } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { Action } from '@navette-js/actions';
+import { attachmentUrl, eachImage, type AttachmentStorage, type AttachmentsVisibility } from './rich-editor-attachments.ts';
+import { safeFileUrl } from './file-upload-support.ts';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -196,6 +198,8 @@ const lengthOf = (value: unknown): string | null => { const text = String(value 
 const styleLength = (value: string) => (/^\d+(\.\d+)?$/.test(value) ? `${value}px` : value);
 /** Images with an optional id (attachments) and size (resizable images). */
 export const SizedImage = Image.extend({
+    // A private attachment is saved without a URL: only its `data-id`.
+    parseHTML() { return [{ tag: 'img[src]' }, { tag: 'img[data-id]' }]; },
     addAttributes() {
         return {
             ...this.parent?.(),
@@ -233,6 +237,11 @@ export class RichContentRenderer {
     protected _mergeTags: Record<string, unknown | (() => unknown)> = {};
     protected _blocks: Record<string, { block: CustomBlockClass; data: Record<string, unknown> }> = {};
     protected _mentions: MentionProvider[] = [];
+    protected _plugins: { getTipTapServerExtensions(): Extensions }[] = [];
+    protected _linkProtocols: string[] | null = null;
+    protected _attachmentsStorage: AttachmentStorage | null = null;
+    protected _attachmentsVisibility: AttachmentsVisibility = 'public';
+    protected _getFileAttachmentUrlUsing: ((file: string) => string | null | Promise<string | null>) | null = null;
     constructor(content: unknown) { this.content = content; }
     static make(content: unknown): RichContentRenderer { return new this(content); }
     /** Values of the merge tags: text (escaped), an `HtmlString` (inserted as is), or a function returning one. */
@@ -245,12 +254,37 @@ export class RichContentRenderer {
         return this;
     }
     mentions(providers: MentionProvider[]): this { this._mentions = providers; return this; }
+    /** Plugins of the editor: their server extensions keep their nodes and marks in the rendered content. */
+    plugins(plugins: { getTipTapServerExtensions(): Extensions }[]): this { this._plugins = plugins; return this; }
+    /** Protocols allowed in links (the editor's `linkProtocols()`): other links are removed. */
+    linkProtocols(protocols: string[] | null): this { this._linkProtocols = protocols; return this; }
+    /** Storage of the attached images: each image's `data-id` gets its URL from it (a temporary one when `private`). */
+    fileAttachmentsStorage(storage: AttachmentStorage | null): this { this._attachmentsStorage = storage; return this; }
+    fileAttachmentsVisibility(visibility: AttachmentsVisibility): this { this._attachmentsVisibility = visibility === 'private' ? 'private' : 'public'; return this; }
+    /** URL of an attached image from its `data-id`, instead of the storage's. */
+    getFileAttachmentUrlUsing(callback: ((file: string) => string | null | Promise<string | null>) | null): this { this._getFileAttachmentUrlUsing = callback; return this; }
+    protected schemaOptions() { return { linkProtocols: this._linkProtocols, extensions: this._plugins.flatMap((plugin) => plugin.getTipTapServerExtensions()) }; }
+    /** Plain text of the rendered content (merge tags replaced). */
+    async toText(): Promise<string> {
+        const { richHtmlToDocument, richDocumentToText } = await import('./index.ts');
+        return richDocumentToText(richHtmlToDocument(await this.toHtml(), this.schemaOptions()), this.schemaOptions());
+    }
     async toHtml(): Promise<string> {
         const { richHtmlToDocument, richDocumentToHtml, renderRichDocument } = await import('./index.ts');
+        const options = this.schemaOptions();
         // Sanitized first: only what the schema accepts goes through.
-        const sanitized = richDocumentToHtml(typeof this.content === 'string' ? richHtmlToDocument(this.content) : this.content);
+        const sanitized = richDocumentToHtml(typeof this.content === 'string' ? richHtmlToDocument(this.content, options) : this.content, options);
         if (sanitized === null) return '';
-        const document = richHtmlToDocument(sanitized) as RichDocument;
+        const document = richHtmlToDocument(sanitized, options) as RichDocument;
+        // Attached images: their URL from their `data-id` (never trusted from the content for private ones).
+        if (this._attachmentsStorage || this._getFileAttachmentUrlUsing) {
+            await eachImage(document, async (node) => {
+                const id = node.attrs?.id;
+                if (typeof id !== 'string' || id === '') return;
+                const url = this._getFileAttachmentUrlUsing ? safeFileUrl(await this._getFileAttachmentUrlUsing(id)) : await attachmentUrl(this._attachmentsStorage, this._attachmentsVisibility, id);
+                node.attrs = { ...node.attrs, src: url ?? (this._attachmentsVisibility === 'private' ? null : node.attrs?.src ?? null) };
+            });
+        }
         const raw = new Map<string, string>();
         const placeholder = (html: string) => { const key = `navette-raw-${randomBytes(8).toString('hex')}`; raw.set(key, html); return { type: 'paragraph', content: [{ type: 'text', text: key }] }; };
         const inlinePlaceholder = (html: string) => { const key = `navette-raw-${randomBytes(8).toString('hex')}`; raw.set(key, html); return { type: 'text', text: key }; };
@@ -288,13 +322,29 @@ export class RichContentRenderer {
             for (const child of node.content) { const result = await transform(child); if (result) children.push(result); }
             return { ...node, content: children };
         };
-        const html = renderRichDocument(await transform(document));
+        const html = renderRichDocument(await transform(document), options);
         let output = html;
         for (const [key, value] of raw) output = output.replace(`<p>${key}</p>`, () => value).replace(key, () => value);
         return output;
     }
 }
 
+/** Collapsible section (`details` tool): `<details><summary>…</summary><div data-type="detailsContent">…</div></details>`. */
+export const DetailsNode = Node.create({
+    name: 'details', group: 'block', content: 'detailsSummary detailsContent', defining: true, isolating: true,
+    parseHTML() { return [{ tag: 'details' }]; },
+    renderHTML({ HTMLAttributes }) { return ['details', HTMLAttributes, 0]; },
+});
+export const DetailsSummaryNode = Node.create({
+    name: 'detailsSummary', content: 'text*', defining: true, isolating: true, selectable: false,
+    parseHTML() { return [{ tag: 'summary' }]; },
+    renderHTML({ HTMLAttributes }) { return ['summary', HTMLAttributes, 0]; },
+});
+export const DetailsContentNode = Node.create({
+    name: 'detailsContent', content: 'block+', defining: true, selectable: false,
+    parseHTML() { return [{ tag: 'div[data-type="detailsContent"]' }]; },
+    renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'detailsContent' }), 0]; },
+});
 /** "Lead" paragraph group: `<div class="lead">`. */
 export const LeadNode = Node.create({
     name: 'lead', group: 'block', content: 'block+',
@@ -327,4 +377,4 @@ export const GridColumnNode = Node.create({
     renderHTML({ HTMLAttributes }) { const span = count(HTMLAttributes['data-col-span'], 12); return ['div', mergeAttributes({ class: 'grid-layout-col', style: `--col-span: span ${span} / span ${span}` }, HTMLAttributes), 0]; },
 });
 /** Server schema additions of the rich editor, besides the starter kit. */
-export const RICH_CONTENT_EXTENSIONS: Extensions = [TextColorMark, SmallMark, MergeTagNode, MentionNode, CustomBlockNode, LeadNode, GridNode, GridColumnNode];
+export const RICH_CONTENT_EXTENSIONS: Extensions = [TextColorMark, SmallMark, MergeTagNode, MentionNode, CustomBlockNode, LeadNode, GridNode, GridColumnNode, DetailsNode, DetailsSummaryNode, DetailsContentNode];
