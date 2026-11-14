@@ -6,7 +6,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { e } from '@navette-js/support';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}(?:\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}){0,9}$/;
-const PACKAGE = /^[a-z0-9][a-z0-9._-]{0,99}(?:\/[a-z0-9][a-z0-9._-]{0,99})?$/;
+const PACKAGE = /^@?[a-z0-9][a-z0-9._-]{0,99}(?:\/[a-z0-9][a-z0-9._-]{0,99})?$/;
 
 /** A file of the asset system: an id unique within its package, and a local file path or an URL. */
 export abstract class Asset {

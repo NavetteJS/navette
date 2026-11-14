@@ -134,9 +134,24 @@ Action.make('remind_me')
     })
 ```
 
-<Aside variant="warning">
-Broadcast notifications and receiving database notifications through websockets are not available. New notifications appear at the next poll.
-</Aside>
+### Receiving new database notifications live
+
+Polling is simple, but each open page asks the server for news every 30 seconds. With [broadcasting](/notifications/broadcast-notifications#setting-up-broadcasting-in-a-panel) enabled on the panel, the server tells the open pages when a user has new notifications instead, and the bell stops polling. Pass `true` as the third argument of `sendToDatabase()` to announce the notification:
+
+```ts
+import { knexNotificationStore, Notification, Panel } from '@navette-js/panels';
+
+const panel = Panel.make()
+    // ...
+    .databaseNotifications(knexNotificationStore(knex))
+    .broadcasting();
+
+await Notification.make()
+    .title('Saved successfully')
+    .sendToDatabase(panel.getDatabaseNotifications(), user, true);
+```
+
+The polling interval still applies while the connection to the server is down. See [receiving database notifications live](/notifications/broadcast-notifications#receiving-database-notifications-live) for the details.
 
 ## Managing notifications in the panel
 
