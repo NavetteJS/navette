@@ -50,7 +50,7 @@ import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import type { DataAdapter } from '@navette-js/database';
-import { REORDER_LIMIT, Table, TrashedFilter, filterSelectableKeys, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
+import { REORDER_LIMIT, Table, TrashedFilter, callTableColumnMethod, filterSelectableKeys, recordMatchesTableFilters, getTableRecords, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
 import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 
@@ -3242,7 +3242,7 @@ class ResourceTabs extends SchemaComponent {
 
 /** Resource list page: table state and methods called by the browser. */
 export class ListRecords extends Page implements TableHost {
-    static callable = ['updateTableColumnState', 'sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableFilters', 'resetTableFiltersForm', 'removeTableFilters', 'removeTableFilter', 'applyTableColumnManager', 'resetTableColumnManager', 'toggleTableReordering', 'reorderTable'];
+    static callable = ['updateTableColumnState', 'callTableColumnMethod', 'sortTable', 'gotoPage', 'nextPage', 'previousPage', 'applyTableFilters', 'resetTableFiltersForm', 'removeTableFilters', 'removeTableFilter', 'applyTableColumnManager', 'resetTableColumnManager', 'toggleTableReordering', 'reorderTable'];
     static resource: typeof Resource;
     /** In a cluster, the list page shows the cluster's sub-navigation. */
     getSubNavigation(): SubNavigationItem[] | Promise<SubNavigationItem[]> {
@@ -3366,12 +3366,17 @@ export class ListRecords extends Page implements TableHost {
         this.tableFilters = this.sanitizeTableFilters(this.tableFilters);
         this.tableDeferredFilters = JSON.parse(JSON.stringify(this.tableFilters));
         this.paginators.page = 1;
-        this.dispatch('deselectAllTableRecords', [], { self: true });
+        this.deselectTableRecordsWhenFiltered();
+    }
+    /** Filters or searches changed: the selection is cleared, unless the table says `deselectAllRecordsWhenFiltered(false)`. */
+    protected deselectTableRecordsWhenFiltered(): void {
+        if (this.getTable().shouldDeselectAllRecordsWhenFiltered()) this.dispatch('deselectAllTableRecords', [], { self: true });
     }
     applyTableFilters(): void {
         // Only filters declared by the table reach the applied state: each sanitizes its own state, or else only its known keys are kept.
         this.tableFilters = this.sanitizeTableFilters(this.tableDeferredFilters);
         this.paginators.page = 1;
+        this.deselectTableRecordsWhenFiltered();
     }
     /** Removes an active filter indicator: the field is cleared from both the applied state and the form. */
     async removeTableFilter(filterName: unknown, field: unknown = null): Promise<void> {
@@ -3384,6 +3389,7 @@ export class ListRecords extends Page implements TableHost {
         this.tableFilters = { ...this.tableFilters, [filter.name]: next };
         this.tableDeferredFilters = { ...this.tableDeferredFilters, [filter.name]: JSON.parse(JSON.stringify(next)) };
         this.paginators.page = 1;
+        this.deselectTableRecordsWhenFiltered();
     }
     /** Live field in the filters form (e.g. a rule's operator changed): runs its `afterStateUpdated`. */
     async updatedTableDeferredFilters(_value: unknown, key: string | null): Promise<void> { await this.runFilterFieldHook('tableDeferredFilters', key); }
@@ -3404,7 +3410,7 @@ export class ListRecords extends Page implements TableHost {
         this.tableFilters = this.getTable().getDefaultFilterState();
         this.tableDeferredFilters = this.getTable().getDefaultFilterState();
         this.paginators.page = 1;
-        this.dispatch('deselectAllTableRecords', [], { self: true });
+        this.deselectTableRecordsWhenFiltered();
     }
     /** "Remove all": resets every removable filter (to its empty state, not its default), the search and the column searches. */
     async removeTableFilters(): Promise<void> {
@@ -3418,7 +3424,7 @@ export class ListRecords extends Page implements TableHost {
         this.tableSearch = '';
         this.tableColumnSearches = {};
         this.paginators.page = 1;
-        this.dispatch('deselectAllTableRecords', [], { self: true });
+        this.deselectTableRecordsWhenFiltered();
     }
     applyTableColumnManager(state: unknown = null, _wasReordered: unknown = false): void { if (state) this.tableColumns = sanitizeColumnState(this.getTable(), state); }
     resetTableColumnManager(): void { this.tableColumns = this.getTable().getDefaultColumnState(); }
@@ -3444,7 +3450,7 @@ export class ListRecords extends Page implements TableHost {
     /** The table state is passed to widgets, which can rerun the same query. */
     getWidgetData(): Record<string, unknown> { return Object.fromEntries(PAGE_TABLE_PROPERTIES.map((property) => [property, (this as any)[property]])); }
     protected rendersActionModalsInPage(): boolean { return false; }
-    getBulkActions(): Action[] { return this.getTable().getBulkActions() ?? [DeleteBulkAction.make()]; }
+    getBulkActions(): Action[] { return (this.getTable().getBulkActions() ?? [DeleteBulkAction.make()]).map((action: any) => (typeof action?.bulk === 'function' ? action.bulk() : action)); }
     /** Row actions declared by the table, with groups flattened. */
     getRecordActions(): Action[] {
         const table = this.getTable();
@@ -3474,11 +3480,21 @@ export class ListRecords extends Page implements TableHost {
         const record = trashedFilterValue(this) !== null && adapter.findWithTrashed ? await adapter.findWithTrashed(context.recordKey) : await adapter.find(context.recordKey);
         if (!record) return null;
         // As in Filament, the record must still match the active tab, unless the tab is `excludeQueryWhenResolvingRecord()`.
+        // As in Filament, it must also match the applied filters, except those marked `excludeWhenResolvingRecord()`.
+        if (!(await recordMatchesTableFilters(this.getTable(), this, adapter, adapter.getKey(record)))) return null;
         const tab = this.getTabs()[this.getActiveTabKey()];
         const modifier = tab?.getQuery();
         if (!modifier || tab!.shouldExcludeQueryWhenResolvingRecord()) return record;
         const keys = await adapter.listKeys({ keys: [adapter.getKey(record)], trashed: trashedFilterValue(this) !== null ? 'with' : 'without', modifiers: [modifier] });
         return keys.length ? record : null;
+    }
+    /**
+     * Calls a method of a column's JavaScript (the server-side search of a `SelectColumn`...). Only exposed, read-only methods of a
+     * visible column, for a record within the table's scope; nothing is re-rendered.
+     */
+    async callTableColumnMethod(columnName: unknown, recordKey: unknown, method: unknown, args: unknown = null): Promise<unknown> {
+        this.skipRender();
+        return callTableColumnMethod(this.getTable(), this, this.getDataAdapterForTable(), columnName, recordKey, method, args);
     }
     /**
      * Writes an editable cell. Everything comes from the browser: the column must exist and be editable and visible, the record
@@ -3494,8 +3510,11 @@ export class ListRecords extends Page implements TableHost {
         const table = this.getTable(), adapter = this.getDataAdapterForTable();
         let keys: string[];
         // The selection comes from the browser: it is narrowed to records this table can actually display.
-        if (!this.isTrackingDeselectedTableRecords) keys = await adapter.keysInScope(clean(this.selectedTableRecords));
-        else {
+        if (!this.isTrackingDeselectedTableRecords) {
+            keys = await adapter.keysInScope(clean(this.selectedTableRecords));
+            // As in Filament, the selection is narrowed to the filtered query unless `deselectAllRecordsWhenFiltered(false)`.
+            if (keys.length && table.shouldDeselectAllRecordsWhenFiltered() && table.getFilters().length) keys = await adapter.listKeys({ ...getTableQuery(table, this), keys });
+        } else {
             const excluded = new Set(clean(this.deselectedTableRecords));
             // "Select all" covers the whole query, or only the current page with `selectCurrentPageOnly()`.
             const all = table.selectsCurrentPageOnly() ? (await getTableRecords(table, this, adapter)).records.map((record) => adapter.getKey(record)) : await adapter.listKeys(getTableQuery(table, this));
@@ -3511,8 +3530,48 @@ export class ListRecords extends Page implements TableHost {
      * `authorizeIndividualRecords()` are skipped; `process` reports a failure by returning `false` or throwing. Then sends the
      * action's success notification, or its failure notification with the number of records skipped and failed.
      */
+    /**
+     * The selected records, for an action using `accessSelectedRecords()` (`action.getSelectedRecords()`): loaded by chunks, or
+     * only their keys when `fetch` is `false` (and the table has no selectability check).
+     */
+    async getSelectedTableRecords(fetch = true, chunkSize = 100): Promise<any[]> {
+        const keys = await this.getSelectedRecordKeys();
+        if (!fetch) return keys;
+        const adapter = this.getDataAdapterForTable();
+        const records: any[] = [];
+        const size = Math.max(1, Math.floor(chunkSize) || 100);
+        for (let index = 0; index < keys.length; index += size) records.push(...(await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)))).filter((record) => record !== null));
+        return records;
+    }
+    /** A query of the selected records (`action.getSelectedRecordsQuery()`): the adapter's query builder, restricted to the selected keys. */
+    async getSelectedTableRecordsQuery(): Promise<any> {
+        const adapter = this.getDataAdapterForTable();
+        if (typeof adapter.newQuery !== 'function') throw new Error('getSelectedRecordsQuery() needs a data adapter with newQuery() (ObjectionAdapter).');
+        return adapter.newQuery({ keys: await this.getSelectedRecordKeys(), trashed: 'with' });
+    }
+    /**
+     * After an action that used the selected records: the success notification (`successNotificationTitle()`), or the failure
+     * notification with the messages of `reportBulkProcessingFailure()`.
+     */
+    async notifySelectedRecordsOutcome(action: Action): Promise<void> {
+        action.markSelectedRecordsOutcomeNotified();
+        const total = action.getTotalSelectedRecordsCount(), success = action.getSuccessfulSelectedRecordsCount();
+        if (success >= total) {
+            const title = action.getSuccessNotificationTitle();
+            if (title) Notification.make().success().title(title).send();
+            return;
+        }
+        const withoutMessage = action.getBulkProcessingFailureWithoutMessageCount();
+        const body = [...action.getBulkProcessingFailureMessages(), ...(withoutMessage ? [action.getMissingBulkProcessingFailureNotificationMessage(withoutMessage, total)] : [])].filter(Boolean).join(' ');
+        const title = action.getFailureNotificationTitle(success, total) ?? action.getSuccessNotificationTitle() ?? '';
+        if (!title && !body) return;
+        const notification = Notification.make().title(title);
+        (success ? notification.warning() : notification.danger()).body(body || null).send();
+    }
     async processSelectedRecords(action: Action, process: (record: any) => unknown | Promise<unknown>): Promise<{ total: number; success: number; unauthorized: number; failed: number }> {
         const keys = await this.getSelectedRecordKeys();
+        // `reportBulkProcessingFailure()` calls made by `process` count as failures with their own message.
+        action.startSelectedRecordsRun(keys.length);
         const adapter = this.getDataAdapterForTable();
         const authorization = action.getIndividualRecordsAuthorization();
         const ctx = { livewire: this, record: null, arguments: {}, data: {}, action };
@@ -3524,7 +3583,12 @@ export class ListRecords extends Page implements TableHost {
                 if (!record) { failed++; continue; }
                 const allowed = authorization === null ? true : typeof authorization === 'string' ? await canOn(this, authorization, record) : await authorization(record, { ...ctx, record });
                 if (!allowed) { unauthorized++; continue; }
-                try { if ((await process(record)) === false) failed++; else success++; } catch (error) { failed++; if (failed === 1) console.error(error); }
+                const reportedBefore = action.getSuccessfulSelectedRecordsCount();
+                try {
+                    const result = await process(record);
+                    if (action.getSuccessfulSelectedRecordsCount() < reportedBefore) failed++;
+                    else if (result === false) failed++; else success++;
+                } catch (error) { failed++; if (failed === 1) console.error(error); }
             }
         }
         const total = keys.length;
@@ -3532,10 +3596,14 @@ export class ListRecords extends Page implements TableHost {
             const title = action.getSuccessNotificationTitle();
             if (title) Notification.make().success().title(title).send();
         } else {
-            const body = [action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) && unauthorized ? action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) : null, failed ? action.getMissingBulkProcessingFailureNotificationMessage(failed, total) : null].filter(Boolean).join(' ');
+            const reported = action.getBulkProcessingFailureMessages();
+            const reportedCount = action.getTotalSelectedRecordsCount() - action.getSuccessfulSelectedRecordsCount() - action.getBulkProcessingFailureWithoutMessageCount();
+            const unreported = Math.max(0, failed - reportedCount);
+            const body = [action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) && unauthorized ? action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) : null, ...reported, unreported ? action.getMissingBulkProcessingFailureNotificationMessage(unreported, total) : null].filter(Boolean).join(' ');
             const notification = Notification.make().title(action.getFailureNotificationTitle(success, total) ?? action.getSuccessNotificationTitle() ?? '');
             (success ? notification.warning() : notification.danger()).body(body || null).send();
         }
+        action.markSelectedRecordsOutcomeNotified();
         if (action.shouldDeselectRecordsAfterCompletion()) this.deselectAllTableRecords();
         return { total, success, unauthorized, failed };
     }
@@ -3599,10 +3667,10 @@ export class ListRecords extends Page implements TableHost {
     gotoPage(page: number, _pageName = 'page'): void { this.paginators.page = Math.max(1, Math.floor(Number(page)) || 1); }
     nextPage(_pageName = 'page'): void { this.paginators.page = (Number(this.paginators.page) || 1) + 1; }
     previousPage(_pageName = 'page'): void { this.paginators.page = Math.max(1, (Number(this.paginators.page) || 1) - 1); }
-    updatedTableSearch(): void { this.paginators.page = 1; }
+    updatedTableSearch(): void { this.paginators.page = 1; this.deselectTableRecordsWhenFiltered(); }
     getDataAdapterForTable(): DataAdapter { return this.resource.adapter; }
     getDataAdapter(): DataAdapter { return this.resource.adapter; }
-    updatedTableColumnSearches(): void { this.paginators.page = 1; }
+    updatedTableColumnSearches(): void { this.paginators.page = 1; this.deselectTableRecordsWhenFiltered(); }
     updatedTableRecordsPerPage(): void { this.paginators.page = 1; }
     updatedTableSort(): void { this.paginators.page = 1; }
 

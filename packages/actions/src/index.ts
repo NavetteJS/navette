@@ -291,6 +291,82 @@ export class Action implements Renderable {
     missingBulkProcessingFailureNotificationMessage(message: BulkMessage | null): this { this._missingProcessingMessage = message; return this; }
     getMissingBulkProcessingFailureNotificationMessage(count: number, total: number): string | null { const message = this._missingProcessingMessage; return typeof message === 'function' ? message(count, total) : message; }
 
+    // --- selected table records (Filament's `accessSelectedRecords()`)
+    private _accessSelectedRecords = false;
+    private _bulk = false;
+    private _fetchSelectedRecords = true;
+    private _selectionHost: any = null;
+    private _selection = { total: 0, successful: 0, withoutMessage: 0, messages: new Map<string, { message: BulkMessage | null; count: number }>(), notified: false, used: false };
+    /**
+     * A table action (header, toolbar or row action) that works on the selected records: its click sends the table's selection,
+     * and its handler reads it with `getSelectedRecords()` or `getSelectedRecordsQuery()`. The selection is checked again on the
+     * server (records the table can show, selectable, within `maxSelectableRecords()`).
+     */
+    accessSelectedRecords(condition = true): this { this._accessSelectedRecords = condition; return this; }
+    canAccessSelectedRecords(): boolean { return this._accessSelectedRecords || this._bulk; }
+    /** Marks a bulk action (set by the table for the actions of its bulk menus): it always accesses the selected records. */
+    bulk(condition = true): this { this._bulk = condition; return this; }
+    isBulk(): boolean { return this._bulk; }
+    /** `false`: `getSelectedRecords()` returns the selected keys instead of loading the records (faster for large selections). */
+    fetchSelectedRecords(condition = true): this { this._fetchSelectedRecords = condition; return this; }
+    shouldFetchSelectedRecords(): boolean { return this._fetchSelectedRecords; }
+    private selectionHost(method: string): any {
+        if (!this.canAccessSelectedRecords()) throw new Error(`The action [${this.name}] is attempting to access the selected records from the table, but it is not using [accessSelectedRecords()], so they are not available.`);
+        const host = this._selectionHost;
+        if (!host || typeof host[method] !== 'function') throw new Error(`The action [${this.name}] is not running in a table: no selected records.`);
+        return host;
+    }
+    /**
+     * The selected records (or their keys with `fetchSelectedRecords(false)`), loaded by `chunkSelectedRecords()` chunks. Counts the
+     * total for the failure notification of `reportBulkProcessingFailure()`.
+     */
+    async getSelectedRecords(): Promise<any[]> {
+        const records: any[] = await this.selectionHost('getSelectedTableRecords').getSelectedTableRecords(this._fetchSelectedRecords, this._chunkSize);
+        this._selection.total = records.length;
+        this._selection.successful = records.length;
+        this._selection.used = true;
+        return records;
+    }
+    /** A query of the selected records (an Objection query builder with `ObjectionAdapter`), e.g. for one `update()` of all of them. */
+    async getSelectedRecordsQuery(): Promise<any> { return this.selectionHost('getSelectedTableRecordsQuery').getSelectedTableRecordsQuery(); }
+    /**
+     * Reports that one selected record could not be processed. `key` groups failures sharing a `message` (a text, or a function of
+     * the number of such failures and of the selected records); without a key, `missingBulkProcessingFailureNotificationMessage()` is used.
+     */
+    reportBulkProcessingFailure(key: string | null = null, message: BulkMessage | null = null): void {
+        if (key !== null && key !== '') { const previous = this._selection.messages.get(key); this._selection.messages.set(key, { message, count: (previous?.count ?? 0) + 1 }); }
+        else this._selection.withoutMessage++;
+        this._selection.successful = Math.max(0, this._selection.successful - 1);
+        this._selection.used = true;
+    }
+    /** Reports that no selected record could be processed. */
+    reportCompleteBulkProcessingFailure(key: string | null = null, message: BulkMessage | null = null): void {
+        if (key !== null && key !== '') this._selection.messages.set(key, { message, count: this._selection.total });
+        else this._selection.withoutMessage += this._selection.total;
+        this._selection.successful = 0;
+        this._selection.used = true;
+    }
+    /** Reports how many selected records were processed: the others count as failures without message. */
+    reportBulkProcessingSuccessfulRecordsCount(count: number): void {
+        this._selection.withoutMessage = Math.max(0, this._selection.successful - count);
+        this._selection.successful = Math.max(0, Math.floor(count));
+        this._selection.used = true;
+    }
+    getTotalSelectedRecordsCount(): number { return this._selection.total; }
+    getSuccessfulSelectedRecordsCount(): number { return this._selection.successful; }
+    /** Failures reported without a key. */
+    getBulkProcessingFailureWithoutMessageCount(): number { return this._selection.withoutMessage; }
+    /** Messages of the failures reported with a key and a message. */
+    getBulkProcessingFailureMessages(): string[] {
+        return [...this._selection.messages.values()].flatMap(({ message, count }) => { const text = typeof message === 'function' ? message(count, this._selection.total) : message; return text ? [text] : []; });
+    }
+    /** Whether the handler used the selection (`getSelectedRecords()` or a report), so the host sends the outcome notification. */
+    hasSelectedRecordsOutcome(): boolean { return this._selection.used && !this._selection.notified; }
+    /** Set by the host once it has sent the success or failure notification of the selection. */
+    markSelectedRecordsOutcomeNotified(): void { this._selection.notified = true; }
+    /** Starts a selection run (used by the host's `processSelectedRecords()`). */
+    startSelectedRecordsRun(total: number): void { this._selection = { total, successful: total, withoutMessage: 0, messages: new Map(), notified: false, used: true }; }
+
     // --- outcome of single actions
     private _successNotification: ((notification: any, ctx: ActionCallContext) => any) | null = null;
     private _successRedirectUrl: string | ((ctx: ActionCallContext & Record<string, unknown>) => string | null | Promise<string | null>) | null = null;
@@ -319,12 +395,23 @@ export class Action implements Renderable {
     async call(ctx: ActionCallContext): Promise<unknown> {
         if (!this._handler) return null;
         ctx = { ...ctx, action: this };
+        // The selection is read through the component running the action.
+        this._selectionHost = ctx.livewire ?? null;
+        this._selection = { total: 0, successful: 0, withoutMessage: 0, messages: new Map(), notified: false, used: false };
         if (this._mutateData) ctx = { ...ctx, data: await this._mutateData(ctx.data ?? {}, ctx) };
         await this._before?.(ctx);
         const result = await this._handler(ctx);
         await this._after?.(ctx);
+        // Success or failure notification of the selected records, sent by the table's component.
+        if (this.hasSelectedRecordsOutcome()) await (ctx.livewire as any)?.notifySelectedRecordsOutcome?.(this);
         return result;
     }
+
+    /**
+     * Attribute of the click that mounts the action: `x-on:click` for an action using `accessSelectedRecords()` (the table's Alpine
+     * `mountAction()` sends the selection along), `wire:click` otherwise.
+     */
+    private clickAttribute(): string { return this._accessSelectedRecords ? 'x-on:click' : 'wire:click'; }
 
     /** Menu item of a table bulk action. The click goes through the table's Alpine `mountAction()`, which sends the selection. */
     async toGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>): Promise<string> {
@@ -362,12 +449,12 @@ export class Action implements Renderable {
         if (this._disabled !== false) {
             // Conditionally disabled: this markup is used whether or not the action ends up disabled.
             const disabled = await this.isDisabled(ctx);
-            return `<button ${disabled ? 'aria-disabled="true" ' : ''}role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', disabled ? 'fi-disabled' : null, ...colors].filter(Boolean).join(' ')}" wire:click="${expression}" wire:key="${e(wireKey)}">${inner}</button>`;
+            return `<button ${disabled ? 'aria-disabled="true" ' : ''}role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', disabled ? 'fi-disabled' : null, ...colors].filter(Boolean).join(' ')}" ${this.clickAttribute()}="${expression}" wire:key="${e(wireKey)}">${inner}</button>`;
         }
         if (this._keyBindings.length) {
-            return `<button x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}" wire:click="${expression}" wire:key="${e(wireKey)}">${inner}</button>`;
+            return `<button x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}" ${this.clickAttribute()}="${expression}" wire:key="${e(wireKey)}">${inner}</button>`;
         }
-        return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="${expression}" wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${inner}</button>`;
+        return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${this.clickAttribute()}="${expression}" wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${inner}</button>`;
     }
 
     /** Small link (or icon button) for a table row action. */
@@ -384,7 +471,7 @@ export class Action implements Renderable {
             const disabled = this._disabled !== false && (await this.isDisabled(ctx));
             const buttonClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', disabled ? 'fi-disabled' : null, ...(color !== 'gray' ? colorManager.getComponentClasses('icon-button', color) : [])].filter(Boolean).join(' ');
             const glyph = iconName ? icon(iconName, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': raw }) }) : '';
-            return `<button title="${e(label)}" aria-label="${e(label)}" ${disabled ? 'disabled ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${buttonClasses}"${disabled ? '' : ` wire:click="${e(raw)}"`} wire:key="${e(wireKey)}">${glyph}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }))}</button>`;
+            return `<button title="${e(label)}" aria-label="${e(label)}" ${disabled ? 'disabled ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${buttonClasses}"${disabled ? '' : ` ${this.clickAttribute()}="${e(raw)}"`} wire:key="${e(wireKey)}">${glyph}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }))}</button>`;
         }
         const iconHtml = iconName ? icon(iconName, { size: 'sm', attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': raw }) }) : '';
         const href = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
@@ -392,7 +479,7 @@ export class Action implements Renderable {
         // Only local or http(s) URLs become links (no `javascript:` or protocol-relative URLs).
         if (href && /^(\/(?!\/)|https?:\/\/)/.test(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="fi-link-label">${e(label)}</span></a>`;
         const keys = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
-        return `<button ${keys}${tooltip}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${classes}" wire:click="${e(raw)}" wire:key="${e(wireKey)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }), 'sm')}<span class="fi-link-label">${e(label)}</span></button>`;
+        return `<button ${keys}${tooltip}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${classes}" ${this.clickAttribute()}="${e(raw)}" wire:key="${e(wireKey)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }), 'sm')}<span class="fi-link-label">${e(label)}</span></button>`;
     }
 
     /** Modal of a mounted action; `content` is the rendered form, if any. */
@@ -490,7 +577,7 @@ export class Action implements Renderable {
             const safeUrl = linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl) ? linkUrl : null;
             const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
             const mountExpression = this._handler ? this.mountExpressionFor(mountContext) : null;
-            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${this._alpineClick ? `x-on:click="${e(this._alpineClick)}" ` : ''}${(mountExpression ?? this._action) ? `wire:click="${e(mountExpression ?? this._action!)}" ` : ''}`;
+            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${this._alpineClick ? `x-on:click="${e(this._alpineClick)}" ` : ''}${(mountExpression ?? this._action) ? `${mountExpression ? this.clickAttribute() : 'wire:click'}="${e(mountExpression ?? this._action!)}" ` : ''}`;
             const tag = safeUrl ? 'a' : 'button';
             const target = this._livewireTarget ?? mountExpression ?? this._action;
             if (this._labeledFrom) {
@@ -521,12 +608,12 @@ export class Action implements Renderable {
                 type: isSubmit ? 'submit' : 'button',
                 'wire:loading.attr': 'aria-disabled',
                 'wire:loading.class': 'fi-disabled',
-                'wire:target': this._livewireTarget ?? this._submit,
+                'wire:target': this._livewireTarget ?? this._submit ?? (this._accessSelectedRecords && mountExpression ? mountExpression : null),
                 'x-bind:disabled': isSubmit ? 'isProcessing' : null,
             })
             .class(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : colorManager.getComponentClasses('button', this._color))])
             .when(this._action, (a) => a.set('wire:click', this._action!))
-            .when(mountExpression, (a) => a.set('wire:click', mountExpression!))
+            .when(mountExpression, (a) => a.set(this.clickAttribute(), mountExpression!))
             .when(this._alpineClick, (a) => a.set('x-on:click', this._alpineClick!));
         const wireTarget = this._livewireTarget ?? this._submit ?? this._action ?? mountExpression;
         const keyBindings = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';

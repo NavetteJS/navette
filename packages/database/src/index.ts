@@ -62,6 +62,8 @@ export interface DataAdapter<T = any> {
     forceDelete(key: string | number): Promise<boolean>;
     /** Keys of every record matching the query (unpaginated), for "select all". */
     listKeys(query: Omit<ListQuery, 'page' | 'perPage'>): Promise<string[]>;
+    /** Query builder of the ORM for a list query (`getSelectedRecordsQuery()`); optional. */
+    newQuery?(query: Omit<ListQuery, 'page' | 'perPage'>): any;
     deleteMany(keys: (string | number)[]): Promise<number>;
     /** True if another record already has this value (`unique` rule). */
     exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
@@ -178,6 +180,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
 
     async count(): Promise<number> { return this.base().resultSize(); }
 
+    /** The adapter's query builder for a list query (scope, search, filters and keys applied), e.g. for a bulk `update()`. */
+    newQuery(query: Omit<ListQuery, 'page' | 'perPage'>): QueryBuilder<M, M[]> { return this.filtered(query); }
     async listKeys(query: Omit<ListQuery, 'page' | 'perPage'>): Promise<string[]> {
         const rows = await this.filtered(query).select(this.keyColumn);
         return rows.map((r) => this.getKey(r));

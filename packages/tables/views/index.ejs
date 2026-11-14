@@ -46,7 +46,7 @@
 %>
 <div x-data="filamentTable({
                 areGroupsCollapsedByDefault: <%- grouping.collapsedByDefault ? 'true' : 'false' %>,
-                canTrackDeselectedRecords: <%- selection ? 'false' : 'true' %>,
+                canTrackDeselectedRecords: <%- canTrackDeselectedRecords ? 'true' : 'false' %>,
                 currentSelectionLivewireProperty: <%- selection ? js(selection.property) : 'null' %>,
                 maxSelectableRecords: <%- maxSelectableRecords ?? 'null' %>,
                 reorderMessage: <%- js(t('filament-tables::table.reordering.moved')) %>,
@@ -76,7 +76,7 @@
                 const filtersModalId = id + '-table-filters';
             %>
             <% const toolbarVisible = reorder !== null || groups.length > 0 || isSearchable || filtersTriggerInToolbar || hasColumnManager || toolbarActions.length > 0; %>
-            <div x-show="<%- heading !== null || headerActions.length || toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header.visible" class="fi-ta-header-ctn">
+            <div x-show="<%- heading !== null || headerActions.length || toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length || (selectable && !selection) ? 1 : 0 %>)" wire:key="<%= id %>.table.header.visible" class="fi-ta-header-ctn">
                 <%- hook('tables::header.before') %>
                 <% if (heading !== null || headerActions.length) { %>
                     <div class="<%- cls(['fi-ta-header', { 'fi-ta-header-adaptive-actions-position': headerActions.length }]) %>">
@@ -108,7 +108,7 @@
                     </div>
                 <% } %>
                 <%- hook('tables::toolbar.before') %>
-                <div<% if (!toolbarVisible) { %> x-cloak<% } %> x-show="<%- toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length ? 1 : 0 %>)" wire:key="<%= id %>.table.header-toolbar.<%- toolbarVisible ? 'visible' : 'selection' %>" class="fi-ta-header-toolbar">
+                <div<% if (!toolbarVisible) { %> x-cloak<% } %> x-show="<%- toolbarVisible ? 'true' : 'false' %> || false || (getSelectedRecordsCount() && <%- bulkActions.length || (selectable && !selection) ? 1 : 0 %>)" wire:key="<%= id %>.table.header-toolbar.<%- toolbarVisible ? 'visible' : 'selection' %>" class="fi-ta-header-toolbar">
                     <%- hook('tables::toolbar.start') %>
                     <div class="fi-ta-actions fi-align-start fi-wrapped">
                         <%- hook('tables::toolbar.reorder-trigger.before') %>
@@ -289,7 +289,7 @@
                     <%= t('filament-tables::table.reorder_indicator') %>
                 </div>
             <% } %>
-            <% if (selection ? maxSelectableRecords !== 1 : bulkActions.length) { %>
+            <% if (selection ? maxSelectableRecords !== 1 : selectable) { %>
                     <div x-cloak role="status" aria-live="polite" aria-atomic="true" x-bind:hidden="! getSelectedRecordsCount()" x-show="getSelectedRecordsCount()" wire:key="<%= id %>.table.selection.indicator" class="fi-ta-selection-indicator">
                         <div>
                             <%- loadingIndicator(attrs({ 'x-show': 'isLoading' })) %>
@@ -304,11 +304,11 @@
                         <div>
                             <%- hook('tables::selection.indicator.actions.before') %>
                             <div class="fi-ta-selection-indicator-actions-ctn">
-                                <button class="<%- cls([...linkClasses, 'fi-link', 'fi-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="selectAllRecords" x-show="canSelectAllRecords()" wire:key="<%= id %>table.selection.indicator.actions.select-all.<%- allCount %>.<%- page.page %>">
+                                <% if (!selectsGroupsOnly) { %><button class="<%- cls([...linkClasses, 'fi-link', 'fi-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="selectAllRecords" x-show="canSelectAllRecords()" wire:key="<%= id %>table.selection.indicator.actions.select-all.<%- allCount %>.<%- page.page %>">
                                     <span class="fi-link-label">
                                         <%= t('filament-tables::table.selection_indicator.actions.select_all.label', { count: number(allCount) }) %>
                                     </span>
-                                </button>
+                                </button><% } %>
                                 <button class="<%- cls([...dangerLinkClasses, 'fi-link', 'fi-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="deselectAllRecords">
                                     <span class="fi-link-label">
                                         <%= t('filament-tables::table.selection_indicator.actions.deselect_all.label') %>
@@ -354,7 +354,8 @@
                         </div>
                     </div>
 
-                    <% if (filterIndicators.some((indicator) => indicator.removable)) { %>
+                    <% if (filterIndicators.some((indicator) => indicator.removable) && filterActions.removeAll.customized) { %><% if (!filterActions.removeAll.hidden) { %><%- filterActionHtml(filterActions.removeAll, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="removeTableFilters,removeTableFilter" wire:click="removeTableFilters"', null, false, 'sm') %><% } %>
+                    <% } else if (filterIndicators.some((indicator) => indicator.removable)) { %>
                     <button x-tooltip="{
                             content: <%= js(t('filament-tables::table.filters.actions.remove_all.tooltip')) %>,
                             theme: $store.theme,
@@ -383,7 +384,7 @@
                     <% if (selectable || columns.some((c) => c.sortable)) { %>
                     <div class="fi-ta-content-header">
                         <% if (selectable) { %>
-                        <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
+                        <% if (maxSelectableRecords !== 1 && !selectsGroupsOnly) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
                         <% } %>
                         <% if (columns.some((c) => c.sortable)) { %>
                                     <div x-data="{
@@ -584,18 +585,18 @@
                                     </div>
                                     <% } %>
 
-                                    <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.stacked.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
+                                    <% if (maxSelectableRecords !== 1 && !selectsGroupsOnly) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.stacked.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
                                 </td>
                             </tr>
                         <% } %>
 
                         <% if (headerGroups) { %>
                             <tr class="fi-ta-table-head-groups-row">
-                                <% if (rows.length) { %><th></th><% } %>
+                                <% if (rows.length) { %><% if (reorder?.active) { %><th></th><% } else { %><% if (hasRowActions && actionsPosition.startsWith('before')) { %><th></th><% } %><% if (selectable) { %><th></th><% } %><% } %><% } %>
                                 <% for (const group of headerGroups) { %>
-                                    <% if (group.label === null) { %><th></th><% } else { %><th colspan="<%- group.span %>" scope="colgroup" class="fi-ta-header-group-cell"><%= group.label %></th><% } %>
+                                    <% if (group.label === null) { %><th></th><% } else { %><th colspan="<%- group.span %>" scope="colgroup" <%- group.attributes %> class="<%- cls(group.classes) %>"<% if (group.style) { %> style="<%= group.style %>"<% } %>><%= group.label %></th><% } %>
                                 <% } %>
-                                <% if (rows.length) { %><th></th><% } %>
+                                <% if (rows.length && !reorder?.active && hasRowActions && !actionsPosition.startsWith('before')) { %><th></th><% } %>
                             </tr>
                         <% } %>
 
@@ -604,7 +605,7 @@
                             <% if (rows.length && !reorder?.active && hasRowActions && actionsPosition === 'before-cells') { %><th aria-label="<%= tc('filament-tables::table.columns.actions.label', 2) %>" scope="col" class="fi-ta-actions-header-cell fi-ta-empty-header-cell"></th><% } %>
                             <% if (rows.length && !reorder?.active && selectable) { %>
                             <th scope="col" class="fi-ta-cell fi-ta-selection-cell">
-                                <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
+                                <% if (maxSelectableRecords !== 1 && !selectsGroupsOnly) { %><input aria-label="<%= t('filament-tables::table.fields.bulk_select_page.label') %>" type="checkbox" x-bind:checked="<%= selectPageBinding %>" x-on:click="toggleSelectRecordsOnPage" wire:key="<%= id %>.table.bulk-select-page.checkbox.<%- randomKey() %>" wire:loading.attr="disabled" wire:target="<%- targets %>" class="fi-ta-page-checkbox fi-checkbox-input" /><% } %>
                             </th>
                             <% } %>
                             <% if (rows.length && !reorder?.active && hasRowActions && actionsPosition === 'before-columns') { %><th aria-label="<%= tc('filament-tables::table.columns.actions.label', 2) %>" scope="col" class="fi-ta-actions-header-cell fi-ta-empty-header-cell"></th><% } %>
@@ -614,15 +615,16 @@
                             <% for (const [columnIndex, column] of columns.entries()) { %>
                                 <% const headerCellView = hasHeaderCellHook ? hook('tables::header.cell', { column: visibleColumns[columnIndex], isReordering }) : ''; %>
                                 <% if (headerCellView.trim() !== '') { %><%- headerCellView %><% continue; } %>
-                                <th<% if (column.sortable) { %> aria-sort="<%- column.sort %>"<% } %> scope="col" class="<%- cls(['fi-ta-header-cell', 'fi-ta-header-cell-' + column.cssName, { 'fi-growable': column.growable, 'fi-grouped': column.grouped, 'fi-wrapped': column.wrapHeader }, column.alignment && column.alignment !== 'start' ? 'fi-align-' + column.alignment : null, ...column.responsive]) %>"<% if (column.width) { %> style="width: <%= column.width %>"<% } %>>
+                                <% const headerLabel = column.labelHtml; %>
+                                <th<% if (column.sortable) { %> aria-sort="<%- column.sort %>"<% } %> scope="col" <%- column.headerAttributes %> class="<%- cls(['fi-ta-header-cell', 'fi-ta-header-cell-' + column.cssName, { 'fi-growable': column.growable, 'fi-grouped': column.grouped, 'fi-wrapped': column.wrapHeader }, column.alignment && column.alignment !== 'start' ? 'fi-align-' + column.alignment : null, ...column.responsive, ...column.headerClasses]) %>"<% if (column.width || column.headerStyle) { %> style="<%= [column.width ? 'width: ' + column.width : null, column.headerStyle].filter(Boolean).join('; ') %>"<% } %>>
                                     <% if (column.sortable) { %>
                                         <button type="button" data-prevent-disabled-clicks wire:click="sortTable(<%= js(column.name) %>)" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" class="fi-ta-header-cell-sort-btn">
-                                            <%= column.label %>
+                                            <%- headerLabel %>
                                             <%- icon(column.sort === 'ascending' ? 'm-chevron-up' : 'm-chevron-down', { alias: column.sort === 'ascending' ? 'tables::header-cell.sort-asc-button' : column.sort === 'descending' ? 'tables::header-cell.sort-desc-button' : 'tables::header-cell.sort-button', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'sortTable(' + js(column.name) + ')' }) }) %>
                                             <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'sortTable(' + js(column.name) + ')' })) %>
                                         </button>
                                     <% } else { %>
-                                        <%= column.label %>
+                                        <%- headerLabel %>
                                     <% } %>
                                 </th>
                             <% } %>
@@ -725,7 +727,7 @@
                                 <% if (!reorder?.active && hasRowActions && actionsPosition === 'before-columns') { %><% rowActionsCell(row) %><% } %>
 
                                 <% for (const cell of row.cells) { %>
-                                    <td wire:key="<%= id %>.table.record.<%= row.key %>.column.<%= cell.name %>" class="<%- cls(['fi-ta-cell', 'fi-ta-cell-' + cell.cssName, cell.alignment && cell.alignment !== 'start' ? 'fi-align-' + cell.alignment : null, ...cell.responsive]) %>">
+                                    <td wire:key="<%= id %>.table.record.<%= row.key %>.column.<%= cell.name %>" <%- cell.attributes %> class="<%- cls(['fi-ta-cell', 'fi-ta-cell-' + cell.cssName, cell.alignment && cell.alignment !== 'start' ? 'fi-align-' + cell.alignment : null, ...cell.classes, ...cell.responsive]) %>"<% if (cell.style) { %> style="<%= cell.style %>"<% } %>>
                                         <% if (cell.mountExpression && !cell.url) { %>
                                             <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
                                             <button type="button" wire:click.prevent.stop="<%= cell.mountExpression %>" wire:loading.attr="disabled" wire:target="<%= cell.mountExpression %>" class="fi-ta-col">
@@ -734,7 +736,7 @@
                                             <% if (table.isStackedOnMobile()) { %></div><% } %>
                                         <% } else if (cell.url) { %>
                                             <% if (table.isStackedOnMobile()) { %><div class="fi-ta-cell-label"><%= cell.label %></div><div class="fi-ta-cell-content"><% } %>
-                                            <a href="<%= cell.url %>" x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }" class="fi-ta-col fi-ta-col-has-column-url">
+                                            <a href="<%= cell.url %>"<% if (cell.urlInNewTab) { %> target="_blank"<% } else { %> x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"<% } %> class="fi-ta-col fi-ta-col-has-column-url">
                                                 <%- cell.html %>
                                             </a>
                                             <% if (table.isStackedOnMobile()) { %></div><% } %>

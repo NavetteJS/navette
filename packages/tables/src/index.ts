@@ -5,12 +5,18 @@ import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
 import { applyConditions, loadRelationshipOptions, modelOfHost, type RelationshipQueryModifier } from './query-builder.ts';
+import { extraAttributesHtml, mergeExtraAttributes, mergeIntoFirstTag, resolveExtraAttributes, splitExtraAttributes, type ExtraAttributes, type ExtraAttributesSource } from './column-attributes.ts';
+import { formatIsoDate, formatMoney, formatNumber, limitText, limitWords, parseDateState, type MoneyFormatOptions, type NumericFormatOptions } from './formatting.ts';
+import { loadRelatedRecordOptions, type RelatedOptionsRequest } from './relationship-options.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 views.namespace('filament-tables', fileURLToPath(new URL('../views', import.meta.url)));
 export * from './query-builder.ts';
 export { makeTableSelectTable } from './table-select.ts';
+export * from './formatting.ts';
+export * from './column-attributes.ts';
+export { callTableColumnMethod, TABLE_COLUMN_METHODS } from './column-methods.ts';
 
 /** Render hook slots of a table. */
 export const TablesRenderHook = {
@@ -64,8 +70,47 @@ export abstract class Column<R = any> {
     protected _sortColumn: string | null = null;
     protected _searchColumn: string | null = null;
     protected _url: ((record: R) => string | null) | null = null;
-    /** Label of the column group this column belongs to (set by ColumnGroup). */
-    _group: string | null = null;
+    /** Column group this column belongs to (set by ColumnGroup). */
+    _group: ColumnGroup<R> | null = null;
+    // --- column options of Filament's Column (url in a new tab, click, tooltips, alignment, extra attributes)
+    protected _urlInNewTab: boolean | ((record: R) => boolean) = false;
+    protected _clickDisabled = false;
+    protected _headerTooltip: string | null = null;
+    protected _verticalAlignment: 'start' | 'center' | 'end' | null = null;
+    protected _extraAttributes: ExtraAttributesSource<R>[] = [];
+    protected _extraCellAttributes: ExtraAttributesSource<R>[] = [];
+    protected _extraHeaderAttributes: ExtraAttributes[] = [];
+    /** Opens the column's `url()` in a new tab. */
+    openUrlInNewTab(condition: boolean | ((record: R) => boolean) = true): this { this._urlInNewTab = condition; return this; }
+    shouldOpenUrlInNewTab(record?: R): boolean { return typeof this._urlInNewTab === 'function' ? Boolean(this._urlInNewTab(record as R)) : this._urlInNewTab; }
+    /** The cell is neither a link nor a button: the row's URL, the row's action and the column's own `url()` / `action()` are ignored. */
+    disabledClick(condition = true): this { this._clickDisabled = condition; return this; }
+    /** Tooltip on the column's header label. */
+    headerTooltip(tooltip: string | null): this { this._headerTooltip = tooltip; return this; }
+    getHeaderTooltip(): string | null { return this._headerTooltip; }
+    /** Vertical alignment of the cells: `start`, `center` or `end` (Filament's `fi-vertical-align-*` classes). */
+    verticalAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._verticalAlignment = alignment !== null && ['start', 'center', 'end'].includes(alignment) ? alignment : null; return this; }
+    verticallyAlignStart(condition = true): this { return this.verticalAlignment(condition ? 'start' : null); }
+    verticallyAlignCenter(condition = true): this { return this.verticalAlignment(condition ? 'center' : null); }
+    verticallyAlignEnd(condition = true): this { return this.verticalAlignment(condition ? 'end' : null); }
+    getVerticalAlignment(): 'start' | 'center' | 'end' | null { return this._verticalAlignment; }
+    /**
+     * Extra HTML attributes of the column's content element: an object, or a function of the record. `merge: true` adds them to
+     * those of an earlier call. Values are escaped and event handler attributes (`onclick`...) are dropped.
+     */
+    extraAttributes(attributes: ExtraAttributesSource<R>, merge = false): this { this._extraAttributes = merge ? [...this._extraAttributes, attributes] : [attributes]; return this; }
+    getExtraAttributes(record: R): ExtraAttributes { return resolveExtraAttributes(this._extraAttributes, record); }
+    /** Extra HTML attributes of the column's `<td>` cells (an object, or a function of the record). */
+    extraCellAttributes(attributes: ExtraAttributesSource<R>, merge = false): this { this._extraCellAttributes = merge ? [...this._extraCellAttributes, attributes] : [attributes]; return this; }
+    getExtraCellAttributes(record: R): ExtraAttributes { return resolveExtraAttributes(this._extraCellAttributes, record); }
+    /** Extra HTML attributes of the column's `<th>` header cell. */
+    extraHeaderAttributes(attributes: ExtraAttributes, merge = false): this { this._extraHeaderAttributes = merge ? [...this._extraHeaderAttributes, attributes] : [attributes]; return this; }
+    getExtraHeaderAttributes(): ExtraAttributes { return mergeExtraAttributes(this._extraHeaderAttributes); }
+    /** Cell content with the column's `extraAttributes()` added to its outer element. */
+    async renderHtml(record: R, recordKey?: string | number): Promise<string> {
+        const html = await this.toHtml(record, recordKey);
+        return this._extraAttributes.length ? mergeIntoFirstTag(html, this.getExtraAttributes(record)) : html;
+    }
 
     constructor(name: string) { this.name = name; }
     label(label: string): this { this._label = label; return this; }
@@ -79,8 +124,12 @@ export abstract class Column<R = any> {
     private _sortInverted = false;
     /** `inverted`: the sort column runs opposite to the displayed value (e.g. an age sorted by birth date). */
     isSortInverted(): boolean { return this._sortInverted; }
-    /** Link on the cell; takes precedence over the row action. */
-    url(resolver: (record: R) => string | null): this { this._url = resolver; return this; }
+    /** Link on the cell; takes precedence over the row action. `shouldOpenInNewTab`: same as `openUrlInNewTab()`. */
+    url(resolver: ((record: R) => string | null) | string | null, shouldOpenInNewTab: boolean | ((record: R) => boolean) | null = null): this {
+        this._url = resolver === null ? null : typeof resolver === 'function' ? resolver : () => resolver;
+        if (shouldOpenInNewTab !== null) this._urlInNewTab = shouldOpenInNewTab;
+        return this;
+    }
     protected _cellAction: string | { getName(): string } | null = null;
     /**
      * Clicking the cell runs an action on its record: the name of a record action of the table, or an `Action` (checked and
@@ -100,7 +149,12 @@ export abstract class Column<R = any> {
     }
     /** Lets the user hide the column from the column manager. */
     toggleable(condition = true, options: { isToggledHiddenByDefault?: boolean } = {}): this { this._toggleable = condition; this._toggledHiddenByDefault = options.isToggledHiddenByDefault === true; return this; }
-    alignment(alignment: 'start' | 'center' | 'end' | null): this { this._alignment = alignment; return this; }
+    /** Horizontal alignment: `start`, `center`, `end`, `left`, `right`, `justify` or `between`. */
+    alignment(alignment: 'start' | 'center' | 'end' | 'left' | 'right' | 'justify' | 'between' | null): this { this._alignment = alignment; return this; }
+    alignStart(condition = true): this { return this.alignment(condition ? 'start' : null); }
+    alignRight(condition = true): this { return this.alignment(condition ? 'right' : null); }
+    alignJustify(condition = true): this { return this.alignment(condition ? 'justify' : null); }
+    alignBetween(condition = true): this { return this.alignment(condition ? 'between' : null); }
     protected _visibleFrom: string | null = null;
     protected _hiddenFrom: string | null = null;
     protected _columnWidth: string | null = null;
@@ -122,9 +176,10 @@ export abstract class Column<R = any> {
     /** Lets a long label wrap in the header. */
     wrapHeader(condition = true): this { this._wrapHeader = condition; return this; }
     canHeaderWrap(): boolean { return this._wrapHeader; }
-    alignEnd(): this { return this.alignment('end'); }
-    alignLeft(): this { return this.alignment('left'); }
-    alignCenter(): this { return this.alignment('center'); }
+    alignEnd(condition = true): this { return this.alignment(condition ? 'end' : null); }
+    /** Left alignment, whatever the text direction (`alignStart()` follows it). */
+    alignLeft(condition = true): this { return this.alignment(condition ? 'left' : null); }
+    alignCenter(condition = true): this { return this.alignment(condition ? 'center' : null); }
     getStateUsing(resolver: StateResolver<R>): this { this._state = resolver; return this; }
     protected _enum: Enum<string | number> | null = null;
     /**
@@ -161,8 +216,8 @@ export abstract class Column<R = any> {
         const state = this._state ? await this._state({ record }) : (record as any)[this.name];
         return (state === null || state === undefined || state === '') && this._default !== null ? this._default : state;
     }
-    /** True for editable cells: they are not wrapped in a link or button to the record. */
-    isClickDisabled(): boolean { return false; }
+    /** True for editable cells and `disabledClick()`: they are not wrapped in a link or button to the record. */
+    isClickDisabled(): boolean { return this._clickDisabled; }
     abstract toHtml(record: R, recordKey?: string | number): Promise<string>;
 }
 
@@ -254,17 +309,55 @@ export class TextColumn<R = any> extends Column<R> {
     /** Text displayed instead of the raw value (e.g. an enum label). */
     formatStateUsing(formatter: (ctx: { state: unknown; record: R }) => string): this { this._format = formatter; return this; }
     /** Date in a PHP-style format, `M j, Y` by default ("Nov 9, 2026"). `timeZone`: IANA zone to display the date in. */
-    date(format: string | boolean = 'M j, Y', timeZone: string | null = null): this { this._date = format === false ? null : format === true ? 'M j, Y' : format; this._timeZone = timeZone; return this; }
+    date(format: string | boolean | null = 'M j, Y', timeZone: string | null = null): this { this._date = format === false ? null : format === true || format === null ? 'M j, Y' : format; this._dateKind = 'php'; if (timeZone !== null) this._timeZone = timeZone; return this; }
     /** Date and time, `M j, Y H:i:s` by default. */
-    dateTime(format: string | boolean = 'M j, Y H:i:s', timeZone: string | null = null): this { return this.date(format === true ? 'M j, Y H:i:s' : format, timeZone); }
+    dateTime(format: string | boolean | null = 'M j, Y H:i:s', timeZone: string | null = null): this { return this.date(format === true || format === null ? 'M j, Y H:i:s' : format, timeZone); }
     /** Time only, `H:i:s` by default. */
-    time(format = 'H:i:s', timeZone: string | null = null): this { return this.date(format, timeZone); }
-    /** Relative date, e.g. "2 days ago". */
-    since(condition = true): this { this._since = condition; return this; }
+    time(format: string | null = 'H:i:s', timeZone: string | null = null): this { return this.date(format ?? 'H:i:s', timeZone); }
+    private _dateKind: 'php' | 'iso' = 'php';
+    /** Date in a Carbon `isoFormat()` format, `L` by default ("11/09/2026"). */
+    isoDate(format: string | null = null, timeZone: string | null = null): this { this.date(format ?? 'L', timeZone); this._dateKind = 'iso'; return this; }
+    /** Date and time in an `isoFormat()` format, `LLL` by default ("November 9, 2026 2:30 PM"). */
+    isoDateTime(format: string | null = null, timeZone: string | null = null): this { return this.isoDate(format ?? 'LLL', timeZone); }
+    /** Time in an `isoFormat()` format, `LT` by default ("2:30 PM"). */
+    isoTime(format: string | null = null, timeZone: string | null = null): this { return this.isoDate(format ?? 'LT', timeZone); }
+    /** Relative date, e.g. "2 days ago". A string argument is the time zone (Filament's `since($timezone)`). */
+    since(condition: boolean | string | null = true): this { this._since = condition !== false; if (typeof condition === 'string') this._timeZone = condition; return this; }
+    /** Formats a date state for a tooltip; `null` for an empty or invalid state. */
+    private dateTooltipUsing(kind: 'php' | 'iso' | 'since', format: string, timeZone: string | null): this {
+        return this.tooltip((_record, state) => {
+            if (isBlankState(state)) return null;
+            const zone = timeZone ?? this._timeZone;
+            if (kind === 'since') return diffForHumans(state as string) ?? null;
+            if (kind === 'php') return formatDate(state, format, zone);
+            const date = parseDateState(state);
+            return date ? formatIsoDate(date, format, zone ?? 'UTC') : null;
+        });
+    }
+    /** Tooltip with the date in a PHP format (`M j, Y` by default), e.g. next to `since()`. */
+    dateTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('php', format ?? 'M j, Y', timeZone); }
+    dateTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('php', format ?? 'M j, Y H:i:s', timeZone); }
+    timeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('php', format ?? 'H:i:s', timeZone); }
+    /** Tooltip with the relative date ("2 days ago"). */
+    sinceTooltip(timeZone: string | null = null): this { return this.dateTooltipUsing('since', '', timeZone); }
+    /** Tooltips with the date in an `isoFormat()` format (`L`, `LLL` and `LT` by default). */
+    isoDateTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'L', timeZone); }
+    isoDateTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'LLL', timeZone); }
+    isoTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'LT', timeZone); }
     /** Time zone used by `date()`, `dateTime()` and `time()`. */
     timezone(timeZone: string | null): this { this._timeZone = timeZone; return this; }
-    /** Number formatted with thousands separators; `numeric(1)`: fixed number of decimals. */
-    numeric(condition: boolean | number = true): this { this._numeric = condition !== false; this._decimals = typeof condition === 'number' ? condition : null; return this; }
+    private _numericOptions: NumericFormatOptions = {};
+    /**
+     * Number formatted with thousands separators. `numeric(1)`: fixed number of decimals. Filament's other arguments follow
+     * (`decimalSeparator`, `thousandsSeparator`, `maxDecimalPlaces`, `locale`), or pass them in an object:
+     * `numeric({ decimalPlaces: 2, locale: 'fr' })`. Without separators, the number is formatted for `locale` (`en-US` by default).
+     */
+    numeric(condition: boolean | number | null | NumericFormatOptions = true, decimalSeparator: string | null = null, thousandsSeparator: string | null = null, maxDecimalPlaces: number | null = null, locale: string | null = null): this {
+        this._numeric = condition !== false;
+        this._numericOptions = condition !== null && typeof condition === 'object' ? { ...condition } : { decimalPlaces: typeof condition === 'number' ? condition : null, decimalSeparator, thousandsSeparator, maxDecimalPlaces, locale };
+        this._decimals = this._numericOptions.decimalPlaces ?? null;
+        return this;
+    }
     /** Font weight: `thin`, `light`, `medium`, `semibold`, `bold`… */
     weight(weight: PerItem<R, string | null>): this { this._weight = weight; return this; }
     /** Text size: `xs`, `sm` (default), `md` or `lg`. */
@@ -277,10 +370,17 @@ export class TextColumn<R = any> extends Column<R> {
     lineClamp(lines: number | null): this { this._lineClamp = lines; return this; }
     /** Renders inline (without a block layout), e.g. inside a stacked layout. */
     inline(condition = true): this { this._inline = condition; return this; }
-    /** Truncates the displayed text to `length` characters, followed by "...". */
-    limit(length: number | null): this { this._limit = length; return this; }
-    /** Truncates the displayed text to this number of words, followed by "...". */
-    words(count: number | null): this { this._words = count; return this; }
+    private _limitEnd: string | null = '...';
+    private _wordsEnd: string | null = '...';
+    /** Truncates the displayed text to `length` characters (100 by default), followed by `end` ("..."). Not applied to HTML. */
+    limit(length: number | null = 100, end: string | null = '...'): this { this._limit = length !== null && length > 0 ? Math.floor(length) : null; this._limitEnd = end; return this; }
+    /** Truncates the displayed text to this number of words (100 by default), followed by `end` ("..."). Not applied to HTML. */
+    words(count: number | null = 100, end: string | null = '...'): this { this._words = count !== null && count > 0 ? Math.floor(count) : null; this._wordsEnd = end; return this; }
+    /** Character limit of `limit()`, e.g. to show the full text in a tooltip only when it was truncated. */
+    getCharacterLimit(): number | null { return this._limit; }
+    getCharacterLimitEnd(): string | null { return this._limitEnd; }
+    getWordLimit(): number | null { return this._words; }
+    getWordLimitEnd(): string | null { return this._wordsEnd; }
     prefix(prefix: string | null): this { this._prefix = prefix; return this; }
     suffix(suffix: string | null): this { this._suffix = suffix; return this; }
     /** Tooltip on hover; `null` for none. */
@@ -290,8 +390,16 @@ export class TextColumn<R = any> extends Column<R> {
     copyableState(state: PerItem<R, string | null>): this { this._copyableState = state; return this; }
     copyMessage(message: string | null): this { this._copyMessage = message; return this; }
     copyMessageDuration(milliseconds: number): this { this._copyMessageDuration = milliseconds; return this; }
-    /** Amount formatted in the given currency, e.g. `money('usd')`. */
-    money(currency: string | ((record: R) => string) = 'usd'): this { this._money = currency; return this; }
+    private _moneyOptions: MoneyFormatOptions = {};
+    /**
+     * Amount formatted in the given currency, e.g. `money('usd')`. `divideBy`: divides the state first (`100` for cents); then
+     * `locale` (`en-US` by default) and `decimalPlaces`, or an options object in place of `divideBy`.
+     */
+    money(currency: string | ((record: R) => string) | null = 'usd', divideBy: number | MoneyFormatOptions | null = 0, locale: string | null = null, decimalPlaces: number | null = null): this {
+        this._money = currency ?? 'usd';
+        this._moneyOptions = divideBy !== null && typeof divideBy === 'object' ? { ...divideBy } : { divideBy, locale, decimalPlaces };
+        return this;
+    }
     /** Text displayed when the value is empty. */
     placeholder(text: string | null): this { this._placeholder = text; return this; }
     /** Secondary text below the value (`'below'`, the default) or above it. */
@@ -332,12 +440,16 @@ export class TextColumn<R = any> extends Column<R> {
         const enumCase = this.enumCaseOf(record, item);
         if (enumCase) text = enumCase.getLabel();
         else if (this._since) text = diffForHumans(item as string) ?? String(item);
+        else if (this._date !== null && this._dateKind === 'iso') { const date = parseDateState(item); text = date ? formatIsoDate(date, this._date, this._timeZone ?? 'UTC') : String(item); }
         else if (this._date !== null) text = formatDate(item, this._date, this._timeZone);
-        else if (currency && isNumericValue(item)) text = new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(Number(item));
-        else if (this._numeric && isNumericValue(item)) text = new Intl.NumberFormat('en-US', this._decimals !== null ? { minimumFractionDigits: this._decimals, maximumFractionDigits: this._decimals } : {}).format(Number(item));
+        else if (currency && isNumericValue(item)) text = formatMoney(Number(item), currency, this._moneyOptions);
+        else if (this._numeric && isNumericValue(item)) text = formatNumber(Number(item), this._numericOptions);
         else text = String(item);
-        if (this._limit !== null && text.length > this._limit) text = `${text.slice(0, this._limit).trimEnd()}...`;
-        if (this._words !== null) { const words = text.split(/\s+/); if (words.length > this._words) text = `${words.slice(0, this._words).join(' ')}...`; }
+        // As in Filament, HTML and Markdown states are not truncated (cutting them could break their markup).
+        if (!resolveItem(this._html, record, item) && !resolveItem(this._markdown, record, item)) {
+            if (this._limit !== null) text = limitText(text, this._limit, this._limitEnd);
+            if (this._words !== null) text = limitWords(text, this._words, this._wordsEnd);
+        }
         return `${this._prefix ?? ''}${text}${this._suffix ?? ''}`;
     }
     private stateItems(state: unknown): unknown[] {
@@ -487,9 +599,26 @@ export class Summarizer {
     getQueryScope(): ((query: any) => void) | null { return this._scope; }
     static make(): Summarizer { return configured(new Summarizer()); }
     label(label: string | null): this { this._label = label; return this; }
-    money(currency = 'usd'): this { this._money = currency.toUpperCase(); return this; }
-    /** Number formatting, with a fixed number of decimals. */
-    numeric(decimals: number | null = null): this { this._decimals = decimals; return this; }
+    protected _moneyOptions: MoneyFormatOptions = {};
+    protected _numericOptions: NumericFormatOptions = {};
+    protected _limit: { length: number; end: string | null } | null = null;
+    /** Amount of money: currency (`usd` by default), `divideBy` (100 for cents), `locale` and `decimalPlaces`, or an options object. */
+    money(currency: string | null = 'usd', divideBy: number | MoneyFormatOptions | null = 0, locale: string | null = null, decimalPlaces: number | null = null): this {
+        this._money = (currency ?? 'usd').toUpperCase();
+        this._moneyOptions = divideBy !== null && typeof divideBy === 'object' ? { ...divideBy } : { divideBy, locale, decimalPlaces };
+        return this;
+    }
+    /**
+     * Number formatting: `numeric(2)` for two decimals, then Filament's `decimalSeparator`, `thousandsSeparator`,
+     * `maxDecimalPlaces` and `locale`, or an options object (`numeric({ locale: 'fr' })`).
+     */
+    numeric(decimals: number | null | NumericFormatOptions = null, decimalSeparator: string | null = null, thousandsSeparator: string | null = null, maxDecimalPlaces: number | null = null, locale: string | null = null): this {
+        this._numericOptions = decimals !== null && typeof decimals === 'object' ? { ...decimals } : { decimalPlaces: decimals, decimalSeparator, thousandsSeparator, maxDecimalPlaces, locale };
+        this._decimals = this._numericOptions.decimalPlaces ?? null;
+        return this;
+    }
+    /** Truncates the formatted value to `length` characters (100 by default), followed by `end`. */
+    limit(length = 100, end: string | null = '...'): this { this._limit = { length: Math.max(0, Math.floor(length)), end }; return this; }
     prefix(prefix: string | null): this { this._prefix = prefix; return this; }
     suffix(suffix: string | null): this { this._suffix = suffix; return this; }
     /** Formats the value yourself (the result is escaped). */
@@ -510,9 +639,10 @@ export class Summarizer {
         let text: string;
         if (this._formatStateUsing) text = this._formatStateUsing(value) ?? '';
         else if (typeof value === 'number' && Number.isFinite(value)) {
-            const digits = this._decimals !== null ? { minimumFractionDigits: this._decimals, maximumFractionDigits: this._decimals } : {};
-            text = this._money ? new Intl.NumberFormat('en-US', { style: 'currency', currency: this._money, ...digits }).format(value) : new Intl.NumberFormat('en-US', digits).format(value);
+            // `numeric(2)` before `money()` keeps its decimals for the amount.
+            text = this._money ? formatMoney(value, this._money, { decimalPlaces: this._decimals, ...this._moneyOptions, ...(this._moneyOptions.decimalPlaces == null && this._decimals !== null ? { decimalPlaces: this._decimals } : {}) }) : formatNumber(value, this._numericOptions);
         } else text = value === null || value === undefined ? '' : String(value);
+        if (this._limit && text !== '') text = limitText(text, this._limit.length, this._limit.end);
         return `${this._prefix ?? ''}${text}${this._suffix ?? ''}`;
     }
     protected item(value: unknown, type: SummaryItem['type'] = 'text'): SummaryItem { return { type, label: this.getLabel(), value: this.format(value), labelHidden: this._labelHidden }; }
@@ -563,12 +693,40 @@ export class Values extends Summarizer {
 export class Range extends Summarizer {
     readonly kind = 'range';
     private _minimalDateTime = false;
+    private _minimalText = false;
+    private _excludeNull = true;
     static make(): Range { return configured(new Range()); }
     /** Dates: day only when the bounds fall on different days, day and time otherwise; a single value when both are equal. */
     minimalDateTimeDifference(condition = true): this { this._minimalDateTime = condition; return this; }
+    /** Text: each bound is cut after the first character that differs from the other ("Ad - Al" for "Ada" and "Alan"). */
+    minimalTextualDifference(condition = true): this { this._minimalText = condition; return this; }
+    /** `false`: empty values count as bounds too (null values never do: SQL's `min()` and `max()` skip them). */
+    excludeNull(condition = true): this { this._excludeNull = condition; return this; }
+    shouldExcludeNull(): boolean { return this._excludeNull; }
+    /** Filament's minimal textual difference of two bounds (case-insensitive comparison). */
+    static minimalTextualBounds(fromValue: string, toValue: string): string[] {
+        const originalFrom = fromValue.trim(), originalTo = toValue.trim();
+        const state = [originalFrom, originalTo].filter((value, index) => (index === 1 ? !(originalFrom === originalTo || originalTo === '') : originalFrom !== ''));
+        if (state.length !== 2) return state;
+        const fromCharacters = [...originalFrom], toCharacters = [...originalTo];
+        const isFromLonger = fromCharacters.length > toCharacters.length;
+        let from = '', to = '', index = 0;
+        for (const [characterIndex, character] of (isFromLonger ? toCharacters : fromCharacters).entries()) {
+            index = characterIndex;
+            from += isFromLonger ? fromCharacters[characterIndex] : character;
+            to += isFromLonger ? character : toCharacters[characterIndex];
+            if (from.toLowerCase() !== to.toLowerCase()) break;
+        }
+        if (from !== to) return [from, to];
+        index++;
+        if (isFromLonger) from += fromCharacters[index] ?? ''; else to += toCharacters[index] ?? '';
+        return [from, to];
+    }
     summarize(column: string, values: SummaryValues, _customValue?: unknown): SummaryItem | null {
-        let bounds = [values.min[column], values.max[column]].filter((v) => v !== null && v !== undefined && v !== '').map(String);
+        let bounds = [values.min[column], values.max[column]].filter((v) => v !== null && v !== undefined && (!this._excludeNull || v !== '')).map(String);
         if (!bounds.length) return null;
+        if (this._minimalText && bounds.length === 2) bounds = Range.minimalTextualBounds(bounds[0], bounds[1]);
+        if (this._limit) bounds = bounds.map((bound) => limitText(bound, this._limit!.length, this._limit!.end));
         if (this._minimalDateTime && bounds.length === 2) {
             const date = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
             const dateTime = (value: string) => `${date(value)} ${value.length > 10 ? value.slice(11, 19) : '00:00:00'}`;
@@ -793,19 +951,48 @@ async function renderColumnLayout<R>(node: Column<R> | ColumnLayout<R>, record: 
     if (!visible.has(node)) return '';
     const alignment = node.getAlignment();
     // Inside a layout, text is inline and carries its own alignment.
-    const html = (await node.toHtml(record, key)).replace(/class="([^"]*\bfi-ta-text\b[^"]*)"/, (_match, classes: string) => `class="${classes.replace(/ fi-align-\w+/g, '')} fi-inline${alignment ? ` fi-align-${alignment}` : ''}"`);
+    const html = (await node.renderHtml(record, key)).replace(/class="([^"]*\bfi-ta-text\b[^"]*)"/, (_match, classes: string) => `class="${classes.replace(/ fi-align-\w+/g, '')} fi-inline${alignment ? ` fi-align-${alignment}` : ''}"`);
     const cell = new Attributes().gridColumn({ default: 1 }).class([{ 'fi-growable': node.canGrow(true) }, 'fi-ta-col', ...(alignment ? [`fi-align-${alignment}`] : []), ...node.getResponsiveClasses()]);
     return `<div ${cell.toHtml()}>${html}</div>`;
 }
 
-/** Column group: a shared label above the column headers. */
+/** Column group: a shared label above the column headers, `ColumnGroup.make('Address', [columns])`. */
 export class ColumnGroup<R = any> {
-    private label: string;
+    /** Default setup for every group created afterwards by `make()`. */
+    static configureUsing(configure: (instance: ColumnGroup<any>) => void): void { configureUsing(ColumnGroup, configure); }
+    private _label: string;
     private _columns: Column<R>[] = [];
-    constructor(label: string) { this.label = label; }
-    static make<R = any>(label: string): ColumnGroup<R> { return configured(new ColumnGroup<R>(label)); }
-    columns(columns: Column<R>[]): this { this._columns = columns; for (const c of columns) c._group = this.label; return this; }
+    private _alignment: string | null = null;
+    private _wrapHeader = false;
+    private _visibleFrom: string | null = null;
+    private _hiddenFrom: string | null = null;
+    private _extraHeaderAttributes: ExtraAttributes[] = [];
+    constructor(label: string, columns: Column<R>[] = []) { this._label = label; this.columns(columns); }
+    static make<R = any>(label: string, columns: Column<R>[] = []): ColumnGroup<R> { return configured(new ColumnGroup<R>(label, columns)); }
+    label(label: string): this { this._label = label; return this; }
+    getLabel(): string { return this._label; }
+    columns(columns: Column<R>[]): this { this._columns = columns; for (const c of columns) c._group = this; return this; }
     getColumns(): Column<R>[] { return this._columns; }
+    /** Alignment of the group's header label: `start`, `center`, `end`... */
+    alignment(alignment: 'start' | 'center' | 'end' | 'left' | 'right' | 'justify' | 'between' | null): this { this._alignment = alignment !== null && ALIGNMENTS.includes(alignment) ? alignment : null; return this; }
+    alignStart(condition = true): this { return this.alignment(condition ? 'start' : null); }
+    alignCenter(condition = true): this { return this.alignment(condition ? 'center' : null); }
+    alignEnd(condition = true): this { return this.alignment(condition ? 'end' : null); }
+    alignLeft(condition = true): this { return this.alignment(condition ? 'left' : null); }
+    alignRight(condition = true): this { return this.alignment(condition ? 'right' : null); }
+    getAlignment(): string | null { return this._alignment; }
+    /** Lets a long group label wrap. */
+    wrapHeader(condition = true): this { this._wrapHeader = condition; return this; }
+    canHeaderWrap(): boolean { return this._wrapHeader; }
+    visibleFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._visibleFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
+    hiddenFrom(breakpoint: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | null): this { this._hiddenFrom = breakpoint !== null && BREAKPOINTS.includes(breakpoint) ? breakpoint : null; return this; }
+    /** Extra HTML attributes of the group's header cell. */
+    extraHeaderAttributes(attributes: ExtraAttributes, merge = false): this { this._extraHeaderAttributes = merge ? [...this._extraHeaderAttributes, attributes] : [attributes]; return this; }
+    getExtraHeaderAttributes(): ExtraAttributes { return mergeExtraAttributes(this._extraHeaderAttributes); }
+    /** Classes of the group's `<th>`, as Filament renders it. */
+    getHeaderClasses(): string[] {
+        return ['fi-ta-header-group-cell', ...(this._wrapHeader ? ['fi-wrapped'] : []), ...(this._alignment ? [`fi-align-${this._alignment}`] : []), ...(this._hiddenFrom ? [`${this._hiddenFrom}:fi-hidden`] : []), ...(this._visibleFrom ? [`${this._visibleFrom}:fi-visible`] : [])];
+    }
 }
 
 /** Only plain CSS lengths are written into a style attribute. */
@@ -906,6 +1093,17 @@ export class ImageColumn<R = any> extends Column<R> {
     placeholder(text: string | null): this { this._placeholder = text; return this; }
     wrap(condition = true): this { this._wrap = condition; return this; }
     inline(condition = true): this { this._inline = condition; return this; }
+    private _extraImgAttributes: ExtraAttributesSource<R>[] = [];
+    /**
+     * Extra HTML attributes of each `<img>`: an object, or a function of the record and the image's state item (e.g.
+     * `{ loading: 'lazy' }`). Values are escaped; `src`, `alt` and event handlers cannot be set this way.
+     */
+    extraImgAttributes(attributes: ExtraAttributesSource<R>, merge = false): this { this._extraImgAttributes = merge ? [...this._extraImgAttributes, attributes] : [attributes]; return this; }
+    getExtraImgAttributes(record: R, state: unknown = null): ExtraAttributes {
+        const attributes = resolveExtraAttributes(this._extraImgAttributes, record, state);
+        for (const name of Object.keys(attributes)) if (['src', 'srcset', 'alt'].includes(name.toLowerCase())) delete attributes[name];
+        return attributes;
+    }
     async toHtml(record: R): Promise<string> {
         let state = await this.getState(record);
         const align = this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null;
@@ -925,7 +1123,8 @@ export class ImageColumn<R = any> extends Column<R> {
         const images = items.map((item) => {
             const alt = resolveItem(this._alt, record, item) ?? '';
             const tooltip = resolveItem(this._tooltip, record, item);
-            return `<img alt="${e(alt)}" src="${e(String(item))}"${tooltip ? ` x-tooltip="${e(tooltipAttribute(tooltip))}"` : ''} style="${style}" />`;
+            const img = `<img alt="${e(alt)}" src="${e(String(item))}"${tooltip ? ` x-tooltip="${e(tooltipAttribute(tooltip))}"` : ''} style="${style}" />`;
+            return this._extraImgAttributes.length ? mergeIntoFirstTag(img, this.getExtraImgAttributes(record, item)) : img;
         }).join('');
         const remaining = overLimit && this._limitedRemainingText ? `<div class="${cls(['fi-ta-image-limited-remaining-text', this._limitedRemainingTextSize ? `fi-size-${this._limitedRemainingTextSize}` : null])}" style="${style}">+${overLimit}</div>` : '';
         return `<div class="${cls(classes)}">${images}${remaining}</div>`;
@@ -1175,13 +1374,96 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     private _inline = false;
     static make<R = any>(name: string): SelectColumn<R> { return configured(new SelectColumn<R>(name)); }
     /** `{ value: label }` pairs, `[value, label]` pairs, or a function of the record returning either. */
-    options(options: SelectColumnOptions | ((record: R) => SelectColumnOptions | Promise<SelectColumnOptions>)): this { this._options = typeof options === 'function' ? options : normalizeSelectOptions(options); return this; }
+    options(options: SelectColumnOptions | ((record: R) => SelectColumnOptions | Promise<SelectColumnOptions>)): this { this._options = typeof options === 'function' ? options : normalizeSelectOptions(options); this._rememberedOptions = null; return this; }
     /** Static options (empty when they depend on the record: use `getOptionsFor()`). */
     getOptions(): [string, string][] { return typeof this._options === 'function' ? [] : this._options; }
+    /**
+     * Options of a record. Relationship options are listed only when they are not searched on the server (`searchableOptions()`
+     * without `preloadOptions()`). With `rememberOptions()` (on by default for relationships), they are computed once per request.
+     */
     async getOptionsFor(record: R): Promise<[string, string][]> {
-        if (this._optionsRelationship) return (this._relationshipOptions ??= loadRelationshipOptions((record as any)?.constructor, this._optionsRelationship.name, this._optionsRelationship.title, this._optionsRelationship.modify));
-        return typeof this._options === 'function' ? normalizeSelectOptions(await this._options(record)) : this._options;
+        if (this._optionsRelationship) {
+            if (this.hasLazyRelationshipOptions()) return [];
+            const load = () => this.loadRelationshipOptionsFor(record, {});
+            return this.areOptionsRemembered() ? (this._relationshipOptions ??= load()) : load();
+        }
+        if (typeof this._options !== 'function') return this._options;
+        const resolve = async () => normalizeSelectOptions(await (this._options as (record: R) => SelectColumnOptions | Promise<SelectColumnOptions>)(record));
+        return this.areOptionsRemembered() ? (this._rememberedOptions ??= resolve()) : resolve();
     }
+    private _rememberedOptions: Promise<[string, string][]> | null = null;
+    private _rememberOptions: boolean | null = null;
+    /** Computes the options once per request (every row of the page then gets the first record's options). */
+    rememberOptions(condition = true): this { this._rememberOptions = condition; return this; }
+    areOptionsRemembered(): boolean { return this._rememberOptions ?? this._optionsRelationship !== null; }
+    private _preloadOptions = false;
+    /** With `searchableOptions()` and `optionsRelationship()`: lists the related records up front, instead of only on search. */
+    preloadOptions(condition = true): this { this._preloadOptions = condition; return this; }
+    areOptionsPreloaded(): boolean { return this._preloadOptions; }
+    private hasLazyRelationshipOptions(): boolean { return this._optionsRelationship !== null && this._searchable && !this._preloadOptions; }
+    private _searchResultsUsing: ((search: string, record: R) => SelectColumnOptions | Promise<SelectColumnOptions>) | null = null;
+    private _optionLabelUsing: ((value: string, record: R) => string | null | Promise<string | null>) | null = null;
+    private _optionLabelFromRecordUsing: ((relatedRecord: any) => string | Promise<string>) | null = null;
+    private _optionsSearchColumns: string[] | null = null;
+    /**
+     * Search results computed on the server for each search term (implies `searchableOptions()`): `{ value: label }` or
+     * `[value, label]` pairs. Pair it with `getOptionLabelUsing()`: a value is only accepted when it has a label.
+     */
+    getOptionsSearchResultsUsing(callback: ((search: string, record: R) => SelectColumnOptions | Promise<SelectColumnOptions>) | null): this { this._searchResultsUsing = callback; if (callback) this._searchable = true; return this; }
+    /** Label of a value (e.g. one found by `getOptionsSearchResultsUsing()`); a value without label is refused when saving. */
+    getOptionLabelUsing(callback: ((value: string, record: R) => string | null | Promise<string | null>) | null): this { this._optionLabelUsing = callback; return this; }
+    /** `optionsRelationship()`: label of an option computed from the related record, e.g. `(author) => \`${author.first_name} ${author.last_name}\``. */
+    getOptionLabelFromRecordUsing(callback: ((relatedRecord: any) => string | Promise<string>) | null): this { this._optionLabelFromRecordUsing = callback; this._relationshipOptions = null; return this; }
+    hasDynamicSearchResults(): boolean { return this._searchResultsUsing !== null || this.hasLazyRelationshipOptions(); }
+    /** Options of a relationship column, loaded with its query modifier and label callback. */
+    private loadRelationshipOptionsFor(record: R, request: RelatedOptionsRequest): Promise<[string, string][]> {
+        const relationship = this._optionsRelationship!;
+        return loadRelatedRecordOptions((record as any)?.constructor, relationship.name, relationship.title, { modify: relationship.modify, labelFromRecord: this._optionLabelFromRecordUsing, searchColumns: this._optionsSearchColumns, ...request });
+    }
+    /** Results of a search typed in the JavaScript select. Static options are searched in the browser: nothing is returned. */
+    async getOptionsSearchResults(record: R, search: string): Promise<[string, string][]> {
+        const term = String(search ?? '').slice(0, 1000);
+        if (this._searchResultsUsing) return normalizeSelectOptions(await this._searchResultsUsing(term, record)).slice(0, Math.max(1, this._optionsLimit));
+        if (this._optionsRelationship) return this.loadRelationshipOptionsFor(record, { search: term, limit: this._optionsLimit });
+        return [];
+    }
+    /** Label of a value for a record: `getOptionLabelUsing()`, the related record, or the matching option; `null` when unknown. */
+    async getOptionLabelFor(record: R, value: unknown): Promise<string | null> {
+        if (value === null || value === undefined || value === '' || (typeof value !== 'string' && typeof value !== 'number')) return null;
+        const key = String(value);
+        if (this._optionLabelUsing) { const label = await this._optionLabelUsing(key, record); return label === null || label === undefined || label === '' ? null : String(label); }
+        if (this._optionsRelationship) return (await this.loadRelationshipOptionsFor(record, { keys: [key] }))[0]?.[1] ?? null;
+        return (await this.getOptionsFor(record)).find(([option]) => option === key)?.[1] ?? null;
+    }
+    /** Option shape of the JavaScript select. */
+    private optionsForJs(options: [string, string][], record: R): { label: string; value: string; isDisabled: boolean }[] {
+        return options.map(([option, label]) => ({ label: this.labelForDisplay(label), value: option, isDisabled: this.isOptionDisabled(option, label, record) }));
+    }
+    /** Methods of the JavaScript select, called through `callTableColumnMethod()`. */
+    async getOptionsForJsFor(record: R): Promise<unknown[]> { return this.optionsForJs(await this.getOptionsFor(record), record); }
+    async getOptionsSearchResultsForJsFor(record: R, search: string): Promise<unknown[]> { return this.optionsForJs(await this.getOptionsSearchResults(record, search), record); }
+    async getOptionLabelForJs(record: R): Promise<string | null> { const label = await this.getOptionLabelFor(record, await this.getState(record)); return label === null ? null : this.labelForDisplay(label); }
+    private _searchDebounce = 1000;
+    /** Delay before a server-side search runs, in milliseconds (1000 by default). */
+    optionsSearchDebounce(milliseconds: number): this { this._searchDebounce = Math.max(0, Math.floor(milliseconds)); return this; }
+    getOptionsSearchDebounce(): number { return this._searchDebounce; }
+    private _messages: { loading?: string | null; noOptions?: string | null; noSearchResults?: string | null; searchPrompt?: string | null; searching?: string | null } = {};
+    optionsLoadingMessage(message: string | null): this { this._messages.loading = message; return this; }
+    noOptionsMessage(message: string | null): this { this._messages.noOptions = message; return this; }
+    noOptionsSearchResultsMessage(message: string | null): this { this._messages.noSearchResults = message; return this; }
+    optionsSearchPrompt(message: string | null): this { this._messages.searchPrompt = message; return this; }
+    optionsSearchingMessage(message: string | null): this { this._messages.searching = message; return this; }
+    getOptionsLoadingMessage(): string { return this._messages.loading ?? t('filament-forms::components.select.loading_message'); }
+    getNoOptionsMessage(): string { return this._messages.noOptions ?? t('filament-tables::table.columns.select.no_options_message'); }
+    getNoOptionsSearchResultsMessage(): string { return this._messages.noSearchResults ?? t('filament-tables::table.columns.select.no_search_results_message'); }
+    getOptionsSearchPrompt(): string { return this._messages.searchPrompt ?? t('filament-tables::table.columns.select.search_prompt'); }
+    getOptionsSearchingMessage(): string { return this._messages.searching ?? t('filament-tables::table.columns.select.searching_message'); }
+    private _searchOptionLabels = true;
+    private _searchOptionValues = false;
+    /** Fields the JavaScript select searches in, among the options it already has: labels (by default) and values. */
+    searchOptionLabels(condition = true): this { this._searchOptionLabels = condition; return this; }
+    searchOptionValues(condition = true): this { this._searchOptionValues = condition; return this; }
+    getSearchableOptionFields(): string[] { return [...(this._searchOptionLabels ? ['label'] : []), ...(this._searchOptionValues ? ['value'] : [])]; }
     private _optionsRelationship: { name: string; title: string | null; modify: RelationshipQueryModifier | null } | null = null;
     private _relationshipOptions: Promise<[string, string][]> | null = null;
     /**
@@ -1200,9 +1482,19 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     private _allowHtml = false;
     /** Option labels are HTML, sanitized on the server (JavaScript select only; the native select shows their text). */
     allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    /** Filament's name of `allowHtml()`. */
+    allowOptionsHtml(condition = true): this { return this.allowHtml(condition); }
     private labelForDisplay(label: string): string { return !this._allowHtml ? label : this.isNative() ? label.replace(/<[^>]*>/g, '') : sanitizeHtml(label); }
-    /** A search field in the select (implies a JavaScript select). */
-    searchableOptions(condition = true): this { this._searchable = condition; return this; }
+    /**
+     * A search field in the select (implies a JavaScript select). With `optionsRelationship()`, the related records are then
+     * searched on the server; an array names the related columns searched (the title attribute by default).
+     */
+    searchableOptions(condition: boolean | string[] = true): this {
+        this._searchable = Array.isArray(condition) ? true : condition;
+        this._optionsSearchColumns = Array.isArray(condition) ? condition.filter((column) => typeof column === 'string') : null;
+        this._relationshipOptions = null;
+        return this;
+    }
     isNative(): boolean { return this._native && !this._searchable; }
     /** Options that cannot be chosen. A disabled option is also refused on the server. */
     disableOptionWhen(callback: (value: string, label: string, record: R) => boolean): this { this._disabledOptions.push(callback); return this; }
@@ -1212,24 +1504,25 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     optionsLimit(limit: number): this { this._optionsLimit = limit; return this; }
     /** `false`: long option labels are truncated in the JavaScript select instead of wrapping. */
     allowOptionsLabelsWrap(condition = true): this { this._canOptionLabelsWrap = condition; return this; }
+    /** Filament's name of `allowOptionsLabelsWrap()`. */
+    wrapOptionLabels(condition = true): this { return this.allowOptionsLabelsWrap(condition); }
     /** Side where the JavaScript select's dropdown opens (automatic by default). */
     position(position: 'top' | 'bottom' | null): this { this._position = position; return this; }
     inline(condition = true): this { this._inline = condition; return this; }
     protected getImplicitRules(): ColumnValidationRule[] {
-        // Options that depend on the record are checked by `validateFor()`.
-        if (typeof this._options === 'function' || this._optionsRelationship) return [];
+        // Options that depend on the record, or come from a search, are checked by `validateFor()`.
+        if (typeof this._options === 'function' || this._optionsRelationship || this._optionLabelUsing || this._searchResultsUsing) return [];
         const options = this._options;
         return [{ name: 'in', passes: (v) => (typeof v === 'string' || typeof v === 'number') && options.some(([value]) => value === String(v)), message: (a) => `The selected ${a} is invalid.` }];
     }
-    /** The value must be one of the record's options, and not a disabled one. */
+    /**
+     * As in Filament, a value is valid when it has a label: one of the record's options, the related record (in the modified
+     * relationship query), or `getOptionLabelUsing()`. A disabled option is refused too.
+     */
     async validateFor(record: R, input: unknown): Promise<string | null> {
         if (!isBlank(input)) {
-            // Relationship options: the received key must be one of the related model's records (in the modified query).
-            const options = this._optionsRelationship && (typeof input === 'string' || typeof input === 'number')
-                ? await loadRelationshipOptions((record as any)?.constructor, this._optionsRelationship.name, this._optionsRelationship.title, this._optionsRelationship.modify, [String(input)])
-                : await this.getOptionsFor(record);
-            const option = (typeof input === 'string' || typeof input === 'number') ? options.find(([value]) => value === String(input)) : undefined;
-            if (!option || this.isOptionDisabled(option[0], option[1], record)) return this._validationMessages.in ?? `The selected ${this.getValidationAttribute()} is invalid.`;
+            const label = await this.getOptionLabelFor(record, input);
+            if (label === null || this.isOptionDisabled(String(input), label, record)) return this._validationMessages.in ?? `The selected ${this.getValidationAttribute()} is invalid.`;
         }
         return this.validate(input);
     }
@@ -1237,12 +1530,16 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         const state = await this.getState(record);
         const value = state === null || state === undefined ? '' : String(state);
         const options = await this.getOptionsFor(record);
-        const found = options.find(([option]) => option === value)?.[1] ?? null;
+        // A value missing from the listed options (searched on the server) gets its label from `getOptionLabelFor()`.
+        const found = options.find(([option]) => option === value)?.[1] ?? (value !== '' && (this.hasDynamicSearchResults() || this._optionLabelUsing) ? await this.getOptionLabelFor(record, value) : null);
         const optionLabel = found === null ? null : this.labelForDisplay(found);
         const isDisabled = await this.isDisabledFor(record);
         const isNative = this.isNative();
         const placeholder = this._placeholder ?? t('filament-forms::components.select.placeholder');
-        const optionsForJs = isNative ? [] : options.map(([option, label]) => ({ label: this.labelForDisplay(label), value: option, isDisabled: this.isOptionDisabled(option, label, record) }));
+        const optionsForJs = isNative ? [] : this.optionsForJs(options, record);
+        // As in Filament: options depending on the record are fetched again when the select opens.
+        const hasDynamicOptions = !isNative && (typeof this._options === 'function' || (this._optionsRelationship !== null && !this.hasLazyRelationshipOptions()));
+        const hasInitialNoOptionsMessage = this._optionsRelationship !== null ? this._preloadOptions || !this._searchable : !this.hasDynamicSearchResults();
         const config = `selectTableColumn({
                     accessibilityAttributes: [],
                     ariaLabel: ${js(this.getLabel())},
@@ -1250,29 +1547,29 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
                     canSelectPlaceholder: ${js(this._selectablePlaceholder)},
                     clearButtonLabel: ${js(t('filament-forms::components.select.actions.clear.label'))},
                     errorMessage: ${js(t('filament-forms::components.select.error_message'))},
-                    hasDynamicOptions: false,
-                    hasDynamicSearchResults: false,
-                    hasInitialNoOptionsMessage: true,
+                    hasDynamicOptions: ${js(hasDynamicOptions)},
+                    hasDynamicSearchResults: ${js(this.hasDynamicSearchResults())},
+                    hasInitialNoOptionsMessage: ${js(hasInitialNoOptionsMessage)},
                     initialOptionLabel: ${js(optionLabel)},
                     isDisabled: ${js(isDisabled)},
                     isHtmlAllowed: ${js(this._allowHtml && !isNative)},
                     isNative: ${js(isNative)},
                     isSearchable: ${js(this._searchable)},
-                    loadingMessage: ${js(t('filament-forms::components.select.loading_message'))},
+                    loadingMessage: ${js(this.getOptionsLoadingMessage())},
                     messages: ${js(this.getUpdateStateMessages())},
                     name: ${js(this.name)},
-                    noOptionsMessage: ${js(t('filament-forms::components.select.no_options_message'))},
-                    noSearchResultsMessage: ${js(t('filament-forms::components.select.no_search_results_message'))},
+                    noOptionsMessage: ${js(this.getNoOptionsMessage())},
+                    noSearchResultsMessage: ${js(this.getNoOptionsSearchResultsMessage())},
                     options: ${js(optionsForJs)},
                     optionsLimit: ${js(this._optionsLimit)},
                     placeholder: ${js(placeholder)},
                     position: ${js(this._position)},
                     recordKey: ${js(String(recordKey))},
-                    searchableOptionFields: ${js(['label'])},
-                    searchDebounce: 1000,
-                    searchingMessage: ${js(t('filament-forms::components.select.searching_message'))},
+                    searchableOptionFields: ${js(this.getSearchableOptionFields())},
+                    searchDebounce: ${js(this._searchDebounce)},
+                    searchingMessage: ${js(this.getOptionsSearchingMessage())},
                     searchLabel: ${js(t('filament-forms::components.select.search_label'))},
-                    searchPrompt: ${js(t('filament-forms::components.select.search_prompt'))},
+                    searchPrompt: ${js(this.getOptionsSearchPrompt())},
                     state: ${js(state === null || state === undefined ? null : value)},
                 })`;
         const tooltip = this.tooltipExpression(record, isNative ? null : 'triggerTarget: $el.isConnected && select ? select.selectButton : null,');
@@ -1490,6 +1787,10 @@ export interface TableFilter {
     removeIndicator?(state: FilterState, field: string): FilterState;
     /** Data loaded from the database before indicators are computed (e.g. related record labels). */
     loadIndicatorData?(state: FilterState, host: TableHost): Promise<void>;
+    /** Changes the base query (`baseQuery()`), outside the filters' own conditions. */
+    applyToBaseQuery?(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void;
+    /** `true`: the filter is not applied when a row action resolves its record (`excludeWhenResolvingRecord()`). */
+    shouldExcludeWhenResolvingRecord?(): boolean;
 }
 
 const filterLabel = (name: string) => name.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -1550,6 +1851,32 @@ abstract class BaseFilter implements TableFilter {
     indicateUsing(callback: ((data: FilterState) => IndicatorResult) | null): this { this._indicateUsing = callback; return this; }
     /** Query condition built from the sanitized state, replacing the default one. */
     query(modifier: (query: any, data: FilterState) => void): this { this._query = modifier; return this; }
+    /** Filament's name of `query()`. */
+    modifyQueryUsing(modifier: (query: any, data: FilterState) => void): this { return this.query(modifier); }
+    protected _baseQuery: ((query: any, data: FilterState) => void) | null = null;
+    /**
+     * Changes the table's base query, whatever the filter's state (unless it is an unchecked checkbox filter), e.g. to include
+     * soft-deleted records or join a table. Its conditions are not grouped with the other filters'.
+     */
+    baseQuery(modifier: ((query: any, data: FilterState) => void) | null): this { this._baseQuery = modifier; return this; }
+    /** Filament's long name of `baseQuery()`. */
+    modifyBaseQueryUsing(modifier: ((query: any, data: FilterState) => void) | null): this { return this.baseQuery(modifier); }
+    applyToBaseQuery(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void {
+        if (!this._baseQuery) return;
+        const data = this.sanitizeState(state);
+        if (data.isActive === false) return;
+        const modifier = this._baseQuery;
+        (query.modifiers ??= []).push((q) => { modifier(q, data); });
+    }
+    protected _excludeWhenResolvingRecord = false;
+    /** Row actions find their record even when it does not match this filter (by default, a record must match every filter). */
+    excludeWhenResolvingRecord(condition = true): this { this._excludeWhenResolvingRecord = condition; return this; }
+    shouldExcludeWhenResolvingRecord(): boolean { return this._excludeWhenResolvingRecord; }
+    protected _modifyFormField: ((field: any) => any) | null = null;
+    /** Changes the form field of the filter (select, checkbox or toggle), e.g. `(field) => field.native(false)`. */
+    modifyFormFieldUsing(callback: ((field: any) => any) | null): this { this._modifyFormField = callback; return this; }
+    /** The form field, after `modifyFormFieldUsing()`. */
+    protected modifiedFormField<T>(field: T): T { return this._modifyFormField ? (this._modifyFormField(field) ?? field) : field; }
     /** Width of the filter in the filters form grid. */
     columnSpan(span: number | string | Record<string, number | string>): this { this._columnSpan = typeof span === 'object' ? span : { default: span }; return this; }
     columnSpanFull(): this { return this.columnSpan('full'); }
@@ -1624,9 +1951,15 @@ export class SelectFilter extends BaseFilter {
         if (this._relationship) return this.loadRelationshipOptions(host, null);
         return typeof this._options === 'function' ? this._options() : Promise.resolve(this._options);
     }
+    private _optionLabelFromRecordUsing: ((relatedRecord: any) => string | Promise<string>) | null = null;
+    /** `relationship()`: label of an option (and of the indicator) computed from the related record instead of the title attribute. */
+    getOptionLabelFromRecordUsing(callback: ((relatedRecord: any) => string | Promise<string>) | null): this { this._optionLabelFromRecordUsing = callback; return this; }
     private async loadRelationshipOptions(host: unknown, keys: string[] | null): Promise<[string, string][]> {
         const relation = this._relationship!;
-        const options = await loadRelationshipOptions(modelOfHost(host), relation.name, relation.title, relation.modify, keys === null ? null : keys.filter((key) => key !== EMPTY_RELATIONSHIP_OPTION));
+        const relatedKeys = keys === null ? null : keys.filter((key) => key !== EMPTY_RELATIONSHIP_OPTION);
+        const options = this._optionLabelFromRecordUsing
+            ? await loadRelatedRecordOptions(modelOfHost(host), relation.name, relation.title, { keys: relatedKeys, modify: relation.modify, labelFromRecord: this._optionLabelFromRecordUsing })
+            : await loadRelationshipOptions(modelOfHost(host), relation.name, relation.title, relation.modify, relatedKeys);
         return relation.empty && (keys === null || keys.includes(EMPTY_RELATIONSHIP_OPTION)) ? [[EMPTY_RELATIONSHIP_OPTION, this.getEmptyRelationshipOptionLabel()], ...options] : options;
     }
     /** Options are evaluated on every render, so the select gets a key derived from them (forces a re-render when they change). */
@@ -1636,7 +1969,7 @@ export class SelectFilter extends BaseFilter {
         if (this._multiple) select.multiple();
         if (this._searchable) select.searchable();
         if (!this._selectablePlaceholder) select.selectablePlaceholder(false);
-        return [select];
+        return [this.modifiedFormField(select)];
     }
     private defaultValues(): string[] { return (Array.isArray(this._default) ? this._default : this._default === undefined || this._default === null ? [] : [this._default]).map(filterValue).filter((v): v is string => v !== null); }
     getResetState(): FilterState { return this._multiple ? { values: [] } : { value: null }; }
@@ -1714,7 +2047,7 @@ export class TernaryFilter extends BaseFilter {
     getFormDefinition() { return { placeholder: this._placeholder ?? '-', options: [['1', this.getTrueLabel()], ['0', this.getFalseLabel()]] as [string, string][] }; }
     getFormComponents(): unknown[] {
         const definition = this.getFormDefinition();
-        return [Select.make('value').label(this.getLabel()).placeholder(definition.placeholder).options(definition.options)];
+        return [this.modifiedFormField(Select.make('value').label(this.getLabel()).placeholder(definition.placeholder).options(definition.options))];
     }
     getResetState(): FilterState { return { value: null }; }
     getDefaultState(): FilterState { return { value: this._default === true || this._default === 1 || this._default === '1' ? '1' : this._default === false || this._default === 0 || this._default === '0' ? '0' : null }; }
@@ -1777,7 +2110,7 @@ export class Filter extends BaseFilter {
     private hasSchema(): boolean { return this._components.length > 0; }
     getFormComponents(): unknown[] {
         if (this.hasSchema()) return this._components;
-        return (this._formComponents ??= [(this._toggle ? Toggle : Checkbox).make('isActive').label(this.getLabel())]);
+        return (this._formComponents ??= [this.modifiedFormField((this._toggle ? Toggle : Checkbox).make('isActive').label(this.getLabel()))]);
     }
     private fields(): unknown[] { return this.getFormComponents().filter((c: any) => typeof c?.getName === 'function'); }
     getResetState(): FilterState { return this.hasSchema() ? Object.fromEntries(this.fields().map((c: any) => [String(c.getName()), null])) : { isActive: false }; }
@@ -1997,7 +2330,7 @@ export class Table<R = any> {
     /** Toolbar actions other than bulk action groups. */
     getToolbarActions(): any[] { return this._toolbarActions.filter((action) => !(action instanceof BulkActionGroup)); }
     /** Row actions: `Action`s or an `ActionGroup` (dropdown). */
-    recordActions(actions: any[]): this { this._recordActions = actions; return this; }
+    recordActions(actions: any[]): this { this._recordActions = actions; this.modifyUngroupedRecordActions(); return this; }
     getRecordActions(): any[] { return this._recordActions; }
     /** Actions given to columns with `action()` (not those named after a record action). */
     getColumnActions(): any[] { return this.getColumns().map((column) => column.getAction()).filter((action) => action !== null); }
@@ -2049,20 +2382,57 @@ export class Table<R = any> {
     /** "Select all" only selects the records of the current page. */
     selectCurrentPageOnly(condition = true): this { this._selectsCurrentPageOnly = condition; return this; }
     selectsCurrentPageOnly(): boolean { return this._selectsCurrentPageOnly; }
+    private _selectable: boolean | null = null;
+    /**
+     * Record checkboxes: `true` shows them without bulk actions (for actions using `accessSelectedRecords()`), `false` hides them
+     * even with bulk actions. By default (`null`), they are shown when a bulk action is visible.
+     */
+    selectable(condition: boolean | null = true): this { this._selectable = condition; return this; }
+    isSelectable(): boolean | null { return this._selectable; }
+    private _selectsGroupsOnly = false;
+    /** Records are selected group by group: no "select all" link and no page checkbox (grouped tables). */
+    selectGroupsOnly(condition = true): this { this._selectsGroupsOnly = condition; return this; }
+    selectsGroupsOnly(): boolean { return this._selectsGroupsOnly; }
+    private _deselectAllRecordsWhenFiltered = true;
+    /**
+     * `false`: the selection survives filtering and searching; "select all" then only selects the listed keys (deselected records
+     * are not tracked), and selected records are not restricted to the current filters.
+     */
+    deselectAllRecordsWhenFiltered(condition = true): this { this._deselectAllRecordsWhenFiltered = condition; return this; }
+    shouldDeselectAllRecordsWhenFiltered(): boolean { return this._deselectAllRecordsWhenFiltered; }
+    private _modifyUngroupedRecordActions: ((action: any) => unknown) | null = null;
+    private _modifiedRecordActions = new WeakSet<object>();
+    /**
+     * Changes every record action that is not in an `ActionGroup`, e.g. `(action) => action.iconButton()`. It applies to the
+     * actions given to `recordActions()`, before or after this call.
+     */
+    modifyUngroupedRecordActionsUsing(callback: ((action: any) => unknown) | null = null): this { this._modifyUngroupedRecordActions = callback; this.modifyUngroupedRecordActions(); return this; }
+    private modifyUngroupedRecordActions(): void {
+        const modify = this._modifyUngroupedRecordActions;
+        if (!modify) return;
+        for (const action of this._recordActions) {
+            if (!action || typeof action !== 'object' || typeof action.getActions === 'function' || this._modifiedRecordActions.has(action)) continue;
+            this._modifiedRecordActions.add(action);
+            modify(action);
+        }
+    }
     /** `false`: filters apply as soon as a field changes, without the "Apply" button. */
     deferFilters(condition = true): this { this._deferFilters = condition; return this; }
-    private _filterActions: Partial<Record<'trigger' | 'apply' | 'reset', (action: FiltersAction) => FiltersAction | void>> = {};
+    private _filterActions: Partial<Record<'trigger' | 'apply' | 'reset' | 'removeAll', (action: FiltersAction) => FiltersAction | void>> = {};
+    /** Customizes the "Remove all filters" button next to the filter indicators (`hidden()` removes it). */
+    filtersRemoveAllAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.removeAll = configure; return this; }
     /** Customizes the button that opens the filters: `filtersTriggerAction((action) => action.button().label('Filter'))`. */
     filtersTriggerAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.trigger = configure; return this; }
     /** Customizes the "Apply" button of deferred filters. */
     filtersApplyAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.apply = configure; return this; }
     /** Customizes the "Reset" button (`hidden()` removes it). */
     filtersResetAction(configure: (action: FiltersAction) => FiltersAction | void): this { this._filterActions.reset = configure; return this; }
-    getFiltersActionView(kind: 'trigger' | 'apply' | 'reset'): FiltersActionView {
+    getFiltersActionView(kind: 'trigger' | 'apply' | 'reset' | 'removeAll'): FiltersActionView {
         const defaults = {
             trigger: { label: t('filament-tables::table.actions.filter.label'), icon: icons.resolve('tables::actions.filter') ?? 'm-funnel', color: 'gray', view: 'icon-button' as const },
             apply: { label: t('filament-tables::table.filters.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const },
             reset: { label: t('filament-tables::table.filters.actions.reset.label'), icon: null, color: this._filtersResetPosition === 'footer' ? 'gray' : 'danger', view: this._filtersResetPosition === 'footer' ? 'button' as const : 'link' as const },
+            removeAll: { label: t('filament-tables::table.filters.actions.remove_all.label'), icon: icons.resolve('tables::filters.remove-all-button') ?? 'm-x-mark', color: 'gray', view: 'icon-button' as const },
         }[kind];
         const configure = this._filterActions[kind];
         if (!configure) return { ...defaults, hidden: false, customized: false };
@@ -2111,6 +2481,8 @@ export class Table<R = any> {
     persistSortInSession(condition = true): this { this._persist.sort = condition; return this; }
     private _persistGrouping = false;
     persistGroupingInSession(condition = true): this { this._persistGrouping = condition; return this; }
+    /** Filament's name of `persistGroupingInSession()`. */
+    persistGroupInSession(condition = true): this { return this.persistGroupingInSession(condition); }
     persistsGroupingInSession(): boolean { return this._persistGrouping; }
     persistsFiltersInSession(): boolean { return this._persist.filters; }
     persistsSearchInSession(): boolean { return this._persist.search; }
@@ -2217,11 +2589,32 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
     // The host can restrict the query (active list tab).
     (host as any).modifyTableQuery?.(query);
     for (const modifier of table.getQueryModifiers()) (query.modifiers ??= []).push((q) => { modifier(q); });
-    for (const filter of table.getFilters()) {
-        const state = host.tableFilters?.[filter.name];
-        filter.apply(query, state && typeof state === 'object' ? state : filter.getDefaultState());
-    }
+    applyTableFilters(table, host, query);
     return query;
+}
+/**
+ * Applies the filters to a query: every filter's `baseQuery()` first, then the filters' conditions. `resolvingRecord`: filters
+ * marked `excludeWhenResolvingRecord()` are left out (a row action resolving its record).
+ */
+export function applyTableFilters<R>(table: Table<R>, host: TableHost, query: Omit<ListQuery, 'page' | 'perPage'>, options: { resolvingRecord?: boolean } = {}): void {
+    const stateOf = (filter: TableFilter) => { const state = host.tableFilters?.[filter.name]; return state && typeof state === 'object' ? state : filter.getDefaultState(); };
+    for (const filter of table.getFilters()) filter.applyToBaseQuery?.(query, stateOf(filter));
+    for (const filter of table.getFilters()) {
+        if (options.resolvingRecord && filter.shouldExcludeWhenResolvingRecord?.()) continue;
+        filter.apply(query, stateOf(filter));
+    }
+}
+/**
+ * Whether a record still matches the applied filters, as Filament checks when a row action resolves its record; filters marked
+ * `excludeWhenResolvingRecord()` are left out.
+ */
+export async function recordMatchesTableFilters<R>(table: Table<R>, host: TableHost, adapter: Pick<DataAdapter<R>, 'listKeys'>, key: string): Promise<boolean> {
+    if (!table.getFilters().length) return true;
+    const query: Omit<ListQuery, 'page' | 'perPage'> = { keys: [key] };
+    applyTableFilters(table, host, query, { resolvingRecord: true });
+    if (!query.modifiers?.length && query.trashed === undefined) return true;
+    // Without a trashed filter, soft-deleted records are left to the caller's own lookup.
+    return (await adapter.listKeys({ ...query, trashed: query.trashed ?? 'with' })).length > 0;
 }
 /** Current grouping: only a group declared by the table is accepted, whatever state the browser sends. */
 export function getTableGrouping<R>(table: Table<R>, host: TableHost): { group: Group<R>; direction: SortDirection } | null {
@@ -2259,13 +2652,14 @@ export async function isTableFilterRemovable<R>(table: Table<R>, host: TableHost
 }
 
 /** Markup of a customized filters action: an icon button, a button or a link, with an optional badge. */
-function filterActionHtml(view: FiltersActionView, attributes: string, badge: string | null, forceEnabled = false): string {
+function filterActionHtml(view: FiltersActionView, attributes: string, badge: string | null, forceEnabled = false, size = 'md'): string {
     const force = forceEnabled ? ['fi-force-enabled'] : [];
+    const sizeClass = `fi-size-${/^(xs|sm|md|lg|xl)$/.test(size) ? size : 'md'}`;
     const colors = (component: 'button' | 'link' | 'icon-button') => (view.color && view.color !== 'gray' ? (colorManager?.getComponentClasses(component, view.color) ?? []) : []);
     const iconHtml = view.icon ? icon(view.icon) : '';
-    if (view.view === 'icon-button') return `<button title="${e(view.label)}" aria-label="${e(view.label)}" ${attributes} class="${cls(['fi-force-enabled', 'fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-md', ...colors('icon-button')])}">${iconHtml}${badge !== null ? `<div class="fi-icon-btn-badge-ctn">${badge}</div>` : ''}</button>`;
-    if (view.view === 'link') return `<button ${attributes} class="${cls([...force, 'fi-ac-link-action', 'fi-link', 'fi-size-md', ...colors('link')])}">${iconHtml}<span class="fi-link-label">${e(view.label)}</span>${badge !== null ? `<div class="fi-link-badge-ctn">${badge}</div>` : ''}</button>`;
-    return `<button ${attributes} class="${cls([...force, 'fi-ac-btn-action', 'fi-btn', 'fi-size-md', ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="fi-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+    if (view.view === 'icon-button') return `<button title="${e(view.label)}" aria-label="${e(view.label)}" ${attributes} class="${cls(['fi-force-enabled', 'fi-ac-icon-btn-action', 'fi-icon-btn', sizeClass, ...colors('icon-button')])}">${iconHtml}${badge !== null ? `<div class="fi-icon-btn-badge-ctn">${badge}</div>` : ''}</button>`;
+    if (view.view === 'link') return `<button ${attributes} class="${cls([...force, 'fi-ac-link-action', 'fi-link', sizeClass, ...colors('link')])}">${iconHtml}<span class="fi-link-label">${e(view.label)}</span>${badge !== null ? `<div class="fi-link-badge-ctn">${badge}</div>` : ''}</button>`;
+    return `<button ${attributes} class="${cls([...force, 'fi-ac-btn-action', 'fi-btn', sizeClass, ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="fi-btn-badge-ctn">${badge}</div>` : ''}</button>`;
 }
 
 /** Keys whose record passes `checkIfRecordIsSelectableUsing()`, loaded in chunks. Without a check, the keys are returned as they are. */
@@ -2493,7 +2887,8 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     // Bulk action menus: those given, or one "Bulk actions" menu with `bulkActions`; menus without a visible action are left out.
     const bulkMenus = (options.bulkActionGroups ?? ((options.bulkActions ?? []).length ? [BulkActionGroup.make([]).toMenu(options.bulkActions!)] : [])).filter((menu) => menu.actions.length > 0);
     const bulkActionsHtml = bulkMenus.flatMap((menu) => menu.actions);
-    const hasBulk = bulkActionsHtml.length > 0 || selectionOnly;
+    // `selectable()`: checkboxes without bulk actions, or none at all; otherwise as soon as a bulk action is visible.
+    const hasBulk = selectionOnly || (table.isSelectable() ?? bulkActionsHtml.length > 0);
     const selectable = (hasBulk || reordering) && !groupsOnly;
     const filled = (value: string | null) => value !== null && value.trim() !== '';
     // A new group starts when the title changes; the previous group then gets its summary row.
@@ -2521,7 +2916,18 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         }
         previousGroup = { key: groupKey, title: groupTitle };
         const cells = [];
-        if (!groupsOnly) for (const column of visible) cells.push({ name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url: column.getUrl(record), html: await column.toHtml(record, key), plain: column.isClickDisabled(), mountExpression: !reordering && column.getActionName() !== null && !column.isClickDisabled() ? `mountAction(${js(column.getActionName())}, {}, ${js({ table: true, recordKey: key })})` : null });
+        if (!groupsOnly) for (const column of visible) {
+            const clickDisabled = column.isClickDisabled();
+            const url = clickDisabled ? null : column.getUrl(record);
+            const cellAttributes = splitExtraAttributes(column.getExtraCellAttributes(record));
+            cells.push({
+                name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url, html: await column.renderHtml(record, key), plain: clickDisabled,
+                urlInNewTab: url !== null && column.shouldOpenUrlInNewTab(record),
+                // `fi-vertical-align-*` and `extraCellAttributes()` of the `<td>`.
+                classes: [...(column.getVerticalAlignment() ? [`fi-vertical-align-${column.getVerticalAlignment()}`] : []), ...cellAttributes.classes], attributes: cellAttributes.html, style: cellAttributes.style,
+                mountExpression: !reordering && column.getActionName() !== null && !clickDisabled ? `mountAction(${js(column.getActionName())}, {}, ${js({ table: true, recordKey: key })})` : null,
+            });
+        }
         const recordAction = table.getRecordAction();
         if (reordering) for (const cell of cells) cell.url = null;
         let contentHtml: string | null = null;
@@ -2578,22 +2984,33 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         allCount: table.getPaginationMode() === 'simple' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length : page.total,
         selection: selectionOnly ? { property: options.selection!.property, disabled: options.selection!.disabled === true } : null,
         maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() === 'simple' ? rows.length : page.total,
-        columns: visible.map((c) => ({ name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), responsive: c.getResponsiveClasses(), width: c.getWidth(), growable: c.getWidth() === null && c.canGrow(), wrapHeader: c.canHeaderWrap(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none' })),
+        columns: visible.map((c) => {
+            const header = splitExtraAttributes(c.getExtraHeaderAttributes());
+            return {
+                name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), responsive: c.getResponsiveClasses(), width: c.getWidth(), growable: c.getWidth() === null && c.canGrow(), wrapHeader: c.canHeaderWrap(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none',
+                // `headerTooltip()` and `extraHeaderAttributes()`.
+                tooltip: c.getHeaderTooltip(), headerClasses: header.classes, headerAttributes: header.html, headerStyle: header.style,
+                labelHtml: c.getHeaderTooltip() ? `<span x-tooltip="${e(`{\n                                                                    content: ${js(c.getHeaderTooltip())},\n                                                                    theme: $store.theme,\n                                                                }`)}" class="fi-ta-header-cell-tooltip">${e(c.getLabel())}</span>` : e(c.getLabel()),
+            };
+        }),
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'), grayButtonClasses: classes('button', 'gray'), indicatorColorClasses: (color: string) => classes('badge', color),
         bulkActions: bulkActionsHtml, bulkMenus, bulkMenuColors: (component: 'button' | 'icon-button', color: string) => (color === 'gray' ? [] : (colorManager?.getComponentClasses(component, color) ?? [])),
         filtersForm: options.filtersForm ?? null, activeFiltersCount: countActiveFilters(table, host), filtersLayout: table.getFiltersLayout(), filterIndicators: table.areFilterIndicatorsHidden() ? [] : getFilterIndicators(table, host),
-        filterActions: { trigger: table.getFiltersActionView('trigger'), apply: table.getFiltersActionView('apply'), reset: table.getFiltersActionView('reset') },
-        filterActionHtml: (view: FiltersActionView, attributes: string, badge: string | null = null, forceEnabled = false) => filterActionHtml(view, attributes, badge, forceEnabled),
+        filterActions: { trigger: table.getFiltersActionView('trigger'), apply: table.getFiltersActionView('apply'), reset: table.getFiltersActionView('reset'), removeAll: table.getFiltersActionView('removeAll') },
+        filterActionHtml: (view: FiltersActionView, attributes: string, badge: string | null = null, forceEnabled = false, size = 'md') => filterActionHtml(view, attributes, badge, forceEnabled, size),
         filtersDeferred: table.hasDeferredFilters(), filtersResetPosition: table.getFiltersResetActionPosition(), filtersFormWidth: table.getFiltersFormWidth(), filtersFormMaxHeight: table.getFiltersFormMaxHeight(), modal,
         hasColumnManager: !reordering && table.hasToggleableColumns(),
         afterContainer: options.after ?? '', heading: table.getHeading(), headerActions: options.headerActions ?? [], summaryHtml: summary?.html ?? '', trailingGroupSummary,
         // Column group header row: one cell per ungrouped column, one merged cell per run of columns in the same group.
-        headerGroups: visible.some((c) => c._group !== null) ? visible.reduce<{ label: string | null; span: number }[]>((runs, c) => {
+        headerGroups: visible.some((c) => c._group !== null) ? visible.reduce<{ group: ColumnGroup<R> | null; label: string | null; span: number; classes: string[]; attributes: string; style: string | null }[]>((runs, c) => {
             const last = runs[runs.length - 1];
-            if (c._group !== null && last && last.label === c._group) last.span++;
-            else runs.push({ label: c._group, span: 1 });
+            if (c._group !== null && last && last.group === c._group) { last.span++; return runs; }
+            const extra = c._group ? splitExtraAttributes(c._group.getExtraHeaderAttributes()) : { classes: [], html: '', style: null };
+            runs.push({ group: c._group, label: c._group?.getLabel() ?? null, span: 1, classes: c._group ? [...c._group.getHeaderClasses(), ...extra.classes] : [], attributes: extra.html, style: extra.style });
             return runs;
         }, []) : null,
+        selectsGroupsOnly: table.selectsGroupsOnly(),
+        canTrackDeselectedRecords: !selectionOnly && table.shouldDeselectAllRecordsWhenFiltered(),
         isSearchable: !reordering && table.getColumns().some((c) => c.isGloballySearchable()),
         emptyState: { custom: await table.getCustomEmptyState(), heading: table.getEmptyStateHeading(), description: table.getEmptyStateDescription(), icon: table.getEmptyStateIcon(), actions: options.emptyStateActions ?? [] },
         pagination: reordering || groupsOnly || !table.isPaginated() ? '' : views.render('filament::components.pagination', {
