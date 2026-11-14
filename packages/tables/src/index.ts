@@ -1,6 +1,6 @@
 // @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
-import { Attributes, cls, e, hasRenderHook, icon, icons, js, markdownToHtml, renderHook, sanitizeHtml, views, type ColorManager, configured, configureUsing } from '@navette-js/support';
+import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
@@ -122,6 +122,14 @@ export abstract class Column<R = any> {
     alignLeft(): this { return this.alignment('left'); }
     alignCenter(): this { return this.alignment('center'); }
     getStateUsing(resolver: StateResolver<R>): this { this._state = resolver; return this; }
+    protected _enum: Enum<string | number> | null = null;
+    /**
+     * Displays values through an enum (label, color, icon), like Filament does for an attribute cast to an enum. Without it,
+     * the enum of the model's `static casts` is used, and so is a state that is already an enum case.
+     */
+    enum(enumeration: Enum<string | number> | null): this { this._enum = enumeration; return this; }
+    /** Enum case of a state item, or `null`. */
+    protected enumCaseOf(record: R, item: unknown): EnumCase<string | number> | null { return resolveEnumCase(item, { enum: this._enum, record, attribute: this.name }); }
     /** Fixed state, or a function of the record (alias of `getStateUsing()` for a value). */
     state(state: unknown | ((record: R) => unknown)): this { this._state = typeof state === 'function' ? ({ record }) => (state as (record: R) => unknown)(record) : () => state; return this; }
     protected _default: unknown = null;
@@ -319,7 +327,9 @@ export class TextColumn<R = any> extends Column<R> {
         if (this._format) return String(this._format({ state: item, record }) ?? '');
         let text: string;
         const currency = typeof this._money === 'function' ? this._money(record) : this._money;
-        if (this._since) text = diffForHumans(item as string) ?? String(item);
+        const enumCase = this.enumCaseOf(record, item);
+        if (enumCase) text = enumCase.getLabel();
+        else if (this._since) text = diffForHumans(item as string) ?? String(item);
         else if (this._date !== null) text = formatDate(item, this._date, this._timeZone);
         else if (currency && isNumericValue(item)) text = new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() }).format(Number(item));
         else if (this._numeric && isNumericValue(item)) text = new Intl.NumberFormat('en-US', this._decimals !== null ? { minimumFractionDigits: this._decimals, maximumFractionDigits: this._decimals } : {}).format(Number(item));
@@ -335,8 +345,8 @@ export class TextColumn<R = any> extends Column<R> {
     }
     private hasDescriptions(): boolean { return this._descriptionAbove !== null || this._descriptionBelow !== null; }
     /** Plain value without per-item options: Filament's short markup. */
-    private canRenderOptimized(state: unknown): boolean {
-        return !Array.isArray(state) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && this._tooltip === null
+    private canRenderOptimized(state: unknown, record: R): boolean {
+        return !Array.isArray(state) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && !this.enumCaseOf(record, state)?.getIcon() && this._tooltip === null
             && this._copyable === false && this._weight === null && this._fontFamily === null && this._lineClamp === null && this._size === null && !this.hasDescriptions() && !this._wrap && this._html === false && this._markdown === false;
     }
     private alignClass(): string | null { return this._alignment && this._alignment !== 'start' ? `fi-align-${this._alignment}` : null; }
@@ -348,9 +358,9 @@ export class TextColumn<R = any> extends Column<R> {
         if (isBlankState(state)) {
             return `<div class="${cls(this.containerClasses())}">${this._placeholder !== null ? `<p class="fi-ta-placeholder">${e(this._placeholder)}</p>` : ''}</div>`;
         }
-        if (this.canRenderOptimized(state)) {
+        if (this.canRenderOptimized(state, record)) {
             let html = e(this.formatItem(state, record));
-            const color = resolveItem(this._color, record, state);
+            const color = resolveItem(this._color, record, state) ?? this.enumCaseOf(record, state)?.getColor() ?? null;
             if (this._badge) {
                 const badgeColor = color ?? 'primary';
                 html = `<span class="${cls(['fi-badge', 'fi-size-sm', ...(badgeColor !== 'gray' ? (colorManager?.getComponentClasses('badge', badgeColor) ?? []) : [])])}">${html}</span>`;
@@ -374,10 +384,10 @@ export class TextColumn<R = any> extends Column<R> {
 
         const itemData = (item: unknown) => {
             const formatted = collapsedHtml !== null ? collapsedHtml.replace(/<[^>]+>/g, '') : this.formatItem(item, record);
-            const color = resolveItem(this._color, record, item) ?? (this._badge ? 'primary' : null);
+            const color = resolveItem(this._color, record, item) ?? this.enumCaseOf(record, item)?.getColor() ?? (this._badge ? 'primary' : null);
             const sizeOption = resolveItem(this._size, record, item);
             const size = sizeOption === 'base' ? 'md' : sizeOption ?? 'sm';
-            const iconName = this._icon === null ? null : resolveItem(this._icon, record, item);
+            const iconName = (this._icon === null ? null : resolveItem(this._icon, record, item)) ?? this.enumCaseOf(record, item)?.getIcon() ?? null;
             const iconColor = resolveItem(this._iconColor, record, item);
             const iconHtml = iconName ? icon(iconName, { size: size === 'md' ? 'md' : size === 'lg' ? 'lg' : 'sm', attributes: new Attributes({ 'aria-hidden': 'true' }).class(iconColor ? (colorManager?.getComponentClasses('icon-column', iconColor) ?? []) : []) }) : '';
             const copyable = resolveItem(this._copyable, record, item);
@@ -616,6 +626,8 @@ export class Group<R = any> {
     getTitle(record: R): string | null {
         if (this._title) return this._title(record);
         const key = this.getStringKey(record);
+        const enumeration = this._keyUsing ? null : enumCast(record, this.getColumn());
+        if (key !== null && enumeration) return enumeration.getLabel(key);
         if (key !== null && this._date) return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${key}T00:00:00Z`));
         return key;
     }
@@ -924,7 +936,7 @@ export class IconColumn<R = any> extends Column<R> {
 
     private isBooleanItem(item: unknown): boolean { return this._boolean || typeof item === 'boolean'; }
     private iconOf(record: R, item: unknown): string | null {
-        const own = this._icon === null ? null : resolveItem(this._icon, record, item);
+        const own = (this._icon === null ? null : resolveItem(this._icon, record, item)) ?? this.enumCaseOf(record, item)?.getIcon();
         if (own) return own;
         if (!this.isBooleanItem(item) || item === null || item === undefined) return null;
         const on = item === true || item === 1 || item === '1';
@@ -932,7 +944,7 @@ export class IconColumn<R = any> extends Column<R> {
         return chosen === false ? null : chosen ?? (on ? icons.resolve('tables::columns.icon-column.true') ?? 'o-check-circle' : icons.resolve('tables::columns.icon-column.false') ?? 'o-x-circle');
     }
     private colorOf(record: R, item: unknown): string | null {
-        const own = this._color === null ? null : resolveItem(this._color, record, item);
+        const own = (this._color === null ? null : resolveItem(this._color, record, item)) ?? this.enumCaseOf(record, item)?.getColor();
         if (own) return own;
         if (!this.isBooleanItem(item) || item === null || item === undefined) return null;
         const on = item === true || item === 1 || item === '1';
@@ -952,7 +964,7 @@ export class IconColumn<R = any> extends Column<R> {
             const tooltip = resolveItem(this._tooltip, record, item);
             const attributes = new Attributes(tooltip ? { 'x-tooltip': tooltipAttribute(tooltip) } : {}).class(color ? (colorManager?.getComponentClasses('icon-column', color) ?? []) : []);
             // The icon is hidden from assistive technology: a text alternative goes with it.
-            const alternative = tooltip ? tooltip : this.isBooleanItem(item) ? t(`filament-tables::table.columns.icon.boolean.${item === true || item === 1 || item === '1' ? 'true' : 'false'}`) : (typeof item === 'string' || typeof item === 'number') ? String(item) : null;
+            const alternative = tooltip ? tooltip : this.enumCaseOf(record, item)?.getLabel() ?? (this.isBooleanItem(item) ? t(`filament-tables::table.columns.icon.boolean.${item === true || item === 1 || item === '1' ? 'true' : 'false'}`) : (typeof item === 'string' || typeof item === 'number') ? String(item) : null);
             return `${icon(name, { size: (size && size !== 'base' ? size : 'lg') as any, attributes })}${alternative ? `<span class="fi-sr-only">${e(alternative)}</span>` : ''}`;
         }).join('');
         return `<div class="${cls([...base, this._listWithLineBreaks ? 'fi-ta-icon-has-line-breaks' : null, this._wrap ? 'fi-wrapped' : null])}">${html}</div>`;
@@ -1110,8 +1122,8 @@ export abstract class EditableColumn<R = any> extends Column<R> {
 /**
  * In-cell editable select (native select only). The received value must be one of the declared options.
  */
-export type SelectColumnOptions = [string, string][] | Record<string, string>;
-const normalizeSelectOptions = (options: SelectColumnOptions): [string, string][] => (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
+export type SelectColumnOptions = [string, string][] | Record<string, string> | Enum<string | number>;
+const normalizeSelectOptions = (options: SelectColumnOptions): [string, string][] => isEnum(options) ? options.options() : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
 
 export class SelectColumn<R = any> extends EditableColumn<R> {
     private _options: [string, string][] | ((record: R) => SelectColumnOptions | Promise<SelectColumnOptions>) = [];
@@ -1542,8 +1554,8 @@ export class SelectFilter extends BaseFilter {
     attribute(column: string): this { return this.column(column); }
     getColumn(): string { return this._column ?? this.name; }
     /** Fixed options, or an async function (e.g. records of a relationship). */
-    options(options: [string, string][] | Record<string, string> | (() => Promise<[string, string][]>)): this {
-        this._options = typeof options === 'function' ? options : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
+    options(options: [string, string][] | Record<string, string> | Enum<string | number> | (() => Promise<[string, string][]>)): this {
+        this._options = typeof options === 'function' ? options : normalizeSelectOptions(options);
         return this;
     }
     /** Several values can be picked: records matching any of them are shown. */

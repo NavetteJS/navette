@@ -172,6 +172,8 @@ return new Table()
 
 `getTitleFromRecordUsing()` is an alias of `getTitleUsing()`. The title is escaped.
 
+When the attribute is cast to an [enum](/advanced/enums#casting-model-attributes-to-an-enum) on the model, the label of each value is the title of its group.
+
 ### Disabling the title label prefix
 
 By default, the title is prefixed with the label of the group. To disable this prefix, use the `titlePrefixedWithLabel(false)` method:

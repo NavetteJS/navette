@@ -17,7 +17,7 @@ SelectFilter.make('status')
     })
 ```
 
-The options that are passed to `options()` are the values the user can choose from, and their labels. They may also be an array of `[value, label]` pairs:
+The options that are passed to `options()` are the values the user can choose from, and their labels. They may also be an [enum](/advanced/enums#using-an-enum-for-field-options), or an array of `[value, label]` pairs:
 
 ```ts
 import { SelectFilter } from '@navette-js/tables';

@@ -66,6 +66,8 @@ ToggleButtons.make('status')
 
 Buttons without a color use `primary`. The colors are those registered on the panel.
 
+If you are using an [enum](/advanced/enums#enum-colors) for the options, its colors are used, unless you set others with `colors()`.
+
 ## Adding icons to option buttons
 
 You can add icons to the option buttons using the `icons()` method. Each key in the object should correspond to an option value, and each value is a Heroicons name prefixed with `o-`, `s-` or `m-`:
@@ -100,6 +102,8 @@ ToggleButtons.make('status')
         published: 'm-check-circle',
     })
 ```
+
+If you are using an [enum](/advanced/enums#enum-icons) for the options, its icons are used, unless you set others with `icons()`.
 
 ## Boolean options
 

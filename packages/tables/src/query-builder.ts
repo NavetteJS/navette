@@ -7,7 +7,7 @@ import type { ListQuery } from '@navette-js/database';
 import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette-js/forms';
 import { Block, Builder, colorsOf, iconActionButton, isItemKey, shortKey, writeState } from '@navette-js/forms/builder';
 import { Component, Group, Schema } from '@navette-js/schemas';
-import { Attributes, e, icons, js, views, configured } from '@navette-js/support';
+import { Attributes, e, icons, isEnum, js, views, configured, type Enum } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { createHash } from 'node:crypto';
 import type { FilterIndicator, FilterState, TableFilter, TableHost } from './index.ts';
@@ -429,9 +429,9 @@ export class SelectConstraint extends Constraint {
     private _multiple = false;
     private _searchable = false;
     static make(name: string): SelectConstraint { return configured(new SelectConstraint(name, 'select', icons.resolve('query-builder::constraints.select') ?? 'm-chevron-up-down')); }
-    /** Options as `[value, label]` pairs or `{ value: label }`; only these values can filter. */
-    options(options: [string | number, string][] | Record<string, string>): this {
-        this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
+    /** Options as `[value, label]` pairs, `{ value: label }` or an enum; only these values can filter. */
+    options(options: [string | number, string][] | Record<string, string> | Enum<string | number>): this {
+        this._options = isEnum(options) ? options.options() : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
         return this;
     }
     getOptions(): [string, string][] { return this._options; }

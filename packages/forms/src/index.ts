@@ -1,5 +1,5 @@
 // @navette-js/forms — form fields (Field, TextInput, Select, Checkbox…) and server-side validation.
-import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, sanitizeHtml, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, isEnum, js, sanitizeHtml, views, type ColorManager, type Enum, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
 import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem } from '@navette-js/schemas';
@@ -194,10 +194,10 @@ export abstract class Field extends Component {
     hexColor(): this { return this.stringRuleWith('hex_color'); }
     multipleOf(value: number): this { return this.stringRuleWith('multiple_of', [value]); }
     /** The value must be one of these (a list, or the values of an enum-like object). */
-    in(values: readonly (string | number)[] | Record<string, string | number>): this { const allowed = (Array.isArray(values) ? values : Object.values(values)).map(String); return this.rule({ name: 'in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
+    in(values: readonly (string | number)[] | Record<string, string | number> | Enum<string | number>): this { const allowed = (isEnum(values) ? values.values() : Array.isArray(values) ? values : Object.values(values)).map(String); return this.rule({ name: 'in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
     notIn(values: readonly (string | number)[]): this { const denied = values.map(String); return this.rule({ name: 'not_in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => !denied.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
-    /** `in()` with the values of an enum-like object. */
-    enum(values: Record<string, string | number>): this { return this.in(values); }
+    /** `in()` with the values of an enum (`defineEnum()`, `nativeEnum()`) or of an enum-like object. */
+    enum(values: Record<string, string | number> | Enum<string | number>): this { return this.in(values); }
     startsWith(prefixes: string | string[]): this { return this.stringRuleWith('starts_with', [prefixes].flat()); }
     endsWith(suffixes: string | string[]): this { return this.stringRuleWith('ends_with', [suffixes].flat()); }
     doesntStartWith(prefixes: string | string[]): this { return this.stringRuleWith('doesnt_start_with', [prefixes].flat()); }
@@ -779,6 +779,8 @@ export class TextInput extends Field {
 }
 
 type Options = [string, string][] | Record<string, string>;
+/** `[value, label]` pairs of options given as pairs, as `{ value: label }` or as an enum. */
+const optionPairs = (options: Options | Enum<string | number>): [string, string][] => (isEnum(options) ? options.options() : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]));
 /** Options, possibly grouped: `{ 'In process': { draft: 'Draft', reviewing: 'Reviewing' }, Reviewed: { … } }`. */
 type GroupedOptions = Options | Record<string, string | Record<string, string>> | [string, string | [string, string][]][];
 type OptionGroup = { label: string; options: [string, string][] };
@@ -825,7 +827,7 @@ function inputAffixHtml(side: 'prefix' | 'suffix', options: { label: string | nu
  * which queries the server through the exposed methods (`getSearchResultsForJs`…).
  */
 export class Select extends Field {
-    private _options: GroupedOptions | ((ctx: ComponentContext) => GroupedOptions | Promise<GroupedOptions>) = [];
+    private _options: GroupedOptions | Enum<string | number> | ((ctx: ComponentContext) => GroupedOptions | Enum<string | number> | Promise<GroupedOptions | Enum<string | number>>) = [];
     private _placeholder: string | null = null;
     private _searchable = false;
     private _native = true;
@@ -856,7 +858,7 @@ export class Select extends Field {
      * `dynamic: false`: options come from a function but stay fixed for the page's lifetime (announced as static to the browser).
      * `searchOnServer: false`: search runs in the browser, among the options already sent (for a complete list).
      */
-    options(options: GroupedOptions | ((ctx: ComponentContext) => GroupedOptions | Promise<GroupedOptions>), config: { dynamic?: boolean; searchOnServer?: boolean } = {}): this { this._options = options; this._dynamic = config.dynamic ?? null; this._searchOnServer = config.searchOnServer ?? null; return this; }
+    options(options: GroupedOptions | Enum<string | number> | ((ctx: ComponentContext) => GroupedOptions | Enum<string | number> | Promise<GroupedOptions | Enum<string | number>>), config: { dynamic?: boolean; searchOnServer?: boolean } = {}): this { this._options = options; this._dynamic = config.dynamic ?? null; this._searchOnServer = config.searchOnServer ?? null; return this; }
     /** "Yes" / "No" options, saved as `1` / `0`. */
     boolean(trueLabel: string | null = null, falseLabel: string | null = null, placeholder: string | null = null): this {
         this._options = [['1', trueLabel ?? t('filament-forms::components.select.boolean.true')], ['0', falseLabel ?? t('filament-forms::components.select.boolean.false')]];
@@ -972,7 +974,7 @@ export class Select extends Field {
     async resolveGroupedOptions(): Promise<(OptionGroup | [string, string])[]> {
         if (this._relationship) return this._searchable && !this._preload ? [] : this.relationshipOptions(null, null);
         const options = typeof this._options === 'function' ? await this._options(this.context()) : this._options;
-        const groups = normalizeOptions(options);
+        const groups = normalizeOptions(isEnum(options) ? options.options() : options);
         if (!this._allowHtml) return groups;
         const clean = ([value, label]: [string, string]): [string, string] => [value, sanitizeHtml(label)];
         return groups.map((item) => (Array.isArray(item) ? clean(item) : { label: item.label, options: item.options.map(clean) }));
@@ -1953,7 +1955,8 @@ export class Radio extends Field {
     private _inline = false;
     private _live = false;
     static make(name: string): Radio { return configured(new Radio(name)); }
-    options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
+    /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
+    options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Helper text per value, under the option label. */
     descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
     /** Options side by side. */
@@ -2150,7 +2153,15 @@ export class ToggleButtons extends Field {
     colors(colors: Record<string, string>): this { this._colors = colors; return this; }
     /** Icon per value. */
     icons(icons: Record<string, string>): this { this._icons = icons; return this; }
-    options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
+    /** Options as pairs, `{ value: label }`, or an enum (its colors and icons are used unless `colors()` / `icons()` set others). */
+    options(options: Options | Enum<string | number>): this {
+        this._options = optionPairs(options);
+        if (isEnum(options)) {
+            if (!Object.keys(this._colors).length) this._colors = options.colors();
+            if (!Object.keys(this._icons).length) this._icons = options.icons();
+        }
+        return this;
+    }
     /** Buttons side by side. */
     inline(condition = true): this { this._inline = condition; return this; }
     /** Buttons joined into a single group. */
@@ -2654,7 +2665,8 @@ export class CheckboxList extends Field {
     private _options: [string, string][] = [];
     private _optionColumns: number | null = null;
     static make(name: string): CheckboxList { return configured(new CheckboxList(name)); }
-    options(options: Options): this { this._options = (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]) => [String(value), String(label)]); return this; }
+    /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
+    options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Number of columns the options are spread over (from `lg`). */
     columns(columns: number | null): this { this._optionColumns = columns; return this; }
     private _descriptions: Record<string, string> = {};

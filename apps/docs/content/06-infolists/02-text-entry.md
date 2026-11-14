@@ -141,6 +141,8 @@ TextEntry.make('status')
     .icon((record) => (record.status === 'approved' ? 'c-check-circle' : null))
 ```
 
+When the attribute is cast to an [enum](/advanced/enums#casting-model-attributes-to-an-enum) on the model, or with `enum()`, the label, color and icon of each value come from the enum.
+
 ## Formatting
 
 When using a text entry, you may want the actual outputted text in the UI to differ from the raw [state](/infolists/overview#entry-content-state) of the entry, which is often automatically retrieved from the record. Formatting the state allows you to preserve the integrity of the raw data while also allowing it to be presented in a more user-friendly way.

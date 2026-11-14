@@ -20,6 +20,8 @@ IconColumn.make('status')
 
 `color()` works the same way. `size()` sets the size: `xs`, `sm`, `md`, `lg` (the default), `xl` or `2xl`. Each icon has a hidden text alternative for screen readers: its tooltip if it has one, otherwise the state.
 
+When the attribute is cast to an [enum](/advanced/enums#enum-icons) on the model, or with `enum()`, the icon and color of each value come from the enum, and screen readers announce its label.
+
 ## Handling booleans
 
 Icon columns can display a check or "X" icon based on the state of the column, either true or false, using the `boolean()` method:
