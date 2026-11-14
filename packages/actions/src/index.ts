@@ -260,6 +260,8 @@ export class Action implements Renderable {
     /** Every field of the modal form is disabled (read-only modal); their values are not submitted. */
     disabledSchema(condition: Lazy<boolean, ActionCallContext> = true): this { this._schemaDisabled = condition; return this; }
     async isSchemaDisabled(ctx: ActionCallContext): Promise<boolean> { return Boolean(await evaluate(this._schemaDisabled, ctx)); }
+    /** Whether `disabledSchema()` was called (its condition is then evaluated). */
+    hasDisabledSchemaCondition(): boolean { return this._schemaDisabled !== false; }
     /**
      * Custom content above the modal form. A string is escaped; an `HtmlString` (a rendered view…) is inserted as is: build
      * it from escaped values. A function receives the action context (`ctx.action.renderModalAction(name, ctx)` renders an
@@ -310,6 +312,8 @@ export class Action implements Renderable {
     /** This action's modal opens on top of its parent's, which stays visible, instead of replacing it. */
     overlayParentActions(condition: Lazy<boolean, ActionCallContext> = true): this { this._overlayParentActions = condition; return this; }
     async shouldOverlayParentActions(ctx: ActionCallContext): Promise<boolean> { return Boolean(await evaluate(this._overlayParentActions, ctx)); }
+    /** Whether `overlayParentActions()` was called (its condition is then evaluated). */
+    hasOverlayParentActionsCondition(): boolean { return this._overlayParentActions !== false; }
     /** Once this (child) action has run, its parent actions are cancelled too: all of them, or up to (and including) the named one. */
     cancelParentActions(toAction: boolean | string | null = true): this { this._cancelParentActions = toAction; return this; }
     /** Closing this (child) action's modal also cancels its parent actions: all of them, or up to (and including) the named one. */

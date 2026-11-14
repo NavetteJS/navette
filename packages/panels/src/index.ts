@@ -1299,7 +1299,7 @@ abstract class BasePage extends Component implements SchemaHost {
         const action = await this.findMountableAction(mounted.name, mounted.context);
         const schema = action.applySchema(Schema.make(this).key(`mountedActionSchema${index}`).statePath(`mountedActions.${index}.data`).operation(mounted.name).record(await this.resolveActionRecord(mounted.context)), mounted.arguments ?? {});
         // `disabledSchema()`: every field is disabled (and not submitted).
-        if (schema && (await action.isSchemaDisabled(await this.actionContext(mounted)))) for (const component of schema.getFlatComponents() as any[]) if (component instanceof Field) component.disabled(true);
+        if (schema && action.hasDisabledSchemaCondition() && (await action.isSchemaDisabled(await this.actionContext(mounted)))) for (const component of schema.getFlatComponents() as any[]) if (component instanceof Field) component.disabled(true);
         return schema;
     }
     private async renderActionModal(index: number): Promise<string> {
@@ -1411,7 +1411,7 @@ abstract class BasePage extends Component implements SchemaHost {
     private async syncActionModals(): Promise<void> {
         const top = this.mountedActions[this.mountedActions.length - 1];
         let overlay = false;
-        if (top) try { overlay = await (await this.findMountableAction(top.name, top.context)).shouldOverlayParentActions(await this.actionContext(top)); } catch (error) { if (!(error instanceof WireError)) throw error; }
+        if (top) try { const action = await this.findMountableAction(top.name, top.context); overlay = action.hasOverlayParentActionsCondition() && (await action.shouldOverlayParentActions(await this.actionContext(top))); } catch (error) { if (!(error instanceof WireError)) throw error; }
         this.dispatch('sync-action-modals', { id: this.id, newActionNestingIndex: this.mountedActions.length ? this.mountedActions.length - 1 : null, shouldOverlayParentActions: overlay });
     }
     /** False for a table component: its modals are rendered inside the table. */
