@@ -15,10 +15,11 @@ Every page starts with:
 ```md
 ---
 title: Text input
+description: A single-line text field, with types, masks, prefixes and suffixes.
 ---
 ```
 
-Nothing else is read from the front matter.
+`description` is optional: one sentence, used in `llms.txt` and the page `<meta name="description">`. Without it, the first sentence of the page is used, so make that sentence say what the page is about. Nothing else is read from the front matter.
 
 ## Supported Markdown
 

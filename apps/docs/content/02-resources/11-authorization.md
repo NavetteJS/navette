@@ -1,5 +1,6 @@
 ---
 title: Authorization
+description: Control what each user may do with policies on resources, records, actions, pages and widgets, or plug in your own permission system.
 ---
 
 ## Introduction

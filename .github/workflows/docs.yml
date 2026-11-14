@@ -28,10 +28,12 @@ jobs:
       - run: npm ci
       # Version shown on the site: the latest release tag.
       - run: echo "DOCS_VERSION=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo v0.0.0)" >> "$GITHUB_ENV"
-      # The site is served under https://navettejs.github.io/navette/: every absolute link gets this prefix.
-      - run: node apps/docs/build.ts
+      # The site is served under https://navettejs.github.io/navette/: every absolute link gets this prefix, and the links of
+      # llms.txt and of the .md pages are absolute. The check then verifies the built site, Markdown versions included.
+      - run: node apps/docs/build.ts && node apps/docs/check.mjs
         env:
           DOCS_BASE: /navette
+          DOCS_ORIGIN: https://navettejs.github.io
           DOCS_OUT: ${{ github.workspace }}/_site
       - uses: actions/upload-pages-artifact@v3
         with:
