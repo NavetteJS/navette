@@ -3,6 +3,7 @@ import { Attributes, e, icon, js, loadingIndicator, renderHook } from '@navette-
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
 import type { NotificationData } from './notifications.ts';
+import { databaseNotificationsBroadcastScript } from './broadcasting.ts';
 import { richDocumentToHtml, richHtmlToDocument } from '@navette-js/forms';
 import { pagination } from '@navette-js/support/ui';
 
@@ -260,7 +261,11 @@ export class DatabaseNotifications extends Component {
             'x-on:close-modal.window': `if (($event.detail.id === ${js(id)}) && isOpen) close()`, 'x-on:close-modal-quietly.window': `if (($event.detail.id === ${js(id)}) && isOpen) closeQuietly()`,
             'x-on:open-modal.window': `if (($event.detail.id === ${js(id)}) && (! isOpen)) open()`, 'x-bind:class': "{ 'fi-modal-open': isOpen, }", 'x-cloak': '', 'x-show': 'isOpen',
         }).class(['fi-modal', 'fi-absolute-positioning-context', 'fi-modal-slide-over', 'fi-modal-slide-over-from-end', has ? 'fi-modal-has-sticky-header' : null, 'fi-no-database']);
-        const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}=""` : '';
+        // With broadcasting, new notifications are announced by the stream; the polling interval only applies while it is down.
+        const { panel, user: signedIn } = (this._ctx ?? {}) as any;
+        const live = typeof panel?.hasBroadcasting === 'function' && panel.hasBroadcasting();
+        if (live) this.addScript('database-notifications-broadcast', databaseNotificationsBroadcastScript(panel.getBroadcastChannel(signedIn), interval));
+        const poll = !live && interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}=""` : '';
         const windowClasses = ['fi-modal-window', 'fi-modal-window-has-close-btn', has ? 'fi-modal-window-has-content' : 'fi-modal-window-has-icon', `fi-align-${has ? 'start' : 'center'}`, 'fi-width-md'].join(' ');
         const transitions = 'x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end"';
         // The window has `autofocus` so the focus trap lands on it, not on "Mark all as read", which Enter would trigger at once.

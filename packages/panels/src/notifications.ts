@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { Attributes, e, icon, icons, js } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
+import { broadcastToUsers, dispatchDatabaseNotificationsSent, NOTIFICATION_BROADCAST_EVENT, type BroadcastOptions, type BroadcastRecipient } from './broadcasting.ts';
 
 export type NotificationActionData = { label: string; url: string | null; openUrlInNewTab: boolean; close?: boolean; dispatch?: { event: string; data: Record<string, unknown> } | null; color?: string | null; button?: boolean };
 export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionData[] };
@@ -75,8 +76,49 @@ export class Notification {
         return this;
     }
     getData(): NotificationData { return { ...this.data }; }
-    /** Stores the notification for this user (panel bell): `await Notification.make()….sendToDatabase(panel.getDatabaseNotifications(), user.id)`. Does nothing without a store. */
-    async sendToDatabase(store: NotificationSink | null, user: string | number): Promise<this> { if (store) await store.send(user, { ...this.data, id: randomUUID() }); return this; }
+    /**
+     * Stores the notification for this user (panel bell): `await Notification.make()….sendToDatabase(panel.getDatabaseNotifications(), user)`.
+     * Does nothing without a store. With `isEventDispatched`, the user's open pages fetch their notifications at once (broadcasting).
+     */
+    async sendToDatabase(store: NotificationSink | null, user: BroadcastRecipient, isEventDispatched = false, options: BroadcastOptions = {}): Promise<this> {
+        if (!store) return this;
+        await store.send(typeof user === 'object' ? user.id : user, { ...this.data, id: randomUUID() });
+        if (isEventDispatched) await dispatchDatabaseNotificationsSent(user, options);
+        return this;
+    }
+    /** The notification as sent to the browser by `broadcast()`. */
+    getBroadcastMessage(): NotificationData & { format: 'filament' } { return { ...this.data, format: 'filament' }; }
+    /**
+     * Shows the notification live on the open pages of these users (a user object or id), wherever it is sent from: a request of
+     * another user, a queued job, a timer. `options.tenant` limits it to the pages of a tenant (its key), `options.panel` to a panel.
+     */
+    async broadcast(users: BroadcastRecipient | BroadcastRecipient[], options: BroadcastOptions = {}): Promise<this> {
+        await broadcastToUsers(users, NOTIFICATION_BROADCAST_EVENT, this.getBroadcastMessage(), options);
+        return this;
+    }
+    /** Rebuilds a notification from its data (`getBroadcastMessage()`), which may come from the browser: every value is checked. */
+    static fromArray(data: unknown): Notification {
+        const source = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+        const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : null);
+        const name = (value: unknown) => (typeof value === 'string' && /^[a-z0-9-]+(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/.test(value) ? value : null);
+        const notification = new Notification();
+        const id = text(source.id, 100);
+        if (id && /^[A-Za-z0-9_-]+$/.test(id)) notification.data.id = id;
+        notification.data.title = text(source.title, 1000);
+        notification.data.body = text(source.body, 5000);
+        notification.data.status = typeof source.status === 'string' && Object.hasOwn(STATUS_ICON, source.status) ? source.status : null;
+        notification.data.icon = name(source.icon);
+        notification.data.iconColor = typeof source.iconColor === 'string' && /^[a-z]+$/.test(source.iconColor) ? source.iconColor : null;
+        notification.data.duration = source.duration === 'persistent' ? 'persistent' : typeof source.duration === 'number' && Number.isFinite(source.duration) ? Math.max(0, Math.min(source.duration, 3_600_000)) : 6000;
+        if (Array.isArray(source.actions)) {
+            notification.actions(source.actions.filter((action) => action && typeof action === 'object' && typeof (action as any).label === 'string').map((action: any) => ({
+                label: action.label.slice(0, 200), url: typeof action.url === 'string' ? action.url : null, openUrlInNewTab: action.openUrlInNewTab === true, close: action.close === true,
+                dispatch: action.dispatch && typeof action.dispatch.event === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(action.dispatch.event) ? { event: action.dispatch.event, data: action.dispatch.data && typeof action.dispatch.data === 'object' && !Array.isArray(action.dispatch.data) ? action.dispatch.data : {} } : null,
+                color: typeof action.color === 'string' ? action.color : null, button: action.button === true,
+            })));
+        }
+        return notification;
+    }
     /** Queues the notification for the browser of the current request. */
     send(): this {
         const store = requestStore.getStore();
@@ -114,7 +156,7 @@ export function renderNotification(n: NotificationData): string {
 
 /** Container component for flash notifications. */
 export class Notifications extends Component {
-    static callable = ['pullNotifications'];
+    static callable = ['pullNotifications', 'handleBroadcastNotification'];
     isFilamentNotificationsComponent = true;
     notifications: Record<string, NotificationData> = {};
     hasPulledNotificationsOnMount = false;
@@ -136,7 +178,23 @@ export class Notifications extends Component {
     }
     pullNotificationsFromSession(batches: unknown = []): void { this.pullNotifications(batches); }
     removeNotification(id: unknown): void { if (typeof id === 'string') delete this.notifications[id]; }
+    /** A notification received live (`Notification.broadcast()`). It comes from the browser: it is rebuilt from checked values. */
+    handleBroadcastNotification(notification: unknown = {}): void {
+        if (!notification || typeof notification !== 'object' || (notification as Record<string, unknown>).format !== 'filament') return;
+        const data = Notification.fromArray(notification).getData();
+        // An icon name that is not a known icon is dropped rather than failing the update.
+        try { renderNotification(data); } catch { data.icon = null; }
+        if (Object.keys(this.notifications).length >= 50) delete this.notifications[Object.keys(this.notifications)[0]];
+        this.notifications[data.id] = data;
+    }
+    /** Listens to the user's broadcast channel when the panel has broadcasting (`panel.broadcasting()`). */
+    protected registerBroadcastListener(): void {
+        const { panel, user } = (this._ctx ?? {}) as any;
+        if (!user || typeof panel?.hasBroadcasting !== 'function' || !panel.hasBroadcasting()) return;
+        this.addScript('broadcast-notifications', `setUpFilamentBroadcastNotifications({ $wire, broadcastChannel: ${js(panel.getBroadcastChannel(user))}, event: ${js('.' + NOTIFICATION_BROADCAST_EVENT)}, onNotification: (notification) => $wire.handleBroadcastNotification(notification), })`);
+    }
     render(): string {
+        this.registerBroadcastListener();
         return `<div x-data="notificationsComponent()" data-filament-notifications="${this.hasPulledNotificationsOnMount ? 'mounted' : 'pending'}"><div class="fi-no fi-align-right fi-vertical-align-start" role="status" aria-atomic="false">${Object.values(this.notifications).map(renderNotification).join('')}</div></div>`;
     }
 }

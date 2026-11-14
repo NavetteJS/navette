@@ -43,6 +43,7 @@
         <link href="<%- assetUrl('fonts/filament/filament/inter/index.css') %>" rel="stylesheet" data-navigate-track />
 
         <%- colorVariables %>
+        <% if (locals.assetStyles) { %><%- assetStyles %><% } %>
 
         <%# The application's compiled theme if any, otherwise the default stylesheet %>
         <link rel="stylesheet" href="<%- locals.theme ? theme : assetUrl('css/filament/filament/app.css') %>" data-navigate-track="reload" />
@@ -112,11 +113,19 @@
 
         <%- renderHook('panels::scripts.before', renderHookScopes) %>
         <script>
-            window.filamentData = []
+            <%- locals.scriptData ?? 'window.filamentData = []' %>
         </script>
 
+        <% if (locals.assetScripts) { %><%- assetScripts %><% } %>
         <% for (const src of ['js/filament/actions/actions.js', 'js/filament/notifications/notifications.js', 'js/filament/schemas/schemas.js', 'js/filament/support/support.js', 'js/filament/tables/tables.js', 'js/filament/filament/echo.js', 'js/filament/filament/app.js']) { %>
             <script src="<%- assetUrl(src) %>"<% if (locals.spa !== false) { %> data-navigate-once data-navigate-track<% } %>></script>
+        <% } %>
+
+        <% if (locals.broadcasting) { %>
+        <script src="<%- assetUrl('navette/broadcasting.js') %>" data-navigate-once></script>
+        <script>
+            window.navetteBroadcasting.configure(<%- js(broadcasting) %>)
+        </script>
         <% } %>
 
         <style>

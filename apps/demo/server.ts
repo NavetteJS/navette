@@ -23,6 +23,7 @@ import { TaskResource } from './resources/TaskResource.ts';
 import { TimesheetResource } from './resources/TimesheetResource.ts';
 import { calendarWidgets, hrWidgets } from './widgets/hr.ts';
 import { calendarPages } from './pages/calendar.ts';
+import { liveNotificationsAssets, LiveNotificationsPage } from './pages/live-notifications.ts';
 import { appPanel, demoAuthProvider } from './app-panel.ts';
 import { labPanel } from './lab-panel.ts';
 import { shopWidgets } from './widgets/shop.ts';
@@ -124,12 +125,15 @@ const panel = Panel.make()
     .globalSearchFieldKeyBindingSuffix()
     // Seeded notifications link to absolute URLs on another host: keep only the path.
     .databaseNotifications(knexNotificationStore((table: string) => Model.knex()(table), { mapUrl: (url) => url.replace(/^https?:\/\/[^/]+/, '') || '/' }))
+    // Notifications pushed live to the open pages (the bell then refreshes without polling). Off for screenshot comparisons.
+    .broadcasting(!process.env.NAVETTE_NO_THEMES)
+    .assets(process.env.NAVETTE_NO_THEMES ? [] : liveNotificationsAssets)
     .navigationGroups(['Shop', 'HR', 'Projects', 'Blog'])
     .pages([
         DemoDashboard,
         ShopDashboard, HrDashboard,
         // Left out with NAVETTE_NO_THEMES so the navigation matches the reference screenshots.
-        ...(process.env.NAVETTE_NO_THEMES ? [] : calendarPages),
+        ...(process.env.NAVETTE_NO_THEMES ? [] : [...calendarPages, LiveNotificationsPage]),
     ])
     .widgets([...welcomeWidgets, ...shopWidgets, ...hrWidgets, ...calendarWidgets])
     .resources([CustomerResource, DepartmentResource, OrderResource, ProductResource, BrandResource, EmployeeResource, CategoryResource, LeaveRequestResource, ExpenseResource, ProjectResource, TaskResource, TimesheetResource, PostResource, PostCategoryResource, AuthorResource])
