@@ -1,6 +1,7 @@
 // Express integration: serves the bundled livewire.js and exposes the CSRF-protected update and upload endpoints.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import nodePath from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Request, Response, Router } from 'express';
 import express from 'express';
@@ -30,6 +31,12 @@ export function verifyCsrf(req: Request, token: unknown): boolean {
     return cookie.length > 0 && cookie.length === sent.length && timingSafeEqual(cookie, sent);
 }
 
+/** HTTP status of an error that declares a client error (`status` between 400 and 499), or `null`. */
+function httpClientErrorStatus(error: unknown): number | null {
+    const status = (error as { status?: unknown } | null)?.status;
+    return Number.isInteger(status) && (status as number) >= 400 && (status as number) < 500 ? (status as number) : null;
+}
+
 export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeContext: (req: Request, res: Response) => unknown | Promise<unknown> = (req, res) => ({ req, res }),
     /** Wraps the handling in a request context and can enrich the response (notifications…). */
     around: (ctx: any, req: Request, res: Response, handle: () => Promise<any>) => Promise<any> = (_ctx, _req, _res, handle) => handle(),
@@ -45,7 +52,8 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
             const ctx = await makeContext(req, res);
             res.json(await around(ctx, req, res, () => runtime.handle(req.body, ctx)));
         } catch (e) {
-            const status = e instanceof WireError ? e.status : 500;
+            // A `WireError`, or an error carrying an HTTP client error status (a Repeater's `maxItemsForProcessing()`: 413).
+            const status = e instanceof WireError ? e.status : httpClientErrorStatus(e) ?? 500;
             if (status === 500) console.error(e);
             else if (process.env.NODE_ENV !== 'production') console.warn(`[wire] ${status} ${(e as Error).message} — calls=${JSON.stringify(req.body?.components?.map((c: any) => c.calls))} updates=${JSON.stringify(req.body?.components?.map((c: any) => c.updates))}`);
             res.status(status).send(e instanceof Error ? e.message : 'Error');
@@ -65,6 +73,12 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
             if (status === 500) console.error(e);
             res.status(status).json({ message: e instanceof Error ? e.message : 'Error' });
         }
+    });
+    // Temporary image previews (`UploadStore.temporaryUrl()`): the signature binds the file id and an expiry.
+    router.get(`${prefix}/preview-file/:id`, (req, res) => {
+        const file = runtime.uploads?.resolvePreview(req.params.id, req.query.expires, req.query.signature) ?? null;
+        if (!file) { res.status(404).end(); return; }
+        res.set({ 'Content-Type': file.type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=1800', 'Content-Security-Policy': "default-src 'none'" }).sendFile(nodePath.resolve(file.path), { dotfiles: 'allow' });
     });
     return router;
 }

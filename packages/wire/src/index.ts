@@ -195,6 +195,8 @@ export class WireRuntime {
     private options: RuntimeOptions;
     constructor(options: RuntimeOptions) { this.options = options; }
     get uploads(): UploadStore | null { return this.options.uploads ?? null; }
+    /** Prefix of the upload and preview endpoints (`/livewire` by default). */
+    get uploadPrefix(): string { return this.options.uploadPrefix ?? '/livewire'; }
 
     /** Params passed by a parent to its existing children during the current request: child id → params. */
     private requestScope = new AsyncLocalStorage<{ childProps: Map<string, Record<string, unknown>> }>();

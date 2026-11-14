@@ -48,7 +48,7 @@ export abstract class Component {
     grow(condition = true): this { this._grow = condition; return this; }
     canGrow(): boolean { return this._grow; }
     /** Default configuration for every instance later created by `make()`: `TextInput.configureUsing((input) => input.maxLength(255))`. */
-    static configureUsing<T>(this: abstract new (...args: any[]) => T, configure: (instance: T) => void): void { configureUsing(this, configure); }
+    static configureUsing<T>(this: abstract new (...args: any[]) => T, configure: (instance: T) => void): () => void { return configureUsing(this, configure); }
     protected _name: string | null = null;
     protected _keyName: string | null = null;
     protected _hidden: Lazy<boolean, ComponentContext> = false;
@@ -177,7 +177,8 @@ export class Schema {
     private _rootHeadingLevel = 2;
 
     constructor(livewire: SchemaHost) { this.livewire = livewire; }
-    static make(livewire: SchemaHost): Schema { return configured(new Schema(livewire)); }
+    /** `livewire` may be left out for a schema that only holds components for another one (a repeater's item schema). */
+    static make(livewire?: SchemaHost): Schema { return configured(new Schema(livewire!)); }
     private _lazy: boolean | (() => boolean | Promise<boolean>) = false;
     private _lazyKey: string | null = null;
     /** Renders the components only when the schema enters the viewport (see `Component.lazyLoaded()`). */

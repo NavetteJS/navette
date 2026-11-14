@@ -625,9 +625,16 @@ export const views = new ViewRegistry();
 
 // ------------------------------------------------------------------ global configuration
 const configurators = new Map<Function, ((instance: any) => void)[]>();
-/** Registers a callback applied to every instance of the class (and its subclasses) created afterwards by `make()`. */
-export function configureUsing<T>(cls: abstract new (...args: any[]) => T, configure: (instance: T) => void): void {
+/**
+ * Registers a callback applied to every instance of the class (and its subclasses) created afterwards by `make()`.
+ * Returns a function that removes the callback again.
+ */
+export function configureUsing<T>(cls: abstract new (...args: any[]) => T, configure: (instance: T) => void): () => void {
     configurators.set(cls, [...(configurators.get(cls) ?? []), configure]);
+    return () => {
+        const remaining = (configurators.get(cls) ?? []).filter((callback) => callback !== configure);
+        if (remaining.length) configurators.set(cls, remaining); else configurators.delete(cls);
+    };
 }
 /** Applies the global callbacks to a new instance, from the most general class to the most specific. */
 export function configured<T extends object>(instance: T): T {
