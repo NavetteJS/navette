@@ -10,7 +10,7 @@ import { Field, Select, Step, TableSelect, TextInput } from '@navette-js/forms';
 import { Schema } from '@navette-js/schemas';
 import { TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
 import {
-    AssociateAction, AttachAction, CreateAction, DeleteAction, DeleteBulkAction, DetachBulkAction, EditAction, ForceDeleteBulkAction, Notification, Panel, RelationManager,
+    AssociateAction, AttachAction, CreateAction, DeleteAction, DeleteBulkAction, DetachBulkAction, EditAction, ForceDeleteBulkAction, ManageRelatedRecords, Notification, Panel, RelationManager,
     ReplicateAction, Resource, RestoreBulkAction, ViewAction, type User,
 } from '../src/index.ts';
 import { runInRequest } from '../src/notifications.ts';
@@ -63,6 +63,27 @@ class CommentsRelationManager extends RelationManager {
     static table(table: Table): Table { return table.columns([TextColumn.make('body')]).headerActions(commentHeaderActions()); }
 }
 
+/** The same tags on a relation page: the relationship actions work there too. */
+class ManagePostTags extends ManageRelatedRecords {
+    static relationship = 'tags';
+    static modelLabel = 'tag';
+    static recordTitleAttribute = 'name';
+    static adapterFor(ownerKey: string) { return TagsRelationManager.adapterFor(ownerKey); }
+    static relatedAdapter() { return new ObjectionAdapter(Tag); }
+    static attach(ownerKey: string, recordKey: string) { return TagsRelationManager.attach(ownerKey, recordKey); }
+    static table(table: Table): Table { return table.columns([TextColumn.make('name')]).headerActions([AttachAction.make().recordSelectOptionsQuery((query) => query.where('team', 'a'))]); }
+}
+
+/** A regular resource (with record pages), serving the relation page. */
+class TaggedPostResource extends Resource {
+    static slug = 'tagged-posts';
+    static modelLabel = 'post';
+    static adapter = new ObjectionAdapter(Post);
+    static relatedPages = { tags: ManagePostTags };
+    static form(schema: Schema): Schema { return schema.components([TextInput.make('title').required()]); }
+    static table(table: Table): Table { return table.columns([TextColumn.make('title')]); }
+}
+
 class PostResource extends Resource {
     static slug = 'posts';
     static modelLabel = 'post';
@@ -76,7 +97,7 @@ class PostResource extends Resource {
 }
 
 const user: User = { id: 1, name: 'Ada', email: 'ada@example.test' };
-const panel = Panel.make().id('prebuilt-actions').key('prebuilt-key').auth({ find: async () => user } as any).resources([PostResource]);
+const panel = Panel.make().id('prebuilt-actions').key('prebuilt-key').auth({ find: async () => user } as any).resources([PostResource, TaggedPostResource]);
 const List = (PostResource.getPages() as any).index;
 const titles = async () => (await db('posts').whereNull('deleted_at').orderBy('id')).map((row: any) => row.title);
 const tagsOf = async (post: number) => (await db('post_tag').where('post_id', post).orderBy('tag_id')).map((row: any) => row.tag_id);
@@ -341,4 +362,12 @@ test('detach bulk: one record at a time by default, all keys at once with `fetch
     await livewire(TagsRelationManager, { ownerRecord: post }).callTableBulkAction('detach', [tags.Delta]).assertNotified('Detached');
     assert.deepEqual(calls, [['detach', String(post), [String(tags.Delta)]]]);
     assert.deepEqual(await tagsOf(post), []);
+});
+
+test('relation pages (`ManageRelatedRecords`) attach like relation managers, with the same checks', async () => {
+    const { post, tags } = await seedTags();
+    const TagsPage = (TaggedPostResource.getPages() as any).tags;
+    await livewire(TagsPage, { record: post }).callAction(TestAction.make('attach').table(), { recordId: String(tags.Gamma) }).assertHasActionErrors(['recordId']);
+    await livewire(TagsPage, { record: post }).callAction(TestAction.make('attach').table(), { recordId: String(tags.Beta) }).assertHasNoActionErrors().assertNotified('Attached');
+    assert.deepEqual(await tagsOf(post), [tags.Beta, tags.Delta]);
 });

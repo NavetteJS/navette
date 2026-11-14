@@ -69,7 +69,7 @@ export type BulkOutcome = { total: number; success: number; unauthorized: number
  */
 export async function sendBulkActionOutcome(action: Action, ctx: Context, outcome: BulkOutcome): Promise<void> {
     const { total, success, unauthorized, failed } = outcome;
-    const counts = { successCount: success, failureCount: total - success, totalCount: total, isAll: success === 0, missingAuthorizationFailureMessageCount: unauthorized, missingProcessingFailureMessageCount: failed, records: undefined };
+    const counts = { successCount: success, failureCount: total - success, totalCount: total, isAll: success === 0, missingAuthorizationFailureMessageCount: unauthorized, missingProcessingFailureMessageCount: failed };
     const context: Context = { ...ctx, ...counts };
     if (unauthorized + failed === 0) await sendActionSuccess(action, context, null);
     else {
@@ -99,6 +99,8 @@ export class CustomizableAction extends Action {
     }
 }
 
+type FooterActions = Action[] | ((action: any) => Action[]);
+
 /** A modal footer button submitting the mounted action with `{ another: true }` ("… & create another"). */
 const anotherAction = (name: string, label: string) => Action.make(name).label(label).color('gray').action(`callMountedAction(${js({ another: true })})`);
 
@@ -109,7 +111,8 @@ const anotherAction = (name: string, label: string) => Action.make(name).label(l
 class AnotherFooter {
     enabled = true;
     modify: ((action: Action) => Action | void) | null = null;
-    custom: Action[] | null = null;
+    /** Footer actions set with `extraModalFooterActions()` (a list, or a function of the action where the core allows it). */
+    custom: FooterActions | null = null;
     private readonly name: string;
     private readonly label: () => string;
     constructor(name: string, label: () => string) { this.name = name; this.label = label; }
@@ -118,7 +121,7 @@ class AnotherFooter {
         const action = anotherAction(this.name, this.label());
         return (this.modify?.(action) as Action | undefined) ?? action;
     }
-    actions(): Action[] { return this.custom ?? [this.build()].filter((action): action is Action => action !== null); }
+    actions(): FooterActions { return this.custom ?? [this.build()].filter((action): action is Action => action !== null); }
 }
 
 /** Create in a modal with the resource form. */
@@ -156,8 +159,8 @@ export class CreateAction extends CustomizableAction {
     createAnotherAction(callback: ((action: Action) => Action | void) | null): this { this._another.modify = callback; return this.refreshFooter(); }
     /** The "Create & create another" button (to place it in custom footer actions). */
     getCreateAnotherAction(): Action { return this._another.build() ?? anotherAction('createAnother', t('filament-actions::create.single.modal.actions.create_another.label')); }
-    extraModalFooterActions(actions: Action[]): this { if (this._another) this._another.custom = actions; return super.extraModalFooterActions(actions); }
-    private refreshFooter(): this { return super.extraModalFooterActions(this._another.actions()); }
+    extraModalFooterActions(actions: FooterActions): this { if (this._another) this._another.custom = actions; return super.extraModalFooterActions(actions as any); }
+    private refreshFooter(): this { return super.extraModalFooterActions(this._another.actions() as any); }
 }
 
 /** Attributes of a record, changed by `mutateRecordDataUsing()`. */
@@ -540,12 +543,12 @@ export class RecordSelectAction extends CustomizableAction {
      */
     tableSelect(configuration: TableConfiguration | null): this { this._tableConfiguration = configuration; return this; }
     getTableSelectConfiguration(): TableConfiguration | null { return this._tableConfiguration; }
-    extraModalFooterActions(actions: Action[]): this { if (this._another) this._another.custom = actions; return super.extraModalFooterActions(actions); }
+    extraModalFooterActions(actions: FooterActions): this { if (this._another) this._another.custom = actions; return super.extraModalFooterActions(actions as any); }
     /** @internal */
     protected setAnother(condition: boolean): this { this._another!.enabled = condition; return this.refreshFooter(); }
     /** @internal */
     protected canRelateAnother(): boolean { return this._another?.enabled ?? false; }
-    private refreshFooter(): this { return this._another ? super.extraModalFooterActions(this._another.actions()) : this; }
+    private refreshFooter(): this { return this._another ? super.extraModalFooterActions(this._another.actions() as any) : this; }
 
     /** Options handed to the manager for a request of this component. */
     getRecordSelectOptions(livewire: any, limit = 50): RecordSelectOptions {
@@ -763,11 +766,20 @@ export class DissociateBulkAction extends CustomizableAction {
 
 // --- default attach / associate options of a relation manager with a `relatedAdapter()`
 
+/** What the defaults need from a relation manager (or a relation page, `ManageRelatedRecords`). */
+export type RelatedRecordsManager = {
+    readonly name: string;
+    recordTitleAttribute: string | null;
+    relatedAdapter(ownerKey: string): DataAdapter | null;
+    adapterFor(ownerKey: string): DataAdapter;
+    getRelatedResource?(): any;
+};
+
 /**
  * Records of the manager's `relatedAdapter()` matching the search (in the search columns), within the options query, without
  * the records already related to the owner (unless duplicates are allowed): `[key, label]` pairs.
  */
-export async function searchRelatedRecords(manager: typeof RelationManager, ownerKey: string, search: string, options: RecordSelectOptions): Promise<[string, string][]> {
+export async function searchRelatedRecords(manager: RelatedRecordsManager, ownerKey: string, search: string, options: RecordSelectOptions): Promise<[string, string][]> {
     const adapter = requireRelatedAdapter(manager, ownerKey);
     const related = manager.adapterFor(ownerKey);
     const title = manager.recordTitleAttribute;
@@ -791,7 +803,7 @@ export async function searchRelatedRecords(manager: typeof RelationManager, owne
 }
 
 /** Label of a record that may be related to the owner (in the related adapter, within the options query, not already related), or `null`. */
-export async function relatedRecordLabel(manager: typeof RelationManager, ownerKey: string, recordKey: string, options: RecordSelectOptions): Promise<string | null> {
+export async function relatedRecordLabel(manager: RelatedRecordsManager, ownerKey: string, recordKey: string, options: RecordSelectOptions): Promise<string | null> {
     if (!isKey(recordKey)) return null;
     const adapter = requireRelatedAdapter(manager, ownerKey);
     const modifiers = options.modifyQuery ? [(query: any) => { options.modifyQuery!(query, null); }] : [];
@@ -802,12 +814,12 @@ export async function relatedRecordLabel(manager: typeof RelationManager, ownerK
     return relatedRecordTitle(manager, record, key);
 }
 
-function requireRelatedAdapter(manager: typeof RelationManager, ownerKey: string): DataAdapter {
+function requireRelatedAdapter(manager: RelatedRecordsManager, ownerKey: string): DataAdapter {
     const adapter = manager.relatedAdapter(ownerKey);
     if (!adapter) throw new Error(`${manager.name}: define relatedAdapter() (or searchAttachable() / attachableLabel(), searchAssociable() / associableLabel()).`);
     return adapter;
 }
-const relatedRecordTitle = (manager: typeof RelationManager, record: any, key: string): string => {
+const relatedRecordTitle = (manager: RelatedRecordsManager, record: any, key: string): string => {
     const title = manager.recordTitleAttribute;
     if (title) return String(record?.[title] ?? key);
     const resource = manager.getRelatedResource?.();

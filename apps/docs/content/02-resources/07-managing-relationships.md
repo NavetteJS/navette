@@ -735,6 +735,8 @@ The page title is "Manage {record title} Comments", and its breadcrumbs lead bac
 
 On every request, the owner record is read again with the adapter of the resource, and the user must have the `view` ability on it; otherwise the page answers 404 or 403.
 
+The relationship actions (`AttachAction`, `AssociateAction`, `DetachAction`, `DissociateAction` and their bulk versions) work on a relation page too: define the same static methods as on a relation manager (`relatedAdapter()`, `attach()`, `detach()`, `associate()`…).
+
 ### Adding relation pages to resource sub-navigation
 
 List the page in `recordSubNavigation` to show it next to the View and Edit pages of the record. Its item uses `navigationLabel` (or the title) and `navigationIcon`:

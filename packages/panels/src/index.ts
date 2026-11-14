@@ -3923,6 +3923,32 @@ export class ManageRelatedRecords extends ListRecords {
         await (ListRecords.prototype as any).hydrate?.call(this);
     }
     getRecordKey(): string | null { return this.recordKey; }
+    /** The owner's key, for the relationship actions (attach, associate…), as on a relation manager. */
+    get ownerRecord(): string { return this.recordKey; }
+    // Relationship actions: the same static methods as on a `RelationManager` (see there).
+    static relatedAdapter(_ownerKey: string): DataAdapter | null { return null; }
+    static pivotForm(_schema: Schema): SchemaComponent[] { return []; }
+    static attach(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown> = {}): Promise<void> { throw new Error('ManageRelatedRecords.attach() must be defined.'); }
+    static updatePivot(_ownerKey: string, _recordKey: string, _pivot: Record<string, unknown>): Promise<void> { throw new Error('ManageRelatedRecords.updatePivot() must be defined when pivotForm() returns fields.'); }
+    static detach(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('ManageRelatedRecords.detach() must be defined.'); }
+    static associate(_ownerKey: string, _recordKey: string): Promise<void> { throw new Error('ManageRelatedRecords.associate() must be defined.'); }
+    static dissociate(_ownerKey: string, _recordKeys: string[]): Promise<void> { throw new Error('ManageRelatedRecords.dissociate() must be defined.'); }
+    static searchAttachable(ownerKey: string, search: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<[string, string][]> {
+        if (this.relatedAdapter(ownerKey)) return searchRelatedRecords(this, ownerKey, search, options);
+        throw new Error('ManageRelatedRecords.searchAttachable() (or relatedAdapter()) must be defined.');
+    }
+    static attachableLabel(ownerKey: string, recordKey: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<string | null> {
+        if (this.relatedAdapter(ownerKey)) return relatedRecordLabel(this, ownerKey, recordKey, options);
+        throw new Error('ManageRelatedRecords.attachableLabel() (or relatedAdapter()) must be defined.');
+    }
+    static searchAssociable(ownerKey: string, search: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<[string, string][]> {
+        if (this.relatedAdapter(ownerKey)) return searchRelatedRecords(this, ownerKey, search, { ...options, allowsDuplicates: false });
+        throw new Error('ManageRelatedRecords.searchAssociable() (or relatedAdapter()) must be defined.');
+    }
+    static associableLabel(ownerKey: string, recordKey: string, options: RecordSelectOptions = defaultRecordSelectOptions): Promise<string | null> {
+        if (this.relatedAdapter(ownerKey)) return relatedRecordLabel(this, ownerKey, recordKey, { ...options, allowsDuplicates: false });
+        throw new Error('ManageRelatedRecords.associableLabel() (or relatedAdapter()) must be defined.');
+    }
     /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
