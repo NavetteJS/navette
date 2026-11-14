@@ -90,7 +90,7 @@ test('moveFiles() moves the temporary file into the storage', async () => {
     const spy: FileStorage = { async store(_file, _directory, _name, given) { options = given; return 'k.png'; }, async info() { return null; } };
     const third = upload();
     await getSchemaState(form(host({ photo: { a: `livewire-file:${third.id}` } }, [third]), [FileUpload.make('photo').storage(spy).moveFiles()]));
-    assert.deepEqual(options, { move: true });
+    assert.deepEqual(options, { move: true, visibility: 'public' });
 });
 
 test('fetchFileInformation(false) only sends the URL; open and download URLs are customized and checked', async () => {

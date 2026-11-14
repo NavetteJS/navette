@@ -78,6 +78,20 @@ FileUpload.make('receipt_path')
 
 The functions are evaluated each time they are needed (rendering, validation and saving), so they always see the current state of the form.
 
+### Setting the visibility of files
+
+Files can be public, served under a permanent URL, or private, shown through [temporary signed URLs](/advanced/file-storage#temporary-urls-for-private-files). Like Filament's `visibility()`, the method sets the visibility of the field's files:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('contract')
+    .storage(contractsStorage)
+    .visibility('private')
+```
+
+By default, a field uses the visibility of its storage: `'private'` for a `LocalFileStorage` created with `{ visibility: 'private' }`, `'public'` otherwise. With a private visibility, the previews and the open and download buttons use temporary URLs from the storage's `temporaryUrl()`; the visibility is also passed to the storage's `store()`, for storages that keep public and private files apart.
+
 ### Writing a custom storage
 
 To store files elsewhere (an object storage such as S3, for example), implement the `FileStorage` interface:
@@ -635,7 +649,19 @@ With `storeFiles(false)`, `preserveFilenames()` and `getUploadedFileNameForStora
 
 ## Deleting files
 
-Removing a file from the field does not delete it from the storage. If you want to delete stored files, compare the old and new keys in your data adapter, after saving.
+Removing a file from the field does not delete it from the storage, as Navette is unaware whether it is used elsewhere. To delete a stored file when the user removes it, use `deleteUploadedFileUsing()`:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('attachments')
+    .multiple()
+    .deleteUploadedFileUsing(({ file, storage }) => storage?.delete?.(file))
+```
+
+The callback receives the key of the removed file (`file`), the field's `storage`, and the [field context](/forms/overview#using-the-field-context). Like in Filament, it runs as soon as the user removes the file, before the form is saved. It only runs for a stored file that the record holds: a key sent by the browser that is not one of the record's files never reaches it (see [authorizing existing file paths](#authorizing-existing-file-paths)), and nothing happens when the field is disabled or not [deletable](#hiding-the-remove-file-button). `LocalFileStorage.delete()` never removes a file outside of its folder.
+
+To delete files only once the record is saved, compare the old and the new keys after saving (in your data adapter or in the page's `afterSave()` hook) and call `storage.delete(key)` for the keys that are gone.
 
 ## Orienting images from their EXIF data
 

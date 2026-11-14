@@ -687,3 +687,4 @@ export function hasRenderHook(name: string, scopes: unknown | unknown[] | null =
 views.share({ renderHook, hasRenderHook });
 export { isSafeUrl, markdownToHtml, sanitizeHtml } from './html.ts';
 export * from './enums.ts';
+export { fileUrlConfig, isSafeStorageKey, resolveStoredFileUrl, signedFileUrl, signFileUrl, temporaryFileUrlExpiry, verifyFileUrlSignature, type FileUrlStorage } from './file-urls.ts';
