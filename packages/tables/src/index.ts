@@ -5,6 +5,7 @@ import { addRelationshipsToQuery, ensureRelationshipSupport, groupScopeThroughRe
 export { addRelationshipsToQuery, ensureRelationshipSupport } from './relationships.ts';
 import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
+import { NavetteTimezone } from '@navette-js/support';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
 import { applyConditions, loadRelationshipOptions, modelOfHost, type RelationshipQueryModifier } from './query-builder.ts';
@@ -400,11 +401,11 @@ export class TextColumn<R = any> extends Column<R> {
     private dateTooltipUsing(kind: 'php' | 'iso' | 'since', format: string, timeZone: string | null): this {
         return this.tooltip((_record, state) => {
             if (isBlankState(state)) return null;
-            const zone = timeZone ?? this._timeZone;
+            const zone = timeZone ?? this.getTimezone();
             if (kind === 'since') return diffForHumans(state as string) ?? null;
             if (kind === 'php') return formatDate(state, format, zone);
             const date = parseDateState(state);
-            return date ? formatIsoDate(date, format, zone ?? 'UTC') : null;
+            return date ? formatIsoDate(date, format, zone) : null;
         });
     }
     /** Tooltip with the date in a PHP format (`M j, Y` by default), e.g. next to `since()`. */
@@ -418,7 +419,9 @@ export class TextColumn<R = any> extends Column<R> {
     isoDateTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'LLL', timeZone); }
     isoTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'LT', timeZone); }
     /** Time zone used by `date()`, `dateTime()` and `time()`. */
+    /** Time zone dates are displayed in; defaults to `NavetteTimezone.get()` (`UTC` unless configured). */
     timezone(timeZone: string | null): this { this._timeZone = timeZone; return this; }
+    getTimezone(): string { return this._timeZone ?? NavetteTimezone.get(); }
     private _numericOptions: NumericFormatOptions = {};
     /**
      * Number formatted with thousands separators. `numeric(1)`: fixed number of decimals. Filament's other arguments follow
@@ -518,8 +521,8 @@ export class TextColumn<R = any> extends Column<R> {
         const enumCase = this.enumCaseOf(record, item);
         if (enumCase) text = enumCase.getLabel();
         else if (this._since) text = diffForHumans(item as string) ?? String(item);
-        else if (this._date !== null && this._dateKind === 'iso') { const date = parseDateState(item); text = date ? formatIsoDate(date, this._date, this._timeZone ?? 'UTC') : String(item); }
-        else if (this._date !== null) text = formatDate(item, this._date, this._timeZone);
+        else if (this._date !== null && this._dateKind === 'iso') { const date = parseDateState(item); text = date ? formatIsoDate(date, this._date, this.getTimezone()) : String(item); }
+        else if (this._date !== null) text = formatDate(item, this._date, this.getTimezone());
         else if (currency && isNumericValue(item)) text = formatMoney(Number(item), currency, this._moneyOptions);
         else if (this._numeric && isNumericValue(item)) text = formatNumber(Number(item), this._numericOptions);
         else text = String(item);

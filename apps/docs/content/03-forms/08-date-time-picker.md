@@ -194,6 +194,16 @@ DateTimePicker.make('published_at')
 
 The time zone may come from the user, for example `.timezone(user.timezone)`. An invalid time zone name throws an error when the field is declared. Date pickers and time pickers are not converted, since a date or a time alone has no instant.
 
+If you do not pass a `timezone()` to the field, it uses Navette's default time zone, `UTC` unless you set another one with `NavetteTimezone.set()`, once, when your app starts (for example in `server.ts`, before the panels are built):
+
+```ts
+import { NavetteTimezone } from '@navette-js/support';
+
+NavetteTimezone.set('America/New_York');
+```
+
+`NavetteTimezone.set()` also accepts a function, called each time a component needs the time zone, so the default may depend on the signed-in user (read from your own request context): `NavetteTimezone.set(() => currentUser()?.timezone ?? null)`. A function returning `null` falls back to `UTC`, and `NavetteTimezone.get()` returns the time zone in effect. The default applies to `DateTimePicker` fields with a time, `TextColumn` and `TextEntry` date formatting; date-only values (`DatePicker`, the date constraints of the query builder, date filters) are never converted, since a date alone has no instant.
+
 ## Making the field live
 
 The date picker accepts `live()`, so the form is re-rendered as soon as the date changes. This example computes the number of days of a leave request:

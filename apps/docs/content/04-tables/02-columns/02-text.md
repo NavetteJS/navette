@@ -244,6 +244,16 @@ TextColumn.make('created_at')
     .dateTime('M j, Y H:i', 'Europe/Paris')
 ```
 
+If you do not pass a `timezone()` to the column, it uses Navette's default time zone, `UTC` unless you set another one with `NavetteTimezone.set()`, once, when your app starts (for example in `server.ts`, before the panels are built):
+
+```ts
+import { NavetteTimezone } from '@navette-js/support';
+
+NavetteTimezone.set('America/New_York');
+```
+
+`NavetteTimezone.set()` also accepts a function, called each time a component needs the time zone, so the default may depend on the signed-in user (read from your own request context): `NavetteTimezone.set(() => currentUser()?.timezone ?? null)`. A function returning `null` falls back to `UTC`, and `NavetteTimezone.get()` returns the time zone in effect. The default applies to `DateTimePicker` fields with a time, `TextColumn` and `TextEntry` date formatting; date-only values (`DatePicker`, the date constraints of the query builder, date filters) are never converted, since a date alone has no instant.
+
 #### Displaying a relative date
 
 `since()` displays how long ago the date was, such as `2 days ago`:

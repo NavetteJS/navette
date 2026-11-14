@@ -9,7 +9,7 @@ export { FieldBase, type FieldSlotName, type StateCallback, type ValidationMessa
 import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 export { modifyAction, type ActionModifier } from './item-actions.ts';
 export type { JsFieldProps, JsFieldRenderer, JsonValue, JsRendererContext, JsRendererInstance, JsRendererUtilities, Snapshot } from '@navette-js/schemas';
-import { loadingIndicator } from '@navette-js/support';
+import { loadingIndicator, NavetteTimezone } from '@navette-js/support';
 import { randomUUID } from 'node:crypto';
 import { generateHTML, generateJSON } from '@tiptap/html/server';
 import StarterKit from '@tiptap/starter-kit';
@@ -2052,6 +2052,11 @@ abstract class TemporalField extends Field {
     locale(locale: Lazy<string | null, ComponentContext>): this { return this.setLazy('_locale', locale); }
     /** Shows and edits the value in this time zone, while it is saved in UTC (date-time pickers). */
     timezone(timezone: string | null): this { if (timezone !== null) new Intl.DateTimeFormat('en', { timeZone: timezone }); this._timezone = timezone; return this; }
+    /**
+     * Time zone the value is shown and entered in when the field has a date and a time: `timezone()`, else the global
+     * `NavetteTimezone.get()`; `null` when neither is set (the value is shown as stored, in UTC).
+     */
+    getTimezone(): string | null { return this._timezone ?? (NavetteTimezone.isConfigured() ? NavetteTimezone.get() : null); }
     hoursStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_hoursStep', step); }
     minutesStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_minutesStep', step); }
     secondsStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_secondsStep', step); }
@@ -2135,7 +2140,8 @@ abstract class TemporalField extends Field {
         const normalized = normalizeDateTime(value);
         if (normalized === null) return value === undefined ? null : value === '' ? null : typeof value === 'string' ? value : null;
         let local = normalized;
-        if (this._timezone && this.hasDate() && this.hasTime()) local = formatInZone(new Date(normalized.replace(' ', 'T') + 'Z'), this._timezone);
+        const zone = this.getTimezone();
+        if (zone && this.hasDate() && this.hasTime()) local = formatInZone(new Date(normalized.replace(' ', 'T') + 'Z'), zone);
         return this.stateOf(local);
     }
     /** Form state as the input expects it. */
@@ -2147,8 +2153,9 @@ abstract class TemporalField extends Field {
     }
     /** Wall-clock value of the field's time zone to UTC. */
     private toUtc(value: unknown): unknown {
-        if (!this._timezone || !this.hasDate() || !this.hasTime() || typeof value !== 'string') return value;
-        const instant = zonedToUtc(value, this._timezone);
+        const zone = this.getTimezone();
+        if (!zone || !this.hasDate() || !this.hasTime() || typeof value !== 'string') return value;
+        const instant = zonedToUtc(value, zone);
         return instant ? normalizeDateTime(instant) : value;
     }
     /** Saved value: in UTC, in `format()` (or the default format). */
