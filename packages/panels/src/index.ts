@@ -14,10 +14,10 @@ import { Checkbox, Field, RawJs, Select, Step, TextInput, Wizard, richDocumentTo
 import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
-import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
+import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
 import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
 import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
-export { Notification, Notifications } from './notifications.ts';
+export { Notification, Notifications, type NotificationActionData, type NotificationActionInput, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
 import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
 export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
@@ -812,7 +812,7 @@ export class Panel {
         for (const page of this._pages) if (page.shouldRegisterNavigation && !(await this.canAccessPage(page, user))) hidden.add(page.slug);
         return hidden;
     }
-    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[] }[] {
+    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[]; dropdownItems: NavigationItemView[] }[] {
         const items = [
             // The pages of a cluster are in its sub-navigation: the menu only shows the cluster.
             ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => {
@@ -833,7 +833,7 @@ export class Panel {
             // An item with a parent item is shown below it (an unknown parent hides it, as in Filament).
             const own = inGroup.filter((i) => i._parentItem === null).map((i) => view(i, [...i._childItems, ...inGroup.filter((child) => child._parentItem === i.label)]));
             const options = label ? this._navigationGroupOptions.get(label) : undefined;
-            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive || i.activeChildItems), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
+            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive || i.activeChildItems), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, dropdownItems: own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
         }).filter((g) => g.items.length);
     }
 
@@ -1252,17 +1252,21 @@ abstract class BasePage extends Component implements SchemaHost {
     }
 }
 
-/** A navigation group for the topbar: in a dropdown, an item with children forms its own list with them. */
-function topNavigationGroup<G extends { items: NavigationItemView[] }>(group: G): G & { lists: (NavigationItemView & { colorClasses: string[] })[][] } {
-    const colored = (item: NavigationItemView) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] });
+const coloredNavigationItem = (item: NavigationItemView) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] });
+/** The lists of a navigation group's dropdown: an item with children forms its own list with them (Filament's `$lists`). */
+function navigationDropdownLists(items: NavigationItemView[]): (NavigationItemView & { colorClasses: string[] })[][] {
     const lists: (NavigationItemView & { colorClasses: string[] })[][] = [];
-    for (const item of group.items) {
-        if (item.childItems.length) { lists.push([colored(item), ...item.childItems.map(colored)], []); continue; }
+    for (const item of items) {
+        if (item.childItems.length) { lists.push([coloredNavigationItem(item), ...item.childItems.map(coloredNavigationItem)], []); continue; }
         if (!lists.length) lists.push([]);
-        lists[lists.length - 1].push(colored(item));
+        lists[lists.length - 1].push(coloredNavigationItem(item));
     }
     if (lists.length && !lists[lists.length - 1].length) lists.pop();
-    return { ...group, items: group.items.map(colored), lists };
+    return lists;
+}
+/** A navigation group for the topbar: in a dropdown, an item with children forms its own list with them. */
+function topNavigationGroup<G extends { items: NavigationItemView[] }>(group: G): G & { lists: (NavigationItemView & { colorClasses: string[] })[][] } {
+    return { ...group, items: group.items.map(coloredNavigationItem), lists: navigationDropdownLists(group.items) };
 }
 
 /** A panel page, in the full layout (sidebar, header). */
@@ -4618,7 +4622,10 @@ export class Sidebar extends Component {
             globalSearch: panel.hasGlobalSearch() && inSidebar(panel.getGlobalSearchPosition()) ? await this.mountChild(`navette.${panel.getId()}.global-search`, {}, `${this.id}.global-search`) : null,
             databaseNotifications: panel.getDatabaseNotifications() && inSidebar(panel.getDatabaseNotificationsPosition()) ? await this.mountChild(`navette.${panel.getId()}.database-notifications`, {}, `${this.id}.database-notifications`, { lazy: true }) : null,
             userMenu: inSidebar(panel.getUserMenuPosition()) ? await renderUserMenu(this, 'sidebar') : null,
-            homeUrl: panel.getUrl(), brand: panel.getBrand(), groups: panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user)),
+            homeUrl: panel.getUrl(), brand: panel.getBrand(),
+            // With a sidebar collapsible to icons, a group with an icon and a label opens a dropdown of its items while collapsed.
+            groups: panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user))
+                .map((group) => ({ ...group, lists: panel.isSidebarCollapsibleOnDesktop() && group.label && group.icon ? navigationDropdownLists(group.dropdownItems) : null })),
             livewireId: this.id,
         });
     }
@@ -4743,6 +4750,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtimeOptions.uploadPrefix ??= panel.getLivewirePrefix();
     // One color manager for all panels: each request sets its own panel's colors on it.
     useColorManager(sharedColors);
+    useNotificationsColorManager(sharedColors);
     useFormsColorManager(sharedColors);
     useTableColorManager(sharedColors);
     useInfolistsColorManager(sharedColors);

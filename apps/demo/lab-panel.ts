@@ -295,6 +295,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .widgets(labWidgets)
         .renderHook('panels::scripts.before', () => '<script src="/js/lab-chart-plugins.js"></script>')
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
+        // Collapsed to icons, the "Tables" group (it has an icon) opens a dropdown of its items.
+        .sidebarCollapsibleOnDesktop()
         .defaultThemeMode('dark')
         .auth(options.auth)
         .canAccess(options.canAccess);
