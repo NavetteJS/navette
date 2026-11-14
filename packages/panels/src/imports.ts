@@ -19,6 +19,8 @@ export type ImportRun = {
     /** Key of the run in the import history, if the panel keeps one. */
     id: string | number | null;
     userId: string | number | null;
+    /** Type of the user (the panel's id), stored by a history with a polymorphic user. */
+    userType?: string | null;
     importer: string;
     fileName: string;
     totalRows: number;
@@ -421,7 +423,7 @@ export async function importRow(importer: typeof Importer, columns: ImportColumn
         await importer.beforeSave(ctx.values, existingKey === null ? null : record, ctx);
         await (existingKey === null ? importer.beforeCreate(ctx) : importer.beforeUpdate(ctx));
         // An update without any attribute to write (only relationships, or every cell blank and ignored) keeps the record as is.
-        const saved = existingKey === null ? await adapter.create(ctx.values) : Object.keys(ctx.values).length ? await adapter.update(existingKey, ctx.values) : record;
+        const saved = await importer.saveRecord(ctx.values, existingKey === null ? null : record, { ...ctx, adapter, key: existingKey });
         if (!saved) throw new RowImportFailedError('The record could not be saved.');
         ctx.record = saved;
         for (const column of filled) await column.saveRelationships(saved, data[column.name], columnCtx(column), model);
@@ -547,7 +549,21 @@ export abstract class Importer {
     static async beforeCreate(_ctx: ImportRowContext): Promise<void> {}
     /** Like `beforeSave()`, only when updating a record. */
     static async beforeUpdate(_ctx: ImportRowContext): Promise<void> {}
+    /**
+     * Saves the row's record (Filament's `saveRecord()`) and returns it: creates it with the attributes filled by the columns
+     * (`values`), or updates the existing `record` (`ctx.key`). Override it to save another way (an upsert, a service...);
+     * relationship columns are saved afterwards on the returned record.
+     */
+    static async saveRecord(values: Record<string, unknown>, record: any | null, ctx: ImportRowContext & { adapter: { create(data: Record<string, unknown>): Promise<any>; update(key: string, data: Record<string, unknown>): Promise<any> }; key: string | null }): Promise<any> {
+        // An update without any attribute to write (only relationships, or every cell blank and ignored) keeps the record as is.
+        if (ctx.key === null) return ctx.adapter.create(values);
+        return Object.keys(values).length ? ctx.adapter.update(ctx.key, values) : record;
+    }
     static async afterSave(_record: any, _ctx: ImportRowContext): Promise<void> {}
+    /** Queue name handed to the background runner (`useBackgroundRunner()`) with each queued import of this importer. */
+    static getJobQueue(): string | null { return null; }
+    /** Connection name handed to the background runner with each queued import of this importer. */
+    static getJobConnection(): string | null { return null; }
     static async afterCreate(_ctx: ImportRowContext): Promise<void> {}
     static async afterUpdate(_ctx: ImportRowContext): Promise<void> {}
     /** Custom validation messages: `{ 'name.required': 'The name column must not be empty.' }` (`:attribute` is replaced). */
@@ -702,7 +718,15 @@ export function importFileRule(rule: ImportFileRule, livewire: () => any): Rule 
 export class ImportAction {
     /** Records the imports requested by import actions instead of processing them (tests); `restore()` stops it. */
     static fake(): ImportFake { importFake?.restore(); importFake = new ImportFake(); return importFake; }
-    static make(name = 'import'): ImportActionInstance {
+    /** Name of `ImportAction.make()` without a name. */
+    static getDefaultName(): string { return 'import'; }
+    private static configurators: ((action: ImportActionInstance) => void)[] = [];
+    /** Default setup of every import action created afterwards by `make()`: `ImportAction.configureUsing((action) => action.chunkSize(500))`. */
+    static configureUsing(configure: (action: ImportActionInstance) => void): void { this.configurators.push(configure); }
+    /** Forgets the `configureUsing()` callbacks (tests). */
+    static resetConfiguration(): void { this.configurators = []; }
+    static make(name: string | null = null): ImportActionInstance {
+        name ??= this.getDefaultName();
         let importer: typeof Importer | null = null, maxRows: ActionLazy<number> = DEFAULT_MAX_IMPORT_ROWS, maxKilobytes = 5120, mapping = true, queued = false;
         let chunkSize: ActionLazy<number> = 100, delimiter: ActionLazy<string | null> = null, encoding: ActionLazy<string | null> = null, headerOffset: ActionLazy<number | null> = null;
         let staticOptions: ActionLazy<Record<string, unknown>> = {};
@@ -803,8 +827,8 @@ export class ImportAction {
                 const adapter = livewire.getDataAdapterForTable();
                 const history: ImportExportHistory | null = panel?.getImportExportHistory?.() ?? null;
                 const fileName = String(upload.name ?? 'import');
-                const run: ImportRun = { id: null, userId: user?.id ?? null, importer: currentImporter.name, fileName, totalRows: rows.length, processedRows: 0, successfulRows: 0, columnMap, options };
-                if (history) run.id = await history.startImport({ userId: user.id, importer: currentImporter.name, fileName, totalRows: rows.length });
+                const run: ImportRun = { id: null, userId: user?.id ?? null, userType: panel?.getId?.() ?? null, importer: currentImporter.name, fileName, totalRows: rows.length, processedRows: 0, successfulRows: 0, columnMap, options };
+                if (history) run.id = await history.startImport({ userId: user.id, userType: run.userType ?? null, importer: currentImporter.name, fileName, totalRows: rows.length });
                 if (importFake) { importFake.record({ import: run, columnMap, options }); return; }
                 const size = Math.max(1, Math.floor(lazy(chunkSize, livewire)));
                 const sensitiveHeaders = new Set(columns.filter((column) => column.isSensitive()).map((column) => columnMap[column.name]).filter((header): header is string => header !== null));
@@ -853,7 +877,7 @@ export class ImportAction {
                 };
                 if (!background) { await process(); return; }
                 Notification.make().success().title(t('filament-actions::import.notifications.started.title')).body(tc('filament-actions::import.notifications.started.body', rows.length, { count: rows.length.toLocaleString('en-US') })).send();
-                runInBackground(process);
+                runInBackground(process, { type: 'import', exporter: null, importer: currentImporter, run, queue: currentImporter.getJobQueue(), connection: currentImporter.getJobConnection(), panel: panel?.getId?.() ?? null, userId: user?.id ?? null });
             }) as ImportActionInstance;
         action.importer = (value) => { importer = value; return action; };
         action.getImporter = () => importerOf();
@@ -873,6 +897,7 @@ export class ImportAction {
             fileRules.push(...list);
             return action;
         };
+        for (const configure of this.configurators) configure(action);
         return action;
     }
 }

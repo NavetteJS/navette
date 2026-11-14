@@ -156,6 +156,8 @@ SelectFilter.make('tags')
 
 The second argument is the column used as the option label. The relationship must be declared in the model's `relationMappings`, and the table must use an `ObjectionAdapter`.
 
+`filter.hasRelationship()` tells whether `relationship()` is configured, and `getRelationshipName()` returns the relationship. Filament's `getQualifiedRelatedKeyNameForRelationship()` (an Eloquent column name for `whereHas()`) has no equivalent: the data adapter builds the relationship query.
+
 ### Customizing the option labels
 
 `getOptionLabelFromRecordUsing()` computes the label of each option, and of the active filter indicator, from the related record instead of reading the title attribute:

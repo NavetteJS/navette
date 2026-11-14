@@ -12,7 +12,7 @@ import express, { type Request, type Response, type Router } from 'express';
 import { Action, ActionHalt, AuthorizationResponse, useColorManager, ActionGroup, useCsrfToken as useActionsCsrfToken, type ActionCallContext } from '@navette-js/actions';
 import { actionRateLimitKey, clearDefaultActionUrlScript, getActionRateLimitStore, MountedAction, readDefaultActionQuery, type MountedActionHost } from './action-support.ts';
 export { actionRateLimitKey, getActionRateLimitStore, MemoryActionRateLimitStore, MountedAction, readDefaultActionQuery, useActionRateLimitStore, type ActionRateLimitStore, type DefaultActionQuery } from './action-support.ts';
-export { AuthorizationResponse } from '@navette-js/actions';
+export { AuthorizationResponse, DenyResponse, type DenyMessage } from '@navette-js/actions';
 /** A mounted action in the component state: name, arguments, server-side context and form data. */
 export type MountedActionState = { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown>; /** Read by the unsaved changes alert of the browser. */ hasUnsavedChangesAlert?: boolean };
 /** Evaluation context of an action's visibility and authorization on mount. */
@@ -41,6 +41,9 @@ export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, Export
 export { decodeCsv, guessCsvDelimiter, ImportAction, ImportColumn, Importer, ImportFake, ImportValidationError, readSpreadsheet, RowImportFailedError, TestableImport, type DispatchedImport, type ImportActionInstance, type ImportColumnContext, type ImportFileRule, type ImportRowContext, type ImportRule, type ImportRun, type RowStatus, type SpreadsheetReadOptions, type TestableImportOptions } from './imports.ts';
 export { DiskDownloadStore, registerDownloader, sendDownload, type Downloader, type DownloadPutOptions, type DownloadStorage, type StoredDownload } from './downloads.ts';
 export { XlsxCell, XlsxColor, XlsxOptions, XlsxStyle, type XlsxRowInput } from './xlsx.ts';
+export { XlsxSheet, XlsxSheetView, XlsxWriter } from './xlsx.ts';
+export { type ExportFileContext, type ExportFormatInterface } from './export-formats.ts';
+export { type BackgroundTaskContext, type ExportFormatType, type ImportExportHistoryOptions } from './import-export.ts';
 export { buildXlsx, readXlsx } from './xlsx.ts';
 import { CreateAction, DeleteAction, DeleteBulkAction, ForceDeleteAction, RestoreAction, relatedRecordLabel, searchRelatedRecords, sendBulkActionOutcome, type RecordSelectOptions } from './record-actions.ts';
 export { AssociateAction, AttachAction, CreateAction, CustomizableAction, DeleteAction, DeleteBulkAction, DetachAction, DetachBulkAction, DissociateAction, DissociateBulkAction, EditAction, ForceDeleteAction, ForceDeleteBulkAction, RecordSelectAction, ReplicateAction, RestoreAction, RestoreBulkAction, sendActionFailure, sendActionSuccess, sendBulkActionOutcome, ViewAction, type BulkOutcome, type RecordSelectOptions } from './record-actions.ts';
@@ -226,7 +229,20 @@ export class Panel {
     importExportHistory(store: ImportExportHistory | null): this { this._importExportHistory = store; return this; }
     getImportExportHistory(): ImportExportHistory | null { return this._importExportHistory; }
     getDownloads(): DownloadStorage { return (this._downloads ??= new DiskDownloadStore({ directory: join(process.env.NAVETTE_DOWNLOADS ?? join('storage', 'downloads'), this._id.replace(/[^A-Za-z0-9_-]/g, '-')) })); }
-    getDownloadUrl(token: string): string { return this.getBaseUrl(`downloads/${encodeURIComponent(token)}`); }
+    private _downloadDisks: Record<string, DownloadStorage> = {};
+    /**
+     * Named download stores ("disks", as Filament's `fileDisk('s3')`): an export action's `fileDisk(name)` or an exporter's
+     * `getFileDiskName()` keeps its files in one of them instead of the `downloads()` store.
+     */
+    downloadDisks(disks: Record<string, DownloadStorage>): this { this._downloadDisks = { ...this._downloadDisks, ...disks }; return this; }
+    hasDownloadDisk(name: string): boolean { return Object.hasOwn(this._downloadDisks, name); }
+    /** The store of a named disk (`null`: the `downloads()` store). */
+    getDownloadDisk(name: string | null = null): DownloadStorage {
+        if (name === null) return this.getDownloads();
+        if (!this.hasDownloadDisk(name)) throw new Error(`Download disk [${name}] is not registered: use panel.downloadDisks({ ${name}: store }).`);
+        return this._downloadDisks[name];
+    }
+    getDownloadUrl(token: string, disk: string | null = null): string { return this.getBaseUrl(`downloads/${encodeURIComponent(token)}`) + (disk === null ? '' : `?disk=${encodeURIComponent(disk)}`); }
     private _pages: (typeof Page)[] = [];
     private _resources: (typeof Resource)[] = [];
     private _navigationItems: NavigationItem[] = [];
@@ -4425,8 +4441,9 @@ export class ListRecords extends Page implements TableHost {
             const records = await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)));
             for (const record of records) {
                 if (!record) { failed++; continue; }
-                const allowed = authorization === null ? true : typeof authorization === 'string' ? await canOn(this, authorization, record) : await authorization(record, { ...ctx, record });
-                if (!allowed) { unauthorized++; continue; }
+                // A denial may be a `DenyResponse`: its message is grouped by key in the failure notification.
+                const response = authorization === null ? null : typeof authorization === 'string' ? await inspectOn(this, authorization, record) : AuthorizationResponse.from(await authorization(record, { ...ctx, record }));
+                if (response?.denied()) { unauthorized++; action.reportBulkAuthorizationFailure(response); continue; }
                 const reportedBefore = action.getSuccessfulSelectedRecordsCount();
                 try {
                     const result = await process(record);
@@ -6057,7 +6074,10 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const ctx = await context(req, res);
         if (!ctx.user || ctx.denied) return forbidden(req, res);
         if (!(await runAccessMiddleware(req, res, ctx, 'page'))) return;
-        const file = await panel.getDownloads().get(String(req.params.token), ctx.user.id);
+        // `?disk=`: one of the panel's named download disks (an unknown name finds nothing).
+        const disk = typeof req.query?.disk === 'string' ? req.query.disk : null;
+        if (disk !== null && !panel.hasDownloadDisk(disk)) return renderErrorPage(panel, req, res, 404);
+        const file = await panel.getDownloadDisk(disk).get(String(req.params.token), ctx.user.id);
         if (!file) return renderErrorPage(panel, req, res, 404);
         await downloaderOf(file)(file, res);
     });

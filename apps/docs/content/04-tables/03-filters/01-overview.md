@@ -118,6 +118,10 @@ static table(table: Table<Post>): Table<Post> {
 
 Every change sends a request to the server and reloads the table. Keep deferred filters for slow queries, or for forms with text fields.
 
+### Resetting and refreshing the table from code
+
+From an action or a method of the table's page, `this.resetTableFiltersForm()` (or `livewire.resetTableFiltersForm()` in an action's function) restores the default values of all filters, as the "Reset" link does, and returns the table to its first page. Navette keeps no cache of the records: every request renders the table again from a fresh query, so there is no `resetTable()` to call after changing records. To reload the table from the browser without changing anything, dispatch Livewire's `$refresh` (`wire:click="$refresh"`, or `$wire.$refresh()` in Alpine).
+
 ## Persisting filters in the user's session
 
 To keep the applied filters when the user leaves the page and comes back, use `persistFiltersInSession()`. `persistSearchInSession()`, `persistColumnSearchesInSession()` and `persistSortInSession()` do the same for the search, the column searches and the sort:

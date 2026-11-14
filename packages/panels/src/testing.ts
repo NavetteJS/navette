@@ -90,8 +90,9 @@ function png(width: number, height: number): Buffer {
 }
 
 // ------------------------------------------------------------------ TestAction (Filament\Actions\Testing\TestAction)
-type ActionName = string | { make(...args: any[]): { getName(): string } };
-const actionNameOf = (name: ActionName): string => (typeof name === 'string' ? name : name.make().getName());
+type ActionName = string | { getDefaultName?(): string | null; make(...args: any[]): { getName(): string } };
+/** An action name, or an action class: its `getDefaultName()` (or the name of an instance made without arguments). */
+const actionNameOf = (name: ActionName): string => (typeof name === 'string' ? name : name.getDefaultName?.() ?? name.make().getName());
 /** Designates an action to mount or assert: a table row or bulk action, an action of a schema component, with arguments. */
 export class TestAction {
     readonly name: string;
@@ -343,7 +344,10 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         const files: { name: string; type: string; content: Buffer }[] = [];
         for (const notification of this.allNotifications) for (const action of notification.actions ?? []) {
             if (!action.url?.startsWith(prefix) || !this.user) continue;
-            const file = this.panel.getDownloads().get(decodeURIComponent(action.url.slice(prefix.length)), this.user.id);
+            const [token, query] = action.url.slice(prefix.length).split('?');
+            const disk = new URLSearchParams(query ?? '').get('disk');
+            if (disk !== null && !this.panel.hasDownloadDisk(disk)) continue;
+            const file = this.panel.getDownloadDisk(disk).get(decodeURIComponent(token), this.user.id);
             // Read synchronously: the built-in stores (memory, disk). An asynchronous store is read with its own get().
             if (file && !(file instanceof Promise)) files.push({ name: file.name, type: file.type, content: file.content });
         }
@@ -705,13 +709,20 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
                 const chain = await this.resolveChain(component, specs);
                 if (!chain) fail(`Failed asserting that an action with name [${this.prettyName(specs)}] exists on the [${this.className}] component.`);
                 const last = chain![chain!.length - 1];
-                if (check && !(await check(last.action, (await this.actionState(component, last)).ctx))) fail(message(this.prettyName(specs)));
+                if (check) {
+                    const { ctx } = await this.actionState(component, last);
+                    // `action.getModalDescription()`… without arguments evaluate with the action's context.
+                    last.action.useEvaluationContext?.(ctx);
+                    let passed: boolean;
+                    try { passed = await check(last.action, ctx); } finally { last.action.useEvaluationContext?.(null); }
+                    if (!passed) fail(message(this.prettyName(specs)));
+                }
             });
         });
     }
     /** The action exists (optionally `check(action)` returns true). */
-    assertActionExists(actions: Actions, check: ((action: any) => boolean | Promise<boolean>) | null = null, args: Record<string, unknown> = {}): this {
-        return this.actionAssertion(actions, args, check ? (action) => check(action) : null, (name) => `Failed asserting that an action with the name [${name}] and provided configuration exists on the [${this.className}] component.`);
+    assertActionExists(actions: Actions, check: ((action: any, ctx: any) => boolean | Promise<boolean>) | null = null, args: Record<string, unknown> = {}): this {
+        return this.actionAssertion(actions, args, check ? (action, ctx) => check(action, ctx) : null, (name) => `Failed asserting that an action with the name [${name}] and provided configuration exists on the [${this.className}] component.`);
     }
     assertActionDoesNotExist(actions: Actions): this {
         return this.enqueue(async () => {

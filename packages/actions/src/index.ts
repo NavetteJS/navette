@@ -3,9 +3,9 @@ import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndic
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
-import { AuthorizationResponse } from './authorization.ts';
+import { AuthorizationResponse, DenyResponse } from './authorization.ts';
 import { addAttributeSet, mergeAttributeSets, mergeIntoRootTag, attributesToHtml, type ExtraAttributes } from './extra-attributes.ts';
-export { AuthorizationResponse, isAllowed } from './authorization.ts';
+export { AuthorizationResponse, DenyResponse, isAllowed, type DenyMessage } from './authorization.ts';
 export { mergeIntoRootTag, mergeAttributeSets, attributesToHtml, type ExtraAttributes } from './extra-attributes.ts';
 
 /** Policy abilities required by `authorize('update')` (all) or `authorizeAny([...])` (one). */
@@ -87,7 +87,25 @@ export class Action implements Renderable {
     private _lazyIcon: ((ctx: ComponentContext) => string | null | Promise<string | null>) | null = null;
 
     constructor(name: string) { this.name = name; }
-    static make(name: string): Action { return configured(new Action(name)); }
+    /**
+     * Name used by `make()` without a name (Filament's `getDefaultName()`): `null` for `Action`, so a name is required; a
+     * subclass may return its own (`class SendEmailAction extends Action { static getDefaultName() { return 'sendEmail'; } }`).
+     * The prebuilt actions return theirs (`EditAction.getDefaultName()` is `'edit'`).
+     */
+    static getDefaultName(): string | null { return null; }
+    /**
+     * A new action of this class (a subclass gets an instance of itself), named `name` or `getDefaultName()`. Then runs the
+     * instance's `setUp()` (empty by default; a subclass configures itself there) and the `configureUsing()` callbacks.
+     */
+    static make(name: string | null = null): Action {
+        const resolved = name ?? this.getDefaultName();
+        if (!resolved) throw new Error(`Action of class [${this.name}] must have a unique name, passed to the [make()] method.`);
+        const action = new this(resolved);
+        action.setUp();
+        return configured(action);
+    }
+    /** Configuration of a custom action class, run by `make()` before the `configureUsing()` callbacks. */
+    protected setUp(): void {}
     label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     /** Pass a function to make the color depend on the record (row actions). */
     color(color: string | ((ctx: ComponentContext) => string | Promise<string>)): this { this._colorSet = true; if (typeof color === 'function') this._lazyColor = color; else { this._color = color; this._lazyColor = null; } return this; }
@@ -146,6 +164,51 @@ export class Action implements Renderable {
     /** Label of the submit button; a function receives the action context (its arguments…). */
     modalSubmitActionLabel(label: string | null | ((ctx: ActionCallContext) => string | null)): this { if (typeof label === 'function') { this._lazySubmitLabel = label; this._modalSubmitActionLabel = null; } else { this._modalSubmitActionLabel = label; this._lazySubmitLabel = null; } return this; }
     modalIcon(name: string | null): this { this._modalIcon = name; return this; }
+
+    // --- modal getters (Filament's `getModalHeading()`, `getModalDescription()`…), e.g. for `assertActionExists(name, (action) => …)`.
+    // A function value is evaluated with `ctx`; without it, with the context given by the test helpers
+    // (`useEvaluationContext()`), or an empty one.
+    private _evaluationContext: ActionCallContext | null = null;
+    /** @internal Context used by the getters below when none is passed (set by the testing helpers before calling a check). */
+    useEvaluationContext(ctx: ActionCallContext | null): this { this._evaluationContext = ctx; return this; }
+    private getterContext(ctx: ActionCallContext | null | undefined): ActionCallContext {
+        return { livewire: null as any, record: null, arguments: {}, data: {}, ...(ctx ?? this._evaluationContext ?? {}), action: this } as ActionCallContext;
+    }
+    private static modalText(value: unknown): string | null { return value === null || value === undefined || value === '' ? null : value instanceof HtmlString ? value.html : String(value); }
+    /** Heading of the modal (the action's label by default). */
+    async getModalHeading(ctx?: ActionCallContext | null): Promise<string> {
+        const context = this.getterContext(ctx);
+        const heading = Action.modalText(await evaluate(this._modalHeading, context));
+        return heading ?? (await this.getLabel({ livewire: context.livewire, component: null as any, operation: null, record: context.record, get: (() => undefined) as unknown as ComponentContext['get'], state: undefined }));
+    }
+    /** Text under the heading (the confirmation text by default with `requiresConfirmation()`), or `null`. */
+    async getModalDescription(ctx?: ActionCallContext | null): Promise<string | null> {
+        return Action.modalText(await evaluate(this._modalDescription, this.getterContext(ctx))) ?? (this._requiresConfirmation ? t('filament-actions::modal.confirmation') : null);
+    }
+    /** Small text above the heading, or `null`. */
+    async getModalEyebrow(ctx?: ActionCallContext | null): Promise<string | null> { return Action.modalText(await evaluate(this._modalEyebrow, this.getterContext(ctx))); }
+    /** Label of the submit button ("Confirm" with `requiresConfirmation()`, otherwise "Submit", by default). */
+    async getModalSubmitActionLabel(ctx?: ActionCallContext | null): Promise<string> {
+        return this._lazySubmitLabel?.(this.getterContext(ctx)) ?? this._modalSubmitActionLabel ?? t(this._requiresConfirmation ? 'filament-actions::modal.actions.confirm.label' : 'filament-actions::modal.actions.submit.label');
+    }
+    /** Label of the cancel button. */
+    getModalCancelActionLabel(): string { return this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label'); }
+    /** Icon of the modal (the warning icon with `requiresConfirmation()`), or `null`. */
+    getModalIcon(): string | null { return this._modalIcon ?? (this._requiresConfirmation ? icons.resolve('actions::modal.confirmation') ?? 'o-exclamation-triangle' : null); }
+    /** Color of the modal icon (the action's color by default). */
+    getModalIconColor(): string { return this._modalIconColor ?? this._color ?? 'primary'; }
+    /** Width of the modal: `md` for a confirmation, `4xl` otherwise, by default. */
+    getModalWidth(): string { return this._modalWidth ?? (this._requiresConfirmation ? 'md' : '4xl'); }
+    /** Alignment of the modal's content. */
+    getModalAlignment(): 'start' | 'center' { const width = this.getModalWidth(); return this._modalAlignment ?? (this._requiresConfirmation || ['xs', 'sm'].includes(width) ? 'center' : 'start'); }
+    /** Alignment of the modal's footer actions. */
+    getModalFooterActionsAlignment(): 'start' | 'center' | 'end' { return this._footerAlignment ?? (this._requiresConfirmation ? 'center' : 'start'); }
+    /** Whether the modal opens as a slide-over. */
+    isModalSlideOver(): boolean { return this._slideOver; }
+    /** Whether the action asks for confirmation (`requiresConfirmation()`). */
+    isConfirmationRequired(): boolean { return this._requiresConfirmation; }
+    /** Whether the modal has a submit button (`modalSubmitAction(false)` removes it). */
+    hasModalSubmitAction(): boolean { return this._hasSubmit; }
     private _badge: string | number | null | (() => string | number | null | Promise<string | number | null>) = null;
     private _badgeColor = 'primary';
     /** Color of the counter set with `badge(value)`. */
@@ -447,7 +510,7 @@ export class Action implements Renderable {
     /** Runs after the handler succeeds (logging, extra notification…). */
     after(fn: (ctx: ActionCallContext) => unknown | Promise<unknown>): this { this._after = fn; return this; }
     // --- bulk actions
-    private _individualAuthorization: string | ((record: any, ctx: ActionCallContext) => boolean | Promise<boolean>) | null = null;
+    private _individualAuthorization: string | ((record: any, ctx: ActionCallContext) => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>) | null = null;
     private _chunkSize = 100;
     private _deselectAfterCompletion = false;
     private _successNotificationTitle: string | null = null;
@@ -458,8 +521,8 @@ export class Action implements Renderable {
      * Bulk action: each selected record must pass this policy ability (or function), otherwise it is skipped and counted in the
      * failure notification. Used by `processSelectedRecords()` of the table's page.
      */
-    authorizeIndividualRecords(ability: string | ((record: any, ctx: ActionCallContext) => boolean | Promise<boolean>) | null): this { this._individualAuthorization = ability; return this; }
-    getIndividualRecordsAuthorization(): string | ((record: any, ctx: ActionCallContext) => boolean | Promise<boolean>) | null { return this._individualAuthorization; }
+    authorizeIndividualRecords(ability: string | ((record: any, ctx: ActionCallContext) => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>) | null): this { this._individualAuthorization = ability; return this; }
+    getIndividualRecordsAuthorization(): string | ((record: any, ctx: ActionCallContext) => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>) | null { return this._individualAuthorization; }
     /** Number of selected records loaded at a time by `processSelectedRecords()` (100 by default). */
     chunkSelectedRecords(size: number): this { this._chunkSize = Math.max(1, Math.floor(size)); return this; }
     getSelectedRecordsChunkSize(): number { return this._chunkSize; }
@@ -485,6 +548,7 @@ export class Action implements Renderable {
     private _fetchSelectedRecords = true;
     private _selectionHost: any = null;
     private _selection = { total: 0, successful: 0, withoutMessage: 0, messages: new Map<string, { message: BulkMessage | null; count: number }>(), notified: false, used: false };
+    private _authorizationFailures = { withoutMessage: 0, responses: new Map<string, { response: AuthorizationResponse; count: number }>() };
     /**
      * A table action (header, toolbar or row action) that works on the selected records: its click sends the table's selection,
      * and its handler reads it with `getSelectedRecords()` or `getSelectedRecordsQuery()`. The selection is checked again on the
@@ -561,7 +625,28 @@ export class Action implements Renderable {
     /** Set by the host once it has sent the success or failure notification of the selection. */
     markSelectedRecordsOutcomeNotified(): void { this._selection.notified = true; }
     /** Starts a selection run (used by the host's `processSelectedRecords()`). */
-    startSelectedRecordsRun(total: number): void { this._selection = { total, successful: total, withoutMessage: 0, messages: new Map(), notified: false, used: true }; }
+    startSelectedRecordsRun(total: number): void {
+        this._selection = { total, successful: total, withoutMessage: 0, messages: new Map(), notified: false, used: true };
+        this._authorizationFailures = { withoutMessage: 0, responses: new Map() };
+    }
+    /**
+     * Records a selected record denied by `authorizeIndividualRecords()` (used by the host's `processSelectedRecords()`): denials
+     * of a `DenyResponse` are grouped by key, other denials by message; denials without a message use
+     * `missingBulkAuthorizationFailureNotificationMessage()`.
+     */
+    reportBulkAuthorizationFailure(response: AuthorizationResponse | null = null): void {
+        const message = response instanceof DenyResponse ? null : response?.message() ?? null;
+        const key = response instanceof DenyResponse ? `key:${response.getKey() ?? ''}` : message ? `message:${message}` : null;
+        if (key === null || !response) this._authorizationFailures.withoutMessage++;
+        else { const previous = this._authorizationFailures.responses.get(key); this._authorizationFailures.responses.set(key, { response: previous?.response ?? response, count: (previous?.count ?? 0) + 1 }); }
+        this._selection.used = true;
+    }
+    /** Messages of the denials of `authorizeIndividualRecords()`: one per `DenyResponse` key (from its count) or per message. */
+    getBulkAuthorizationFailureMessages(): string[] {
+        return [...this._authorizationFailures.responses.values()].flatMap(({ response, count }) => { const text = response.message(count, this._selection.total); return text ? [text] : []; });
+    }
+    /** Denials of `authorizeIndividualRecords()` without a message. */
+    getBulkAuthorizationFailureWithoutMessageCount(): number { return this._authorizationFailures.withoutMessage; }
 
     // --- outcome of single actions
     private _successNotification: ((notification: any, ctx: ActionCallContext) => any) | null = null;

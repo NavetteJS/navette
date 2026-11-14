@@ -521,6 +521,26 @@ The picker is made wider for 2 or 3 columns.
 
 The SQL for dates, months, years and text searches is written for SQLite, MySQL and MariaDB, PostgreSQL and SQL Server. Navette reads the client of the Knex connection to choose it. Columns are passed as identifiers and values as bound parameters; the operators come from a closed list.
 
+## Overriding the default operators
+
+Each constraint offers its default operators. To offer only some of them, pass the built-in operator classes to `operators()`; `pushOperators()` adds operators after the default ones, and `unshiftOperators()` before them (the first one becomes the default operator of a new rule):
+
+```ts
+import { ContainsOperator, IsFilledOperator, NumberConstraint, EqualsOperator, IsMinOperator, TextConstraint } from '@navette-js/tables';
+
+TextConstraint.make('name')
+    .operators([ContainsOperator.make(), IsFilledOperator.make()])
+
+NumberConstraint.make('stock')
+    .integer()
+    .pushOperators([IsFilledOperator.make()]) // like nullable()
+
+NumberConstraint.make('price')
+    .unshiftOperators([EqualsOperator.make()]) // "equals" becomes the default operator
+```
+
+The built-in operators are `IsFilledOperator` (any constraint), `ContainsOperator`, `StartsWithOperator`, `EndsWithOperator` and `EqualsOperator` (text), `IsMinOperator`, `IsMaxOperator` and `EqualsOperator` (number), `IsTrueOperator` (boolean), `IsAfterOperator`, `IsBeforeOperator`, `IsDateOperator`, `IsMonthOperator` and `IsYearOperator` (date), `IsOperator` (select), and `IsRelatedToOperator`, `HasMinOperator`, `HasMaxOperator`, `EqualsOperator` and `IsEmptyOperator` (relationship). Filament has an `EqualsOperator` class per constraint type; in Navette one `EqualsOperator` works as the constraint's own: it compares text on a text constraint, numbers on a number constraint, and the number of related records on a relationship constraint. A built-in operator follows its constraint's options (`integer()`, `time()`, `multiple()`…), even when they are set after `operators()`. `IsOperator` needs a select constraint, and `IsRelatedToOperator` and `IsEmptyOperator` a relationship constraint.
+
 ## Custom operators
 
 You may add your own operators to a constraint with `pushOperators()` (after the default ones) or `unshiftOperators()` (before them: the first one becomes the default operator of a new rule), or replace its operators with `operators()`. An operator given to `unshiftOperators()` with the name of an existing operator replaces it. An operator has a name, labels, an optional settings form, the condition it adds to the query, and the summary shown in the filter indicator:
