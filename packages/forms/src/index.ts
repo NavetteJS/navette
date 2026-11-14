@@ -2,8 +2,10 @@
 import { Attributes, HtmlString, cls, e, evaluate, icon, icons, isEnum, js, sanitizeHtml, views, type ColorManager, type Enum, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
-import { Component, Icon as SchemaIcon, Schema, Text, childSchema, debounceMilliseconds, jsFieldHtml, normalizeRendererConfiguration, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem, type JsFieldBindingConfiguration, type JsFieldConfiguration, type JsRenderer } from '@navette-js/schemas';
+import { Component, LayoutComponent, loadSingularRelationshipState, saveSingularRelationship, withStateSource, Icon as SchemaIcon, Schema, Text, childSchema, debounceMilliseconds, jsFieldHtml, normalizeRendererConfiguration, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem, type JsFieldBindingConfiguration, type JsFieldConfiguration, type JsRenderer } from '@navette-js/schemas';
 import { Action, ActionHalt } from '@navette-js/actions';
+import { FieldBase } from './field-base.ts';
+export { FieldBase, type FieldSlotName, type StateCallback, type ValidationMessage } from './field-base.ts';
 import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 export { modifyAction, type ActionModifier } from './item-actions.ts';
 export type { JsFieldProps, JsFieldRenderer, JsonValue, JsRendererContext, JsRendererInstance, JsRendererUtilities, Snapshot } from '@navette-js/schemas';
@@ -46,95 +48,26 @@ export type { Rule } from './rules.ts';
 export { recordFailedRules, stringRule } from './rules.ts';
 const headline = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ (.)/g, (_, c) => ' ' + c.toLowerCase());
 
-export abstract class Field extends Component {
-    protected _label: Lazy<string | null, ComponentContext> = null;
+export abstract class Field extends FieldBase {
     protected _required: Lazy<boolean, ComponentContext> = false;
-    protected _disabled: Lazy<boolean, ComponentContext> = false;
-    protected _autofocus = false;
-    protected _default: unknown = null;
     protected _rules: Rule[] = [];
-    protected _afterStateUpdated: ((ctx: ComponentContext & { set: (name: string, value: unknown) => void }) => unknown) | null = null;
-    protected _dehydrated: boolean | null = null;
-    protected _hiddenLabel = false;
-    protected _helperText: string | null = null;
-    protected _liveMode: 'live' | 'blur' | null = null;
-    protected _validationAttribute: string | null = null;
-    protected _validationMessages: Record<string, string | ((attribute: string) => string)> = {};
-    protected _markedAsRequired: boolean | null = null;
 
     constructor(name: string) { super(); this._name = name; }
-    /** Sends the state to the server as soon as it changes (`onBlur`: when the field loses focus). `false` turns it off. */
-    live(condition: boolean | { onBlur?: boolean } = true): this { this._liveMode = condition === false ? null : typeof condition === 'object' && condition.onBlur ? 'blur' : 'live'; return this; }
-    isLive(): boolean { return this._liveMode !== null; }
-    /** `wire:model` directive of the field, with its live modifiers. */
-    protected wireModel(): string { return `wire:model${this._liveMode ? '.live' : ''}${this._liveMode === 'blur' ? '.blur' : ''}`; }
+    /** `wire:model` directive of the field, with its live modifiers (`wire:model.live.debounce.500`). */
+    protected wireModel(): string { return this.applyStateBindingModifiers('wire:model'); }
+    /** Second `$entangle()` argument: whether the binding is live (`isOptimisticallyLive: false`: only a plain `live()`). */
+    /** Extra Alpine attributes, as HTML (` name="value"`), for a control rendered by a JavaScript component. */
+    protected extraAlpineHtml(): string { const html = new Attributes(this.getExtraAlpineAttributes()).toHtml(); return html ? ` ${html}` : ''; }
+    /** Extra Alpine and input attributes, as HTML, for a control whose root element is the JavaScript component. */
+    protected extraControlHtml(): string { const html = new Attributes(this.getExtraControlAttributes()).toHtml(); return html ? ` ${html}` : ''; }
+    protected entangleLive(isOptimisticallyLive = true): boolean { return this.getStateBindingModifiers({ withBlur: false, withDebounce: false, isOptimisticallyLive }).includes('live'); }
     hasStatePath(): boolean { return true; }
     getName(): string { return this._name!; }
     getId(): string { return this.getKey()!; }
 
-    label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     required(condition: Lazy<boolean, ComponentContext> = true): this { this._required = condition; return this; }
-    disabled(condition: Lazy<boolean, ComponentContext> = true): this { this._disabled = condition; return this; }
-    autofocus(condition = true): this { this._autofocus = condition; return this; }
-    default(value: unknown): this { this._default = value; return this; }
-    /** Helper text shown under the field. */
-    helperText(text: string | null): this { this._helperText = text; return this; }
-    protected _belowContent: ComponentSlot = null;
-    /** Text, components or actions under the control (after the helper text). Strings are escaped. */
-    belowContent(content: ComponentSlot): this { this._belowContent = content; return this; }
-    /** Helper text id, linked to the control through `aria-describedby`. */
-    protected getHelperTextId(): string | null { return this._helperText !== null ? `${this.getId()}-helper-text` : null; }
-    /** Keeps the label for screen readers only. */
-    hiddenLabel(condition = true): this { this._hiddenLabel = condition; return this; }
 
-    protected _hint: Lazy<string | HtmlString | null, ComponentContext> = null;
-    protected _hintColor: Lazy<string | null, ComponentContext> = null;
-    protected _hintIcon: Lazy<string | null, ComponentContext> = null;
-    protected _hintIconTooltip: Lazy<string | null, ComponentContext> = null;
-    protected _hintActions: Action[] = [];
-    /**
-     * Hint shown to the right of the label (a `Text` component). The text is escaped; an `HtmlString` from `@navette-js/support`
-     * (`raw('<a href="…">…</a>')`) is inserted as is, so only put values escaped with `e()` in it.
-     */
-    hint(hint: Lazy<string | HtmlString | null, ComponentContext>): this { this._hint = hint; return this; }
-    /** Color of the hint and its icon (by default `gray` for the text, `primary` for the icon). */
-    hintColor(color: Lazy<string | null, ComponentContext>): this { this._hintColor = color; return this; }
-    /** Hint icon, with an optional tooltip (also used as its accessible name). */
-    hintIcon(name: Lazy<string | null, ComponentContext>, tooltip?: Lazy<string | null, ComponentContext>): this {
-        this._hintIcon = name;
-        if (arguments.length >= 2) this._hintIconTooltip = tooltip ?? null;
-        return this;
-    }
-    hintIconTooltip(tooltip: Lazy<string | null, ComponentContext>): this { this._hintIconTooltip = tooltip; return this; }
-    /** Action shown after the hint (small link), mounted on the field. */
-    hintAction(action: Action): this { return this.hintActions([action]); }
-    hintActions(actions: Action[]): this { this._hintActions = [...this._hintActions, ...actions]; return this; }
-    getHintActions(): Action[] { return this._hintActions; }
-    /** Actions the field exposes for mounting (`schemaComponent` = field key): its hint actions. */
-    getActions(): Action[] { return this.getHintActions(); }
-    /** Row after the label: hint, hint icon and hint actions. */
-    protected async renderAfterLabel(): Promise<string> {
-        const ctx = this.context();
-        const hint = await evaluate(this._hint, ctx);
-        const color = await evaluate(this._hintColor, ctx);
-        const iconName = await evaluate(this._hintIcon, ctx);
-        const items: InlineItem[] = [];
-        if (hint !== null && hint !== undefined && (hint instanceof HtmlString ? hint.html : hint) !== '') items.push(Text.make(hint).color(color));
-        if (iconName) items.push(SchemaIcon.make(iconName).tooltip(await evaluate(this._hintIconTooltip, ctx)).color(color));
-        items.push(...this._hintActions);
-        if (!items.length) return '';
-        // Row components take the field's path, and the field's schema path as their container path.
-        return renderInlineItems(this, items, { alignment: 'end', scope: { path: this.getStatePath(), containerPath: this.container.getStatePath() }, mountKey: this.getKey(), actionView: 'link' });
-    }
-    /** Runs on the server when the field state changes (`live()` field). `set(name, value)` changes another field of the same form. */
-    afterStateUpdated(callback: (ctx: ComponentContext & { set: (name: string, value: unknown) => void }) => unknown): this { this._afterStateUpdated = callback; return this; }
-    hasAfterStateUpdated(): boolean { return this._afterStateUpdated !== null; }
-    async callAfterStateUpdated(set: (name: string, value: unknown) => void): Promise<void> { await this._afterStateUpdated?.({ ...this.context(), set }); }
-    /** Forces the field into the submitted data, even when disabled (`.disabled().dehydrated()`). */
-    dehydrated(condition = true): this { this._dehydrated = condition; return this; }
-    /** By default, a disabled field is neither validated nor saved. */
-    async isDehydrated(): Promise<boolean> { return this._dehydrated ?? !(await this.isDisabled()); }
-    getDefaultState(): unknown { return typeof this._default === 'function' ? this._default() : this._default; }
+    getDefaultState(): unknown { return this.resolvedDefault(); }
     /** Shapes a record value as it enters the form (hydration). */
     hydrateState(value: unknown): unknown { return value; }
     /** Adds a rule: an object `{ name, passes, message }`, or a Laravel-style string (`'max:255'`, `'regex:/^[a-z]+$/'`). */
@@ -162,10 +95,6 @@ export abstract class Field extends Component {
     protected stateForValidation(state: unknown): unknown { return state; }
     /** Sizes (`min`, `max`, `size`, `between`) compare the number, not the text length. */
     protected hasNumericValidation(): boolean { return false; }
-    /** Name of the field in validation messages (the lowercased label by default). */
-    validationAttribute(name: string | null): this { this._validationAttribute = name; return this; }
-    /** Custom messages by rule name (`{ required: 'Tell us your name.', max: 'Too long.' }`); `:attribute` is replaced by the field name. */
-    validationMessages(messages: Record<string, string | ((attribute: string) => string)>): this { this._validationMessages = { ...this._validationMessages, ...messages }; return this; }
     protected _loadStateFromRelationships: ((record: any, ctx: ComponentContext) => unknown) | null = null;
     protected _saveRelationships: ((args: { record: any; state: unknown; ctx: ComponentContext }) => void | Promise<void>) | null = null;
     /** Fills the field from the record's relationships (after the record's own values): `(record, ctx) => state`. */
@@ -176,13 +105,29 @@ export abstract class Field extends Component {
     async savesRelationships(): Promise<boolean> { return this._saveRelationships !== null; }
     async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> { return this._loadStateFromRelationships ? { state: await this._loadStateFromRelationships(record, this.context()) } : null; }
     async saveRelationships(record: any): Promise<void> { if (this._saveRelationships) await this._saveRelationships({ record, state: await this.dehydrateState(this.context().state), ctx: this.context() }); }
-    /** Shows (or hides, with `false`) the required asterisk, regardless of `required()`. */
-    markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
-    async isMarkedAsRequired(): Promise<boolean> { return this._markedAsRequired ?? (await this.isRequired()); }
-    private stringRuleWith(name: string, parameters: unknown[] = []): this { return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name); }
+    /**
+     * Adds a Laravel-style rule with parameters. A parameter may be a function of the field context (as Filament's
+     * closures): the rule is then built at validation time with the evaluated parameters (a list result is spread).
+     */
+    private stringRuleWith(name: string, parameters: Lazy<unknown, ComponentContext>[] = []): this {
+        if (!parameters.some((parameter) => typeof parameter === 'function')) return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name);
+        const options = () => ({ numeric: this.hasNumericValidation(), name: this._name ?? '' });
+        const probe = stringRule(`${name}:${parameters.map(() => '0').join(',')}`, options());
+        let last: Rule | null = null;
+        return this.rule({
+            name: probe?.name ?? name,
+            implicit: probe?.implicit,
+            passes: async (value, ctx) => {
+                const values = (await Promise.all(parameters.map((parameter) => evaluate(parameter as Lazy<unknown, ComponentContext>, ctx)))).flat();
+                last = stringRule(values.length ? `${name}:${values.map(String).join(',')}` : name, options());
+                return last === null || last.passes(value, ctx);
+            },
+            message: (attribute) => last?.message(attribute) ?? '',
+        });
+    }
     /** The value must match the pattern (a RegExp, or a `/pattern/flags` string). */
-    regex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'regex', passes: (v) => { re.lastIndex = 0; return re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
-    notRegex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'not_regex', passes: (v) => { re.lastIndex = 0; return !re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
+    regex(pattern: Lazy<RegExp | string, ComponentContext>): this { return this.rule({ name: 'regex', passes: async (v, ctx) => { const resolved = await evaluate(pattern, ctx); const re = typeof resolved === 'string' ? parseRegex(resolved) : resolved; re.lastIndex = 0; return re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
+    notRegex(pattern: Lazy<RegExp | string, ComponentContext>): this { return this.rule({ name: 'not_regex', passes: async (v, ctx) => { const resolved = await evaluate(pattern, ctx); const re = typeof resolved === 'string' ? parseRegex(resolved) : resolved; re.lastIndex = 0; return !re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
     alpha(): this { return this.stringRuleWith('alpha'); }
     alphaDash(): this { return this.stringRuleWith('alpha_dash'); }
     alphaNum(): this { return this.stringRuleWith('alpha_num'); }
@@ -195,39 +140,113 @@ export abstract class Field extends Component {
     ipv6(): this { return this.stringRuleWith('ipv6'); }
     macAddress(): this { return this.stringRuleWith('mac_address'); }
     hexColor(): this { return this.stringRuleWith('hex_color'); }
-    multipleOf(value: number): this { return this.stringRuleWith('multiple_of', [value]); }
+    multipleOf(value: Lazy<number, ComponentContext>): this { return this.stringRuleWith('multiple_of', [value]); }
     /** The value must be one of these (a list, or the values of an enum-like object). */
-    in(values: readonly (string | number)[] | Record<string, string | number> | Enum<string | number>): this { const allowed = (isEnum(values) ? values.values() : Array.isArray(values) ? values : Object.values(values)).map(String); return this.rule({ name: 'in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
-    notIn(values: readonly (string | number)[]): this { const denied = values.map(String); return this.rule({ name: 'not_in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => !denied.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
+    in(values: Lazy<readonly (string | number)[] | Record<string, string | number> | Enum<string | number>, ComponentContext>): this { return this.rule({ name: 'in', passes: async (v, ctx) => { const list = await evaluate(values, ctx); const allowed = (isEnum(list) ? list.values() : Array.isArray(list) ? list : Object.values(list)).map(String); return (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))); }, message: (a) => `The selected ${a} is invalid.` }); }
+    notIn(values: Lazy<readonly (string | number)[], ComponentContext>): this { return this.rule({ name: 'not_in', passes: async (v, ctx) => { const denied = (await evaluate(values, ctx)).map(String); return (Array.isArray(v) ? v : [v]).every((item) => !denied.includes(String(item))); }, message: (a) => `The selected ${a} is invalid.` }); }
     /** `in()` with the values of an enum (`defineEnum()`, `nativeEnum()`) or of an enum-like object. */
-    enum(values: Record<string, string | number> | Enum<string | number>): this { return this.in(values); }
-    startsWith(prefixes: string | string[]): this { return this.stringRuleWith('starts_with', [prefixes].flat()); }
-    endsWith(suffixes: string | string[]): this { return this.stringRuleWith('ends_with', [suffixes].flat()); }
-    doesntStartWith(prefixes: string | string[]): this { return this.stringRuleWith('doesnt_start_with', [prefixes].flat()); }
-    doesntEndWith(suffixes: string | string[]): this { return this.stringRuleWith('doesnt_end_with', [suffixes].flat()); }
+    enum(values: Lazy<Record<string, string | number> | Enum<string | number>, ComponentContext>): this { return this.in(values); }
+    startsWith(prefixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('starts_with', [prefixes].flat()); }
+    endsWith(suffixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('ends_with', [suffixes].flat()); }
+    doesntStartWith(prefixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('doesnt_start_with', [prefixes].flat()); }
+    doesntEndWith(suffixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('doesnt_end_with', [suffixes].flat()); }
     /** The field must equal `<name>_confirmation` (or the given field) of the same form. */
     confirmed(field: string | null = null): this { return this.rule(field ? `confirmed:${field}` : 'confirmed'); }
-    same(field: string): this { return this.stringRuleWith('same', [field]); }
-    different(field: string): this { return this.stringRuleWith('different', [field]); }
+    same(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('same', [field]); }
+    different(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('different', [field]); }
     /** Compares with a number or another field of the same form. */
-    gt(fieldOrValue: string | number): this { return this.stringRuleWith('gt', [fieldOrValue]); }
-    gte(fieldOrValue: string | number): this { return this.stringRuleWith('gte', [fieldOrValue]); }
-    lt(fieldOrValue: string | number): this { return this.stringRuleWith('lt', [fieldOrValue]); }
-    lte(fieldOrValue: string | number): this { return this.stringRuleWith('lte', [fieldOrValue]); }
+    gt(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('gt', [fieldOrValue]); }
+    gte(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('gte', [fieldOrValue]); }
+    lt(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('lt', [fieldOrValue]); }
+    lte(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('lte', [fieldOrValue]); }
     /** No duplicates in a list value (tags, multiple select, checkbox list). */
     distinct(): this { return this.stringRuleWith('distinct'); }
     /** Required when another field of the form has one of these values (`requiredIf('type', 'company')`). */
-    requiredIf(field: string, values: unknown): this { return this.stringRuleWith('required_if', [field, ...[values].flat()]); }
-    requiredUnless(field: string, values: unknown): this { return this.stringRuleWith('required_unless', [field, ...[values].flat()]); }
-    requiredIfAccepted(field: string): this { return this.stringRuleWith('required_if_accepted', [field]); }
-    requiredWith(fields: string | string[]): this { return this.stringRuleWith('required_with', [fields].flat()); }
-    requiredWithAll(fields: string | string[]): this { return this.stringRuleWith('required_with_all', [fields].flat()); }
-    requiredWithout(fields: string | string[]): this { return this.stringRuleWith('required_without', [fields].flat()); }
-    requiredWithoutAll(fields: string | string[]): this { return this.stringRuleWith('required_without_all', [fields].flat()); }
-    prohibited(condition = true): this { return condition ? this.stringRuleWith('prohibited') : this; }
-    prohibitedIf(field: string, values: unknown): this { return this.stringRuleWith('prohibited_if', [field, ...[values].flat()]); }
-    prohibitedUnless(field: string, values: unknown): this { return this.stringRuleWith('prohibited_unless', [field, ...[values].flat()]); }
-    prohibits(fields: string | string[]): this { return this.stringRuleWith('prohibits', [fields].flat()); }
+    requiredIf(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('required_if', [field, ...[values].flat()]); }
+    requiredUnless(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('required_unless', [field, ...[values].flat()]); }
+    requiredIfAccepted(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('required_if_accepted', [field]); }
+    requiredWith(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_with', [fields].flat()); }
+    requiredWithAll(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_with_all', [fields].flat()); }
+    requiredWithout(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_without', [fields].flat()); }
+    requiredWithoutAll(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_without_all', [fields].flat()); }
+    prohibited(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('prohibited', condition); }
+    prohibitedIf(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('prohibited_if', [field, ...[values].flat()]); }
+    prohibitedUnless(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('prohibited_unless', [field, ...[values].flat()]); }
+    prohibits(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('prohibits', [fields].flat()); }
+    /** Rule applied while `condition` holds (a boolean, or a function of the field context). */
+    private conditionalRule(name: string, condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>)): this { return condition === false ? this : this.rule(name, condition); }
+    /** The value must be a URL whose host has a DNS A or AAAA record. */
+    activeUrl(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('active_url', condition); }
+    /** The value must be a string. */
+    string(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('string', condition); }
+    /** The value must not be empty (it is always present in a form, so this is the same as `required()` without the asterisk). */
+    filled(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('filled', condition); }
+    /** The value may be empty: the opposite of `required()` (`nullable(false)` makes the field required). */
+    nullable(condition: Lazy<boolean, ComponentContext> = true): this { return this.required(async (ctx) => !(await evaluate(condition, ctx))); }
+    /** The value must be "yes", "on", 1, "1", true or "true" (terms of service). */
+    accepted(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('accepted', condition); }
+    /** The value must be "no", "off", 0, "0", false or "false". */
+    declined(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('declined', condition); }
+    /** Required when another field of the form is declined. */
+    requiredIfDeclined(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('required_if_declined', [field]); }
+    /**
+     * The value must be a date after a date (`'2024-01-01'`, `'today'`, `'tomorrow'`) or after the value of another field
+     * (`after('start_date')`, relative to the container: `'../start_date'`, or absolute with `'/data.start_date'`).
+     */
+    after(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('after', date); }
+    afterOrEqual(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('after_or_equal', date); }
+    before(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('before', date); }
+    beforeOrEqual(date: Lazy<string, ComponentContext>): this { return this.dateComparisonRule('before_or_equal', date); }
+    private dateComparisonRule(name: string, date: Lazy<string, ComponentContext>): this {
+        const build = async (ctx: ComponentContext) => { const value = await evaluate(date, ctx); return value ? stringRule(`${name}:${value}`, { numeric: false, name: this._name ?? '' }) : null; };
+        return this.rule({ name, passes: async (value, ctx) => (await build(ctx))?.passes(value, ctx) ?? true, message: (attribute) => `The ${attribute} field must be a date ${({ after: 'after', after_or_equal: 'after or equal to', before: 'before', before_or_equal: 'before or equal to' } as Record<string, string>)[name]} ${typeof date === 'string' ? date.replace(/^[./]+/, '').replace(/_/g, ' ') : 'the given date'}.` });
+    }
+    protected _uniqueIgnoresRecordByDefault: Lazy<boolean, ComponentContext> = true;
+    /** Whether `unique()` ignores the record being edited when `ignoreRecord` is not given (`true` by default). */
+    uniqueValidationIgnoresRecordByDefault(condition: Lazy<boolean, ComponentContext> = true): this { this._uniqueIgnoresRecordByDefault = condition; return this; }
+    async shouldUniqueValidationIgnoreRecordByDefault(): Promise<boolean> { return Boolean(await evaluate(this._uniqueIgnoresRecordByDefault, this.context())); }
+    /**
+     * The value must exist in the database, applying the model's scopes (tenant, soft deletes, `modifyQueryUsing`): `model`
+     * is an Objection model (the form's model by default), `column` the column (the field name by default).
+     */
+    scopedExists(options: { model?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
+        return this.rule({
+            name: 'exists',
+            passes: async (value, ctx) => {
+                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'with');
+                const column = (await evaluate(options.column ?? null, ctx)) ?? this._name!;
+                const values = Array.isArray(value) ? value : [value];
+                for (const item of values) {
+                    const query = makeQuery().where(`${model.tableName}.${column}`, item as any);
+                    const modified = options.modifyQueryUsing ? ((await options.modifyQueryUsing(query, ctx)) ?? query) : query;
+                    if ((await (modified as any).resultSize()) === 0) return false;
+                }
+                return true;
+            },
+            message: (a) => `The selected ${a} is invalid.`,
+        });
+    }
+    /**
+     * The value must not exist in the database, applying the model's scopes (`modifyQueryUsing` may change the query): the
+     * record being edited is ignored unless `ignoreRecord: false`; `ignorable` ignores another record.
+     */
+    scopedUnique(options: { model?: Lazy<any, ComponentContext>; column?: Lazy<string | null, ComponentContext>; ignorable?: Lazy<any, ComponentContext>; ignoreRecord?: boolean | null; modifyQueryUsing?: ((query: any, ctx: ComponentContext) => unknown) | null } = {}): this {
+        return this.rule({
+            name: 'unique',
+            passes: async (value, ctx) => {
+                const { model, query: makeQuery } = await scopedQueryOf(ctx, options.model ?? null, 'without');
+                const column = (await evaluate(options.column ?? null, ctx)) ?? this._name!;
+                const ignoreRecord = options.ignoreRecord ?? (await this.shouldUniqueValidationIgnoreRecordByDefault());
+                const ignorable = ignoreRecord && !options.ignorable ? ctx.record : await evaluate(options.ignorable ?? null, ctx);
+                const query = makeQuery().where(`${model.tableName}.${column}`, value as any);
+                const key = ignorable && typeof ignorable === 'object' ? (ignorable as any)[model.idColumn] : ignorable;
+                if (key !== null && key !== undefined) query.whereNot(`${model.tableName}.${model.idColumn}`, key);
+                const modified = options.modifyQueryUsing ? ((await options.modifyQueryUsing(query, ctx)) ?? query) : query;
+                return (await (modified as any).resultSize()) === 0;
+            },
+            message: (a) => `The ${a} has already been taken.`,
+        });
+    }
     /**
      * The value must exist: in a column of the host's data adapter (`exists()`, `exists({ column })`), in another adapter
      * (`exists({ adapter: new ObjectionAdapter(Brand), column: 'id' })`), or according to a function.
@@ -245,26 +264,29 @@ export abstract class Field extends Component {
             message: (a) => `The selected ${a} is invalid.`,
         });
     }
-    /** `unique` rule: the value must not exist in the column of the same name; `ignoreRecord` excludes the record being edited. */
-    unique(options: { ignoreRecord?: boolean; column?: string } = {}): this {
+    /**
+     * `unique` rule: the value must not exist in the column of the same name (`column`), in the host's data adapter or another
+     * one (`adapter`). The record being edited is ignored, unless `ignoreRecord: false`; `ignorable` ignores another record
+     * (or key). Like Laravel's rule, it does not apply the adapter's scopes: see `scopedUnique()`.
+     */
+    unique(options: { ignoreRecord?: boolean | null; column?: Lazy<string | null, ComponentContext>; adapter?: { exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>; getKey?(record: any): string } | null; ignorable?: Lazy<unknown, ComponentContext> } = {}): this {
         return this.rule({
             name: 'unique',
             passes: async (value, ctx) => {
                 const host = ctx.livewire as any;
-                const adapter = host.getDataAdapter?.();
+                const adapter = options.adapter ?? host.getDataAdapter?.();
                 if (!adapter) throw new Error('unique(): the host component provides no data adapter (getDataAdapter).');
-                const ignored = options.ignoreRecord ? (ctx.record ? adapter.getKey(ctx.record) : (host.getRecordKey?.() ?? null)) : null;
-                return !(await adapter.exists(options.column ?? this._name!, value, ignored));
+                const ignoreRecord = options.ignoreRecord ?? (await this.shouldUniqueValidationIgnoreRecordByDefault());
+                const ignorable = await evaluate(options.ignorable ?? null, ctx);
+                const keyOf = (record: unknown) => (record && typeof record === 'object' ? (adapter.getKey ? adapter.getKey(record) : String((record as any).id)) : (record as string | number));
+                const ignored = ignorable !== null && ignorable !== undefined ? keyOf(ignorable) : ignoreRecord ? (ctx.record ? keyOf(ctx.record) : (host.getRecordKey?.() ?? null)) : null;
+                return !(await adapter.exists((await evaluate(options.column ?? null, ctx)) ?? this._name!, value, ignored));
             },
             message: (a) => `The ${a} has already been taken.`,
         });
     }
 
-    async getLabel(): Promise<string> { return (await evaluate(this._label, this.context())) ?? headline(this._name!); }
     isRequired(): Promise<boolean> { return evaluate(this._required, this.context()); }
-    isDisabled(): Promise<boolean> { return evaluate(this._disabled, this.context()); }
-    getErrors(): string[] { return this.livewire._errors[this.getStatePath()] ?? []; }
-    hasError(): boolean { return this.getErrors().length > 0; }
 
     /** Validation rules: `required` first, then the field's own. */
     async getValidationRules(): Promise<Rule[]> {
@@ -275,17 +297,21 @@ export abstract class Field extends Component {
     async validate(): Promise<string[]> {
         // A field that is not saved (`dehydrated(false)`: confirmation, current password) is still validated;
         // only a disabled field (not forced by `dehydrated()`) is skipped.
-        if ((await this.isDisabled()) && this._dehydrated !== true) return [];
+        const dehydrated = await this.getDehydratedOverride();
+        if ((await this.isDisabled()) && dehydrated !== true) return [];
+        // `saved(false)` + `validatedWhenNotDehydrated(false)`: not validated either.
+        if (dehydrated === false && !(await this.isValidatedWhenNotDehydrated())) return [];
         // An empty string is treated as missing.
-        const raw = this.stateForValidation(this.context().state);
+        let raw = this.stateForValidation(this.context().state);
+        if (this._mutateStateForValidationUsing) raw = await this._mutateStateForValidationUsing({ ...this.context(), state: raw });
         const value = raw === '' ? null : raw;
-        const attribute = this._validationAttribute ?? (await this.getLabel()).toLowerCase();
+        const attribute = await this.getValidationAttribute();
         for (const rule of await this.getValidationRules()) {
             if (rule.name !== 'required' && !rule.implicit && blank(value)) continue;
             if (!(await rule.passes(value, this.context()))) {
                 reportFailedRule(this.getStatePath(), rule.name);
                 const custom = this._validationMessages[rule.name];
-                return [custom === undefined ? rule.message(attribute) : typeof custom === 'function' ? custom(attribute) : custom.replace(/:attribute/g, attribute)];
+                return [custom === undefined ? rule.message(attribute) : typeof custom === 'function' ? custom(attribute, this.context()) : custom.replace(/:attribute/g, attribute)];
             }
         }
         return [];
@@ -295,22 +321,6 @@ export abstract class Field extends Component {
     dehydrateState(state: unknown): unknown { return state; }
     /** Final shaping of the saved value, once child fields are dehydrated (e.g. a Builder's item list). */
     finalizeDehydratedState(state: unknown): unknown { return state; }
-    protected async wrap(html: string, options: { labelPrefix?: string; wrapperClass?: string; after?: string; labelAsDiv?: boolean; focusable?: boolean } = {}): Promise<string> {
-        const errors = this.getErrors();
-        // FusedGroup field: the wrapper is reduced to a screen-reader label.
-        if (this.container.getFieldWrapperView?.() === 'filament-forms::plain-field-wrapper') {
-            const label = await this.getLabel();
-            const labelHtml = label === '' ? '' : options.labelAsDiv ? `<div id="${e(this.getId())}-label" class="fi-fo-field-label fi-sr-only">${e(label)}</div>` : `<label for="${e(this.getId())}" class="fi-fo-field-label fi-sr-only">${e(label)}</label>`;
-            return `<div data-field-wrapper class="fi-fo-field">${labelHtml}${options.labelPrefix ?? ''}${html}${options.after ?? ''}</div>`;
-        }
-        // Helper text: a small inline schema under the control.
-        if (this._helperText !== null) html += `<div id="${e(this.getHelperTextId()!)}" class="fi-sc fi-inline fi-sc-has-gap fi-sc-dense"><div x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: this.getStatePath(), containerPath: this.container.getStatePath() }))})"><div class="fi-sc-component"><span class="fi-sc-text">${e(this._helperText)}</span></div></div></div>`;
-        if (this._belowContent !== null) html += await renderSlot(this, this._belowContent, this.getKey());
-        return views.render('filament-forms::components.field-wrapper', {
-            id: this.getId(), label: await this.getLabel(), required: (await this.isMarkedAsRequired()) && !(await this.isDisabled()),
-            labelPrefix: options.labelPrefix ?? '', hiddenLabel: this._hiddenLabel, after: options.after ?? '', afterLabel: this._hiddenLabel ? '' : await this.renderAfterLabel(), labelAsDiv: options.labelAsDiv === true, focusable: options.focusable === true, html, errorMessage: errors[0] ?? null, wrapperClass: options.wrapperClass ?? null,
-        });
-    }
 }
 
 // Records picked from a table (inline or in a modal): see ./table-select.ts.
@@ -348,8 +358,8 @@ export abstract class TableSelectField extends Field {
     multiple(condition = true): this { this._multiple = condition; return this; }
     isMultiple(): boolean { return this._multiple; }
     /** Maximum (and minimum) number of selected records, checked on the server. */
-    maxItems(count: number | null): this { this._maxItems = count; return this; }
-    minItems(count: number | null): this { this._minItems = count; return this; }
+    maxItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_maxItems', count); }
+    minItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minItems', count); }
     getMaxItems(): number | null { return this._maxItems; }
     getMinItems(): number | null { return this._minItems; }
     /** @internal Uses another field's table definition (the `TableSelect` of a `ModalTableSelect`). */
@@ -390,7 +400,7 @@ export abstract class TableSelectField extends Field {
         if (!values.length) return [];
         return requireTableSelectDriver().selectableKeys(await this.getDefinition(), await this.getTableArguments(), values.slice(0, 1000));
     }
-    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     hydrateState(value: unknown): unknown {
         if (this._multiple) return (Array.isArray(value) ? value : []).filter(isTableSelectKey).map(String);
         return isTableSelectKey(value) ? String(value) : null;
@@ -510,9 +520,9 @@ export class ModalTableSelect extends TableSelectField {
         return this;
     }
     /** Text shown when nothing is selected. */
-    placeholder(placeholder: string | null): this { this._placeholder = placeholder; return this; }
+    placeholder(placeholder: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', placeholder); }
     /** Labels in badges (by default with `multiple()` only). */
-    badge(condition: boolean | null = true): this { this._hasBadges = condition; return this; }
+    badge(condition: Lazy<boolean | null, ComponentContext> = true): this { return this.setLazy('_hasBadges', condition); }
     hasBadges(): boolean { return this._hasBadges ?? this._multiple; }
     badgeColor(color: Lazy<string | null, ComponentContext>): this { this._badgeColor = color; return this; }
     /** Label of a selected record, from the record (`(record) => \`${record.name} (${record.slug})\``). */
@@ -591,7 +601,7 @@ export class ModalTableSelect extends TableSelectField {
             .action(async ({ data }) => {
                 const selection = data.selection;
                 this.setState(this._multiple ? (Array.isArray(selection) ? [...new Set(selection.filter(isTableSelectKey).map(String))] : []) : isTableSelectKey(selection) ? String(selection) : null);
-                await this.callAfterStateUpdated((name, value) => writeTableSelectState(this.livewire as any, [this.container.getStatePath(), name].filter(Boolean).join('.'), value));
+                await this.callAfterStateUpdated();
             });
         if (this._multiple || blank) action.link(); else action.iconButton();
         return this._modifySelectAction?.(action, this.context()) ?? action;
@@ -643,7 +653,6 @@ export class TextInput extends Field {
     private _minValue: number | null = null;
     private _maxValue: number | null = null;
     private _prefix: string | null = null;
-    private _live: 'live' | 'blur' | null = null;
 
     static make(name: string): TextInput { return configured(new TextInput(name)); }
     protected hasNumericValidation(): boolean { return this._numeric !== null; }
@@ -653,14 +662,16 @@ export class TextInput extends Field {
     integer(): this { this._numeric = 'integer'; return this.rule({ name: 'integer', passes: (v) => /^-?\d+$/.test(String(v).trim()), message: (a) => `The ${a} field must be an integer.` }); }
     private _step: number | 'any' | null = null;
     /** Input `step` of a numeric field, overriding the one implied by `numeric()` or `integer()`. */
-    step(step: number | 'any' | null): this { this._step = step; return this; }
-    minValue(value: number): this { this._minValue = value; return this.rule({ name: 'min', passes: (v) => Number(v) >= value, message: (a) => `The ${a} field must be at least ${value}.` }); }
-    maxValue(value: number): this { this._maxValue = value; return this.rule({ name: 'max', passes: (v) => Number(v) <= value, message: (a) => `The ${a} field must not be greater than ${value}.` }); }
+    step(step: Lazy<number | 'any' | null, ComponentContext>): this { return this.setLazy('_step', step); }
+    /** Minimum value (`min` attribute and rule); a function may return it. */
+    minValue(value: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_minValue', value); return this.rule({ name: 'min', passes: (v, ctx) => { last = (ctx.component as any)._minValue as number | null; return last === null || Number(v) >= last; }, message: (a) => `The ${a} field must be at least ${last}.` }); }
+    /** Maximum value (`max` attribute and rule); a function may return it. */
+    maxValue(value: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_maxValue', value); return this.rule({ name: 'max', passes: (v, ctx) => { last = (ctx.component as any)._maxValue as number | null; return last === null || Number(v) <= last; }, message: (a) => `The ${a} field must not be greater than ${last}.` }); }
     /** Label shown before the input (e.g. `$`); `isInline`: inside the input instead of a separate box. */
-    prefix(label: string | null, isInline = false): this { this._prefix = label; this._prefixInline = isInline; return this; }
+    prefix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._prefixInline = isInline; return this.setLazy('_prefix', label); }
     private _suffix: string | null = null;
     /** Label shown after the input ("hours", "kg"…). */
-    suffix(label: string | null, isInline = false): this { this._suffix = label; this._suffixInline = isInline; return this; }
+    suffix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._suffixInline = isInline; return this.setLazy('_suffix', label); }
     private _prefixInline = false;
     private _suffixInline = false;
     private _prefixIcon: string | null = null;
@@ -669,10 +680,10 @@ export class TextInput extends Field {
     private _suffixIconColor: string | null = null;
     private _prefixActions: Action[] = [];
     private _suffixActions: Action[] = [];
-    prefixIcon(icon: string | null, isInline = false): this { this._prefixIcon = icon; this._prefixInline = isInline; return this; }
-    suffixIcon(icon: string | null, isInline = false): this { this._suffixIcon = icon; this._suffixInline = isInline; return this; }
-    prefixIconColor(color: string | null): this { this._prefixIconColor = color; return this; }
-    suffixIconColor(color: string | null): this { this._suffixIconColor = color; return this; }
+    prefixIcon(icon: Lazy<string | null, ComponentContext>, isInline = false): this { this._prefixInline = isInline; return this.setLazy('_prefixIcon', icon); }
+    suffixIcon(icon: Lazy<string | null, ComponentContext>, isInline = false): this { this._suffixInline = isInline; return this.setLazy('_suffixIcon', icon); }
+    prefixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_prefixIconColor', color); }
+    suffixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_suffixIconColor', color); }
     /**
      * Icon button before the input, running an action. The action gets the field's `state`, and `set(name, value)` to change a
      * field of the same form.
@@ -684,19 +695,19 @@ export class TextInput extends Field {
     /** Affix actions, mounted through the schema component. */
     getActions(): Action[] { return [...this.getHintActions(), ...this._prefixActions, ...this._suffixActions]; }
     /** Exact length: `minlength` and `maxlength`, and the matching rule. */
-    length(length: number): this { this.minLength(length); this.maxLength(length); return this; }
+    length(length: Lazy<number | null, ComponentContext>): this { this.minLength(length); this.maxLength(length); return this; }
     private _datalist: string[] = [];
     /** Suggestions offered by the browser while typing (`<datalist>`). */
-    datalist(options: string[]): this { this._datalist = options.map(String); return this; }
+    datalist(options: Lazy<string[], ComponentContext>): this { return this.setLazy('_datalist', options, (list) => (list ?? []).map(String)); }
     private _readOnly = false;
     /** The value is shown and sent, but cannot be changed (`readonly`). */
-    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     private _copyable: { message: string | null; duration: number } | null = null;
     /** A button after the input copies its value (the browser only allows it on HTTPS or `localhost`). */
-    copyable(condition = true, copyMessage: string | null = null, copyMessageDuration = 2000): this { this._copyable = condition ? { message: copyMessage, duration: copyMessageDuration } : null; return this; }
+    copyable(condition: Lazy<boolean, ComponentContext> = true, copyMessage: string | null = null, copyMessageDuration = 2000): this { return this.setLazy('_copyable', condition, (on) => (on ? { message: copyMessage, duration: copyMessageDuration } : null)); }
     private _trim = false;
     /** Removes the spaces around the value before it is validated and saved. */
-    trim(condition = true): this { this._trim = condition; return this; }
+    trim(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_trim', condition); }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
     /** `trim()`: the submitted value is trimmed before it is validated and saved. */
     protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
@@ -704,20 +715,18 @@ export class TextInput extends Field {
     private _inputMode: string | null = null;
     private _autocapitalize: string | null = null;
     /** Virtual keyboard: `none`, `text`, `decimal`, `numeric`, `tel`, `search`, `email` or `url`. */
-    inputMode(mode: string | null): this { this._inputMode = mode; return this; }
+    inputMode(mode: Lazy<string | null, ComponentContext>): this { return this.setLazy('_inputMode', mode); }
     /** `none`, `sentences`, `words` or `characters` (`true` / `false` for `on` / `off`). */
-    autocapitalize(mode: string | boolean | null = true): this { this._autocapitalize = mode === true ? 'on' : mode === false ? 'off' : mode; return this; }
-    /** Sends the state to the server on every keystroke, or on blur with `onBlur`. */
-    live(options: { onBlur?: boolean } = {}): this { this._live = options.onBlur ? 'blur' : 'live'; return this; }
-    type(type: string): this { this._type = type; return this; }
-    password(condition = true): this { this._isPassword = condition; return this; }
-    revealable(condition = true): this { this._isRevealable = condition; return this; }
+    autocapitalize(mode: Lazy<string | boolean | null, ComponentContext> = true): this { return this.setLazy('_autocapitalize', mode, (value) => (value === true ? 'on' : value === false ? 'off' : value)); }
+    type(type: Lazy<string | null, ComponentContext>): this { return this.setLazy('_type', type); }
+    password(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_isPassword', condition, Boolean); }
+    revealable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_isRevealable', condition, Boolean); }
     /** `true` → "on", `false` → "off", a string as is. */
-    autocomplete(value: string | boolean = true): this { this._autocomplete = value === true ? 'on' : value === false ? 'off' : value; return this; }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    autocomplete(value: Lazy<string | boolean | null, ComponentContext> = true): this { return this.setLazy('_autocomplete', value, (item) => (item === true ? 'on' : item === false ? 'off' : item)); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
     private _mask: string | null = null;
-    /** Alpine input mask (`(999) 999-9999`): guides typing in the browser, with no validation value. */
-    mask(pattern: string | null): this { this._mask = pattern; return this; }
+    /** Alpine input mask (`(999) 999-9999`): guides typing in the browser, with no validation value. A function may return it. */
+    mask(pattern: Lazy<string | null, ComponentContext>): this { return this.setLazy('_mask', pattern); }
     /** Phone number: digits, spaces and common punctuation. */
     tel(): this { this._type = 'tel'; return this.rule({ name: 'tel', passes: (v) => /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/.test(String(v)), message: (a) => `The ${a} field format is invalid.` }); }
     email(condition = true): this {
@@ -725,8 +734,10 @@ export class TextInput extends Field {
         this._type = 'email'; return this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
     /** Web address: `url` input type, a valid http(s) value is required. */
     url(): this { this._type = 'url'; return this.rule({ name: 'url', passes: (v) => { try { return ['http:', 'https:'].includes(new URL(String(v)).protocol); } catch { return false; } }, message: (a) => `The ${a} field must be a valid URL.` }); }
-    maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
-    minLength(length: number): this { this._minLength = length; return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    /** Maximum length (`maxlength` attribute and rule); a function may return it. */
+    maxLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_maxLength', length); return this.rule({ name: 'max', passes: (v, ctx) => { last = (ctx.component as any)._maxLength as number | null; return last === null || String(v).length <= last; }, message: (a) => `The ${a} field must not be greater than ${last} characters.` }); }
+    /** Minimum length (`minlength` attribute and rule); a function may return it. */
+    minLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_minLength', length); return this.rule({ name: 'min', passes: (v, ctx) => { last = (ctx.component as any)._minLength as number | null; return last === null || String(v).length >= last; }, message: (a) => `The ${a} field must be at least ${last} characters.` }); }
 
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
@@ -742,12 +753,13 @@ export class TextInput extends Field {
         const hasPrefix = this._prefix !== null || this._prefixIcon !== null || prefixActions.length > 0;
         const hasSuffix = this._suffix !== null || this._suffixIcon !== null || suffixActions.length > 0;
         const type = revealable ? 'password' : this._mask !== null ? 'text' : (this._type ?? (this._isPassword ? 'password' : this._numeric ? 'number' : 'text'));
-        const model = `wire:model${this._live ? '.live' : ''}${this._live === 'blur' ? '.blur' : ''}`;
-        const input = new Attributes()
+        const model = this.wireModel();
+        const alpineAttributes = this.getExtraAlpineAttributes();
+        const input = new Attributes(this.getExtraControlAttributes())
             .merge({
                 'aria-invalid': this.hasError() ? 'true' : null,
                 'aria-describedby': this.getHelperTextId(),
-                autocomplete: this._autocomplete, autofocus: this._autofocus, disabled: isDisabled, id: this.getId(),
+                autocomplete: this._autocomplete, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(),
                 autocapitalize: this._autocapitalize,
                 inputmode: this._inputMode ?? (this._numeric === 'decimal' ? 'decimal' : this._numeric === 'integer' ? 'numeric' : null),
                 list: this._datalist.length && !isDisabled && !this._readOnly ? `${this.getId()}-list` : null,
@@ -763,7 +775,7 @@ export class TextInput extends Field {
             .class(['fi-input', { 'fi-input-has-inline-prefix': this._prefixInline && hasPrefix, 'fi-input-has-inline-suffix': this._suffixInline && hasSuffix, 'fi-revealable': revealable }]);
         const wrapper = new Attributes()
             .merge({
-                'x-data': revealable ? 'passwordRevealFormComponent()' : this._mask !== null ? '{}' : null,
+                'x-data': revealable ? 'passwordRevealFormComponent()' : this._mask !== null || Object.keys(alpineAttributes).length ? '{}' : null,
                 'x-load': revealable ? '' : null,
                 'x-load-src': revealable ? views.render('filament-forms::asset', { path: 'text-input/password-reveal' }).trim() : null,
                 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()",
@@ -794,6 +806,18 @@ function normalizeOptions(options: GroupedOptions): (OptionGroup | [string, stri
         if (value !== null && typeof value === 'object') return { label: String(key), options: (Array.isArray(value) ? value as [string, string][] : Object.entries(value as Record<string, string>)).map(([v, l]): [string, string] => [String(v), String(l)]) };
         return [String(key), String(value)];
     });
+}
+/**
+ * Query of a model for `scopedExists()` / `scopedUnique()`: the form's data adapter applies its scopes (tenant, column
+ * scopes, `modify`, soft deletes); an explicit model is queried as is.
+ */
+async function scopedQueryOf(ctx: ComponentContext, explicit: Lazy<any, ComponentContext>, trashed: 'with' | 'without'): Promise<{ model: any; query: () => any }> {
+    const model = await evaluate(explicit, ctx);
+    if (model) return { model, query: () => model.query() };
+    const adapter = (ctx.livewire as any).getDataAdapter?.();
+    if (adapter && typeof adapter.scopedQuery === 'function' && adapter.model) return { model: adapter.model, query: () => adapter.scopedQuery(trashed) };
+    const formModel = modelOfForm(ctx, null);
+    return { model: formModel, query: () => formModel.query() };
 }
 /** Objection model of the form (the host's data adapter), for relationships. */
 function modelOfForm(ctx: ComponentContext, explicit: any): any {
@@ -844,7 +868,6 @@ export class Select extends Field {
     private _affixes: { prefix: string | null; suffix: string | null; prefixIcon: string | null; suffixIcon: string | null; prefixIconColor: string | null; suffixIconColor: string | null; prefixActions: Action[]; suffixActions: Action[]; prefixInline: boolean; suffixInline: boolean } = { prefix: null, suffix: null, prefixIcon: null, suffixIcon: null, prefixIconColor: null, suffixIconColor: null, prefixActions: [], suffixActions: [], prefixInline: false, suffixInline: false };
     private _dynamic: boolean | null = null;
     private _searchOnServer: boolean | null = null;
-    private _live = false;
     private _hasNoInitialOptions = false;
     private _multiple = false;
     private _optionLabelsUsing: ((values: string[], ctx: ComponentContext) => Options | Promise<Options>) | null = null;
@@ -869,26 +892,26 @@ export class Select extends Field {
         return this;
     }
     /** `false`: the JavaScript select, even without search. */
-    native(condition = true): this { this._native = condition; return this; }
+    native(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_native', condition); }
     /** Option labels are HTML (sanitized on the server; JavaScript select only). */
-    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    allowHtml(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_allowHtml', condition); }
     /** Maximum (and minimum) number of selected items of a multiple select, checked on the server. */
-    maxItems(count: number | null): this { this._maxItems = count; return this; }
-    minItems(count: number | null): this { this._minItems = count; return this; }
+    maxItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_maxItems', count); }
+    minItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minItems', count); }
     /** Number of options shown at once in the JavaScript select (50 by default). */
-    optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
-    searchDebounce(ms: number): this { this._searchDebounce = Math.max(0, Math.floor(ms)); return this; }
-    loadingMessage(message: string): this { this._messages.loading = message; return this; }
-    noSearchResultsMessage(message: string): this { this._messages.noSearchResults = message; return this; }
-    searchPrompt(message: string): this { this._messages.searchPrompt = message; return this; }
-    searchingMessage(message: string): this { this._messages.searching = message; return this; }
-    noOptionsMessage(message: string): this { this._messages.noOptions = message; return this; }
-    prefix(label: string | null, isInline = false): this { this._affixes.prefix = label; this._affixes.prefixInline = isInline; return this; }
-    suffix(label: string | null, isInline = false): this { this._affixes.suffix = label; this._affixes.suffixInline = isInline; return this; }
-    prefixIcon(name: string | null, isInline = false): this { this._affixes.prefixIcon = name; this._affixes.prefixInline = isInline; return this; }
-    suffixIcon(name: string | null, isInline = false): this { this._affixes.suffixIcon = name; this._affixes.suffixInline = isInline; return this; }
-    prefixIconColor(color: string | null): this { this._affixes.prefixIconColor = color; return this; }
-    suffixIconColor(color: string | null): this { this._affixes.suffixIconColor = color; return this; }
+    optionsLimit(limit: Lazy<number, ComponentContext>): this { return this.setLazy('_optionsLimit', limit, (value) => Math.max(1, Math.floor(value))); }
+    searchDebounce(ms: Lazy<number, ComponentContext>): this { return this.setLazy('_searchDebounce', ms, (value) => Math.max(0, Math.floor(Number(value) || 0))); }
+    loadingMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.loading', message); }
+    noSearchResultsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.noSearchResults', message); }
+    searchPrompt(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.searchPrompt', message); }
+    searchingMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.searching', message); }
+    noOptionsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.noOptions', message); }
+    prefix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.prefixInline = isInline; return this.setLazy('_affixes.prefix', label); }
+    suffix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.suffixInline = isInline; return this.setLazy('_affixes.suffix', label); }
+    prefixIcon(name: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.prefixInline = isInline; return this.setLazy('_affixes.prefixIcon', name); }
+    suffixIcon(name: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.suffixInline = isInline; return this.setLazy('_affixes.suffixIcon', name); }
+    prefixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_affixes.prefixIconColor', color); }
+    suffixIconColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_affixes.suffixIconColor', color); }
     prefixAction(action: Action, isInline = false): this { this._affixes.prefixActions = [...this._affixes.prefixActions, action]; this._affixes.prefixInline = isInline; return this; }
     suffixAction(action: Action, isInline = false): this { this._affixes.suffixActions = [...this._affixes.suffixActions, action]; this._affixes.suffixInline = isInline; return this; }
     prefixActions(actions: Action[]): this { this._affixes.prefixActions = actions; return this; }
@@ -945,18 +968,17 @@ export class Select extends Field {
     /** Disables an option depending on the context (e.g. already picked in another row). */
     disableOptionWhen(condition: (value: string, ctx: ComponentContext) => boolean): this { this._disableOptionWhen = condition; return this; }
     /** Sends the state to the server as soon as it changes. */
-    live(condition = true): this { this._live = condition; return this; }
-    placeholder(label: string | null): this { this._placeholder = label; return this; }
+    placeholder(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', label); }
     private _selectablePlaceholder = true;
     /** `false`: the native select has no empty option. */
-    selectablePlaceholder(condition = true): this { this._selectablePlaceholder = condition; return this; }
+    selectablePlaceholder(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_selectablePlaceholder', condition); }
     searchable(condition = true): this { this._searchable = condition; return this; }
     /** Multiple selection: the state is a list of values; always uses the JavaScript select. */
     multiple(condition = true): this { this._multiple = condition; if (condition) this._searchable = true; return this; }
     isMultiple(): boolean { return this._multiple; }
     /** Labels of several values at once (multiple selection with server search); also used to validate the values. */
     getOptionLabelsUsing(resolver: (values: string[], ctx: ComponentContext) => Options | Promise<Options>): this { this._optionLabelsUsing = resolver; return this; }
-    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     /** Sanitized selected values: unique strings. */
     private selectedValues(): string[] { const state = this.context().state; return [...new Set((Array.isArray(state) ? state : []).filter((v) => typeof v === 'string' || typeof v === 'number').map(String))]; }
     private async labelsOf(values: string[]): Promise<[string, string][]> {
@@ -967,7 +989,7 @@ export class Select extends Field {
     }
     private _preload = false;
     /** Relationship with `searchable()`: loads the options with the form, instead of on search only. Other options are always loaded. */
-    preload(condition = true): this { this._preload = condition; return this; }
+    preload(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_preload', condition); }
     hydrateState(value: unknown): unknown {
         if (this._multiple) return (Array.isArray(value) ? value : []).map(String);
         return value === null || value === undefined || value === '' ? null : String(value);
@@ -1044,18 +1066,18 @@ export class Select extends Field {
     createOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._createOptionForm = schema; return this; }
     /** Saves the option from the validated modal data; returns the value (key) of the created option. */
     createOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => string | number | null | Promise<string | number | null>) | null): this { this._createOptionUsing = callback; return this; }
-    createOptionModalHeading(heading: string | null): this { this._createOptionModalHeading = heading; return this; }
+    createOptionModalHeading(heading: Lazy<string | null, ComponentContext>): this { return this.setLazy('_createOptionModalHeading', heading); }
     /** Customizes the create action (label, icon, modal width…). */
     createOptionAction(modify: ((action: Action) => Action | void) | null): this { this._modifyCreateOptionAction = modify; return this; }
     /**
      * Form of the "Edit" modal for the selected option (single selection only). The field becomes `live()` so the button
      * appears as soon as an option is picked. Filled by `fillEditOptionActionFormUsing()`, saved by `updateOptionUsing()`.
      */
-    editOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._editOptionForm = schema; this._live = true; return this; }
+    editOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { this._editOptionForm = schema; if (this._isLive === null) this.live(); return this; }
     updateOptionUsing(callback: ((data: Record<string, unknown>, ctx: ComponentContext) => unknown) | null): this { this._updateOptionUsing = callback; return this; }
     /** Initial data of the "Edit" modal (the context carries the current field state in `state`). */
     fillEditOptionActionFormUsing(callback: ((ctx: ComponentContext) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null): this { this._fillEditOptionForm = callback; return this; }
-    editOptionModalHeading(heading: string | null): this { this._editOptionModalHeading = heading; return this; }
+    editOptionModalHeading(heading: Lazy<string | null, ComponentContext>): this { return this.setLazy('_editOptionModalHeading', heading); }
     editOptionAction(modify: ((action: Action) => Action | void) | null): this { this._modifyEditOptionAction = modify; return this; }
     /** Same form for creating and editing. */
     manageOptionForm(schema: Component[] | ((schema: Schema) => Component[] | Schema) | null): this { return this.createOptionForm(schema).editOptionForm(schema); }
@@ -1076,7 +1098,7 @@ export class Select extends Field {
                 else throw new Error(`Select [${this.getStatePath()}]: createOptionUsing() is required with createOptionForm().`);
                 if (created === null || created === undefined || created === '') return;
                 this.setState(this._multiple ? [...new Set([...this.selectedValues(), String(created)])] : String(created));
-                await this.callAfterStateUpdated((name, value) => writePath(this.livewire as any, [...this.container.getStatePath().split('.').filter(Boolean), ...name.split('.')], value));
+                await this.callAfterStateUpdated();
             });
         // Multiple selection: "Create & create another" keeps the modal open on an empty form.
         if (this._multiple) action.extraModalFooterActions([Action.make('createAnother').label(tr('modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)]);
@@ -1134,8 +1156,8 @@ export class Select extends Field {
             const after = isRequired ? `<span id="${e(this.getId())}-required" class="fi-sr-only">${e(t('filament-forms::components.select.required_description'))}</span>` : '';
             return this.wrap(await this.toJsHtml(grouped, isDisabled, suffix, prefix), { wrapperClass: 'fi-fo-select-wrp', after });
         }
-        const select = new Attributes()
-            .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
+        const select = new Attributes(this.getExtraControlAttributes())
+            .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this.wireModel()]: this.getStatePath() })
             .class(['fi-select-input']);
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('select')?.focus()" }).class(['fi-fo-select', 'fi-fo-select-native', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         const option = ([value, label]: [string, string]) => `<option value="${e(value)}"${this._disableOptionWhen?.(value, this.context()) ? ' disabled' : ''}>${e(label)}</option>`;
@@ -1168,7 +1190,7 @@ export class Select extends Field {
  initialOptionLabel: ${js(hasState ? await this.getOptionLabel() : null)},
  initialOptionLabels: ${selected.length ? js(selected.map(([value, label]) => ({ label, value, isDisabled: false }))) : '[]'},
  initialState: ${this._multiple ? (selected.length ? js(selected.map(([value]) => value)) : '[]') : js(hasState ? String(state) : null)},
- isAutofocused: ${this._autofocus ? 'true' : 'false'},
+ isAutofocused: ${(await this.isAutofocused()) ? 'true' : 'false'},
  isDisabled: ${isDisabled ? 'true' : 'false'},
  isHtmlAllowed: ${this._allowHtml ? 'true' : 'false'},
  isMultiple: ${this._multiple ? 'true' : 'false'},
@@ -1191,7 +1213,7 @@ export class Select extends Field {
  searchLabel: ${js(tr('search_label'))},
  searchPrompt: ${js(this._messages.searchPrompt ?? tr('search_prompt'))},
  searchableOptionFields: ${js(['label'])},
- state: $wire.$entangle(${js(this.getStatePath())}, ${this._live ? 'true' : 'false'}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  })`;
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('.fi-select-input-btn')?.focus()" }).class(['fi-fo-select', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
@@ -1206,7 +1228,7 @@ export class Select extends Field {
  }),
  )
  },
- }"></div><div x-load x-load-src="${e(asset('select'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()" class="fi-select-input"><div x-ref="select"></div></div></div>${suffix}</div>`;
+ }"></div><div x-load x-load-src="${e(asset('select'))}"${this.extraControlHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()" class="fi-select-input"><div x-ref="select"></div></div></div>${suffix}</div>`;
     }
 }
 
@@ -1267,17 +1289,17 @@ export class Repeater extends Field {
      */
     simple(field: Field | null): this { this._simple = field; return this; }
     defaultItems(count: number): this { this._defaultItems = count; return this; }
-    maxItems(count: number): this { this._maxItems = count; return this; }
+    maxItems(count: Lazy<number, ComponentContext>): this { return this.setLazy('_maxItems', count); }
     /** Minimum number of items, checked on the server. */
-    minItems(count: number | null): this { this._minItems = count; return this; }
+    minItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minItems', count); }
     private _reorderable = true;
     /** `false`: items keep their order (e.g. a relationship without an order column). */
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderable', condition); }
     private _dragAndDrop = true;
     /** Move up / move down buttons in each item header, besides drag and drop. */
-    reorderableWithButtons(condition = true): this { this._reorderableWithButtons = condition; return this; }
+    reorderableWithButtons(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderableWithButtons', condition); }
     /** `false`: no drag and drop (buttons may still reorder, with `reorderableWithButtons()`). */
-    reorderableWithDragAndDrop(condition = true): this { this._dragAndDrop = condition; return this; }
+    reorderableWithDragAndDrop(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_dragAndDrop', condition); }
     /** Reordering is off with `reorderable(false)`, and for a relationship without `orderColumn()` (the order could not be saved). */
     private isReorderable(): boolean { return this._reorderable && !(this._relationship !== null && this._relationship.orderColumn === null && this._orderColumnPending === null); }
     private canDrag(): boolean { return this.isReorderable() && this._dragAndDrop; }
@@ -1287,25 +1309,25 @@ export class Repeater extends Field {
     /** Items laid out in a grid (`2`, or `{ md: 2, xl: 3 }`). */
     grid(columns: Record<string, number> | number | null = 2): this { this._grid = columns; return this; }
     /** Items can be collapsed from their header; `collapsed()` collapses them on load. */
-    collapsible(condition = true): this { this._collapsible = condition; return this; }
+    collapsible(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_collapsible', condition); }
     collapsed(condition = true): this { this._collapsed = condition; if (condition) this._collapsible = true; return this; }
     /** Keeps each item's collapsed state in the browser (local storage). */
-    persistCollapsed(condition = true): this { this._persistCollapsed = condition; return this; }
-    cloneable(condition = true): this { this._cloneable = condition; return this; }
+    persistCollapsed(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_persistCollapsed', condition); }
+    cloneable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_cloneable', condition); }
     /** `false`: no "Add" button (and adding is refused on the server). */
-    addable(condition = true): this { this._addable = condition; return this; }
+    addable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_addable', condition); }
     /** `false`: no delete button (and deleting is refused on the server). */
-    deletable(condition = true): this { this._deletable = condition; return this; }
+    deletable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_deletable', condition); }
     /** Item header label: a string, or a function of the item's state (`({ state }) => state.name ?? null`). Escaped. */
     itemLabel(label: ((ctx: { state: Record<string, unknown>; key: string; index: number }) => string | null) | string | null): this { this._itemLabel = label; return this; }
     /** Item number after the label. */
-    itemNumbers(condition = true): this { this._itemNumbers = condition; return this; }
-    truncateItemLabel(condition = true): this { this._truncateItemLabel = condition; return this; }
+    itemNumbers(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_itemNumbers', condition); }
+    truncateItemLabel(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_truncateItemLabel', condition); }
     /** `false`: items have no header (and so no buttons): only their fields. */
-    itemHeaders(condition = true): this { this._itemHeaders = condition; return this; }
-    addActionLabel(label: string | null): this { this._addActionLabel = label; return this; }
+    itemHeaders(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_itemHeaders', condition); }
+    addActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addActionLabel', label); }
     addActionAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._addActionAlignment = alignment; return this; }
-    labelBetweenItems(label: string | null): this { this._labelBetweenItems = label; return this; }
+    labelBetweenItems(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_labelBetweenItems', label); }
     /**
      * Items are the records of a has-many relationship of the form's model (Objection `relationMappings`): loaded when the form is
      * filled, then created, updated and deleted once the record is saved. `orderColumn()` saves the items' order.
@@ -1426,7 +1448,7 @@ export class Repeater extends Field {
      * (or pass `true`). The new item is inserted after the item whose key is sent as `afterItem`.
      */
     addBetweenAction(modify: ActionModifier | boolean = true): this { this._actionModifiers.addBetween = typeof modify === 'boolean' ? (modify ? (action) => action.visible() : null) : modify; return this; }
-    addBetweenActionLabel(label: string | null): this { this._addBetweenLabel = label; return this; }
+    addBetweenActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addBetweenLabel', label); }
     cloneAction(modify: ActionModifier): this { this._actionModifiers.clone = modify; return this; }
     deleteAction(modify: ActionModifier): this { this._actionModifiers.delete = modify; return this; }
     moveUpAction(modify: ActionModifier): this { this._actionModifiers.moveUp = modify; return this; }
@@ -1517,6 +1539,9 @@ export class Repeater extends Field {
             case 'collapseAll': action = Action.make('collapseAll').label(tr('collapse_all.label')).color('gray').link().size('sm'); break;
             case 'expandAll': action = Action.make('expandAll').label(tr('expand_all.label')).color('gray').link().size('sm'); break;
         }
+        // The guards (`addable()`, `maxItems()`, `reorderable()`…) may be functions: the handler sees their evaluated values.
+        const handler = (action as any)._handler as ((ctx: any) => unknown) | null;
+        if (handler) action.action((ctx) => this.withLazyProperties(async () => handler(ctx)));
         return modifyAction(action, this._actionModifiers[name]);
     }
 
@@ -1768,26 +1793,26 @@ abstract class TemporalField extends Field {
     native(condition = true): this { this._native = condition; return this; }
     isNative(): boolean { return this._native; }
     /** Display format of the JavaScript picker, in PHP's notation (`'d/m/Y'`, `'M j, Y H:i'`). */
-    displayFormat(format: string | null): this { this._displayFormat = format; return this; }
+    displayFormat(format: Lazy<string | null, ComponentContext>): this { return this.setLazy('_displayFormat', format); }
     /** Format of the saved value, in PHP's notation (`'Y-m-d'` by default for dates, `'Y-m-d H:i:s'` with a time). */
-    format(format: string | null): this { this._format = format; return this; }
+    format(format: Lazy<string | null, ComponentContext>): this { return this.setLazy('_format', format); }
     /** First day of the week in the JavaScript picker: 0 (Sunday) to 6. */
-    firstDayOfWeek(day: number): this { this._firstDayOfWeek = Math.min(6, Math.max(0, Math.floor(day))); return this; }
+    firstDayOfWeek(day: Lazy<number, ComponentContext>): this { return this.setLazy('_firstDayOfWeek', day, (value) => Math.min(6, Math.max(0, Math.floor(Number(value) || 0)))); }
     weekStartsOnMonday(): this { return this.firstDayOfWeek(1); }
     weekStartsOnSunday(): this { return this.firstDayOfWeek(0); }
     /** Dates that cannot be picked (`YYYY-MM-DD`), also rejected on the server. */
     disabledDates(dates: Lazy<string[], ComponentContext>): this { this._disabledDates = dates; return this; }
-    closeOnDateSelection(condition = true): this { this._closeOnDateSelection = condition; return this; }
+    closeOnDateSelection(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_closeOnDateSelection', condition, Boolean); }
     /** Locale of the JavaScript picker's month and day names (`'fr'`). */
-    locale(locale: string | null): this { this._locale = locale; return this; }
+    locale(locale: Lazy<string | null, ComponentContext>): this { return this.setLazy('_locale', locale); }
     /** Shows and edits the value in this time zone, while it is saved in UTC (date-time pickers). */
     timezone(timezone: string | null): this { if (timezone !== null) new Intl.DateTimeFormat('en', { timeZone: timezone }); this._timezone = timezone; return this; }
-    hoursStep(step: number): this { this._hoursStep = step; return this; }
-    minutesStep(step: number): this { this._minutesStep = step; return this; }
-    secondsStep(step: number): this { this._secondsStep = step; return this; }
+    hoursStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_hoursStep', step); }
+    minutesStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_minutesStep', step); }
+    secondsStep(step: Lazy<number, ComponentContext>): this { return this.setLazy('_secondsStep', step); }
     /** Date focused when the JavaScript picker opens on an empty field. */
-    defaultFocusedDate(date: string | null): this { this._defaultFocusedDate = date; return this; }
-    placeholder(text: string | null): this { this._temporalPlaceholder = text; return this; }
+    defaultFocusedDate(date: Lazy<string | null, ComponentContext>): this { return this.setLazy('_defaultFocusedDate', date); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_temporalPlaceholder', text); }
 
     private static resolveLimit(date: string): string {
         const day = (offset: number) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
@@ -1865,7 +1890,7 @@ abstract class TemporalField extends Field {
         const model = this.wireModel();
         if (this._native) {
             const limit = (value: string | null) => (value === null ? null : !this.hasTime() ? value.slice(0, 10) : !this.hasDate() ? (value.length > 8 ? value.slice(11) : value) : value.replace(' ', 'T'));
-            const input = new Attributes()
+            const input = new Attributes(this.getExtraControlAttributes())
                 .merge({
                     'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
                     max: limit(max), min: limit(min), placeholder: this._temporalPlaceholder,
@@ -1882,16 +1907,16 @@ abstract class TemporalField extends Field {
         const label = await this.getLabel();
         const tr = (key: string) => t(`filament-forms::components.date_time_picker.${key}`);
         const describedBy = [this.getHelperTextId(), this.hasError() ? `${id}-error` : null].filter(Boolean).join(' ') || null;
-        const trigger = new Attributes().merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['fi-fo-date-time-picker-trigger', 'fi-fo-date-time-picker-display-text-input']);
+        const trigger = new Attributes(this.getExtraInputAttributes()).merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['fi-fo-date-time-picker-trigger', 'fi-fo-date-time-picker-display-text-input']);
         const config = `dateTimePickerFormComponent({
  defaultFocusedDate: ${js(this._defaultFocusedDate)},
  displayFormat: ${js(phpDateFormatToDayjs(this._displayFormat ?? this.defaultDisplayFormat()))},
  firstDayOfWeek: ${this._firstDayOfWeek},
  hasDate: ${hasDate ? 'true' : 'false'},
- isAutofocused: ${this._autofocus && !isDisabled ? 'true' : 'false'},
+ isAutofocused: ${(await this.isAutofocused()) && !isDisabled ? 'true' : 'false'},
  locale: ${js(this._locale ?? 'en')},
  shouldCloseOnDateSelection: ${this._closeOnDateSelection ? 'true' : 'false'},
- state: $wire.$entangle(${js(this.getStatePath())}${this.isLive() ? ', true' : ''}),
+ state: $wire.$entangle(${js(this.getStatePath())}${this.entangleLive() ? ', true' : ''}),
  })`;
         const keyHash = createHash('md5').update(JSON.stringify([disabledDates, isDisabled, max, min, hasDate, hasTime, hasSeconds])).digest('hex');
         const events = hasDate
@@ -1906,7 +1931,7 @@ abstract class TemporalField extends Field {
         const calendar = hasDate ? `<div class="fi-fo-date-time-picker-panel-header"><select aria-label="${e(tr('month_select.label'))}" x-model="focusedMonth" class="fi-fo-date-time-picker-month-select"><template x-for="(month, index) in months"><option x-bind:value="index" x-text="month"></option></template></select><input type="number" inputmode="numeric" aria-label="${e(tr('year_input.label'))}" x-model.debounce="focusedYear" class="fi-fo-date-time-picker-year-input" /></div><div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="fi-fo-date-time-picker-calendar-description"></div><div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="fi-fo-date-time-picker-calendar"><div role="row" class="fi-fo-date-time-picker-calendar-header"><template x-for="(day, index) in dayLabels" x-bind:key="index"><div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="fi-fo-date-time-picker-calendar-header-day"></div></template></div><template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex"><div role="row" class="fi-fo-date-time-picker-calendar-week"><template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)"><div role="gridcell" x-text="day" x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null" x-bind:aria-label="day ? getDayLabel(day) : null" x-bind:aria-selected="day &amp;&amp; dayIsSelected(day) ? 'true' : 'false'" x-bind:aria-current="day &amp;&amp; dayIsToday(day) ? 'date' : null" x-bind:aria-disabled="day &amp;&amp; dayIsDisabled(day) ? 'true' : 'false'" x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null" x-on:focus="day &amp;&amp; setFocusedDay(day)" x-on:click="if (day) { $el.focus(); selectDate(day) }" x-bind:class="{ 'fi-fo-date-time-picker-calendar-day': day, 'fi-fo-date-time-picker-calendar-day-today': day &amp;&amp; dayIsToday(day), 'fi-focused': day &amp;&amp; focusedDate.date() === day, 'fi-selected': day &amp;&amp; dayIsSelected(day), 'fi-disabled': day &amp;&amp; dayIsDisabled(day) }"></div></template></div></template></div>` : '';
         const timeInput = (max: number, step: number, label: string, model: string) => `<input max="${max}" min="0" step="${step}" type="number" inputmode="numeric" aria-label="${e(label)}" x-on:blur="checkTimeInputValidity" x-on:invalid="timeInputInvalid" x-model.debounce="${model}" />`;
         const time = hasTime ? `<div class="fi-fo-date-time-picker-time-inputs">${timeInput(23, this._hoursStep, tr('hour_input.label'), 'hour')}<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._minutesStep, tr('minute_input.label'), 'minute')}${hasSeconds ? `<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._secondsStep, tr('second_input.label'), 'second')}` : ''}</div>` : '';
-        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}" x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
+        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
         return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn">${picker}</div></div>`);
     }
 }
@@ -1956,15 +1981,13 @@ export class Radio extends Field {
     private _options: [string, string][] = [];
     private _descriptions: Record<string, string> = {};
     private _inline = false;
-    private _live = false;
     static make(name: string): Radio { return configured(new Radio(name)); }
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Helper text per value, under the option label. */
-    descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
+    descriptions(descriptions: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_descriptions', descriptions, (value) => value ?? {}); }
     /** Options side by side. */
-    inline(condition = true): this { this._inline = condition; return this; }
-    live(condition = true): this { this._live = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
     /** Options that cannot be picked; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
@@ -1984,8 +2007,8 @@ export class Radio extends Field {
             .merge({ 'aria-describedby': this.hasError() ? `${id}-error` : null, 'aria-labelledby': `${id}-label`, 'aria-required': isRequired ? 'true' : null, role: 'radiogroup' })
             .class(['fi-fo-radio', this._inline ? 'fi-inline' : null]);
         const items = this._options.map(([value, label]) => {
-            const input = new Attributes()
-                .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath() })
+            const input = new Attributes(this.getExtraInputAttributes())
+                .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this.wireModel()]: this.getStatePath() })
                 .class(['fi-radio-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             const description = this._descriptions[value] ? `<p class="fi-fo-radio-label-description">${e(this._descriptions[value])}</p>` : '';
             return `<label class="fi-fo-radio-label"><input ${input.toHtml()} /><div class="fi-fo-radio-label-text"><p>${e(label)}</p>${description}</div></label>`;
@@ -1998,25 +2021,25 @@ export class Textarea extends Field {
     private _rows: number | null = null;
     private _maxLength: number | null = null;
     static make(name: string): Textarea { return configured(new Textarea(name)); }
-    rows(rows: number): this { this._rows = rows; return this; }
-    maxLength(length: number): this { this._maxLength = length; return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
+    rows(rows: Lazy<number | null, ComponentContext>): this { return this.setLazy('_rows', rows); }
+    maxLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_maxLength', length); return this.rule({ name: 'max', passes: (v, ctx) => { last = (ctx.component as any)._maxLength as number | null; return last === null || String(v).length <= last; }, message: (a) => `The ${a} field must not be greater than ${last} characters.` }); }
     private _minLength: number | null = null;
     private _placeholder: string | null = null;
     private _readOnly = false;
     private _autosize = false;
     private _grammarly = true;
     private _trim = false;
-    minLength(length: number): this { this._minLength = length; return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    minLength(length: Lazy<number | null, ComponentContext>): this { let last: number | null = null; this.setLazy('_minLength', length); return this.rule({ name: 'min', passes: (v, ctx) => { last = (ctx.component as any)._minLength as number | null; return last === null || String(v).length >= last; }, message: (a) => `The ${a} field must be at least ${last} characters.` }); }
     /** Exact length. */
-    length(length: number): this { this.minLength(length); return this.maxLength(length); }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
-    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    length(length: Lazy<number | null, ComponentContext>): this { this.minLength(length); return this.maxLength(length); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     /** The textarea grows with its content. */
-    autosize(condition = true): this { this._autosize = condition; return this; }
+    autosize(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_autosize', condition, Boolean); }
     /** Stops the Grammarly extension from analyzing the content. */
-    disableGrammarly(condition = true): this { this._grammarly = !condition; return this; }
+    disableGrammarly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_grammarly', condition, (value) => !value); }
     /** Removes the spaces around the value before it is validated and saved. */
-    trim(condition = true): this { this._trim = condition; return this; }
+    trim(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_trim', condition); }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
     /** `trim()`: the submitted value is trimmed before it is validated and saved. */
     protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
@@ -2025,7 +2048,7 @@ export class Textarea extends Field {
         const isDisabled = await this.isDisabled();
         // Initial height: 1.5rem per row plus padding.
         const height = (this._rows ?? 2) * 1.5 + 0.75;
-        const textarea = new Attributes().merge({
+        const textarea = new Attributes(this.getExtraControlAttributes()).merge({
             'aria-invalid': this.hasError() ? 'true' : null, 'data-gramm': this._grammarly ? null : 'false', 'data-gramm_editor': this._grammarly ? null : 'false', 'data-enable-grammarly': this._grammarly ? null : 'false',
             disabled: isDisabled, id: this.getId(), maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder, readonly: this._readOnly,
             required: (await this.isRequired()) && !isDisabled && !this._readOnly, rows: this._rows, [this.wireModel()]: this.getStatePath(),
@@ -2045,11 +2068,11 @@ export class TagsInput extends Field {
     private _suggestions: string[] = [];
     private _splitKeys: string[] = [];
     static make(name: string): TagsInput { return configured(new TagsInput(name)); }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
     /** Values suggested while typing. */
-    suggestions(suggestions: string[]): this { this._suggestions = suggestions.map(String).slice(0, 1000); return this; }
+    suggestions(suggestions: Lazy<string[], ComponentContext>): this { return this.setLazy('_suggestions', suggestions, (list) => (list ?? []).map(String).slice(0, 1000)); }
     /** Keys that confirm the current tag, besides Enter (`['Tab', ',']`). */
-    splitKeys(keys: string[]): this { this._splitKeys = keys; return this; }
+    splitKeys(keys: Lazy<string[], ComponentContext>): this { return this.setLazy('_splitKeys', keys, (list) => list ?? []); }
     private _separator: string | null = null;
     private _tagPrefix: string | null = null;
     private _tagSuffix: string | null = null;
@@ -2059,15 +2082,15 @@ export class TagsInput extends Field {
     /** Saves the tags as one string joined with this separator (`'a,b,c'`) instead of a list. */
     separator(separator: string | null = ','): this { this._separator = separator; return this; }
     /** Text shown before / after each tag (not saved). */
-    tagPrefix(prefix: string | null): this { this._tagPrefix = prefix; return this; }
-    tagSuffix(suffix: string | null): this { this._tagSuffix = suffix; return this; }
+    tagPrefix(prefix: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagPrefix', prefix); }
+    tagSuffix(suffix: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagSuffix', suffix); }
     /** Tags can be reordered by dragging. */
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderable', condition); }
     /** Badge color of the tags (`primary` by default). */
-    color(color: string | null): this { this._tagColor = color; return this; }
+    color(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagColor', color); }
     /** Rules applied to each tag (e.g. a maximum length); the message names the tag. */
     nestedRecursiveRules(rules: (Rule | string)[]): this { this._tagRules = rules.map((rule) => (typeof rule === 'string' ? stringRule(rule, { numeric: false, name: this._name ?? '' }) : rule)).filter((rule): rule is Rule => rule !== null); return this; }
-    getDefaultState(): unknown { return this._default ?? []; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? []; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && this._separator !== null) value = value === '' ? [] : value.split(this._separator);
         else if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
@@ -2093,14 +2116,14 @@ export class TagsInput extends Field {
         const wrapper = new Attributes()
             .merge({ 'aria-label': label, role: 'group', 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" })
             .class(['fi-fo-tags-input', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        const input = new Attributes()
+        const input = new Attributes(this.getExtraInputAttributes())
             .merge({ autocomplete: 'off', disabled: isDisabled, id, list: `${id}-suggestions`, placeholder: this._placeholder ?? t('filament-forms::components.tags_input.placeholder'), type: 'text', 'x-bind': 'input' })
             .class(['fi-input']);
         const badge = ['fi-badge', 'fi-size-md', ...colorManager.getComponentClasses('badge', this._tagColor ?? 'primary'), this._reorderable && !isDisabled ? 'fi-reorderable' : null].filter(Boolean).join(' ');
         const reorderable = this._reorderable && !isDisabled;
         const deleteButton = isDisabled ? '' : `<button type="button" x-on:click.stop="deleteTag(tag)" x-bind:aria-label="'${e(t('filament-forms::components.tags_input.actions.delete.label'))}: ' + tag" class="fi-badge-delete-btn"><span aria-hidden="true" class="fi-badge-delete-btn-icon"></span></button>`;
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}" x-data="tagsInputFormComponent({
-                    state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}"${this.extraAlpineHtml()} x-data="tagsInputFormComponent({
+                    state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}),
                     splitKeys: ${this._splitKeys.length ? e(js(this._splitKeys)) : '[]'},
                     tagAddedMessage: ${e(js(t('filament-forms::components.tags_input.tag_added')))},
                     tagRemovedMessage: ${e(js(t('filament-forms::components.tags_input.tag_removed')))},
@@ -2111,7 +2134,7 @@ export class TagsInput extends Field {
 /** On/off switch. */
 export class Toggle extends Field {
     static make(name: string): Toggle { return configured(new Toggle(name)); }
-    getDefaultState(): unknown { return this._default ?? false; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     hydrateState(value: unknown): unknown { return value === true || value === 1 || value === '1'; }
     private _onIcon: string | null = null;
     private _offIcon: string | null = null;
@@ -2119,13 +2142,13 @@ export class Toggle extends Field {
     private _offColor: string | null = null;
     private _inline = true;
     /** Icons inside the switch's knob. */
-    onIcon(icon: string | null): this { this._onIcon = icon; return this; }
-    offIcon(icon: string | null): this { this._offIcon = icon; return this; }
+    onIcon(icon: Lazy<string | null, ComponentContext>): this { return this.setLazy('_onIcon', icon); }
+    offIcon(icon: Lazy<string | null, ComponentContext>): this { return this.setLazy('_offIcon', icon); }
     /** Colors when on (`primary` by default) and off (`gray`). */
-    onColor(color: string | null): this { this._onColor = color; return this; }
-    offColor(color: string | null): this { this._offColor = color; return this; }
+    onColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_onColor', color); }
+    offColor(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_offColor', color); }
     /** `false`: the label goes above the switch instead of beside it. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     async toHtml(): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager().');
         const on = this.context().state === true;
@@ -2133,10 +2156,10 @@ export class Toggle extends Field {
         const offColors = this._offColor && this._offColor !== 'gray' ? ` ${colorManager.getComponentClasses('toggle', this._offColor).join(' ')}` : '';
         const onIconHtml = this._onIcon ? icon(this._onIcon, { size: 'xs' }) : '';
         const offIconHtml = this._offIcon ? icon(this._offIcon, { size: 'xs' }) : '';
-        const button = new Attributes().merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
+        const button = new Attributes(this.getExtraAlpineAttributes()).merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
         const knob = `<div><div aria-hidden="true">${offIconHtml}</div><div aria-hidden="true">${onIconHtml}</div></div>`;
         const placeholderKnob = `<div><div aria-hidden="true"></div><div aria-hidden="true">${onIconHtml}</div></div>`;
-        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.isLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
+        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
         return this._inline ? this.wrap('', { labelPrefix: control }) : this.wrap(control);
     }
 }
@@ -2149,13 +2172,11 @@ export class ToggleButtons extends Field {
     private _colors: Record<string, string> = {};
     private _icons: Record<string, string> = {};
     static make(name: string): ToggleButtons { return configured(new ToggleButtons(name)); }
-    private _live = false;
     /** Sends the state to the server as soon as it changes. */
-    live(condition = true): this { this._live = condition; return this; }
     /** Color per value (e.g. from an enum). */
-    colors(colors: Record<string, string>): this { this._colors = colors; return this; }
+    colors(colors: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_colors', colors, (value) => value ?? {}); }
     /** Icon per value. */
-    icons(icons: Record<string, string>): this { this._icons = icons; return this; }
+    icons(icons: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_icons', icons, (value) => value ?? {}); }
     /** Options as pairs, `{ value: label }`, or an enum (its colors and icons are used unless `colors()` / `icons()` set others). */
     options(options: Options | Enum<string | number>): this {
         this._options = optionPairs(options);
@@ -2166,9 +2187,9 @@ export class ToggleButtons extends Field {
         return this;
     }
     /** Buttons side by side. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     /** Buttons joined into a single group. */
-    grouped(condition = true): this { this._grouped = condition; return this; }
+    grouped(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_grouped', condition, Boolean); }
     private _multiple = false;
     private _tooltips: Record<string, string> = {};
     private _size: string | null = null;
@@ -2179,15 +2200,15 @@ export class ToggleButtons extends Field {
     /** Several buttons can be selected: the state is a list of values. */
     multiple(condition = true): this { this._multiple = condition; return this; }
     /** Tooltip per value. */
-    tooltips(tooltips: Record<string, string>): this { this._tooltips = tooltips; return this; }
+    tooltips(tooltips: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_tooltips', tooltips, (value) => value ?? {}); }
     /** Button size: `xs`, `sm`, `md` (default), `lg` or `xl`. */
-    size(size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | null): this { this._size = size; return this; }
+    size(size: Lazy<'xs' | 'sm' | 'md' | 'lg' | 'xl' | null, ComponentContext>): this { return this.setLazy('_size', size); }
     /** Icons only: the labels stay for screen readers. */
-    hiddenButtonLabels(condition = true): this { this._labelsHidden = condition; return this; }
+    hiddenButtonLabels(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_labelsHidden', condition, Boolean); }
     /** Buttons stretch to the width of the field. */
-    fullWidth(condition = true): this { this._fullWidth = condition; return this; }
+    fullWidth(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_fullWidth', condition, Boolean); }
     /** Number of columns the buttons are spread over (from `lg`), when not inline. */
-    columns(columns: number | null): this { this._columns = columns; return this; }
+    columns(columns: Lazy<number | null, ComponentContext>): this { return this.setLazy('_columns', columns); }
     /** Options that cannot be selected; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
@@ -2198,7 +2219,7 @@ export class ToggleButtons extends Field {
         this._icons = { 1: icons.resolve('forms::components.toggle-buttons.boolean.true') ?? 'o-check', 0: icons.resolve('forms::components.toggle-buttons.boolean.false') ?? 'o-x-mark', ...this._icons };
         return this;
     }
-    getDefaultState(): unknown { return this._default ?? (this._multiple ? [] : null); }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     hydrateState(value: unknown): unknown {
         if (!this._multiple) return value;
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
@@ -2229,7 +2250,7 @@ export class ToggleButtons extends Field {
         const button = (value: string, disabled: boolean) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, `fi-size-${this._size ?? 'md'}`, disabled ? 'fi-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
         const items = this._options.map(([value, label]) => {
             const optionDisabled = this.isOptionDisabled(value, label);
-            const input = new Attributes().merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this._live ? 'wire:model.live' : 'wire:model']: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
+            const input = new Attributes(this.getExtraInputAttributes()).merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this.wireModel()]: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
             const tooltip = this._tooltips[value] ? ` x-tooltip="${e(`{ content: ${js(this._tooltips[value])}, theme: $store.theme, allowHTML: false }`)}"` : '';
             const iconSize = this._size === 'xs' || this._size === 'sm' ? 'sm' : undefined;
             const html = `<input ${input.toHtml()} /><label for="${e(`${id}-${value}`)}"${tooltip}${this._labelsHidden ? ` aria-label="${e(label)}"` : ''} class="${button(value, optionDisabled)}">${this._icons[value] ? icon(this._icons[value], iconSize ? { size: iconSize } : {}) : ''}${this._labelsHidden ? '' : e(label)}</label>`;
@@ -2346,15 +2367,15 @@ export class RichEditor extends Field {
     /** Browser TipTap extensions: URLs of ES modules exporting an extension (or an array of them). Register their server side with `registerRichContentExtensions()`. */
     extensions(urls: string[]): this { this._jsExtensions = [...this._jsExtensions, ...urls]; return this; }
     /** Saves the content as the editor's JSON document instead of HTML. */
-    json(condition = true): this { this._json = condition; return this; }
-    placeholder(text: string | null): this { this._richPlaceholder = text; return this; }
+    json(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_json', condition); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_richPlaceholder', text); }
     /** Where files attached in the editor are stored (`FileUpload.storage` by default); without storage, attaching is off. */
     fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
-    fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
+    fileAttachmentsDirectory(directory: Lazy<string | null, ComponentContext>): this { return this.setLazy('_attachmentsDirectory', directory); }
     /** Accepted types of attached files, checked on the file's content (images only: they are inserted as images). */
     fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
     /** Maximum size of attached files, in kilobytes. */
-    fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    fileAttachmentsMaxSize(kilobytes: Lazy<number, ComponentContext>): this { return this.setLazy('_attachmentMaxSize', kilobytes); }
     /** Text colors offered by the `textColor` tool (the Tailwind palette by default): `{ brand: TextColor.make('Brand', '#0ea5e9', '#38bdf8') }`. */
     textColors(colors: Record<string, TextColor> | null): this { this._textColors = colors; if (colors) registerTextColors(colors); return this; }
     getTextColors(): Record<string, TextColor> { return this._textColors ?? TextColor.getDefaults(); }
@@ -2362,22 +2383,22 @@ export class RichEditor extends Field {
     customTextColors(condition = true): this { this._customTextColors = condition; return this; }
     /** Merge tags users insert (`mergeTags` tool and `{{` in the text), replaced by values when the content is rendered: `['name', 'today']` or `{ name: 'Name' }`. */
     mergeTags(tags: string[] | Record<string, string>): this { this._mergeTags = Array.isArray(tags) ? Object.fromEntries(tags.map((tag) => [tag, tag])) : { ...tags }; return this; }
-    noMergeTagSearchResultsMessage(message: string | null): this { this._noMergeTagResults = message; return this; }
+    noMergeTagSearchResultsMessage(message: Lazy<string | null, ComponentContext>): this { return this.setLazy('_noMergeTagResults', message); }
     /** Mentions: `[MentionProvider.make('@').items({ 1: 'Ada' })]`. */
     mentions(providers: MentionProvider[]): this { this._mentions = providers; return this; }
     /** Custom blocks (`customBlocks` tool), as a list or grouped by label. */
     customBlocks(blocks: CustomBlocks): this { this._customBlocks = blocks; return this; }
-    minimalCustomBlockControls(condition = true): this { this._minimalCustomBlockControls = condition; return this; }
+    minimalCustomBlockControls(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_minimalCustomBlockControls', condition); }
     /** Shows the blocks of the panel in a grid. */
-    customBlocksGrid(condition = true): this { this._customBlocksGrid = condition; return this; }
+    customBlocksGrid(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_customBlocksGrid', condition); }
     /** Adds a search field to the blocks panel. */
-    searchableCustomBlocks(condition = true): this { this._searchableCustomBlocks = condition; return this; }
+    searchableCustomBlocks(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_searchableCustomBlocks', condition); }
     /** Panel open when the editor loads (`customBlocks`, `mergeTags`). */
-    activePanel(panel: string | null): this { this._activePanel = panel; return this; }
+    activePanel(panel: Lazy<string | null, ComponentContext>): this { return this.setLazy('_activePanel', panel); }
     /** Keeps the toolbar visible while scrolling the content. */
-    stickyToolbar(condition = true): this { this._stickyToolbar = condition; return this; }
+    stickyToolbar(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_stickyToolbar', condition); }
     /** Lets users resize images with handles; the size is saved on the image. */
-    resizableImages(condition = true): this { this._resizableImages = condition; return this; }
+    resizableImages(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_resizableImages', condition); }
     private attachmentsStorage(): FileStorage | null { return this._attachmentsStorage ?? FileUpload.storage; }
     private findTool(name: string): RichEditorTool | null {
         const custom = this._customTools.find((tool) => tool.getName() === name);
@@ -2392,7 +2413,7 @@ export class RichEditor extends Field {
         if (typeof value === 'string' && value.trim().startsWith('{')) { try { const parsed = JSON.parse(value); if (isRichDocument(parsed)) return parsed; } catch { /* HTML */ } }
         return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : '');
     }
-    getDefaultState(): unknown { return richHtmlToDocument(typeof this._default === 'string' ? this._default : ''); }
+    getDefaultState(): unknown { return richHtmlToDocument(typeof this.resolvedDefault() === 'string' ? this.resolvedDefault() as string : ''); }
     /** HTML (sanitized by the editor's schema), or the JSON document with `json()` (normalized through the same schema). */
     dehydrateState(state: unknown): unknown {
         const html = richDocumentToHtml(state);
@@ -2596,8 +2617,11 @@ export class RichEditor extends Field {
             .replace(/noMergeTagSearchResultsMessage: '[^']*',/, () => `noMergeTagSearchResultsMessage: ${js(this._noMergeTagResults ?? t('filament-forms::components.rich_editor.no_merge_tag_search_results_message'))},`)
             .replace(/textColors: JSON\.parse\('[^']*'\),/, () => `textColors: ${js(textColorsForJs(this.getTextColors()))},`)
             .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
-            .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this._liveMode === 'blur' ? 'true' : 'false'},`)
-            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this._liveMode === 'live' ? 'true' : 'false'})`);
+            .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},`)
+            .replace('isLiveDebounced: false,', `isLiveDebounced: ${this.getLiveDebounce() !== null ? 'true' : 'false'},`)
+            .replace('liveDebounce: null,', () => `liveDebounce: ${js(debounceMilliseconds(this.getLiveDebounce()))},`)
+            .replace('            x-load\n', () => `            x-load${this.extraControlHtml()}\n`)
+            .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this.entangleLive(false) ? 'true' : 'false'})`);
         return this.wrap(html, { labelAsDiv: true });
     }
 }
@@ -2629,19 +2653,19 @@ export class ColorPicker extends Field {
         const key = this.getLivewireKey() ?? '';
         // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
-        const input = new Attributes().merge({
+        const input = new Attributes(this.getExtraInputAttributes()).merge({
             'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', 'aria-invalid': this.hasError() ? 'true' : null, autocomplete: 'off',
             disabled: isDisabled, id, required: (await this.isRequired()) && !isDisabled, role: 'combobox', type: 'text', 'x-model': 'state',
         }).class(['fi-input']);
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" }).class(['fi-fo-color-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('color-picker'))}" x-data="colorPickerFormComponent({
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('color-picker'))}"${this.extraAlpineHtml()} x-data="colorPickerFormComponent({
  isAutofocused: false,
  isDisabled: ${isDisabled ? 'true' : 'false'},
  isLive: false,
  isLiveDebounced: false,
  isLiveOnBlur: false,
  liveDebounce: null,
- state: $wire.$entangle(${e(js(this.getStatePath()))}),
+ state: $wire.$entangle(${e(js(this.getStatePath()))}${this.entangleLive() ? ', true' : ''}),
  })" x-on:dropdown-escape="if (isOpen()) { closePanelAndRestoreFocus(); $event.preventDefault() }" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" wire:key="${e(key)}.${hash}" class="fi-input-wrp-content"><input x-on:focus="$refs.panel.open($refs.input)" x-on:keydown.enter.prevent.stop="togglePanelVisibility()" x-ref="input" ${input.toHtml()} /><div aria-hidden="true" class="fi-fo-color-picker-preview my-auto me-3 size-5 shrink-0 rounded-full select-none" x-on:click="togglePanelVisibility()" x-bind:class="{
  'fi-empty': ! state,
  }" x-bind:style="{ 'background-color': state }"></div><div wire:ignore.self wire:key="${e(key)}.panel" x-cloak x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }" x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(t('filament-forms::components.color_picker.panel_label'))}" class="fi-fo-color-picker-panel"><${({ hex: 'hex', rgb: 'rgb-string', rgba: 'rgba-string', hsl: 'hsl-string' })[this._format]}-color-picker x-ref="picker" color="${e(typeof state === 'string' ? state : '')}" /></div></div></div></div>`);
@@ -2651,11 +2675,11 @@ export class ColorPicker extends Field {
 export class Checkbox extends Field {
     private _inline = true;
     static make(name: string): Checkbox { return configured(new Checkbox(name)); }
-    getDefaultState(): unknown { return this._default ?? false; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     /** `false`: the label goes above the checkbox instead of beside it. */
-    inline(condition = true): this { this._inline = condition; return this; }
+    inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
     async toHtml(): Promise<string> {
-        const input = new Attributes()
+        const input = new Attributes(this.getExtraInputAttributes())
             .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), [this.wireModel()]: this.getStatePath() })
             .class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
         return this._inline ? this.wrap('', { labelPrefix: `<input ${input.toHtml()} />` }) : this.wrap(`<input ${input.toHtml()} />`);
@@ -2670,7 +2694,7 @@ export class CheckboxList extends Field {
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Number of columns the options are spread over (from `lg`). */
-    columns(columns: number | null): this { this._optionColumns = columns; return this; }
+    columns(columns: Lazy<number | null, ComponentContext>): this { return this.setLazy('_optionColumns', columns); }
     private _descriptions: Record<string, string> = {};
     private _searchable = false;
     private _bulkToggleable = false;
@@ -2684,17 +2708,17 @@ export class CheckboxList extends Field {
     private _modifySelectAll: ActionModifier = null;
     private _modifyDeselectAll: ActionModifier = null;
     /** Helper text per value, under the option label. */
-    descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
+    descriptions(descriptions: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_descriptions', descriptions, (value) => value ?? {}); }
     /** A search field filters the options in the browser. */
     searchable(condition = true): this { this._searchable = condition; return this; }
     private _searchPrompt = 'Search';
     private _noSearchResultsMessage = 'No search results.';
-    searchPrompt(prompt: string): this { this._searchPrompt = prompt; return this; }
-    noSearchResultsMessage(message: string): this { this._noSearchResultsMessage = message; return this; }
+    searchPrompt(prompt: Lazy<string, ComponentContext>): this { return this.setLazy('_searchPrompt', prompt); }
+    noSearchResultsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_noSearchResultsMessage', message); }
     /** Milliseconds to wait after typing before filtering the options (1000 by default). */
-    searchDebounce(milliseconds: number): this { this._searchDebounce = Math.max(0, Math.floor(milliseconds)); return this; }
+    searchDebounce(milliseconds: Lazy<number, ComponentContext>): this { return this.setLazy('_searchDebounce', milliseconds, (value) => Math.max(0, Math.floor(Number(value) || 0))); }
     /** "Select all" / "Deselect all" links. */
-    bulkToggleable(condition = true): this { this._bulkToggleable = condition; return this; }
+    bulkToggleable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_bulkToggleable', condition); }
     /** Customizes the "Select all" link (label, icon, color; it is handled in the browser, so it has no modal). */
     selectAllAction(modify: ActionModifier): this { this._modifySelectAll = modify; return this; }
     /** Customizes the "Deselect all" link. */
@@ -2702,7 +2726,7 @@ export class CheckboxList extends Field {
     getSelectAllAction(): Action { return modifyAction(Action.make('selectAll').label(t('filament-forms::components.checkbox_list.actions.select_all.label')).link().size('sm'), this._modifySelectAll); }
     getDeselectAllAction(): Action { return modifyAction(Action.make('deselectAll').label(t('filament-forms::components.checkbox_list.actions.deselect_all.label')).link().size('sm'), this._modifyDeselectAll); }
     /** Option labels are HTML, cleaned with the HTML sanitizer (as rich content). Leave it off for labels that come from users. */
-    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    allowHtml(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_allowHtml', condition); }
     /** Options that cannot be checked; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
@@ -2773,7 +2797,7 @@ export class CheckboxList extends Field {
         }
         await super.saveRelationships(record);
     }
-    getDefaultState(): unknown { return this._default ?? []; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? []; }
     hydrateState(value: unknown): unknown {
         let list = value;
         if (typeof value === 'string') { try { list = JSON.parse(value); } catch { list = []; } }
@@ -2796,7 +2820,7 @@ export class CheckboxList extends Field {
         const key = this.getLivewireKey() ?? '';
         const { options: resolvedOptions, descriptions } = await this.getResolvedOptions();
         const options = resolvedOptions.map(([value, label]) => {
-            const input = new Attributes().merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
+            const input = new Attributes(this.getExtraInputAttributes()).merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             const description = descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(descriptions[value])}</p>` : '';
             return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${this._allowHtml ? sanitizeHtml(label) : e(label)}</span>${description}</div></label></div>`;
         });
@@ -2810,7 +2834,7 @@ export class CheckboxList extends Field {
         const bulkLinks = (selectAll.visible ? `<span x-show="! areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.select-all">${link(selectAll)}</span>` : '') + (deselectAll.visible ? `<span x-show="areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.deselect-all">${link(deselectAll)}</span>` : '');
         const bulk = this._bulkToggleable && !isDisabled && resolvedOptions.length && bulkLinks ? `<div x-cloak class="fi-fo-checkbox-list-actions" wire:key="${e(key)}.actions">${bulkLinks}</div>` : '';
         const noResults = this._searchable ? `<div x-cloak x-show="search && ! visibleCheckboxListOptions.length" role="status" aria-live="polite" class="fi-fo-checkbox-list-no-search-results-message">${e(this._noSearchResultsMessage)}</div>` : '';
-        return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}" x-data="checkboxListFormComponent({
+        return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}"${this.extraAlpineHtml()} x-data="checkboxListFormComponent({
  livewireId: ${e(js(this.livewire.id))},
  })" aria-labelledby="${e(this.getId())}-label" class="fi-fo-checkbox-list">${search}${bulk}<div wire:key="${e(key)}.options"${this._searchable ? ' x-show="visibleCheckboxListOptions.length"' : ''} ${grid}>${options.join('')}</div>${noResults}</div>`, { labelAsDiv: true });
     }
@@ -2822,9 +2846,9 @@ export class KeyValue extends Field {
     private _valueLabel: string | null = null;
     private _reorderable = false;
     static make(name: string): KeyValue { return configured(new KeyValue(name)); }
-    keyLabel(label: string): this { this._keyLabel = label; return this; }
-    valueLabel(label: string): this { this._valueLabel = label; return this; }
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    keyLabel(label: Lazy<string, ComponentContext>): this { return this.setLazy('_keyLabel', label); }
+    valueLabel(label: Lazy<string, ComponentContext>): this { return this.setLazy('_valueLabel', label); }
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderable', condition); }
     private _addable = true;
     private _deletable = true;
     private _editableKeys = true;
@@ -2834,19 +2858,19 @@ export class KeyValue extends Field {
     private _addLabel: string | null = null;
     private _deleteLabel: string | null = null;
     /** `false`: no "Add row" button. */
-    addable(condition = true): this { this._addable = condition; return this; }
+    addable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_addable', condition); }
     /** `false`: rows cannot be deleted. */
-    deletable(condition = true): this { this._deletable = condition; return this; }
+    deletable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_deletable', condition); }
     /** `false`: keys cannot be changed. The server keeps the saved keys. */
-    editableKeys(condition = true): this { this._editableKeys = condition; return this; }
+    editableKeys(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_editableKeys', condition); }
     /** `false`: values cannot be changed. */
-    editableValues(condition = true): this { this._editableValues = condition; return this; }
-    keyPlaceholder(text: string | null): this { this._keyPlaceholder = text; return this; }
-    valuePlaceholder(text: string | null): this { this._valuePlaceholder = text; return this; }
-    addActionLabel(label: string | null): this { this._addLabel = label; return this; }
-    deleteActionLabel(label: string | null): this { this._deleteLabel = label; return this; }
+    editableValues(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_editableValues', condition); }
+    keyPlaceholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_keyPlaceholder', text); }
+    valuePlaceholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_valuePlaceholder', text); }
+    addActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addLabel', label); }
+    deleteActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_deleteLabel', label); }
     private _reorderLabel: string | null = null;
-    reorderActionLabel(label: string | null): this { this._reorderLabel = label; return this; }
+    reorderActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_reorderLabel', label); }
     private _modifyAdd: ActionModifier = null;
     private _modifyDelete: ActionModifier = null;
     private _modifyReorder: ActionModifier = null;
@@ -2861,7 +2885,7 @@ export class KeyValue extends Field {
     getReorderAction(): Action { return modifyAction(Action.make('reorder').label(this._reorderLabel ?? t('filament-forms::components.key_value.actions.reorder.label')).icon(fieldActionIcon('key-value', 'reorder')).color('gray').iconButton().size('sm'), this._modifyReorder); }
     // In the form, the state is a list of `{ key, value }` pairs (what the browser component expects, and it keeps order);
     // it becomes an object again when saved.
-    getDefaultState(): unknown { return KeyValue.toPairs(this._default); }
+    getDefaultState(): unknown { return KeyValue.toPairs(this.resolvedDefault()); }
     private static toPairs(value: unknown): { key: string; value: unknown }[] {
         let object = value;
         if (typeof value === 'string') { try { object = JSON.parse(value); } catch { object = {}; } }
@@ -2875,7 +2899,7 @@ export class KeyValue extends Field {
         // Restrictions set on the field are enforced on the server: a forged state cannot add, delete or edit what the UI forbids.
         // The saved value: the one hydrated by this instance, else the record's (fields are rebuilt on every request), else the default.
         const record = this.context().record as Record<string, unknown> | null;
-        const saved = KeyValue.toPairs(this._originalValue ?? (record && typeof record === 'object' ? record[this._name!] : null) ?? this._default);
+        const saved = KeyValue.toPairs(this._originalValue ?? (record && typeof record === 'object' ? record[this._name!] : null) ?? this.resolvedDefault());
         if (!this._addable || !this._deletable || !this._editableKeys || !this._editableValues) {
             const received = Array.isArray(state) ? state.filter((pair: any) => pair && typeof pair === 'object' && typeof pair.key === 'string') : [];
             const byKey = new Map(received.map((pair: any) => [String(pair.key).trim(), pair]));
@@ -2907,8 +2931,8 @@ export class KeyValue extends Field {
         const deletable = this._deletable && del.visible, addable = this._addable && add.visible, reorderable = this._reorderable && reorder.visible;
         const dangerClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager?.getComponentClasses('icon-button', 'danger') ?? [])].join(' ');
         const reorderCell = reorderable ? `<td class="fi-has-action"><span class="fi-sr-only" data-reorder-description x-bind:id="$id('key-value-row') + '-' + row.id" x-text="rowDescription(row, index)"></span><div x-sortable-handle class="fi-fo-key-value-table-row-sortable-handle"><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" ${iconButton} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', reorder.color, 'gray', [])])}" x-bind:tabindex="rows.length &gt; 1 ? -1 : 0" x-bind:aria-hidden="rows.length &gt; 1 ? 'true' : null">${icon(reorder.icon ?? fieldActionIcon('key-value', 'reorder'))}</button></div><div class="fi-sr-only"><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="up" x-on:click.stop="moveRow(row.id, index - 1)" x-bind:disabled="index === 0" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_up.label'))}</button><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="down" x-on:click.stop="moveRow(row.id, index + 1)" x-bind:disabled="index === rows.length - 1" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_down.label'))}</button></div></td>` : '';
-        return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}" x-id="['key-value-row']" x-data="keyValueFormComponent({
- state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
+        return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}"${this.extraAlpineHtml()} x-id="['key-value-row']" x-data="keyValueFormComponent({
+ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}),
  reordering: ${e(js(reordering))},
  })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${deletable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td>${deletable ? `<td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(del.label)}" aria-label="${e(del.label)}" ${iconButton} class="${dangerClasses}">${icon(del.icon ?? fieldActionIcon('key-value', 'delete'))}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${addable ? `<div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...colorClassesOf(colorManager, 'link', add.color, 'gray', [])])}">${add.icon ? icon(add.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(add.label)}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
     }
@@ -2928,9 +2952,6 @@ function accessibilityOf(field: Field, options: { withInvalid?: boolean } = {}):
     const ids = [(field as any).getHelperTextId() as string | null, field.hasError() ? `${field.getId()}-error` : null].filter(Boolean);
     return { 'aria-describedby': ids.length ? ids.join(' ') : null, 'aria-invalid': options.withInvalid !== false && field.hasError() ? 'true' : null };
 }
-type LiveMode = { onBlur: boolean; debounce: number | null } | null;
-/** Second `$entangle()` argument: true only for a plain `live()` field (no `onBlur`, no `debounce`). */
-const entangleLive = (live: LiveMode) => (live !== null && !live.onBlur && live.debounce === null ? 'true' : 'false');
 
 const MARKDOWN_TOOLBAR: string[][] = [['bold', 'italic', 'strike', 'link'], ['heading'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
 /**
@@ -2943,7 +2964,6 @@ export class MarkdownEditor extends Field {
     private _minHeight: string | null = '10rem';
     private _maxHeight: string | null = null;
     private _placeholder: string | null = null;
-    private _live: LiveMode = null;
     static make(name: string): MarkdownEditor { return configured(new MarkdownEditor(name)); }
     /** Toolbar buttons, grouped (`[['bold', 'italic'], ['undo', 'redo']]`) or flat. */
     toolbarButtons(buttons: (string | string[])[]): this { this._toolbarButtons = buttons; return this; }
@@ -2958,13 +2978,12 @@ export class MarkdownEditor extends Field {
     getToolbarButtons(): (string | string[])[] { return this._toolbarButtons; }
     hasToolbarButton(name: string): boolean { return this._toolbarButtons.some((group) => (Array.isArray(group) ? group.includes(name) : group === name)); }
     /** Minimum height of the editing area (`10rem` by default). */
-    minHeight(height: string | null): this { this._minHeight = cssLength(height); return this; }
-    maxHeight(height: string | null): this { this._maxHeight = cssLength(height); return this; }
-    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    minHeight(height: Lazy<string | null, ComponentContext>): this { return this.setLazy('_minHeight', height, cssLength); }
+    maxHeight(height: Lazy<string | null, ComponentContext>): this { return this.setLazy('_maxHeight', height, cssLength); }
+    placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
     /** Sends the state to the server while typing (`debounce` in milliseconds), or on blur with `onBlur`. */
-    live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
-    maxLength(length: number): this { return this.rule({ name: 'max', passes: (v) => String(v).length <= length, message: (a) => `The ${a} field must not be greater than ${length} characters.` }); }
-    minLength(length: number): this { return this.rule({ name: 'min', passes: (v) => String(v).length >= length, message: (a) => `The ${a} field must be at least ${length} characters.` }); }
+    maxLength(length: Lazy<number, ComponentContext>): this { let last: number | null = null; return this.rule({ name: 'max', passes: async (v, ctx) => { last = await evaluate(length, ctx); return String(v).length <= last; }, message: (a) => `The ${a} field must not be greater than ${last} characters.` }); }
+    minLength(length: Lazy<number, ComponentContext>): this { let last: number | null = null; return this.rule({ name: 'min', passes: async (v, ctx) => { last = await evaluate(length, ctx); return String(v).length >= last; }, message: (a) => `The ${a} field must be at least ${last} characters.` }); }
     hydrateState(value: unknown): unknown { return typeof value === 'string' ? value : null; }
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'string', passes: (v) => typeof v === 'string', message: (a) => `The ${a} field must be a string.` }];
@@ -2975,11 +2994,11 @@ export class MarkdownEditor extends Field {
     private _attachmentMaxSize = 12288;
     /** Where attached files are stored (`FileUpload.storage` by default); without storage, the "Attach files" button is hidden. */
     fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
-    fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
+    fileAttachmentsDirectory(directory: Lazy<string | null, ComponentContext>): this { return this.setLazy('_attachmentsDirectory', directory); }
     /** Accepted types of attached files (images), checked on the file's content. */
     fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
     /** Maximum size of attached files, in kilobytes. */
-    fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    fileAttachmentsMaxSize(kilobytes: Lazy<number, ComponentContext>): this { return this.setLazy('_attachmentMaxSize', kilobytes); }
     private canAttachFiles(): boolean { return this.hasToolbarButton('attachFiles') && (this._attachmentsStorage ?? FileUpload.storage) !== null; }
     private visibleToolbar(): (string | string[])[] {
         if (this.canAttachFiles()) return this._toolbarButtons;
@@ -3013,14 +3032,14 @@ export class MarkdownEditor extends Field {
         };
         const config = `markdownEditorFormComponent({
  canAttachFiles: ${this.canAttachFiles() ? 'true' : 'false'},
- isLiveDebounced: ${this._live?.debounce !== null && this._live?.debounce !== undefined ? 'true' : 'false'},
- isLiveOnBlur: ${this._live?.onBlur ? 'true' : 'false'},
+ isLiveDebounced: ${this.getLiveDebounce() !== null ? 'true' : 'false'},
+ isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},
  label: ${js(await this.getLabel())},
- liveDebounce: ${js(this._live?.debounce ?? null)},
+ liveDebounce: ${js(debounceMilliseconds(this.getLiveDebounce()))},
  maxHeight: ${js(this._maxHeight)},
  minHeight: ${js(this._minHeight)},
  placeholder: ${js(this._placeholder)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${entangleLive(this._live)}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive(false) ? 'true' : 'false'}),
  toolbarButtons: ${js(this.visibleToolbar())},
  translations: ${js(translations)},
  uploadFileAttachmentUsing: async (file, onSuccess, onError) => {
@@ -3044,7 +3063,7 @@ export class MarkdownEditor extends Field {
  },
  })`;
         const wrapper = new Attributes().class(['fi-fo-markdown-editor', 'fi-input-wrp', { 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('markdown-editor'))}" x-data="${e(config)}" wire:ignore><textarea x-ref="editor" x-cloak></textarea></div></div></div>`, { labelAsDiv: true });
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('markdown-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore><textarea x-ref="editor" x-cloak></textarea></div></div></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3053,13 +3072,13 @@ const CODE_LANGUAGES = ['cpp', 'css', 'go', 'html', 'java', 'javascript', 'json'
 export class CodeEditor extends Field {
     private _language: string | null = null;
     private _canWrap = false;
-    private _live: LiveMode = null;
     static make(name: string): CodeEditor { return configured(new CodeEditor(name)); }
     /** Language: `cpp`, `css`, `go`, `html`, `java`, `javascript`, `json`, `markdown`, `php`, `python`, `sql`, `xml`, `yaml`. */
-    language(language: string | null): this {
-        if (language !== null && !CODE_LANGUAGES.includes(language)) throw new Error(`CodeEditor: unknown language "${language}".`);
-        this._language = language;
-        return this;
+    language(language: Lazy<string | null, ComponentContext>): this {
+        return this.setLazy('_language', language, (value) => {
+            if (value !== null && !CODE_LANGUAGES.includes(value)) throw new Error(`CodeEditor: unknown language "${value}".`);
+            return value;
+        });
     }
     getLanguage(): string | null { return this._language; }
     /**
@@ -3072,7 +3091,6 @@ export class CodeEditor extends Field {
         return this;
     }
     canWrap(): boolean { return this._canWrap; }
-    live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     hydrateState(value: unknown): unknown { return typeof value === 'string' ? value : value === null || value === undefined ? null : JSON.stringify(value); }
     async getValidationRules(): Promise<Rule[]> {
         return [...(await super.getValidationRules()), { name: 'string', passes: (v) => typeof v === 'string', message: (a) => `The ${a} field must be a string.` }];
@@ -3083,18 +3101,18 @@ export class CodeEditor extends Field {
         const config = `codeEditorFormComponent({
  canWrap: ${this._canWrap ? 'true' : 'false'},
  isDisabled: ${isDisabled ? 'true' : 'false'},
- isLive: ${this._live !== null ? 'true' : 'false'},
- isLiveDebounced: ${this._live?.debounce !== null && this._live?.debounce !== undefined ? 'true' : 'false'},
- isLiveOnBlur: ${this._live?.onBlur ? 'true' : 'false'},
+ isLive: ${this.isLive() ? 'true' : 'false'},
+ isLiveDebounced: ${this.getLiveDebounce() !== null ? 'true' : 'false'},
+ isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},
  label: ${js(await this.getLabel())},
- liveDebounce: ${js(this._live?.debounce ?? null)},
+ liveDebounce: ${js(debounceMilliseconds(this.getLiveDebounce()))},
  language: ${js(this._language)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${entangleLive(this._live)}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive(false) ? 'true' : 'false'}),
  })`;
         // Key hash over the serialized `[isDisabled, language]` options.
         const hash = createHash('md5').update(`a:2:{i:0;b:${isDisabled ? 1 : 0};i:1;${this._language === null ? 'N;' : `s:${this._language.length}:"${this._language}";`}}`).digest('hex');
         const wrapper = new Attributes().class(['fi-fo-code-editor', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return super.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
+        return super.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3122,47 +3140,45 @@ export class Slider extends Field {
     private _pipsFilter: RawJs | null = null;
     private _nonLinearPoints: Record<string, number | number[]> | null = null;
     private _decimalPlaces: number | null = null;
-    private _live: LiveMode = null;
     constructor(name: string) { super(name); this._required = true; }
     static make(name: string): Slider { return configured(new Slider(name)); }
     range(minValue: number, maxValue: number): this { this._minValue = minValue; this._maxValue = maxValue; return this; }
     minValue(value: number): this { this._minValue = value; return this; }
     maxValue(value: number): this { this._maxValue = value; return this; }
     /** Step between values; `1` requires an integer, otherwise the value must be a multiple of the step. */
-    step(step: number | null): this { this._step = step; return this; }
+    step(step: Lazy<number | null, ComponentContext>): this { return this.setLazy('_step', step); }
     /** Minimum / maximum gap between two handles. */
-    minDifference(difference: number | null): this { this._minDifference = difference; return this; }
-    maxDifference(difference: number | null): this { this._maxDifference = difference; return this; }
+    minDifference(difference: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minDifference', difference); }
+    maxDifference(difference: Lazy<number | null, ComponentContext>): this { return this.setLazy('_maxDifference', difference); }
     /** Forbidden margin at the ends: a number, or `[start, end]`. */
     rangePadding(padding: number | [number, number] | null): this { this._rangePadding = padding; return this; }
     /** Colored track segments, one boolean per segment (`[true, false]` by default). */
     fillTrack(fill: boolean[] | null = [true, false]): this { this._fillTrack = fill; return this; }
-    vertical(condition = true): this { this._vertical = condition; return this; }
+    vertical(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_vertical', condition); }
     /** Right to left (top to bottom for a vertical slider, the default when vertical). */
-    rtl(condition: boolean | null = true): this { this._rtl = condition; return this; }
+    rtl(condition: Lazy<boolean | null, ComponentContext> = true): this { return this.setLazy('_rtl', condition); }
     /** Handle behavior (`tap`, `drag`, `fixed`, `snap`, `unconstrained`…); `null`: none. */
     behavior(behavior: string | string[] | null = null): this { this._behavior = behavior; return this; }
     /** Handle tooltips: a boolean, one boolean per handle, or a `RawJs` formatting `$value`. */
     tooltips(tooltips: boolean | RawJs | (boolean | RawJs)[] = true): this { this._tooltips = tooltips; return this; }
     /** Pips: `range` (default), `steps`, `positions`, `count`, `values`. */
     pips(mode: string | null = 'range', density: number | null = null): this { this._pipsMode = mode; this._pipsDensity = density; return this; }
-    pipsMode(mode: string | null): this { this._pipsMode = mode; return this; }
-    pipsDensity(density: number | null): this { this._pipsDensity = density; return this; }
+    pipsMode(mode: Lazy<string | null, ComponentContext>): this { return this.setLazy('_pipsMode', mode); }
+    pipsDensity(density: Lazy<number | null, ComponentContext>): this { return this.setLazy('_pipsDensity', density); }
     /** Pip formatter (a `RawJs` receiving `$value`). */
     pipsFormatter(formatter: RawJs | null): this { this._pipsFormatter = formatter; return this; }
     pipsValues(values: number | number[] | null): this { this._pipsValues = values; return this; }
-    steppedPips(condition = true): this { this._steppedPips = condition; return this; }
+    steppedPips(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_steppedPips', condition); }
     /** Pip filter (a `RawJs` receiving `$value`). */
     pipsFilter(filter: RawJs | null): this { this._pipsFilter = filter; return this; }
     /** Non-linear scale (`{ '10%': 500, '50%': 4000 }`). */
     nonLinearPoints(points: Record<string, number | number[]> | null): this { this._nonLinearPoints = points; return this; }
     /** Decimal places of the saved value. */
     decimalPlaces(places: number | null): this { this._decimalPlaces = places; return this; }
-    live(options: { onBlur?: boolean; debounce?: number | null } = {}): this { this._live = { onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
     getMinValueWithPadding(): number { const padding = this._rangePadding; return this._minValue + (typeof padding === 'number' ? padding : Array.isArray(padding) ? (padding[0] ?? 0) : 0); }
     getMaxValueWithPadding(): number { const padding = this._rangePadding; return this._maxValue - (typeof padding === 'number' ? padding : Array.isArray(padding) ? (padding[1] ?? 0) : 0); }
     isMultiple(): boolean { return Array.isArray(this.context().state); }
-    getDefaultState(): unknown { return this._default ?? this._minValue; }
+    getDefaultState(): unknown { return this.resolvedDefault() ?? this._minValue; }
     private cast(value: unknown): unknown {
         if (typeof value !== 'number' && (typeof value !== 'string' || value.trim() === '' || !Number.isFinite(Number(value)))) return value;
         const number = Number(value);
@@ -3213,7 +3229,7 @@ export class Slider extends Field {
  pipsMode: ${js(this._pipsMode)},
  pipsValues: ${js(this._pipsValues)},
  rangePadding: ${js(this._rangePadding)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${this._live !== null ? 'true' : 'false'}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  step: ${js(this._step)},
  tooltips: ${Slider.formatters(this._tooltips)},
  })`;
@@ -3222,7 +3238,7 @@ export class Slider extends Field {
             .class(['fi-fo-slider', { 'fi-fo-slider-has-pips': this._pipsMode !== null, 'fi-fo-slider-has-tooltips': hasTooltips, 'fi-fo-slider-vertical': this._vertical }]);
         // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
-        return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
+        return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3236,7 +3252,6 @@ export class JsField extends Field {
     protected _renderer: Lazy<JsRenderer | null, ComponentContext> = null;
     protected _rendererConfiguration: Lazy<Record<string, unknown> | null, ComponentContext> = null;
     protected _readOnly: Lazy<boolean, ComponentContext> = false;
-    protected _liveDebounce: number | string | null = null;
 
     static make(name: string): JsField { return configured(new JsField(name)); }
     /** URL of the ES module (resolved against the page URL), or a trusted `RawJs` function expression. Never from user input. */
@@ -3252,15 +3267,10 @@ export class JsField extends Field {
      * Sends the edits to the server: on each change, after `props.onBlur()` (`{ onBlur: true }`), or once the user pauses
      * (`{ debounce: 500 }` or `'500ms'`). `false` turns it off.
      */
-    live(condition: boolean | { onBlur?: boolean; debounce?: number | string | null } = true): this {
-        super.live(condition);
-        this._liveDebounce = typeof condition === 'object' && !condition.onBlur ? (condition.debounce ?? null) : null;
-        return this;
-    }
     /** When edits are sent to the server, passed to the renderer's props (`isLive`, `isLiveOnBlur`, `debounce`). */
     getBindingConfiguration(): JsFieldBindingConfiguration {
-        const isLiveOnBlur = this._liveMode === 'blur';
-        return { isLive: this._liveMode !== null, isLiveOnBlur, debounce: isLiveOnBlur ? null : debounceMilliseconds(this._liveDebounce) };
+        const isLiveOnBlur = this.isLiveOnBlur();
+        return { isLive: this.isLive(), isLiveOnBlur, debounce: isLiveOnBlur ? null : debounceMilliseconds(this.getLiveDebounce()) };
     }
     /** Ids of the helper text and validation error, for the control's `aria-describedby`. */
     getDescriptionIds(): string[] {
@@ -3290,7 +3300,7 @@ export class Hidden extends Field {
     constructor(name: string) { super(name); this._columnSpan = { default: 'hidden' }; }
     static make(name: string): Hidden { return configured(new Hidden(name)); }
     async toHtml(): Promise<string> {
-        const attributes = new Attributes().merge({ id: this.getId(), type: 'hidden', 'wire:model': this.getStatePath(), ...this._extraAttributes }).class(['fi-fo-hidden']);
+        const attributes = new Attributes().merge({ id: this.getId(), type: 'hidden', [this.wireModel()]: this.getStatePath(), ...this._extraAttributes }).class(['fi-fo-hidden']);
         return `<input ${attributes.toHtml()} />`;
     }
 }
@@ -3311,20 +3321,20 @@ export class OneTimeCodeInput extends Field {
     length(length: number): this { this._length = Math.max(1, Math.min(32, Math.floor(length))); return this; }
     getLength(): number { return this._length; }
     /** Submits the form as soon as the last digit is typed. */
-    submitOnCompletion(condition = true): this { this._submitOnCompletion = condition; return this; }
-    readOnly(condition = true): this { this._readOnly = condition; return this; }
+    submitOnCompletion(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_submitOnCompletion', condition); }
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     hydrateState(value: unknown): unknown { return value === null || value === undefined ? null : String(value); }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         const accessibility = accessibilityOf(this);
         const label = await this.getLabel();
         const container = new Attributes().merge({ ...this._extraAttributes, 'aria-describedby': accessibility['aria-describedby'], 'aria-label': label !== '' ? label : null }).class(['fi-one-time-code-input-ctn']);
-        const first = new Attributes().merge({ ...accessibility, autofocus: this._autofocus, disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
+        const first = new Attributes(this.getExtraInputAttributes()).merge({ ...accessibility, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
         const digit = new Attributes().merge(accessibility);
         const inputs = Array.from({ length: this._length }, (_, index) => (index === 0
             ? `<input autocomplete="one-time-code" inputmode="numeric" type="text" ${first.toHtml()} />`
             : `<input aria-label="${e(t('filament::components/input/one-time-code.aria_label', { position: index + 1, count: this._length }))}" autocomplete="off" inputmode="numeric" type="text" ${digit.toHtml()}${isDisabled ? ' disabled' : ''}${this._readOnly ? ' readonly' : ''} class="fi-one-time-code-input-digit" />`));
-        return this.wrap(`<div x-data="${e(`{ code: $wire.$entangle(${js(this.getStatePath())}, false), }`)}"><div x-data="filamentOneTimeCodeInput({ shouldSubmitOnCompletion: ${this._submitOnCompletion ? 'true' : 'false'} })" x-modelable="state" x-model="code" dir="ltr" role="group" ${container.toHtml()}>${inputs.join('')}</div></div>`);
+        return this.wrap(`<div x-data="${e(`{ code: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}), }`)}"><div x-data="filamentOneTimeCodeInput({ shouldSubmitOnCompletion: ${this._submitOnCompletion ? 'true' : 'false'} })" x-modelable="state" x-model="code" dir="ltr" role="group"${this.extraAlpineHtml()} ${container.toHtml()}>${inputs.join('')}</div></div>`);
     }
 }
 
@@ -3352,7 +3362,7 @@ export class Placeholder extends Component {
 }
 
 // Nested state: a field inside a stateful group (e.g. `address.city`) is read and written at its path relative to the schema.
-function relativePath(schema: Schema, field: Field): string[] {
+function relativePath(schema: Schema, field: Component): string[] {
     const base = schema.getStatePath();
     const full = field.getStatePath();
     return (base && full.startsWith(`${base}.`) ? full.slice(base.length + 1) : full).split('.');
@@ -3364,31 +3374,102 @@ function writePath(target: Record<string, unknown>, segments: string[], value: u
     node[segments[segments.length - 1]] = value;
 }
 
-/** Fills the default state of every field in a schema. */
+/** A layout component saving its fields to a singular relationship (`Group.make().relationship('customer')`). */
+const isRelationshipLayout = (c: Component): c is LayoutComponent => c instanceof LayoutComponent && c.getSingularRelationship() !== null;
+/** Whether a component is inside a relationship layout of the schema (its state is loaded and saved by that layout). */
+function isInsideRelationshipLayout(schema: Schema, c: Component): boolean {
+    let parent = c.container.getParentComponent();
+    while (parent && parent.container) {
+        if (isRelationshipLayout(parent)) return true;
+        if (parent.container === schema) return false;
+        parent = parent.container.getParentComponent();
+    }
+    return false;
+}
+/** Runs the `afterStateHydrated()` callbacks (`formatStateUsing()`…) of the components, reading and writing `target`. */
+function callAfterStateHydrated(schema: Schema, target: Record<string, unknown>, components: Component[]): void {
+    withStateSource(schema, target, () => { for (const c of components) c.callAfterStateHydrated(); });
+}
+/** Fills the default state of every field in a schema, then runs the `afterStateHydrated()` callbacks. */
 export function fillSchema(schema: Schema, target: Record<string, unknown>): void {
     for (const c of schema.getFlatComponents()) if (c instanceof Field) writePath(target, relativePath(schema, c), c.getDefaultState());
+    callAfterStateHydrated(schema, target, schema.getFlatComponents());
 }
-/** Fills the form state from a record, field by field. */
+/**
+ * Fills the form state from a record, field by field, then runs the `afterStateHydrated()` callbacks (those of the fields of a
+ * relationship layout run once `loadSchemaRelationships()` has loaded them).
+ */
 export function fillSchemaFromRecord(schema: Schema, target: Record<string, unknown>, record: Record<string, unknown>): void {
     for (const c of schema.getFlatComponents()) {
         if (!(c instanceof Field)) continue;
         const segments = relativePath(schema, c);
         writePath(target, segments, c.hydrateState(readPath(record, segments) ?? c.getDefaultState()));
     }
+    callAfterStateHydrated(schema, target, schema.getFlatComponents().filter((c) => !isInsideRelationshipLayout(schema, c)));
 }
-/** Fills the fields that load their state from the record's relationships (`loadStateFromRelationshipsUsing()`, `Select::relationship()`…). */
+/**
+ * Fills the fields that load their state from the record's relationships (`loadStateFromRelationshipsUsing()`,
+ * `Select::relationship()`…) and the fields of the layout components saving to a relationship (`Group.relationship()`).
+ */
 export async function loadSchemaRelationships(schema: Schema, target: Record<string, unknown>, record: unknown): Promise<void> {
     if (!record) return;
     for (const c of schema.getFlatComponents()) {
-        if (!(c instanceof Field)) continue;
+        if (isRelationshipLayout(c)) {
+            if (isInsideRelationshipLayout(schema, c)) continue;
+            await loadRelationshipLayout(schema, target, c, record);
+            continue;
+        }
+        if (!(c instanceof Field) || isInsideRelationshipLayout(schema, c)) continue;
         const loaded = await c.loadStateFromRelationships(record);
-        if (loaded) writePath(target, relativePath(schema, c), c.hydrateState(loaded.state));
+        if (loaded) {
+            writePath(target, relativePath(schema, c), c.hydrateState(loaded.state));
+            callAfterStateHydrated(schema, target, [c]);
+        }
     }
 }
-/** Saves the visible fields that write the record's relationships, once the record is created or updated. */
+/** Loads a relationship layout's fields from the related record (then the relationship layouts nested in it). */
+async function loadRelationshipLayout(schema: Schema, target: Record<string, unknown>, layout: LayoutComponent, record: unknown): Promise<void> {
+    const state = await loadSingularRelationshipState(layout, record);
+    const path = relativePath(schema, layout);
+    const current = readPath(target, path);
+    writePath(target, path, current && typeof current === 'object' ? Object.assign(current, state) : state);
+    const child = layout.getChildSchemas()[0];
+    callAfterStateHydrated(schema, target, child.getFlatComponents().filter((c) => !isInsideRelationshipLayout(child, c)));
+    for (const c of child.getFlatComponents()) if (isRelationshipLayout(c) && !isInsideRelationshipLayout(child, c)) await loadRelationshipLayout(schema, target, c, record);
+}
+/** Components of a schema whose relationships are saved: the visible ones, and the hidden ones marked `saveRelationshipsWhenHidden()`. */
+async function componentsSavingRelationships(schema: Schema): Promise<Component[]> {
+    const out: Component[] = [];
+    for (const c of schema.getComponents()) {
+        if (!(await c.isVisible()) && !(await c.shouldSaveRelationshipsWhenHidden())) continue;
+        out.push(c);
+        for (const child of ((c as any).getChildSchemas?.() ?? []) as Schema[]) out.push(...(await componentsSavingRelationships(child)));
+    }
+    return out;
+}
+/**
+ * Saves the fields that write the record's relationships, and the layout components saving to a singular relationship
+ * (several layouts using the same relationship are saved together), once the record is created or updated.
+ */
 export async function saveSchemaRelationships(schema: Schema, record: unknown): Promise<void> {
     if (!record) return;
-    for (const c of await schema.getVisibleFlatComponents()) if (c instanceof Field && (await c.isDehydrated() || (c as any)._dehydrated === false) && (await c.savesRelationships())) await c.saveRelationships(record);
+    const layouts = new Map<string, LayoutComponent[]>();
+    for (const c of await componentsSavingRelationships(schema)) {
+        if (isInsideRelationshipLayout(schema, c)) continue;
+        if (isRelationshipLayout(c)) {
+            const key = c.getStatePath();
+            layouts.set(key, [...(layouts.get(key) ?? []), c]);
+            continue;
+        }
+        if (c instanceof Field && (await c.isDehydrated() || (await c.getDehydratedOverride()) === false) && (await c.savesRelationships())) await c.saveRelationships(record);
+    }
+    for (const group of layouts.values()) {
+        let data: Record<string, unknown> = {};
+        for (const layout of group) data = { ...data, ...(await getSchemaState(layout.getChildSchemas()[0])) };
+        await saveSingularRelationship(group[0], record, data);
+        // Relationship fields and layouts inside it save to the related record.
+        for (const layout of group) await saveSchemaRelationships(layout.getChildSchemas()[0], record);
+    }
 }
 /** Validates every visible field of a schema; returns errors by state path. */
 export async function validateSchema(schema: Schema): Promise<Record<string, string[]>> {
@@ -3406,13 +3487,17 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     const data: Record<string, unknown> = {};
     const fields: Field[] = [];
     const skipped: string[] = [];
-    for (const c of await schema.getVisibleFlatComponents()) {
+    const visible = await schema.getVisibleFlatComponents();
+    for (const c of visible) if (c instanceof Field) await c.callBeforeStateDehydrated();
+    for (const c of visible) {
+        // A layout component saving to a relationship leaves its fields out: they are saved to the related record.
+        if (isRelationshipLayout(c)) { skipped.push(c.getStatePath()); continue; }
         if (!(c instanceof Field)) continue;
         // Relationship fields (and the fields of their items) save themselves after the record (see saveSchemaRelationships), unless forced with `dehydrated()`.
         if (skipped.some((path) => c.getStatePath().startsWith(`${path}.`))) continue;
         // A field that is not dehydrated leaves out its children too (the items of a `dehydrated(false)` repeater).
         if (!(await c.isDehydrated())) { skipped.push(c.getStatePath()); continue; }
-        if ((c as any)._dehydrated !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
+        if ((await c.getDehydratedOverride()) !== true && (await c.savesRelationships())) { skipped.push(c.getStatePath()); continue; }
         const state = await c.dehydrateState(c.context().state);
         writePath(data, relativePath(schema, c), state === '' || state === undefined ? null : state);
         for (const [name, value] of Object.entries((c as any).getExtraDehydratedState?.() ?? {})) writePath(data, [...relativePath(schema, c).slice(0, -1), name], value);
@@ -3422,7 +3507,8 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     for (const c of fields.reverse()) {
         const path = relativePath(schema, c);
         const current = readPath(data, path);
-        const final = c.finalizeDehydratedState(current);
+        // `dehydrateStateUsing()` / `mutateDehydratedStateUsing()` see the field's shaped state (a container's, with its children).
+        const final = await c.applyDehydrationCallbacks(c.finalizeDehydratedState(current));
         if (final !== current) writePath(data, path, final);
     }
     return data;
@@ -4127,7 +4213,7 @@ export class FileUpload extends Field {
  shouldAutomaticallyUpscaleImagesWhenResizing: ${js(Boolean(option('shouldAutomaticallyUpscaleImagesWhenResizing', true)))},
  shouldOrientImageFromExif: ${js(Boolean(option('shouldOrientImageFromExif', true)))},
  shouldTransformImage: ${js(Boolean(cropAspectRatio || option('automaticallyResizeImagesHeight', null) || option('automaticallyResizeImagesWidth', null)))},
- state: $wire.$entangle(${js(this.getStatePath())}, false),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  uploadButtonPosition: ${js(option('uploadButtonPosition', 'right'))},
  uploadingMessage: ${js(option('uploadingMessage', t('filament::components/button.messages.uploading_file')))},
@@ -4136,9 +4222,9 @@ export class FileUpload extends Field {
  uploadProgressIndicatorPosition: ${js(option('uploadProgressIndicatorPosition', 'right'))},
  })`;
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([acceptedFileTypes, maxFiles, multiple, isDisabled, ui, explicitEditor, cropAspectRatio])).digest('hex')}`;
-        const input = new Attributes().merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: multiple ? 'multiple' : null, type: 'file' });
+        const input = new Attributes(this.getExtraInputAttributes()).merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: multiple ? 'multiple' : null, type: 'file' });
         const editor = hasEditor ? this.imageEditorHtml({ explicit: explicitEditor, circleCropper, editorAspectRatios: (await this.value(this._editorAspectRatios)) ?? [], cropAspectRatio }) : '';
-        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${alignment}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
+        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${alignment}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
     }
 }
 

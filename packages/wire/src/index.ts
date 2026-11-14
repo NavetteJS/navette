@@ -39,6 +39,8 @@ export abstract class Component {
     /** Children rendered during this request, and children already in the browser: key → [tag, id]. */
     _children: Record<string, [string, string]> = {};
     _previousChildren: Record<string, [string, string]> = {};
+    /** Values of the properties updated in this request, before the update (by updated path): the `$old` state of form fields. */
+    _oldValues: Map<string, unknown> = new Map();
 
     /** HTML shown until a lazy component is loaded; must have a single root. */
     placeholder(): string | Promise<string> { return '<div></div>'; }
@@ -343,6 +345,12 @@ export class WireRuntime {
             const anyC = component as any;
             await anyC.updating?.(path, value);
             await anyC[`updating${studly(prop)}`]?.(value, segments.slice(1).join('.') || null);
+            if (!component._oldValues.has(path)) {
+                const previous = segments.reduce((node: any, key) => (node === null || node === undefined ? undefined : node[key]), component);
+                let copy = previous;
+                if (previous !== null && typeof previous === 'object') { try { copy = structuredClone(previous); } catch { copy = JSON.parse(JSON.stringify(previous)); } }
+                component._oldValues.set(path, copy);
+            }
             setByPath(component, segments, value);
             await anyC.updated?.(path, value);
             await anyC[`updated${studly(prop)}`]?.(value, segments.slice(1).join('.') || null);

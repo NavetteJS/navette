@@ -1,37 +1,63 @@
-<%# Default field wrapper. %>
-<div data-field-wrapper class="<%- cls([locals.wrapperClass, 'fi-fo-field']) %>"<% if (locals.focusable) { %> tabindex="-1"<% } %>>
+<%# Default field wrapper. `label` is HTML (escaped text, or the HTML of an HtmlString / JsContent label). %>
+<div data-field-wrapper class="<%- wrapperClass %>"<%- locals.wrapperAttributes ?? '' %><% if (locals.focusable) { %> tabindex="-1"<% } %>>
+    <% const hasLabelSlots = locals.aboveLabel || locals.beforeLabel || locals.belowLabel || locals.afterLabel; %>
     <% if (locals.hiddenLabel) { %>
         <% if (locals.labelAsDiv) { %>
             <div id="<%= id %>-label" class="fi-fo-field-label fi-sr-only">
-                <%= label %>
+                <%- label %>
             </div>
         <% } else { %>
         <label for="<%= id %>" class="fi-fo-field-label fi-sr-only">
-            <%= label %>
+            <%- label %>
         </label>
         <% } %>
-    <% } else { %>
-    <div class="fi-fo-field-label-col">
+    <% } %>
+    <% if (! locals.hiddenLabel || locals.hasInlineLabel || hasLabelSlots) { %>
+    <div class="fi-fo-field-label-col<% if (locals.hasInlineLabel) { %> fi-vertical-align-start<% } %>">
+        <%- locals.aboveLabel ?? '' %>
         <div class="fi-fo-field-label-ctn">
+            <%- locals.beforeLabel ?? '' %>
+            <% if (! locals.hiddenLabel) { %>
             <%# Button groups: the label is a <div> referenced by aria-labelledby, not a <label> %>
             <<%- locals.labelAsDiv ? 'div id="' + id + '-label"' : 'label for="' + id + '"' %> class="fi-fo-field-label">
                 <%- labelPrefix %>
                 <span class="fi-fo-field-label-content">
-                    <%= label %><% if (required) { %><sup class="fi-fo-field-label-required-mark">*</sup><% } %>
+                    <%- label %><% if (required) { %><sup class="fi-fo-field-label-required-mark">*</sup><% } %>
                 </span>
             </<%- locals.labelAsDiv ? 'div' : 'label' %>>
-            <%# After the label: hint, hint icon and hint actions, inline and right-aligned %>
+            <% } %>
+            <%# After the label: the afterLabel() slot, or the hint, hint icon and hint actions, inline and right-aligned %>
             <%- locals.afterLabel ?? '' %>
         </div>
+        <%- locals.belowLabel ?? '' %>
     </div>
     <% } %>
-    <% if (html !== '' || errorMessage !== null) { %>
+    <% const below = locals.belowContent ?? ''; %>
+    <% if (html !== '' || below !== '' || errorMessage !== null || locals.aboveContent || locals.beforeContent || locals.afterContent) { %>
         <div class="fi-fo-field-content-col">
+            <% if (locals.hasAboveContent) { %><div class="fi-fo-field-content-slot"><%- locals.aboveContent %></div><% } %>
+            <% if (locals.hasBeforeContent || locals.hasAfterContent) { %>
+            <div class="fi-fo-field-content-ctn<% if (! (locals.beforeContent || locals.afterContent)) { %> fi-empty<% } %>">
+                <% if (locals.hasBeforeContent) { %><div class="fi-fo-field-content-slot"><%- locals.beforeContent %></div><% } %>
+                <div class="fi-fo-field-content"><%- html %></div>
+                <%- locals.afterContent ?? '' %>
+            </div>
+            <% } else { %>
             <%- html %>
+            <% } %>
+            <%- below %>
             <% if (errorMessage !== null) { %>
+                <%- locals.aboveErrorMessage ?? '' %>
+                <% if (locals.htmlErrorMessages) { %>
+                <div id="<%= id %>-error" data-validation-error class="fi-fo-field-wrp-error-message">
+                    <%- errorMessage %>
+                </div>
+                <% } else { %>
                 <p id="<%= id %>-error" data-validation-error class="fi-fo-field-wrp-error-message">
                     <%= errorMessage %>
                 </p>
+                <% } %>
+                <%- locals.belowErrorMessage ?? '' %>
             <% } %>
         </div>
     <% } %>

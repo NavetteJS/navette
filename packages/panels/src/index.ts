@@ -18,7 +18,7 @@ export type MountedActionState = { name: string; arguments: Record<string, unkno
 /** Evaluation context of an action's visibility and authorization on mount. */
 type ComponentContextLike = { livewire: any; component: any; operation: null; record: unknown; get: () => undefined; state: undefined; arguments: Record<string, unknown> };
 import { Checkbox, Field, RawJs, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
-import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
+import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, makeStateGetter, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
 import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
@@ -1034,6 +1034,13 @@ abstract class BasePage extends Component implements SchemaHost {
         return (this as any)[`${name}Schema`](schema);
     }
     contentSchema(schema: Schema): Schema { return schema.components([]); }
+    /**
+     * Live form field (`live()`): runs the `afterStateUpdated()` hooks of the updated field and of the components holding it
+     * (a repeater, then its item field), and their partial rendering options.
+     */
+    async updatedData(_value: unknown, key: string | null): Promise<void> {
+        if (key && typeof (this as any).formSchema === 'function') await this.getSchema('form').callAfterStateUpdated(`data.${key}`);
+    }
     /** Render hook scopes of this page: its class (and its resource, for a resource page). */
     getRenderHookScopes(): unknown[] {
         const resource = (this.constructor as any).resource;
@@ -1326,8 +1333,8 @@ abstract class BasePage extends Component implements SchemaHost {
         const path = `mountedActions.${index}.data.${m[2]}`;
         const field = schema?.getFlatComponents().find((c) => c instanceof Field && (c.getStatePath() === path || path.startsWith(`${c.getStatePath()}.`))) as Field | undefined;
         if (!field?.hasAfterStateUpdated()) return;
-        const data = (this.mountedActions[index].data ??= {});
-        await field.callAfterStateUpdated((name, value) => { data[name] = value; });
+        this.mountedActions[index].data ??= {};
+        await schema!.callAfterStateUpdated(path);
         this.renderPartial(`action-modals.${index}`, await this.renderActionModal(index));
     }
     /** Calls a method exposed by a field, from that field's JavaScript (e.g. Select search). Does not re-render. */
@@ -1351,7 +1358,7 @@ abstract class BasePage extends Component implements SchemaHost {
         // An item action of a schema component (Repeater, Builder): the component checks the arguments (the item key exists).
         const component = typeof context.schemaComponent === 'string' && typeof context.parentAction !== 'number' ? await this.findSchemaComponent(context.schemaComponent) : null;
         if (component && typeof component.authorizeActionArguments === 'function' && !(await component.authorizeActionArguments(action.getName(), args))) throw new WireError(404, `Action not found: ${action.getName()}`);
-        const ctx = { livewire: this as any, component: component ?? (null as any), operation: null, record, get: () => undefined, state: undefined, arguments: args };
+        const ctx = { livewire: this as any, component: component ?? (null as any), operation: null, record, get: makeStateGetter(null, ''), state: undefined, arguments: args };
         if (!(await action.isVisible(ctx)) || (await action.isDisabled(ctx))) throw new WireError(403, `Action unavailable: ${action.getName()}`);
         // An action with a URL for this record is a link: it cannot be mounted.
         if (action.resolveUrl(ctx) !== null) throw new WireError(404, `Action not found: ${action.getName()}`);
@@ -1736,7 +1743,7 @@ export class Page extends BasePage {
     }
 
     async render(): Promise<string> {
-        const ctx = { livewire: this as any, component: null as any, operation: null, record: this.getActionRecord(), get: () => undefined, state: undefined };
+        const ctx = { livewire: this as any, component: null as any, operation: null, record: this.getActionRecord(), get: makeStateGetter(null, ''), state: undefined };
         const headerActions: string[] = [];
         for (const action of this.getHeaderActions()) if (await action.isVisible(ctx)) headerActions.push(await action.toHtml(ctx));
         return views.render('filament-panels::pages.page', {
@@ -2361,6 +2368,7 @@ export class Login extends SimplePage {
     }
     /** The user picked another provider in the challenge: run its `beforeChallenge` (an email code is sent). */
     async updatedData(value: unknown, key: string | null): Promise<void> {
+        await super.updatedData(value, key);
         if (key !== 'multiFactor.provider' || !this.isUndertakingMultiFactorAuthentication()) return;
         const provider = this._multiFactorProviders.find((candidate) => candidate.getId() === value);
         if (provider) await this.panel.getMultiFactorChallenge().beforeChallenge(this._multiFactorUser!, provider);
@@ -3176,7 +3184,7 @@ export abstract class ChartWidget extends Widget {
         const hasMaxHeight = maxHeight !== null && maxHeight !== '' && maxHeight !== '100%';
         const data = await this.getCachedData();
         const isEmpty = await this.isEmpty();
-        const actionCtx = { livewire: this as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined };
+        const actionCtx = { livewire: this as any, component: null as any, operation: null, record: null, get: makeStateGetter(null, ''), state: undefined };
         const filtersDropdown = this.hasFiltersForm() ? await this.renderFiltersDropdown(actionCtx) : '';
         const assistive = isEmpty ? null : this.getChartAssistiveContent();
         const label = [heading, description].filter((value) => value !== null && value !== '').join('. ').trim();
@@ -3671,15 +3679,7 @@ export class ListRecords extends Page implements TableHost {
     private async runFilterFieldHook(property: 'tableFilters' | 'tableDeferredFilters', key: string | null): Promise<void> {
         if (!key) return;
         const path = `${property}.${key}`;
-        const field = this.getSchema('tableFiltersForm').getFlatComponents().find((c) => c instanceof Field && c.getStatePath() === path) as Field | undefined;
-        if (!field?.hasAfterStateUpdated()) return;
-        const container = path.split('.').slice(0, -1);
-        await field.callAfterStateUpdated((name, value) => {
-            if (!/^[A-Za-z0-9_]+$/.test(name)) return;
-            let node: any = this;
-            for (const segment of container) node = node?.[segment];
-            if (node && typeof node === 'object') node[name] = value;
-        });
+        await this.getSchema('tableFiltersForm').callAfterStateUpdated(path);
     }
     resetTableFiltersForm(): void {
         this.tableFilters = this.getTable().getDefaultFilterState();
@@ -3832,7 +3832,7 @@ export class ListRecords extends Page implements TableHost {
     }
     async renderTable(): Promise<string> {
         const resource = this.resource;
-        const ctx = { livewire: this as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined };
+        const ctx = { livewire: this as any, component: null as any, operation: null, record: null, get: makeStateGetter(null, ''), state: undefined };
         const table = this.getTable();
         // One menu per `BulkActionGroup` (the default "Bulk actions" menu when the table declares none).
         const bulkActionGroups: BulkActionMenu[] = [];
@@ -4238,23 +4238,6 @@ function emptyToNull(data: Record<string, unknown>): Record<string, unknown> { r
 
 /** Base class for a resource's form pages. */
 abstract class ResourceFormPage extends Page {
-    /** Live form field (`live()` + `afterStateUpdated()`): `set(name, value)` writes next to the updated field. */
-    async updatedData(_value: unknown, key: string | null): Promise<void> {
-        if (!key) return;
-        const path = `data.${key}`;
-        // The updated field first, then its parent fields (a Repeater recomputes a total when one of its rows changes).
-        const fields = (this.getSchema('form').getFlatComponents().filter((c) => c instanceof Field && c.hasAfterStateUpdated() && (c.getStatePath() === path || path.startsWith(`${c.getStatePath()}.`))) as Field[])
-            .sort((a, b) => b.getStatePath().length - a.getStatePath().length);
-        for (const field of fields) {
-            const container = field.getStatePath().split('.').slice(0, -1);
-            await field.callAfterStateUpdated((name, value) => {
-                if (!/^[A-Za-z0-9_]+$/.test(name)) return;
-                let node: any = this;
-                for (const segment of container) node = node?.[segment];
-                if (node && typeof node === 'object') node[name] = value;
-            });
-        }
-    }
     static resource: typeof Resource;
     data: Record<string, unknown> = {};
     /** Hash of the form data as last saved: the browser compares it with the current data (unsaved changes alert). */
@@ -4962,7 +4945,7 @@ export class ViewRecord extends Page {
 }
 
 /** Evaluation context for panel menu actions (no record). */
-const menuContext = (livewire: unknown) => ({ livewire: livewire as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined });
+const menuContext = (livewire: unknown) => ({ livewire: livewire as any, component: null as any, operation: null, record: null, get: makeStateGetter(null, ''), state: undefined });
 /** User menu: profile, panel items, themes, logout. */
 async function renderUserMenu(component: Component, position: 'topbar' | 'sidebar'): Promise<string> {
     const { req, res, panel, user } = component._ctx as PanelContext;

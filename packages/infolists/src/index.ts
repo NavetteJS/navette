@@ -220,7 +220,7 @@ abstract class Entry extends Component {
     protected _openUrlInNewTab: Lazy<boolean, ComponentContext> = false;
     protected _tooltip: PerItem<string | null> = null;
     protected _emptyTooltip: string | null = null;
-    protected _inlineLabel: Lazy<boolean, ComponentContext> = false;
+    // `inlineLabel()` comes from the schema component: an entry inherits it from its layout component or schema.
     protected _alignment: Lazy<string | null, ComponentContext> = null;
     protected _hiddenJs: string | null = null;
     protected _visibleJs: string | null = null;
@@ -257,8 +257,8 @@ abstract class Entry extends Component {
     tooltip(tooltip: PerItem<string | null>): this { this._tooltip = tooltip; return this; }
     /** Tooltip shown on the content when the state is empty. */
     emptyTooltip(tooltip: string | null): this { this._emptyTooltip = tooltip; return this; }
-    /** Label next to the content instead of above it (from the `sm` breakpoint). */
-    inlineLabel(condition: Lazy<boolean, ComponentContext> = true): this { this._inlineLabel = condition; return this; }
+    /** Label next to the content instead of above it (from the `sm` breakpoint); `null` follows the layout component or schema. */
+    inlineLabel(condition: Lazy<boolean | null, ComponentContext> = true): this { return super.inlineLabel(condition); }
     /** Content alignment: `start`, `center`, `end`, `left`, `right`, `justify` or `between`. */
     alignment(alignment: Lazy<string | null, ComponentContext>): this { this._alignment = alignment; return this; }
     alignStart(): this { return this.alignment('start'); }
@@ -334,7 +334,7 @@ abstract class Entry extends Component {
         const label = await this.getLabel();
         const hasLabel = label !== '';
         const isLabelHidden = Boolean(await evaluate(this._hiddenLabel, ctx));
-        const hasInlineLabel = Boolean(await evaluate(this._inlineLabel, ctx));
+        const hasInlineLabel = await this.hasInlineLabel();
         const alignment = await this.getAlignment();
         const url = await evaluate(this._url, ctx);
         const href = typeof url === 'string' && url.trim() !== '' && isSafeUrl(url) ? url : null;
@@ -362,22 +362,7 @@ abstract class Entry extends Component {
         return html;
     }
 
-    /** `hiddenJs()` / `visibleJs()`: the grid wrapper becomes a `<fieldset>` toggled by Alpine, as in Filament. */
-    async toSchemaHtml(isVisible: boolean): Promise<string> {
-        const html = await super.toSchemaHtml(isVisible);
-        const hidden = this._hiddenJs?.trim() || null, visible = this._visibleJs?.trim() || null;
-        const visibility = hidden && visible ? `(! (${hidden})) && (${visible})` : hidden ? `! (${hidden})` : visible;
-        const start = html.indexOf('<div');
-        const end = /><div class="fi-sc-component[ "]/.exec(html)?.index;
-        if (!isVisible || visibility === null || start < 0 || end === undefined || html.slice(start, end).includes('fi-sc-visibility-fieldset')) return html;
-        let tag = html.slice(start, end).replace(/^<div/, '<fieldset disabled role="none"');
-        const toggle = ` x-bind:class="${e(`{ 'fi-hidden': ! (${visibility}) }`)}" x-bind:disabled="${e(`! (${visibility})`)}" x-cloak`;
-        const dataStart = tag.indexOf(' x-data="');
-        if (dataStart >= 0) { const dataEnd = tag.indexOf('"', dataStart + 9); tag = `${tag.slice(0, dataEnd + 1)}${toggle}${tag.slice(dataEnd + 1)}`; } else tag += toggle;
-        tag = /\sclass="/.test(tag) ? tag.replace(/(\sclass="[^"]*)"/, '$1 fi-sc-visibility-fieldset"') : `${tag} class="fi-sc-visibility-fieldset"`;
-        const close = html.lastIndexOf('</div>');
-        return `${html.slice(0, start)}${tag}>${html.slice(end + 1, close)}</fieldset>${html.slice(close + '</div>'.length)}`;
-    }
+    // `hiddenJs()` / `visibleJs()`: the schema component wraps the entry in a `<fieldset>` toggled by Alpine, as in Filament.
 }
 
 let htmlSanitizer: ((html: string) => string) | null = null;

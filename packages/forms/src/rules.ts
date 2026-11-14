@@ -1,6 +1,7 @@
 // Validation rules written as strings (`'max:255'`, `'regex:/^[a-z]+$/'`), as in Laravel, and their messages.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ComponentContext } from '@navette-js/schemas';
+import { promises as dns } from 'node:dns';
 
 const failedRules = new AsyncLocalStorage<Record<string, string[]>>();
 /** Runs `fn` while recording the name of each validation rule that fails, by state path (read by the testing helpers). */
@@ -49,10 +50,13 @@ export function stringRule(spec: string, options: { numeric: boolean; name: stri
     const otherIs = (ctx: ComponentContext) => { const other = sibling(ctx, otherField); return (Array.isArray(other) ? other : [other]).some((item) => otherValues.includes(String(item ?? ''))); };
     const otherName = otherField?.replace(/_/g, ' ');
     switch (name) {
-        case 'nullable': case 'sometimes': case 'bail': case 'string': case 'present': return null;
+        case 'nullable': case 'sometimes': case 'bail': case 'present': return null;
+        case 'string': return make((value) => typeof value === 'string', (a) => `The ${a} field must be a string.`);
+        case 'active_url': return make((value) => hasDnsRecord(value), (a) => `The ${a} field must be a valid URL.`);
         case 'required': case 'filled': return implicit((value) => !isBlank(value), (a) => `The ${a} field is required.`);
         case 'required_if': return implicit((value, ctx) => !otherIs(ctx) || !isBlank(value), (a) => `The ${a} field is required when ${otherName} is ${otherValues.join(', ')}.`);
         case 'required_unless': return implicit((value, ctx) => otherIs(ctx) || !isBlank(value), (a) => `The ${a} field is required unless ${otherName} is in ${otherValues.join(', ')}.`);
+        case 'required_if_declined': return implicit((value, ctx) => ![false, 0, '0', 'no', 'off', 'false'].includes(sibling(ctx, otherField) as any) || !isBlank(value), (a) => `The ${a} field is required when ${otherName} is declined.`);
         case 'required_if_accepted': return implicit((value, ctx) => ![true, 1, '1', 'yes', 'on', 'true'].includes(sibling(ctx, otherField) as any) || !isBlank(value), (a) => `The ${a} field is required when ${otherName} is accepted.`);
         case 'required_with': case 'required_with_all': case 'required_without': case 'required_without_all': {
             const fields = list(parameter);
@@ -127,4 +131,17 @@ function isIpv6(value: string): boolean {
     if (!/^[0-9a-fA-F:.]+$/.test(value) || (value.match(/::/g) ?? []).length > 1) return false;
     const groups = value.split(':');
     return groups.length >= 3 && groups.length <= 8 && groups.every((group) => group === '' || /^[0-9a-fA-F]{1,4}$/.test(group) || isIpv4(group));
+}
+
+/** `active_url`: the host of the URL has a DNS A or AAAA record (looked up with a 5 second limit). */
+async function hasDnsRecord(value: unknown): Promise<boolean> {
+    let host: string;
+    try { host = new URL(String(value)).hostname; } catch { return false; }
+    if (!host) return false;
+    const timeout = new Promise<false>((resolve) => { const timer = setTimeout(() => resolve(false), 5000); timer.unref?.(); });
+    const lookup = (async () => {
+        for (const resolve of [(name: string) => dns.resolve4(name), (name: string) => dns.resolve6(name)]) { try { if ((await resolve(host)).length) return true; } catch { /* no record of this type */ } }
+        return false;
+    })();
+    return Promise.race([lookup, timeout]);
 }

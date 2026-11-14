@@ -339,6 +339,21 @@ TextInput.make('slug')
 A disabled field that is `dehydrated()` is saved with whatever state it holds, and that state is part of the form data the browser sends back. Validate it like any other field, and never trust it for anything the user must not change: compute such values again on the server before saving.
 </Aside>
 
+### Disabling a field based on the current operation
+
+The operation is `'create'` or `'edit'` on resource pages, `'view'` on View pages. You may disable a field for some operations only with `disabledOn()`, which accepts an operation or a list of operations:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('email')
+    .disabledOn('edit')
+
+TextInput.make('code')
+    .disabledOn(['edit', 'view'])
+```
+
+
 ## Hiding a field
 
 You may hide a field:
@@ -361,6 +376,27 @@ TextInput.make('company_name')
 
 A hidden field is neither validated nor saved, and neither are the fields of a hidden layout component such as a section. When the visibility depends on another field, make that field [live](#the-basics-of-reactivity) so the form is re-rendered when it changes.
 
+### Hiding a field using JavaScript
+
+When the visibility depends on another field, making that field `live()` sends a request every time it changes. You may instead hide the field in the browser, with a JavaScript expression evaluated by Alpine.js. `$get()` reads the state of another field, and `$state` is the field's own state:
+
+```ts
+import { Select, TextInput } from '@navette-js/forms';
+
+Select.make('role')
+    .options({ user: 'User', staff: 'Staff' })
+
+TextInput.make('department')
+    .hiddenJs(`$get('role') !== 'staff'`)
+```
+
+`visibleJs()` does the opposite: the field is shown only while the expression is true. Both methods also accept a function of the [field context](#using-the-field-context) returning the expression.
+
+<Aside variant="warning">
+The field is only hidden in the browser: it is still rendered, validated and saved by the server. If the field must not be saved when it is hidden, combine `hiddenJs()` with a server-side `hidden()` or `dehydrated()` condition. Never build these expressions from user input: they run as JavaScript in the browser.
+</Aside>
+
+
 ### Hiding a field based on the current operation
 
 The operation is `'create'` or `'edit'` on resource pages. You may hide or show a field for some operations only with `hiddenOn()` and `visibleOn()`, which accept an operation or a list of operations:
@@ -372,6 +408,58 @@ TextInput.make('password')
     .password()
     .visibleOn('create')
 ```
+
+## Inline labels
+
+Fields may have their labels displayed inline with the field, rather than above it. This is useful for forms with many fields, where vertical space is at a premium:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .inlineLabel()
+```
+
+```preview
+TextInput.make('name')
+    .inlineLabel()
+```
+
+Optionally, you may pass a boolean value, or a function of the [field context](#using-the-field-context), to control if the label should be displayed inline or not.
+
+### Using inline labels in multiple places at once
+
+If you wish to display all labels inline in a [layout component](/schemas/layouts) like a [section](/schemas/sections) or a tab, you may use `inlineLabel()` on the component itself, and all fields within it will have their labels displayed inline:
+
+```ts
+import { Section } from '@navette-js/schemas';
+import { TextInput } from '@navette-js/forms';
+
+Section.make('Details')
+    .inlineLabel()
+    .schema([
+        TextInput.make('name'),
+        TextInput.make('email')
+            .label('Email address'),
+        TextInput.make('phone')
+            .label('Phone number'),
+    ])
+```
+
+You may also use `inlineLabel()` on the entire schema, in a resource's `form()` method for example:
+
+```ts
+static form(schema: Schema): Schema {
+    return schema
+        .inlineLabel()
+        .components([
+            // ...
+        ]);
+}
+```
+
+When using `inlineLabel()` on a layout component or a schema, you can still opt out for an individual field by using `inlineLabel(false)` on it.
+
 
 ## Autofocusing a field when the form is loaded
 
@@ -430,6 +518,120 @@ FusedGroup.make([
 
 You may hide the group's label with `hiddenLabel()`, and add a required asterisk with `markAsRequired()`. The asterisk is visual only: validation stays the responsibility of each field.
 
+## Adding extra content to a field
+
+Fields contain many "slots" where content can be inserted in a child schema. Slots can accept text, any [schema component](/schemas/overview), [actions](/actions/overview) and [action groups](/actions/grouping-actions). Usually, [prime components](/schemas/primes) are used for content.
+
+The following slots are available for all fields:
+
+| Method | Position |
+|---|---|
+| `aboveLabel()` | Above the label. |
+| `beforeLabel()` | Before the label, on the same line. |
+| `afterLabel()` | After the label, on the same line. |
+| `belowLabel()` | Below the label. |
+| `aboveContent()` | Above the field's content (its input). |
+| `beforeContent()` | Before the field's content, on the same line. |
+| `afterContent()` | After the field's content, on the same line. |
+| `belowContent()` | Below the field's content. |
+| `aboveErrorMessage()` | Above the validation error message. |
+| `belowErrorMessage()` | Below the validation error message. |
+
+To insert plain text, you can pass a string to these methods:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .belowContent('This is the user\'s full name.')
+```
+
+```preview
+TextInput.make('name')
+    .belowContent('This is the user\'s full name.')
+```
+
+To insert a schema component, like an [icon](/schemas/primes#icon-component) or a [text](/schemas/primes#text-component), or an [action](/actions/overview), you can pass it, or a list of them, to these methods:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Icon, Text } from '@navette-js/schemas';
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .afterLabel([
+        Icon.make('heroicon-m-star'),
+        Text.make('Required'),
+    ])
+    .belowContent(Action.make('generate').action(() => {
+        // ...
+    }))
+```
+
+To align the content, wrap it in `Schema.start()`, `Schema.end()` or `Schema.between()`. A list mixing them puts each group at its position:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Icon, Schema } from '@navette-js/schemas';
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .belowContent(Schema.end([
+        Icon.make('heroicon-m-information-circle'),
+        'This is the user\'s full name.',
+        Action.make('generate'),
+    ]))
+```
+
+All the slot methods also accept a function of the [field context](#using-the-field-context) returning the content. `belowContent()` is the most common place for longer instructions; `aboveErrorMessage()` and `belowErrorMessage()` are only rendered while the field has a validation error.
+
+## Adding extra HTML attributes to a field
+
+You can pass extra HTML attributes to the field via the `extraAttributes()` method, which will be merged onto its outer HTML element. The attributes should be represented by an object, where the key is the attribute name and the value is the attribute value:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .extraAttributes({ title: 'Text input' })
+```
+
+By default, calling `extraAttributes()` multiple times will overwrite the previous attributes. If you wish to merge the attributes instead, you can pass `true` as the second argument.
+
+### Adding extra HTML attributes to the input element of a field
+
+Some fields use an underlying `<input>` or `<select>` DOM element, but this is often not the outermost element in the field, so `extraAttributes()` may not work as you wish. In this case, you may use the `extraInputAttributes()` method, which merges the attributes onto the `<input>` or `<select>` element:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('categories')
+    .extraInputAttributes({ width: 200 })
+```
+
+Fields controlled by an Alpine.js component, such as a textarea or a rich editor, also accept `extraAlpineAttributes()`, merged onto the element holding `x-data`:
+
+```ts
+import { Textarea } from '@navette-js/forms';
+
+Textarea.make('bio')
+    .extraAlpineAttributes({ 'x-on:keydown.ctrl.enter': '$wire.save()' })
+```
+
+### Adding extra HTML attributes to the field wrapper
+
+You can also pass extra HTML attributes to the very outer element of the "field wrapper", which surrounds the field's label and content, with `extraFieldWrapperAttributes()`:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('categories')
+    .extraFieldWrapperAttributes({ class: 'components-locked' })
+```
+
+These three methods accept a function of the [field context](#using-the-field-context) too, and `true` as their second argument to merge the attributes with the previous ones instead of replacing them.
+
+
 ## Using the field context
 
 Many methods accept a function instead of a static value. Navette calls these functions with one context object. You may destructure the properties you need:
@@ -437,7 +639,9 @@ Many methods accept a function instead of a static value. Navette calls these fu
 | Property | Description |
 |---|---|
 | `state` | The current value of the field. |
-| `get` | A function returning the current value of another field of the same container: `get('type')`. |
+| `rawState` | The value as stored in the host component. Navette applies no state casts, so it is the same as `state`. |
+| `get` | A function returning the current value of another field: `get('type')` (see [below](#getting-the-state-of-another-field)). |
+| `set` | A function changing the value of another field (see [setting the state of another field](#setting-the-state-of-another-field)). |
 | `record` | The record being edited, or `null` on a Create page. |
 | `operation` | The current operation (`'create'`, `'edit'`), or `null`. |
 | `livewire` | The component (page, widget…) that hosts the form. |
@@ -454,9 +658,31 @@ TextInput.make('discount')
 
 These functions may be asynchronous. They run on the server, every time the form is rendered or validated.
 
+Almost every method of a field accepts such a function instead of a static value: labels, helper texts, hints, placeholders, prefixes and suffixes, `readOnly()`, `autofocus()`, `mask()`, the options of a select, the limits of a repeater (`addable()`, `maxItems()`…), and the parameters of validation rules (`minLength()`, `same()`, `in()`, `startsWith()`…). Guards such as `addable()` or `deletable()` are evaluated again on the server when the browser calls the corresponding action, so a function returning `false` cannot be bypassed.
+
+Inside a function, the field instance is available as `component`, and its container as `component.getContainer()`. `getContainer().getComponent('key')` finds another component of the same schema by its key (or by a function testing each component).
+
 ### Getting the state of another field
 
-`get()` reads the state of a field of the same container. In the root form, that is any field of the form, even inside a section or a tab. Inside a [repeater](/forms/repeater) or [builder](/forms/builder) item, `get()` is relative to the item: `get('quantity')` reads the quantity of the same row. To read a field outside of the item, use the host component's state, which lives under `data` on resource pages: `livewire.data.customer_id`.
+`get()` reads the state of a field of the same container. In the root form, that is any field of the form, even inside a section or a tab. Inside a [repeater](/forms/repeater) or [builder](/forms/builder) item, `get()` is relative to the item: `get('quantity')` reads the quantity of the same row.
+
+To read a field outside of the item, climb with `../`, as in a file path: inside a repeater item, `get('../customer_id')` reads the repeater's level, `get('../../customer_id')` the level above. A path starting with `/` (or `get(path, true)`) is absolute, from the root of the host component, where the form state lives under `data` on resource pages: `get('/data.customer_id')`. Dots read nested state: `get('address.city')`.
+
+`get` also has typed helpers, which convert the value: `get.string('name')`, `get.integer('quantity')`, `get.float('price')`, `get.boolean('is_active')`, `get.array('tags')` and `get.date('published_at')`. Each takes `isNullable` as its second argument, to return `null` instead of an empty value (`''`, `0`, `false`…). `get.filled('name')` and `get.blank('name')` test the value as Laravel's helpers do.
+
+### Using JavaScript to determine text content
+
+Labels and other texts are usually computed on the server. When a text depends on the state of a field, you may compute it in the browser instead, without a request, with `JsContent`. Its expression is evaluated by Alpine.js, with `$get()` and `$state` available:
+
+```ts
+import { JsContent } from '@navette-js/schemas';
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('greeting')
+    .label(JsContent.make(`($get('name') === 'John Doe') ? 'Hello, John' : 'Hello, stranger'`))
+```
+
+`JsContent` is accepted wherever a label, a helper text or a hint is: it renders an element whose text is bound to the expression. Never build the expression from user input.
 
 ## The basics of reactivity
 
@@ -476,11 +702,7 @@ Select.make('status')
 
 In this example, when the user changes the value of the `status` field, the form is re-rendered. Functions passed to `visible()`, `required()`, `options()` and the other methods then see the new value through `get()`. You can also [hook into the field's lifecycle](#field-updates) to run custom logic when the field is updated.
 
-`live()` is available on `TextInput`, `Textarea`, `Select`, `Checkbox`, `Toggle`, `CheckboxList`, `Radio`, `ToggleButtons`, `DatePicker`, `DateTimePicker`, `TimePicker`, `MarkdownEditor`, `RichEditor`, `CodeEditor` and `Slider`.
-
-<Aside variant="warning">
-`TagsInput`, `KeyValue` and `ColorPicker` cannot be made `live()` yet. Their value is sent along with the next request.
-</Aside>
+`live()` is available on every field. Optionally, you may pass a boolean value, or a function of the [field context](#using-the-field-context), as its `condition`: `live({ condition: ({ operation }) => operation === 'create' })`.
 
 ### Reactive fields on blur
 
@@ -495,12 +717,12 @@ TextInput.make('username')
 
 ### Debouncing reactive fields
 
-The Markdown editor, the code editor and the slider also accept a `debounce` in milliseconds. The request is sent once the user has stopped typing for that long:
+You may wish to find a middle ground between `live()` and `live({ onBlur: true })`, using "debouncing". Debouncing prevents a network request from being sent until the user has stopped typing for a certain period of time, in milliseconds (or as a string such as `'1s'`):
 
 ```ts
-import { MarkdownEditor } from '@navette-js/forms';
+import { TextInput } from '@navette-js/forms';
 
-MarkdownEditor.make('content')
+TextInput.make('username')
     .live({ debounce: 500 })
 ```
 
@@ -513,6 +735,27 @@ Each field goes through a lifecycle: it is filled when the form is loaded, updat
 Hydration fills the fields with data. On an Edit page, each field receives the value of the record's attribute of the same name, and shapes it for its control: a date picker keeps the `YYYY-MM-DD` part of a date-time, a checkbox list parses a JSON string into a list, a rich editor converts HTML into an editor document. On a Create page, each field receives its [default value](#setting-the-default-value-of-a-field).
 
 To change the record's data before it fills the form, override `mutateFormDataBeforeFill()` on the Edit page.
+
+You may run code after a field is hydrated with `afterStateHydrated()`. The function receives the [field context](#using-the-field-context); `component.state()` replaces the field's state:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .required()
+    .afterStateHydrated(({ component, state }) => {
+        component.state(String(state ?? '').toUpperCase());
+    })
+```
+
+To only format the value shown in the field, use `formatStateUsing()`, which returns the new state. It runs when the field is filled, from the record on an Edit page or from the default value on a Create page:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('status')
+    .formatStateUsing(({ state }) => String(state ?? '').toLowerCase())
+```
 
 ### Field updates
 
@@ -529,6 +772,32 @@ TextInput.make('name')
 ```
 
 Use it together with `live()`, so the hook runs as soon as the field changes.
+
+The context of `afterStateUpdated()` also contains `old`, the state of the field before the update (and `oldRaw`, the same value before casts, which Navette does not apply):
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .live()
+    .afterStateUpdated(({ old, state }) => {
+        // ...
+    })
+```
+
+To react to a change in the browser only, without a request, use `afterStateUpdatedJs()`. Its JavaScript expression runs each time the state changes, with `$state`, `$old`, `$get()` and `$set()` available. The field does not need to be `live()`:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .afterStateUpdatedJs(`$set('email', ($state ?? '').replaceAll(' ', '.').toLowerCase() + '@example.com')`)
+
+TextInput.make('email')
+    .label('Email address')
+```
+
+Never build this expression from user input: it runs as JavaScript in the browser.
 
 #### Setting the state of another field
 
@@ -547,7 +816,11 @@ TextInput.make('title')
     })
 ```
 
-`set()` accepts the plain name of a sibling field: inside a repeater item, `set('amount', …)` changes the amount of the same row. Names containing a dot are ignored. Setting a field this way does not call that field's own `afterStateUpdated()`.
+`set()` takes the same paths as [`get()`](#getting-the-state-of-another-field): a sibling (inside a repeater item, `set('amount', …)` changes the amount of the same row), a nested path (`set('address.city', …)`), `../` to climb a level, or an absolute path starting with `/`. Setting a field this way does not call that field's own `afterStateUpdated()`, unless you pass `{ shouldCallUpdatedHooks: true }` as the third argument:
+
+```ts
+set('slug', 'my-post', { shouldCallUpdatedHooks: true })
+```
 
 When a field inside a repeater item changes, the `afterStateUpdated()` hooks of the field and then of the repeater are called. This lets the repeater recalculate a total:
 
@@ -569,6 +842,18 @@ Repeater.make('lines')
 
 Dehydration extracts the data from the fields when the form is submitted. Only the fields declared in the form, visible and not disabled, are included: a value the browser adds to the request for an unknown field is dropped. Each field also shapes its value for storage. For example, an empty string becomes `null`, a checkbox list only keeps known options, and a rich editor converts its document to sanitized HTML.
 
+You may change the saved value of a field with `dehydrateStateUsing()`. The function receives the [field context](#using-the-field-context) and returns the value to save:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .required()
+    .dehydrateStateUsing(({ state }) => String(state ?? '').toUpperCase())
+```
+
+`mutateDehydratedStateUsing()` does the same after the field's own shaping, and `beforeStateDehydrated()` runs a function just before the field is dehydrated.
+
 #### Preventing a field from being saved
 
 You may prevent a field from being saved using `dehydrated(false)`. In this example, the field is not present in the data passed to the page's save hooks and to the data adapter:
@@ -582,8 +867,55 @@ TextInput.make('password_confirmation')
 ```
 
 <Aside variant="info">
-Even when a field is not saved, it is still validated. A field that is only disabled is not validated.
+Even when a field is not saved, it is still validated, unless you use [`validatedWhenNotDehydrated(false)`](/forms/validation#disabling-validation-when-fields-are-not-saved). A field that is only disabled is not validated.
 </Aside>
+
+### Field rendering
+
+Each time a `live()` field is updated, the whole host component is re-rendered. You may restrict this.
+
+#### Field partial rendering
+
+`partiallyRenderComponentsAfterStateUpdated()` re-renders only the listed components, by key or state path relative to the container, while the rest of the page is left as it is:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .live()
+    .partiallyRenderComponentsAfterStateUpdated(['email'])
+
+TextInput.make('email')
+    .label(({ get }) => `Email address for ${get('name')}`)
+```
+
+To re-render the updated field itself only, use `partiallyRenderAfterStateUpdated()`:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .live()
+    .partiallyRenderAfterStateUpdated()
+    .belowContent(({ state }) => `Your name is ${state}.`)
+```
+
+#### Preventing the component from rendering after a field is updated
+
+If the update only needs to run `afterStateUpdated()`, or if it is handled in JavaScript, you may skip the re-rendering altogether with `skipRenderAfterStateUpdated()`:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('name')
+    .live()
+    .skipRenderAfterStateUpdated()
+    .afterStateUpdated(({ state }) => {
+        // Save the state somewhere…
+    })
+```
+
+These three methods also accept a function of the field context.
 
 ## Reactive forms cookbook
 
@@ -638,6 +970,69 @@ Select.make('sub_category_id')
 ```
 
 The submitted value is checked against the options computed for the submitted category, so a forged value is rejected.
+
+## Saving data to relationships
+
+You may load and save the contents of a layout component to a singular relationship of the record (has-one or belongs-to) by using the `relationship()` method. The fields inside it then read and write the related record instead of the record itself:
+
+```ts
+import { Fieldset } from '@navette-js/schemas';
+import { FileUpload, Textarea, TextInput } from '@navette-js/forms';
+
+Fieldset.make('Metadata')
+    .relationship('metadata')
+    .schema([
+        TextInput.make('title'),
+        Textarea.make('description'),
+        FileUpload.make('image'),
+    ])
+```
+
+`relationship()` is available on `Group`, `Section`, `Fieldset`, `Grid` and the other layout components. In this example, `title`, `description` and `image` are loaded from the `metadata` relationship of the model when the form is filled, and saved to it once the record is saved. If the related record does not exist yet, it is created. Relationships may be nested: a layout with a `relationship()` may contain another one.
+
+The fields inside the layout are not part of the record's own data, so they never reach the page's `mutateFormDataBeforeSave()` hooks. To change their data, use `mutateRelationshipDataBeforeFillUsing()`, `mutateRelationshipDataBeforeCreateUsing()` and `mutateRelationshipDataBeforeSaveUsing()` on the layout component, each receiving `{ data, record, ctx }` and returning the data.
+
+### Saving data to a `BelongsTo` relationship
+
+For a belongs-to relationship, the related record is created first, then related to the record (its foreign key is updated). You may pass the model class to create, if it differs from the relationship's related model, as the third argument: `relationship('author', true, Author)`.
+
+### Conditionally saving data to a relationship
+
+Sometimes, saving the related record is only useful if the user has filled in some fields. Pass a `condition` as the second argument: a function receiving the [field context](#using-the-field-context), whose `state` is the layout's data. When it returns `false`, nothing is created, and an existing related record is deleted:
+
+```ts
+import { Group } from '@navette-js/schemas';
+import { TextInput } from '@navette-js/forms';
+
+Group.make()
+    .relationship('customer', ({ state }) => Boolean(state?.name))
+    .schema([
+        TextInput.make('name')
+            .label('Customer')
+            .requiredWith('email'),
+        TextInput.make('email')
+            .label('Email address')
+            .email()
+            .requiredWith('name'),
+    ])
+```
+
+### Saving relationship data when the component is hidden
+
+By default, a hidden layout component does not save its relationship. To save it anyway, use `saveRelationshipsWhenHidden()`:
+
+```ts
+import { Group } from '@navette-js/schemas';
+import { TextInput } from '@navette-js/forms';
+
+Group.make()
+    .relationship('customer')
+    .saveRelationshipsWhenHidden()
+    .schema([
+        TextInput.make('name'),
+    ])
+```
+
 
 ## Global settings
 

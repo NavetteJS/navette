@@ -97,6 +97,29 @@ Textarea.make('description')
     .disableGrammarly()
 ```
 
+## Trimming whitespace
+
+You can automatically trim whitespace from the beginning and end of the value using the `trim()` method. The value is trimmed before it is validated and saved:
+
+```ts
+import { Textarea } from '@navette-js/forms';
+
+Textarea.make('description')
+    .trim()
+```
+
+You may want to enable trimming globally for all textareas, as Laravel's `TrimStrings` middleware does. You can do this once, when the application starts, with the `configureUsing()` method:
+
+```ts
+import { Textarea } from '@navette-js/forms';
+
+Textarea.configureUsing((component) => {
+    component.trim();
+});
+```
+
+As well as allowing a static value, the `trim()` method also accepts a function of the [field context](/forms/overview#using-the-field-context).
+
 ## Making the field live
 
 You may call `live()` so the form is re-rendered as the user types, or `live({ onBlur: true })` so it is re-rendered when the textarea loses focus. See [reactivity](/forms/overview#the-basics-of-reactivity).

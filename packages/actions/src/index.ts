@@ -555,7 +555,7 @@ export class Action implements Renderable {
     async toModalHtml(ctx: ActionCallContext, index: number, content: string | null = null, mountContext: Record<string, unknown> = {}): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         ctx = { ...ctx, action: this };
-        const schemaCtx = { livewire: ctx.livewire, component: null as any, operation: null, record: ctx.record, get: () => undefined, state: undefined };
+        const schemaCtx = { livewire: ctx.livewire, component: null as any, operation: null, record: ctx.record, get: (() => undefined) as unknown as ComponentContext['get'], state: undefined };
         const label = (await evaluate(this._label, schemaCtx)) ?? this.getDefaultLabel();
         const color = this._lazyColor ? await this._lazyColor(schemaCtx) : this._color;
         const confirmation = this._requiresConfirmation;

@@ -5,6 +5,10 @@ import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { jsComponentHtml, normalizeRendererConfiguration, type JsRenderer } from './js-renderer.ts';
+import { AlignedContent, makeStateGetter, readStatePath, resolveRelativePath, writeStatePath, isSafeStatePath, type StateGetter, type StateSetter } from './component-state.ts';
+import { getRelatedRecord, makeSingularRelationship, type SingularRelationshipConfig, type SingularRelationshipOptions } from './singular-relationship.ts';
+export { AlignedContent, JsContent, makeStateGetter, readStatePath, resolveRelativePath, writeStatePath, isSafeStatePath, type StateGetter, type StateSetter } from './component-state.ts';
+export { getRelatedRecord, loadSingularRelationshipState, saveSingularRelationship, type SingularRelationshipConfig, type SingularRelationshipOptions } from './singular-relationship.ts';
 
 views.namespace('filament-schemas', fileURLToPath(new URL('../views', import.meta.url)));
 
@@ -14,7 +18,56 @@ export interface SchemaHost {
     _errors: Record<string, string[]>;
     getSchema(name: string): Schema | Promise<Schema>;
 }
-export type ComponentContext = { livewire: SchemaHost; component: Component; operation: string | null; record: unknown; get: (path: string) => unknown; state: unknown };
+/**
+ * Context object passed to the functions given to components. `get()` reads the state of another component (relative to the
+ * container, `../` climbs a level, a leading `/` is absolute), `set()` writes it, `state` is the component's state and
+ * `rawState` the same value as stored in the Livewire component (Navette applies no state casts, so they are equal).
+ */
+export type ComponentContext = { livewire: SchemaHost; component: Component; operation: string | null; record: unknown; get: StateGetter; state: unknown; set?: StateSetter; rawState?: unknown; [utility: string]: unknown };
+/** An operation (`'create'`, `'edit'`, `'view'`…) or a Livewire component class: `hiddenOn(EditRecord)`. */
+export type OperationReference = string | (abstract new (...args: any[]) => unknown);
+const matchesOperation = (operations: OperationReference | OperationReference[], operation: string | null, livewire: unknown): boolean =>
+    ([] as OperationReference[]).concat(operations).some((item) => (typeof item === 'function' ? livewire instanceof item : operation !== null && item === operation));
+/** Synchronous condition (`live()`, `extraAttributes()` functions run while the markup is built). */
+const evaluateSync = <T>(value: T | ((ctx: ComponentContext) => T), component: Component): T => {
+    if (typeof value !== 'function') return value;
+    const result = (value as (ctx: ComponentContext) => T)(component.context());
+    if (result instanceof Promise) throw new Error(`${component.constructor.name}: this function must be synchronous.`);
+    return result;
+};
+const executedAfterStateUpdated = new WeakMap<object, Set<string>>();
+/** Data being filled into a schema (not yet in the Livewire component), keyed by schema: `base` is the schema's state path. */
+const stateSources = new Map<Schema, { base: string; target: any }>();
+function stateSourceOf(schema: Schema | undefined): { base: string; target: any } | null {
+    let node: Schema | undefined = schema;
+    while (node) {
+        const source = stateSources.get(node);
+        if (source) return source;
+        node = node.getParentComponent()?.container;
+    }
+    return null;
+}
+/**
+ * Runs `fn` (synchronously) while the components of `schema` read and write their state in `target`, the data being filled
+ * (used to call `afterStateHydrated()` before the data reaches the Livewire component).
+ */
+export function withStateSource<T>(schema: Schema, target: Record<string, unknown>, fn: () => T): T {
+    const previous = stateSources.get(schema);
+    stateSources.set(schema, { base: schema.getStatePath(), target });
+    try { return fn(); } finally { if (previous) stateSources.set(schema, previous); else stateSources.delete(schema); }
+}
+/** Callback run after the state of a component is updated (`old` / `oldRaw`: the state before the update). */
+export type AfterStateUpdatedCallback = (ctx: ComponentContext & { set: StateSetter; old: unknown; oldRaw: unknown }) => unknown;
+type AttributeEntry = Record<string, string> | ((ctx: ComponentContext) => Record<string, string>);
+/** Merged attribute entries; functions are run with the component context (synchronously). */
+export function resolveAttributeEntries(entries: AttributeEntry[], component: Component): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const entry of entries) {
+        const attributes = evaluateSync(entry, component) ?? {};
+        for (const [name, value] of Object.entries(attributes)) out[name] = name === 'class' && out.class ? `${out.class} ${value}` : value;
+    }
+    return out;
+}
 type SpanValue = number | string | ((ctx: ComponentContext) => number | string | Promise<number | string>);
 type ColumnSpan = Record<string, SpanValue> | number | string;
 type GridValue = number | null | ((ctx: ComponentContext) => number | null | Promise<number | null>);
@@ -61,7 +114,9 @@ export abstract class Component {
     lazyLoaded(condition: Lazy<boolean, ComponentContext> = true): this { this._lazyLoaded = condition; return this; }
     getLazyLoadedCondition(): Lazy<boolean, ComponentContext> { return this._lazyLoaded; }
     protected _columnSpan: ColumnSpan = { default: 1 };
-    protected _extraAttributes: Record<string, string> = {};
+    private _extraAttributeEntries: AttributeEntry[] = [];
+    /** Extra attributes of the component's outer element, resolved (functions run with the context). */
+    protected get _extraAttributes(): Record<string, string> { return this._extraAttributeEntries.length ? resolveAttributeEntries(this._extraAttributeEntries, this) : {}; }
     protected _columnStart: ColumnPlacement[] = [];
     protected _columnOrder: ColumnPlacement[] = [];
     protected _gridContainer: Lazy<boolean, ComponentContext> = false;
@@ -72,10 +127,212 @@ export abstract class Component {
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     visible(condition: Lazy<boolean, ComponentContext> = true): this { this._visible = condition; return this; }
     key(key: string | null): this { this._keyName = key; return this; }
-    /** Hidden for the given operation(s) (`'create'`, `'edit'`…). */
-    hiddenOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.hidden(({ operation }) => operation !== null && list.includes(operation)); }
-    /** Visible only for the given operation(s). */
-    visibleOn(operations: string | string[]): this { const list = ([] as string[]).concat(operations); return this.visible(({ operation }) => operation !== null && list.includes(operation)); }
+    /** Hidden for the given operation(s) (`'create'`, `'edit'`…) or Livewire component class(es). Replaces `hidden()`. */
+    hiddenOn(operations: OperationReference | OperationReference[]): this { return this.hidden(({ operation, livewire }) => matchesOperation(operations, operation, livewire)); }
+    /** Visible only for the given operation(s) or Livewire component class(es). Replaces `visible()`. */
+    visibleOn(operations: OperationReference | OperationReference[]): this { return this.visible(({ operation, livewire }) => matchesOperation(operations, operation, livewire)); }
+
+    protected _disabled: Lazy<boolean, ComponentContext> = false;
+    /**
+     * Disables the component: a disabled field is neither editable, validated nor saved (unless `dehydrated()`), and a disabled
+     * layout component disables every field inside it. Always check permissions on the server too.
+     */
+    disabled(condition: Lazy<boolean, ComponentContext> = true): this { this._disabled = condition; return this; }
+    /** Disabled for the given operation(s) or Livewire component class(es). Replaces `disabled()`. */
+    disabledOn(operations: OperationReference | OperationReference[]): this { return this.disabled(({ operation, livewire }) => matchesOperation(operations, operation, livewire)); }
+    /** Own condition, or a disabled container (layout component or schema). */
+    async isDisabled(): Promise<boolean> { return Boolean(await evaluate(this._disabled, this.context())) || (await this.container.isDisabled()); }
+    async isEnabled(): Promise<boolean> { return !(await this.isDisabled()); }
+
+    protected _hiddenJs: Lazy<string | null, ComponentContext> = null;
+    protected _visibleJs: Lazy<string | null, ComponentContext> = null;
+    protected _afterStateUpdatedJs: Lazy<string | null, ComponentContext>[] = [];
+    /**
+     * Hides the component in the browser while this JavaScript expression is true (`$get('role') !== 'staff'`), without a
+     * request. The expression is evaluated with `eval()`: only pass code written by the developer, never user input.
+     */
+    hiddenJs(expression: Lazy<string | null, ComponentContext>): this { this._hiddenJs = expression; return this; }
+    /** Shows the component in the browser only while this JavaScript expression is true. Never pass user input. */
+    visibleJs(expression: Lazy<string | null, ComponentContext>): this { this._visibleJs = expression; return this; }
+    /**
+     * JavaScript run in the browser each time the component's state changes (`$state`, `$get()` and `$set()` are available),
+     * without a request: `$set('email', ($state ?? '').toLowerCase() + '@example.com')`. Calls add up; `null` clears them.
+     * Never pass user input.
+     */
+    afterStateUpdatedJs(expression: Lazy<string | null, ComponentContext>): this {
+        this._afterStateUpdatedJs = expression === null || expression === '' ? [] : [...this._afterStateUpdatedJs, expression];
+        return this;
+    }
+    async getHiddenJs(): Promise<string | null> { const js = await evaluate(this._hiddenJs, this.context()); return js?.trim() || null; }
+    async getVisibleJs(): Promise<string | null> { const js = await evaluate(this._visibleJs, this.context()); return js?.trim() || null; }
+    async getAfterStateUpdatedJs(): Promise<string[]> {
+        const out: string[] = [];
+        for (const item of this._afterStateUpdatedJs) { const js = await evaluate(item, this.context()); if (js && js.trim()) out.push(js); }
+        return out;
+    }
+
+    protected _inlineLabel: Lazy<boolean | null, ComponentContext> = null;
+    /** Labels next to the content instead of above it. On a layout component, applies to every field inside it (`false` opts out). */
+    inlineLabel(condition: Lazy<boolean | null, ComponentContext> = true): this { this._inlineLabel = condition; return this; }
+    /** Own setting, or the container's (layout component, then schema). */
+    async hasInlineLabel(): Promise<boolean> {
+        const own = await evaluate(this._inlineLabel, this.context());
+        return own ?? (await this.container.hasInlineLabel());
+    }
+
+    // ---------------------------------------------------------------- state binding (`live()`)
+    protected _isLive: boolean | ((ctx: ComponentContext) => boolean) | null = null;
+    protected _isLiveOnBlur = false;
+    protected _liveDebounce: number | string | null = null;
+    protected _stateBindingModifiers: string[] | null = null;
+    /**
+     * Sends the state to the server as soon as it changes, re-rendering the form: `live()`, `live({ onBlur: true })` (when the
+     * field loses focus) or `live({ debounce: 500 })` (once the user pauses, in ms or `'1s'`). `live(false)` turns it off.
+     * On a layout component, applies to every field inside it.
+     */
+    live(condition: boolean | ((ctx: ComponentContext) => boolean) | { onBlur?: boolean; debounce?: number | string | null; condition?: boolean | ((ctx: ComponentContext) => boolean) } = true, options: { onBlur?: boolean; debounce?: number | string | null } = {}): this {
+        const settings = typeof condition === 'object' && condition !== null ? condition : { ...options, condition };
+        this._isLive = settings.condition ?? true;
+        this._isLiveOnBlur = settings.onBlur === true;
+        this._liveDebounce = settings.debounce ?? null;
+        return this;
+    }
+    /** `live({ debounce: delay })`. */
+    debounce(delay: number | string | null = 500): this { return this.live({ debounce: delay }); }
+    /** @deprecated Use `live({ onBlur: true })`. */
+    lazy(): this { return this.live({ onBlur: true }); }
+    /** @deprecated Use `live()`. */
+    reactive(): this { return this.live(); }
+    /** Raw `wire:model` modifiers (`['live', 'debounce', '750ms']`), overriding `live()`. */
+    stateBindingModifiers(modifiers: string[] | null): this { this._stateBindingModifiers = modifiers; return this; }
+    /** Modifiers of the component's state binding, inherited from the container when `live()` is not set. */
+    getStateBindingModifiers(options: { withBlur?: boolean; withDebounce?: boolean; isOptimisticallyLive?: boolean } = {}): string[] {
+        const { withBlur = true, withDebounce = true, isOptimisticallyLive = true } = options;
+        if (this._stateBindingModifiers !== null) return this._stateBindingModifiers;
+        const isLive = this._isLive === null ? null : Boolean(evaluateSync(this._isLive, this));
+        if (isLive === false) return [];
+        if (isLive === null) return this.container.getStateBindingModifiers(options);
+        if (this._isLiveOnBlur) return withBlur ? ['live', 'blur'] : isOptimisticallyLive ? ['live'] : [];
+        if (this._liveDebounce !== null && this._liveDebounce !== '') return withDebounce ? ['live', 'debounce', String(this._liveDebounce)] : isOptimisticallyLive ? ['live'] : [];
+        return ['live'];
+    }
+    /** `wire:model` (or another directive) with the binding modifiers: `wire:model.live.debounce.500`. */
+    applyStateBindingModifiers(expression: string, isOptimisticallyLive = true): string {
+        return [expression, ...this.getStateBindingModifiers({ isOptimisticallyLive })].join('.');
+    }
+    isLive(): boolean {
+        if (this._isLive !== null) return Boolean(evaluateSync(this._isLive, this));
+        return this.container.isLive();
+    }
+    isLiveOnBlur(): boolean { return this._isLive !== null ? this.isLive() && this._isLiveOnBlur : this.container.isLiveOnBlur(); }
+    getLiveDebounce(): number | string | null { return this._isLive !== null ? (this.isLive() && !this._isLiveOnBlur ? this._liveDebounce : null) : this.container.getLiveDebounce(); }
+
+    // ---------------------------------------------------------------- lifecycle hooks and partial rendering
+    protected _afterStateUpdated: AfterStateUpdatedCallback[] = [];
+    protected _componentsToPartiallyRender: string[] = [];
+    protected _partiallyRenderAfterStateUpdated: Lazy<boolean, ComponentContext> = false;
+    protected _skipRenderAfterStateUpdated: Lazy<boolean, ComponentContext> = false;
+    /**
+     * Runs on the server after the user updates the state (with `live()`). The context has `state`, `old` (the state before
+     * the update), `get()` and `set()`. Calls add up; `null` clears the callbacks.
+     */
+    afterStateUpdated(callback: AfterStateUpdatedCallback | null): this { this._afterStateUpdated = callback === null ? [] : [...this._afterStateUpdated, callback]; return this; }
+    clearAfterStateUpdatedHooks(): this { this._afterStateUpdated = []; return this; }
+    protected _afterStateHydrated: ((ctx: ComponentContext) => void) | null = null;
+    /**
+     * Runs (synchronously) once the form is filled, with the field's `state`: `component.state(value)` changes it, `set()`
+     * changes another field.
+     */
+    afterStateHydrated(callback: ((ctx: ComponentContext) => void) | null): this { this._afterStateHydrated = callback; return this; }
+    /** Runs the `afterStateHydrated()` callback (the fill functions call it for every component). */
+    callAfterStateHydrated(): void {
+        if (!this._afterStateHydrated) return;
+        const result = this._afterStateHydrated(this.context()) as unknown;
+        if (result instanceof Promise) throw new Error(`${this.constructor.name} [${this.getStatePath() || this.getKey()}]: afterStateHydrated() and formatStateUsing() callbacks must be synchronous.`);
+    }
+    hasAfterStateUpdated(): boolean { return this._afterStateUpdated.length > 0; }
+    /** After the state is updated, only these components are re-rendered (keys or names, relative to the container). */
+    partiallyRenderComponentsAfterStateUpdated(components: string[]): this { this._componentsToPartiallyRender = components; return this; }
+    /** After the state is updated, only this component is re-rendered. */
+    partiallyRenderAfterStateUpdated(condition: Lazy<boolean, ComponentContext> = true): this { this._partiallyRenderAfterStateUpdated = condition; return this; }
+    /** After the state is updated, the Livewire component is not re-rendered (the hooks still run). */
+    skipRenderAfterStateUpdated(condition: Lazy<boolean, ComponentContext> = true): this { this._skipRenderAfterStateUpdated = condition; return this; }
+    getComponentsToPartiallyRenderAfterStateUpdated(): string[] { return this._componentsToPartiallyRender; }
+    async isPartiallyRenderedAfterStateUpdated(): Promise<boolean> { return Boolean(await evaluate(this._partiallyRenderAfterStateUpdated, this.context())); }
+    async isRenderlessAfterStateUpdated(): Promise<boolean> { return Boolean(await evaluate(this._skipRenderAfterStateUpdated, this.context())); }
+    /** State before the current update: recorded by the Livewire runtime for the updated paths. */
+    getOldState(): unknown {
+        const path = this.getStatePath();
+        const old = (this.livewire as any)?._oldValues as Map<string, unknown> | undefined;
+        if (!path || !old) return this.context().state;
+        if (old.has(path)) return old.get(path);
+        for (const [updated, value] of old) {
+            if (path.startsWith(`${updated}.`)) return readStatePath(value, path.slice(updated.length + 1));
+            if (updated.startsWith(`${path}.`)) {
+                const current = this.context().state;
+                const copy = current !== null && typeof current === 'object' ? structuredClone(current) : {};
+                writeStatePath(copy, updated.slice(path.length + 1), value);
+                return copy;
+            }
+        }
+        return this.context().state;
+    }
+    getOldRawState(): unknown { return this.getOldState(); }
+    /** Runs the `afterStateUpdated()` callbacks (each once per state), then the partial rendering options; bubbles to the parent components. */
+    async callAfterStateUpdated(shouldBubbleToParents = true): Promise<void> {
+        // Callbacks already run in this request for the same state are skipped (a hook may be reached twice: bubbling, `set()`).
+        const requestStore = (this.livewire as any)?._oldValues as object | undefined;
+        const executed = requestStore ? (executedAfterStateUpdated.get(requestStore) ?? executedAfterStateUpdated.set(requestStore, new Set()).get(requestStore)!) : new Set<string>();
+        const old = this.getOldState();
+        for (const [index, callback] of this._afterStateUpdated.entries()) {
+            let state: string;
+            try { state = JSON.stringify(this.context().state) ?? 'undefined'; } catch { state = String(Math.random()); }
+            const runId = `${this.getStatePath() || this.getKey()}#${index}#${state}`;
+            if (executed.has(runId)) continue;
+            executed.add(runId);
+            const ctx = this.context();
+            await callback({ ...ctx, set: ctx.set!, old, oldRaw: old });
+        }
+        if (await this.isPartiallyRenderedAfterStateUpdated()) await this.partiallyRender();
+        for (const key of this._componentsToPartiallyRender) {
+            const component = this.getRootContainer().getComponent(this.resolveRelativeKey(key), { withHidden: true, isAbsoluteKey: true });
+            if (!component) throw new Error(`Could not find component [${key}] to partially render.`);
+            await component.partiallyRender();
+        }
+        if (await this.isRenderlessAfterStateUpdated()) this.skipRender();
+        if (shouldBubbleToParents) await this.container.getParentComponent()?.callAfterStateUpdated();
+    }
+    /** Re-renders only this component in the response (`wire:partial="schema-component::<key>"`). */
+    async partiallyRender(): Promise<void> {
+        const key = this.getKey();
+        if (key === null || key === '') throw new Error('A [key()] or state path is required to partially render a component.');
+        const host = this.livewire as any;
+        if (typeof host.renderPartial !== 'function') return;
+        host.renderPartial(`schema-component::${key}`, await this.toSchemaHtml(await this.isVisible()));
+    }
+    /** Skips the re-rendering of the Livewire component in this request (partial renders are still sent). */
+    skipRender(): void { (this.livewire as any)?.skipRender?.(); }
+
+    protected _shouldSaveRelationshipsWhenHidden: Lazy<boolean, ComponentContext> = false;
+    /** Saves the relationships of the component (and of the fields inside it) even when it is hidden. */
+    saveRelationshipsWhenHidden(condition: Lazy<boolean, ComponentContext> = true): this { this._shouldSaveRelationshipsWhenHidden = condition; return this; }
+    async shouldSaveRelationshipsWhenHidden(): Promise<boolean> { return Boolean(await evaluate(this._shouldSaveRelationshipsWhenHidden, this.context())); }
+
+    /** Schema the component belongs to. */
+    getContainer(): Schema { return this.container; }
+    /** Root schema of the form (through the parent components). */
+    getRootContainer(): Schema { return this.container.getRootContainer(); }
+    getLivewire(): SchemaHost { return this.livewire; }
+    /** Absolute state path of a path relative to the component's container (`../` climbs a level, `/…` is absolute). */
+    resolveRelativeStatePath(path: string | Component = '', isAbsolute = false): string {
+        if (path instanceof Component) return path.getStatePath();
+        return resolveRelativePath(this.container.getStatePath(), path, isAbsolute);
+    }
+    /** Absolute key of a key relative to the component's container (`../` climbs a level, `/…` is absolute). */
+    resolveRelativeKey(key: string | Component = '', isAbsolute = false): string {
+        if (key instanceof Component) return key.getKey() ?? '';
+        return resolveRelativePath(this.container.getKey(), key, isAbsolute);
+    }
     /** A number applies from the `lg` breakpoint; an object replaces the default entirely. Values may be closures. */
     columnSpan(span: ColumnSpan): this { this._columnSpan = typeof span === 'object' ? span : { default: 1, lg: span }; return this; }
     /** Starting grid column: a number applies from the `lg` breakpoint; an object sets it per breakpoint. Successive calls merge; `null` resets it. */
@@ -99,7 +356,15 @@ export abstract class Component {
     getChildSchemaRootHeadingLevel(): number { return this.getHeadingLevel() + this.getHeadingsCount(); }
     /** Full grid width on every screen size (`columnSpan('full')` only applies from `lg`). */
     columnSpanFull(): this { return this.columnSpan({ default: 'full' } as any); }
-    extraAttributes(attributes: Record<string, string>): this { Object.assign(this._extraAttributes, attributes); return this; }
+    /**
+     * Extra HTML attributes of the component's outer element: an object, or a (synchronous) function of the context. A later
+     * call replaces the attributes, unless `merge` is true. Never put unescaped user input in them.
+     */
+    extraAttributes(attributes: AttributeEntry, merge = false): this {
+        this._extraAttributeEntries = merge ? [...this._extraAttributeEntries, attributes] : [attributes];
+        return this;
+    }
+    getExtraAttributes(): Record<string, string> { return this._extraAttributes; }
 
     get livewire(): SchemaHost { return this.container.livewire; }
     isLiberatedFromContainerGrid(): boolean { return false; }
@@ -124,8 +389,32 @@ export abstract class Component {
     }
     context(): ComponentContext {
         const livewire = this.livewire as any;
-        const read = (path: string) => path.split('.').reduce((o: any, k) => o?.[k], livewire);
-        return { livewire, component: this, operation: this.container.getOperation(), record: this.container.getRecord(), get: (p) => read([this.container.getStatePath(), p].filter(Boolean).join('.')), state: this.hasStatePath() ? read(this.getStatePath()) : undefined };
+        const read = (path: string) => this.readStateAt(path);
+        const state = this.hasStatePath() ? read(this.getStatePath()) : undefined;
+        return { livewire, component: this, operation: this.container.getOperation(), record: this.container.getRecord(), get: makeStateGetter(read, this.container.getStatePath()), set: (path, value, options) => this.setStateAt(path, value, options), state, rawState: state };
+    }
+    /** Reads an absolute state path: from the data being filled while the schema is filled, otherwise from the Livewire component. */
+    protected readStateAt(path: string): unknown {
+        const source = stateSourceOf(this.container);
+        if (source && (source.base === '' || path === source.base || path.startsWith(`${source.base}.`))) return readStatePath(source.target, source.base === '' ? path : path.slice(source.base.length + 1));
+        return readStatePath(this.livewire, path);
+    }
+    protected writeStateAt(path: string, value: unknown): void {
+        if (!path || !isSafeStatePath(path)) return;
+        const source = stateSourceOf(this.container);
+        if (source && (source.base === '' || path.startsWith(`${source.base}.`))) { writeStatePath(source.target, source.base === '' ? path : path.slice(source.base.length + 1), value); return; }
+        writeStatePath(this.livewire, path, value);
+    }
+    /** Sets the component's own state (`afterStateHydrated(({ component, state }) => component.state(…))`). */
+    state(value: unknown): this { const path = this.getStatePath(); if (path) this.writeStateAt(path, value); return this; }
+    /** `set()` of the context: writes another component's state (relative to the container), optionally calling its `afterStateUpdated()`. */
+    protected setStateAt(path: string, value: unknown, options: { shouldCallUpdatedHooks?: boolean; isAbsolute?: boolean } = {}): void | Promise<void> {
+        const absolute = this.resolveRelativeStatePath(path, options.isAbsolute ?? false);
+        if (!absolute || !isSafeStatePath(absolute)) return;
+        this.writeStateAt(absolute, value);
+        if (!options.shouldCallUpdatedHooks) return;
+        const target = this.getRootContainer().getComponentByStatePath(absolute, { withHidden: true });
+        return target?.callAfterStateUpdated();
     }
     async isVisible(): Promise<boolean> {
         const ctx = this.context();
@@ -151,13 +440,53 @@ export abstract class Component {
                 .class([...placementClass('start', start), ...placementClass('order', order)])
                 .style([...placementStyle('start', start), ...placementStyle('order', order)]))
             .merge({ 'wire:key': this.getLivewireKey() });
+        // A client-side visibility condition (`hiddenJs()` / `visibleJs()`) wraps the component in a `<fieldset>`, disabled
+        // while hidden so that the browser does not validate its controls, as in Filament.
+        const hiddenJs = isVisible ? await this.getHiddenJs() : null;
+        const visibleJs = isVisible ? await this.getVisibleJs() : null;
+        const visibilityJs = hiddenJs && visibleJs ? `(! (${hiddenJs})) && (${visibleJs})` : hiddenJs ? `! (${hiddenJs})` : visibleJs;
+        const afterStateUpdatedJs = isVisible ? await this.getAfterStateUpdatedJs() : [];
+        const statePath = this.getAlpineScopeConfiguration().path;
         return views.render('filament-schemas::component', {
-            key, isVisible, attributes: attributes.toHtml(),
+            key, isVisible, attributes: (visibilityJs ? attributes.class(['fi-sc-visibility-fieldset']) : attributes).toHtml(),
             alpine: isVisible ? `filamentSchemaComponent(${js(this.getAlpineScopeConfiguration())})` : null,
             html: isVisible ? await this.toHtml() : '',
             gridContainer: isVisible && Boolean(await evaluate(this._gridContainer, ctx)),
+            visibilityJs,
+            init: afterStateUpdatedJs.length ? afterStateUpdatedJs.map((code) => `$wire; $wire.watch(${js(statePath)}, ($state, $old) => isStateChanged($state, $old) && eval(${js(code)}))`).join(';') : null,
         });
     }
+}
+
+/**
+ * Layout component able to "teleport" its fields into a singular relationship of the record (`relationship('customer')`):
+ * Group, Grid, Section, Fieldset, Flex, FusedGroup and Form.
+ */
+export abstract class LayoutComponent extends Component {
+    protected _singularRelationship: SingularRelationshipConfig | null = null;
+    abstract getChildSchemas(): Schema[];
+    /**
+     * Loads the fields from a has-one or belongs-to relationship of the record (an Objection model), and saves them back once
+     * the record is saved: the related record is created if it does not exist. `condition` (a function of the related
+     * `state`) decides whether it is saved; when it is false, an existing related record is deleted. `relatedModel` is the
+     * model created when there is no related record yet.
+     */
+    relationship(name: string, condition: SingularRelationshipOptions['condition'] = true, relatedModel: SingularRelationshipOptions['relatedModel'] = null): this {
+        this._singularRelationship = makeSingularRelationship(name, { condition, relatedModel });
+        this._name = name;
+        return this;
+    }
+    getSingularRelationship(): SingularRelationshipConfig | null { return this._singularRelationship; }
+    getRelationshipName(): string | null { return this._singularRelationship?.name ?? null; }
+    hasStatePath(): boolean { return this._singularRelationship !== null; }
+    /** The existing related record for the form's record, or `null`. */
+    getRelatedRecord(record: unknown = this.container.getRecord()): Promise<any> { return getRelatedRecord(this, record); }
+    /** Changes the related record's data before it fills the fields: `({ data, record }) => data`. */
+    mutateRelationshipDataBeforeFillUsing(callback: SingularRelationshipConfig['beforeFill']): this { if (this._singularRelationship) this._singularRelationship.beforeFill = callback; return this; }
+    /** Changes the fields' data before the related record is created: `({ data }) => data`. */
+    mutateRelationshipDataBeforeCreateUsing(callback: SingularRelationshipConfig['beforeCreate']): this { if (this._singularRelationship) this._singularRelationship.beforeCreate = callback; return this; }
+    /** Changes the fields' data before the existing related record is updated: `({ data, record }) => data`. */
+    mutateRelationshipDataBeforeSaveUsing(callback: SingularRelationshipConfig['beforeSave']): this { if (this._singularRelationship) this._singularRelationship.beforeSave = callback; return this; }
 }
 
 export class Schema {
@@ -224,6 +553,85 @@ export class Schema {
     fieldWrapperView(view: string | null): this { this._fieldWrapperView = view; return this; }
     getFieldWrapperView(): string | null { return this._fieldWrapperView; }
 
+    /** Content of a slot aligned to the start (the default, except `afterLabel()` which is aligned to the end). */
+    static start<T>(items: T[]): AlignedContent<T> { return new AlignedContent('start', items); }
+    /** Content of a slot aligned to the end. */
+    static end<T>(items: T[]): AlignedContent<T> { return new AlignedContent('end', items); }
+    /** Content of a slot spread out, with the space between the items. */
+    static between<T>(items: T[]): AlignedContent<T> { return new AlignedContent('between', items); }
+
+    private _disabled: boolean | (() => boolean | Promise<boolean>) = false;
+    /** Disables every field of the schema. */
+    disabled(condition: boolean | (() => boolean | Promise<boolean>) = true): this { this._disabled = condition; return this; }
+    /** Own setting, or the parent component's (a field inside a disabled layout component is disabled). */
+    async isDisabled(): Promise<boolean> {
+        if (typeof this._disabled === 'function' ? await this._disabled() : this._disabled) return true;
+        return this._parentComponent ? this._parentComponent.isDisabled() : false;
+    }
+    private _inlineLabel: boolean | null = null;
+    /** Labels of every field next to their content (`false` on a field opts out). */
+    inlineLabel(condition: boolean | null = true): this { this._inlineLabel = condition; return this; }
+    async hasInlineLabel(): Promise<boolean> { return this._inlineLabel ?? (this._parentComponent ? this._parentComponent.hasInlineLabel() : false); }
+    private _live: { condition: boolean; onBlur: boolean; debounce: number | string | null } | null = null;
+    /** Every field of the schema is `live()` (same options as a field's `live()`). */
+    live(condition = true, options: { onBlur?: boolean; debounce?: number | string | null } = {}): this { this._live = { condition, onBlur: options.onBlur === true, debounce: options.debounce ?? null }; return this; }
+    getStateBindingModifiers(options: { withBlur?: boolean; withDebounce?: boolean; isOptimisticallyLive?: boolean } = {}): string[] {
+        if (this._live === null) return this._parentComponent ? this._parentComponent.getStateBindingModifiers(options) : [];
+        const { withBlur = true, withDebounce = true, isOptimisticallyLive = true } = options;
+        if (!this._live.condition) return [];
+        if (this._live.onBlur) return withBlur ? ['live', 'blur'] : isOptimisticallyLive ? ['live'] : [];
+        if (this._live.debounce !== null) return withDebounce ? ['live', 'debounce', String(this._live.debounce)] : isOptimisticallyLive ? ['live'] : [];
+        return ['live'];
+    }
+    isLive(): boolean { return this._live !== null ? this._live.condition : (this._parentComponent?.isLive() ?? false); }
+    isLiveOnBlur(): boolean { return this._live !== null ? this._live.condition && this._live.onBlur : (this._parentComponent?.isLiveOnBlur() ?? false); }
+    getLiveDebounce(): number | string | null { return this._live !== null ? (this._live.condition && !this._live.onBlur ? this._live.debounce : null) : (this._parentComponent?.getLiveDebounce() ?? null); }
+
+    /** Root schema: the schema of the outermost parent component. */
+    getRootContainer(): Schema { return this._parentComponent ? this._parentComponent.container.getRootContainer() : this; }
+    getLivewire(): SchemaHost { return this.livewire; }
+    /** Every component, depth-first, hidden ones included or not. */
+    private async allComponents(withHidden: boolean): Promise<Component[]> { return withHidden ? this.getFlatComponents() : this.getVisibleFlatComponents(); }
+    /**
+     * A component of the schema (searched in every nested schema) by key, or by a function returning true for it. The key is
+     * relative to the schema key (`email` finds `form.email`), unless `isAbsoluteKey`. Hidden components are skipped unless
+     * `withHidden`.
+     */
+    getComponent(find: string | ((component: Component) => boolean), options: { withHidden?: boolean; isAbsoluteKey?: boolean } = {}): Component | null {
+        const components = this.getFlatComponents();
+        const matches = (component: Component) => {
+            if (typeof find === 'function') return find(component);
+            const key = options.isAbsoluteKey ? find : `${this._key}.${find}`;
+            return component.getKey() === key;
+        };
+        const found = components.find(matches) ?? null;
+        return found;
+    }
+    /** Same as `getComponent()`, skipping hidden components unless `withHidden` (the visibility conditions are evaluated). */
+    async findComponent(find: string | ((component: Component) => boolean), options: { withHidden?: boolean; isAbsoluteKey?: boolean } = {}): Promise<Component | null> {
+        const key = typeof find === 'string' ? (options.isAbsoluteKey ? find : `${this._key}.${find}`) : null;
+        for (const component of await this.allComponents(options.withHidden ?? false)) if (key !== null ? component.getKey() === key : (find as (component: Component) => boolean)(component)) return component;
+        return null;
+    }
+    /** The component holding a state path (absolute, `data.name`), or `null`. */
+    getComponentByStatePath(path: string, options: { withHidden?: boolean } = {}): Component | null {
+        void options;
+        return this.getFlatComponents().find((component) => component.hasStatePath() && component.getStatePath() === path) ?? null;
+    }
+    /**
+     * Runs the `afterStateUpdated()` hooks for an updated state path, as Filament does: the components holding a parent path
+     * first (a repeater, then its item field), down to the component holding the path. Returns whether one was found.
+     */
+    async callAfterStateUpdated(path: string): Promise<boolean> {
+        for (const component of this._components) {
+            const componentPath = component.hasStatePath() ? component.getStatePath() : null;
+            if (componentPath !== null && componentPath === path) { await component.callAfterStateUpdated(false); return true; }
+            if (componentPath !== null && path.startsWith(`${componentPath}.`)) await component.callAfterStateUpdated(false);
+            for (const schema of ((component as any).getChildSchemas?.() ?? []) as Schema[]) if (await schema.callAfterStateUpdated(path)) return true;
+        }
+        return false;
+    }
+
     getKey(): string { return this._key; }
     getStatePath(): string { return this._statePath ?? ''; }
     getComponents(): Component[] { return this._components; }
@@ -280,6 +688,8 @@ export class Schema {
 export function childSchema(parent: Component, components: Component[]): Schema {
     const c = parent.container;
     const schema = new Schema(c.livewire).key(c.getKey()).statePath(c.getStatePath() || null).operation(c.getOperation()).record(c.getRecord()).root(false).parentComponent(parent).components(components);
+    // A layout component saving to a relationship holds its fields' state under the relationship name.
+    if (parent instanceof LayoutComponent && parent.getSingularRelationship()) schema.statePath(parent.getStatePath());
     const lazy = parent.getLazyLoadedCondition();
     if (lazy !== false) schema.lazyLoaded(typeof lazy === 'function' ? () => evaluate(lazy, parent.context()) : lazy).lazyKey(parent.getKey());
     return schema;
@@ -299,7 +709,7 @@ export class StatefulGroup extends Component {
 }
 
 /** Groups components in a grid, without any chrome. */
-export class Group extends Component {
+export class Group extends LayoutComponent {
     protected children: Component[];
     protected _columns: Record<string, number> | number | null = {};
     constructor(children: Component[] = []) { super(); this.children = children; }
@@ -330,7 +740,7 @@ export class Grid extends Group {
  * Components side by side from a breakpoint: each fills the available space,
  * except those marked `grow(false)`, which keep their natural width.
  */
-export class Flex extends Component {
+export class Flex extends LayoutComponent {
     private children: Component[];
     private _from = 'sm';
     constructor(children: Component[] = []) { super(); this.children = children; }
@@ -357,7 +767,7 @@ const footerAlignment = (alignment: string): string => (['right', 'end'].include
  * Card grouping components, with an optional header (icon, heading, description, components after the header)
  * and footer (actions or components).
  */
-export class Section extends Component {
+export class Section extends LayoutComponent {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = {};
     private _heading: Lazy<string | null, ComponentContext>;
@@ -745,7 +1155,7 @@ export class EmbeddedSchema extends Component {
 }
 
 /** `<form>` element: content and footer (actions), submitted to a host method. */
-export class Form extends Component {
+export class Form extends LayoutComponent {
     private children: Component[];
     private _footer: Component[] = [];
     private _id: string | null = null;
@@ -768,7 +1178,8 @@ export interface Renderable { isVisible(ctx: ComponentContext): Promise<boolean>
 
 /** Row of actions in a schema. */
 /** Content placed around a component: text, components and actions, or a function of the context returning them. */
-export type ComponentSlot = Lazy<string | HtmlString | InlineItem | (string | HtmlString | InlineItem)[] | null, ComponentContext>;
+export type ComponentSlotItem = string | HtmlString | InlineItem;
+export type ComponentSlot = Lazy<ComponentSlotItem | ComponentSlotItem[] | AlignedContent<ComponentSlotItem> | null, ComponentContext>;
 export class Actions extends Component {
     private actions: Renderable[];
     private _fullWidth = false;
@@ -814,11 +1225,14 @@ export class Actions extends Component {
     }
 }
 /** Renders a slot of a component as an inline row: strings become `Text` components. */
-export async function renderSlot(parent: Component, content: ComponentSlot, mountKey: string | null = null): Promise<string> {
-    const value = await evaluate(content, parent.context());
+export async function renderSlot(parent: Component, content: ComponentSlot, mountKey: string | null = null, options: { alignment?: string | null; scope?: Record<string, unknown> } = {}): Promise<string> {
+    let value = await evaluate(content, parent.context());
     if (value === null || value === undefined || value === '') return '';
+    // `Schema.start()`, `Schema.end()`, `Schema.between()`: the content with its alignment.
+    let alignment = options.alignment ?? null;
+    if (value instanceof AlignedContent) { alignment = value.alignment; value = value.items; }
     const items = (Array.isArray(value) ? value : [value]).map((item) => (typeof item === 'string' || item instanceof HtmlString ? Text.make(item) : item)) as InlineItem[];
-    return renderInlineItems(parent, items, { mountKey, actionView: 'link' });
+    return renderInlineItems(parent, items, { mountKey, actionView: 'link', alignment, scope: options.scope });
 }
 
 let colorManager: ColorManager | null = null;
@@ -889,7 +1303,7 @@ function columnGrid(columns: Record<string, number> | number | null): Attributes
  * Titled frame grouping fields: a legend and a two-column grid by default.
  * With `statePath()`, the fields live under that path and the fieldset gets a key (and an `id`).
  */
-export class Fieldset extends Component {
+export class Fieldset extends LayoutComponent {
     private children: Component[] = [];
     private _columns: Record<string, number> | number | null = 2;
     private _label: Lazy<string | null, ComponentContext>;
@@ -1211,7 +1625,7 @@ export class Callout extends Component {
  * Fields joined under a single label: each field keeps only a screen-reader label,
  * and the first validation error among the fields is shown under the group.
  */
-export class FusedGroup extends Component {
+export class FusedGroup extends LayoutComponent {
     private children: Component[];
     private _columns: Record<string, number> | number | null = {};
     private _label: Lazy<string | null, ComponentContext> = null;

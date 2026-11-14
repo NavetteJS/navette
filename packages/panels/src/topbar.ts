@@ -5,6 +5,7 @@ import { Component, WireError } from '@navette-js/wire';
 import { notificationActionFromArray, notificationActionsHtml, notificationActionToArray, notificationColorClasses, type NotificationActionData, type NotificationData } from './notifications.ts';
 import { databaseNotificationsBroadcastScript } from './broadcasting.ts';
 import { richDocumentToHtml, richHtmlToDocument } from '@navette-js/forms';
+import { makeStateGetter } from '@navette-js/schemas';
 import { pagination } from '@navette-js/support/ui';
 
 /** Notification body: HTML is sanitized (rich editor tags only), plain text is escaped. */
@@ -60,7 +61,7 @@ export class GlobalSearch extends Component {
             for (const [index, result] of category.results.entries()) {
                 const rendered: string[] = [];
                 for (const action of result.actions ?? []) {
-                    const ctx = { livewire: this as any, component: null as any, operation: null, record: result.record ?? null, get: () => undefined, state: undefined };
+                    const ctx = { livewire: this as any, component: null as any, operation: null, record: result.record ?? null, get: makeStateGetter(null, ''), state: undefined };
                     if (!(await action.isVisible(ctx))) continue;
                     const describedBy = `${id}-group-${groupIndex} ${id}-group-${groupIndex}-result-${index}`;
                     rendered.push(String(await action.toHtml(ctx)).replace(/^<(a|button)\s/, (_m: string, tag: string) => `<${tag} aria-describedby="${e(describedBy)}" data-global-search-action="1" `));
