@@ -1533,7 +1533,9 @@ abstract class BasePage extends Component implements SchemaHost {
         const action = await this.findMountableAction(mounted.name, mounted.context);
         // Arguments of the submit button (`makeModalSubmitAction()`), merged into the mount arguments for this call.
         const submitArguments = _args && typeof _args === 'object' && !Array.isArray(_args) ? (_args as Record<string, unknown>) : {};
-        const visibility = await this.assertActionVisible(action, mounted.context, mounted.arguments ?? {});
+        // The checks see the arguments the handler will receive (an item action checks its item again).
+        const callArguments = { ...(mounted.arguments ?? {}), ...submitArguments };
+        const visibility = await this.assertActionVisible(action, mounted.context, callArguments);
         if (!(await this.authorizeMountedAction(action, visibility, false))) return;
         const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
         if (schema) {
@@ -1541,7 +1543,7 @@ abstract class BasePage extends Component implements SchemaHost {
             if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         }
         const callContext = await this.actionContext(mounted);
-        callContext.arguments = { ...(mounted.arguments ?? {}), ...submitArguments };
+        callContext.arguments = callArguments;
         if (schema) { callContext.data = await getSchemaState(schema); callContext.schema = schema; }
         const ran = await this.runMountedAction(action, callContext, this.mountedActions);
         // Rate limited, or `action.halt()`: the modal stays open; `action.cancel()`: it closes.

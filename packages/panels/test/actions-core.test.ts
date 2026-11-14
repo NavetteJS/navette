@@ -70,6 +70,7 @@ class Board extends Page {
                         Action.make('all').cancelParentActions().action(() => { calls.push('all'); }),
                     ]),
                 ]),
+            Action.make('guarded').requiresConfirmation().hidden(({ arguments: args }: any) => args?.target === 'forbidden').action(({ arguments: args }: any) => { calls.push(`guarded:${args.target}`); }),
             Action.make('readonly').schema([TextInput.make('name')]).disabledSchema().fillForm(() => ({ name: 'Ada' })).action(({ data }: any) => { calls.push(`readonly:${JSON.stringify(data)}`); }),
         ];
     }
@@ -294,6 +295,15 @@ test('cancelParentActions(), unmountAction(true | name), overlayParentActions() 
     assert.match(await page.renderActionModals(), /disabled/);
     await page.callMountedAction();
     assert.deepEqual(calls.slice(-1), ['readonly:{}']);
+});
+
+test('submit arguments are checked like mount arguments', async () => {
+    calls.length = 0;
+    const page = await board();
+    await page.mountAction('guarded', { target: 'ok' });
+    await assert.rejects(page.callMountedAction({ target: 'forbidden' }), (error: any) => error instanceof WireError && error.status === 403);
+    await page.callMountedAction({ extra: 1 });
+    assert.deepEqual(calls, ['guarded:ok']);
 });
 
 test('Actions schema component: verticalAlignment()', async () => {
