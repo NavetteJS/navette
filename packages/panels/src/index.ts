@@ -45,7 +45,7 @@ import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentRe
 export { ParentResourceRegistration } from './nested-resources.ts';
 import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
-import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type AttrValue, type Palette, type RenderHookCallback } from '@navette-js/support';
+import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
@@ -2301,7 +2301,9 @@ export abstract class Resource {
         return action ? `${this.getUrl('index')}?tableAction=${action}&tableActionRecord=${encodeURIComponent(key)}` : null;
     }
     static async getGlobalSearchResults(search: string, user: User | null): Promise<GlobalSearchResult[]> {
-        const page = await this.adapter.paginate({ search, searchColumns: this.getGloballySearchableAttributes(), splitSearchTerms: this.shouldSplitGlobalSearchTerms, page: 1, perPage: Math.min(Math.max(this.globalSearchResultsLimit, 1), 200) });
+        // Dot-notation attributes (`author.name`) search through the relationship, which is loaded for the result details.
+        const with_ = this.getGloballySearchableAttributes().map((name) => relationshipPathOf(name)).filter((path): path is string => path !== null);
+        const page = await this.adapter.paginate({ search, searchColumns: this.getGloballySearchableAttributes(), ...(with_.length ? { with: with_ } : {}), splitSearchTerms: this.shouldSplitGlobalSearchTerms, page: 1, perPage: Math.min(Math.max(this.globalSearchResultsLimit, 1), 200) });
         const results: GlobalSearchResult[] = [];
         for (const record of page.records) {
             const url = await this.getGlobalSearchResultUrl(record, user);

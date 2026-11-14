@@ -202,24 +202,30 @@ Hooks only run for a value that passed validation.
 
 ### Customizing how the state is saved
 
-By default, the validated value is written to the record's attribute with the column's name, through the data adapter. To save it yourself, pass a function to `updateStateUsing()`. Its return value is sent back to the browser as the new state:
+By default, the validated value is written to the record's attribute with the column's name, through the data adapter. A [relationship column](/tables/columns/overview#displaying-data-from-relationships), like `customer.email`, writes the attribute of the related record (the order's customer), when the relationship holds a single record; the hooks receive it as `relatedRecord`. A key of a JSON column, like `settings.color`, updates that column of the record.
 
 ```ts
 import { TextInputColumn } from '@navette-js/tables';
 
 TextInputColumn.make<Order>('customer.email')
-    .getStateUsing(({ record }) => record.customer_email ?? null)
     .rules(['required', 'email'])
+    .afterStateUpdated(({ relatedRecord }) => audit('customer-email-changed', relatedRecord))
+```
+
+To save the value yourself, pass a function to `updateStateUsing()`. Its return value is sent back to the browser as the new state, and `afterStateUpdated()` still runs after your function:
+
+```ts
+import { TextInputColumn } from '@navette-js/tables';
+
+TextInputColumn.make<Order>('reference')
     .updateStateUsing(async ({ record, state }) => {
-        await Customer.query().findById(record.customer_id).patch({ email: String(state) });
-        return state;
+        await Order.query().findById(record.id).patch({ reference: String(state).toUpperCase() });
+        return String(state).toUpperCase();
     })
 ```
 
-A column whose name contains a dot, like `customer.email`, can only be saved with `updateStateUsing()`: Navette does not write related records itself. `afterStateUpdated()` still runs after your function.
-
 <Aside variant="warning">
-`updateStateUsing()` runs after Navette's checks on the row's record, but whatever else it writes is up to you. In the example above, the `update` ability is checked for the order, not for the customer: authorize writes to other records yourself.
+`updateStateUsing()` runs after Navette's checks on the row's record, but whatever else it writes is up to you. When a relationship column writes the customer of an order, the `update` ability is checked for the order, not for the customer: authorize writes to related records yourself, for example with `disabled()`.
 </Aside>
 
 ## Security

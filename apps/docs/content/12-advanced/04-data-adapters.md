@@ -101,30 +101,44 @@ modify: (query) => { query.where('tasks.team_id', currentTeamId()); },
 
 A record outside of this scope cannot be found: it is neither displayed, nor editable, nor deletable, even if its key is sent by hand.
 
-**To add columns from a related table**, usable for display, sorting and searching:
-
-```ts
-modify: (query) => {
-    query.select(
-        'orders.*',
-        Order.knex()('customers').select('customers.name').whereRaw('customers.id = orders.customer_id').as('customer_name'),
-        Order.knex()('order_items').count('*').whereRaw('order_items.order_id = orders.id').as('items_count'),
-    );
-},
-```
-
-```ts
-TextColumn.make('customer.name')
-    .getStateUsing(({ record }) => record.customer_name)
-    .sortable({ column: 'customer_name' })
-    .searchable({ column: 'customer_name' })
-```
-
-Prefer subqueries to joins: they do not multiply rows, and keep the pagination right. Exclude computed columns from writes, for example in `$formatDatabaseJson()` of the model.
+**To add computed columns**, usable for display, sorting and searching, select them with subqueries: they do not multiply rows, and keep the pagination right. Exclude computed columns from writes, for example in `$formatDatabaseJson()` of the model. Data from related records needs no such column: see [relationships](#relationships).
 
 <Aside variant="info">
 The adapter is shared by every request and does not know the user. To filter by user, make them available during the request with an `AsyncLocalStorage`, filled by an Express middleware mounted before `panelRouter()`. In a [multi-tenant panel](/panels/tenancy), the scope of the current tenant is applied for you.
 </Aside>
+
+### Relationships
+
+Declare the relationships of a model in its `relationMappings`, as usual with Objection:
+
+```ts
+import { Model } from '@navette-js/database';
+
+export class Order extends Model {
+    static tableName = 'orders';
+
+    static get relationMappings() {
+        return {
+            customer: { relation: Model.BelongsToOneRelation, modelClass: Customer, join: { from: 'orders.customer_id', to: 'customers.id' } },
+            items: { relation: Model.HasManyRelation, modelClass: OrderItem, join: { from: 'orders.id', to: 'order_items.order_id' } },
+        };
+    }
+}
+```
+
+The adapter then handles [relationship columns](/tables/columns/overview#displaying-data-from-relationships) and [relationship aggregates](/tables/columns/overview#counting-relationships) of tables, infolists and exports:
+
+```ts
+TextColumn.make('customer.name').sortable().searchable()
+
+TextColumn.make('items_count').counts('items').sortable()
+```
+
+- The relationships of dot-notation columns are eager-loaded with each page (`withGraphFetched`), one query per relationship.
+- Searching `customer.name` keeps the orders whose customer matches (a `whereExists` subquery); sorting by it orders by a correlated subquery of the customer's name, for relationships that hold a single record.
+- `counts()`, `exists()`, `avg()`, `sum()`, `min()` and `max()` select a correlated subquery under the column's name (`items_count`), so the column can be sorted and summarized.
+
+Relationship and column names come from your declarations, never from the browser, and must be plain identifiers; a dot-notation name whose first segment is not a relationship is a qualified column (`orders.number`) or a key of a JSON column.
 
 ## Saving data that does not fit in one row
 
@@ -188,6 +202,13 @@ To use a remote API or another ORM, implement the `DataAdapter` interface of `@n
 | `sum(query, columns)`, `aggregate(query, columns)` | Totals and statistics of the records matching a query. |
 | `exists(column, value, exceptKey)` | Whether another record has this value, for the `unique()` rule. |
 | `supportsSoftDeletes()`, `isTrashed(record)`, `restore(key)`, `forceDelete(key)` | Soft deletes. |
+| `supportsRelationships()` | Optional. `true` when the adapter handles the relationships of a `ListQuery` (see below). |
+
+Relationships are optional for a custom adapter. A `ListQuery` may carry:
+
+- `with`: the relationship paths of dot-notation columns (`customer`, `customer.country`), to load with each record. An adapter may ignore it: a column named `customer.name` reads `record.customer.name`, so records that already contain nested objects display without anything else.
+- dot-notation names (`customer.name`) in `searchColumns`, `columnSearches` and `sort`, to search or sort through the relationship.
+- `aggregates`: the relationship aggregates of the columns (`{ relationship, function, column, alias, modify }`), whose values must be set on each record under `alias`. They are only sent to an adapter whose `supportsRelationships()` returns `true`: with any other adapter, a column that aggregates a relationship throws an error naming the column and the adapter.
 
 The `modifiers` of a `ListQuery` are functions that receive the query builder of the adapter: they come from list tabs, from filters and from `modifyTableQuery()`. An adapter without a query builder must pass them an object that understands the calls they make, or the resource must avoid them.
 

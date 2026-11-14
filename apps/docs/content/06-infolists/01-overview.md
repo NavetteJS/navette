@@ -193,7 +193,9 @@ import { TextEntry } from '@navette-js/infolists';
 TextEntry.make('author.name')
 ```
 
-For `author.name`, Navette first reads a flat `author_name` attribute of the record, which a data adapter can compute with a join or a subquery. If the record has no such attribute, it follows the path through nested objects: `record.author.name`. You can also use dot notation to read keys of a JSON column, such as `meta.title`, as long as your model returns the column as an object rather than as a JSON string.
+Navette looks for an `author` relationship on the record's Objection model (`relationMappings`), loads it if it is not loaded yet, and displays the `name` attribute of the related record. Nested relationships work too (`author.country.name`), and a relationship holding several records (`tags.name`) gives the list of their values. You can also use dot notation to read keys of a JSON column, such as `meta.title`, as long as your model returns the column as an object rather than as a JSON string. A flat `author_name` attribute of the record, if your data adapter computes one, takes precedence.
+
+To display an aggregate of related records, such as their number, see [aggregating relationships](/infolists/text-entry#aggregating-relationships).
 
 ### Setting the state of an entry
 

@@ -914,7 +914,11 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
     }
     private async loadRecord(component: any, record: unknown): Promise<unknown> {
         if (record !== null && typeof record === 'object') return record;
-        const found = await component.getDataAdapterForTable().find(String(record));
+        // Loaded like a row of the table: relationships of dot-notation columns and relationship aggregates included.
+        const adapter = component.getDataAdapterForTable();
+        const row = (await adapter.paginate({ ...getTableQuery(component.getTable(), component), keys: [String(record)], page: 1, perPage: 1 })).records[0];
+        if (row) return row;
+        const found = await adapter.find(String(record));
         if (!found) fail(`Failed asserting that the record [${String(record)}] exists in the table of the [${this.className}] component.`);
         return found;
     }

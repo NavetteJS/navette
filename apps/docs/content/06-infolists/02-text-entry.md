@@ -576,6 +576,41 @@ TextEntry.make('tags')
 
 The string is split on the separator as is: spaces around the values are kept.
 
+## Aggregating relationships
+
+Navette provides several methods for aggregating a relationship field, including `avg()`, `max()`, `min()` and `sum()`. For instance, if you wish to show the average of a field on all related records, you may use the `avg()` method:
+
+```ts
+import { TextEntry } from '@navette-js/infolists';
+
+TextEntry.make('users_avg_age')
+    .avg('users', 'age')
+```
+
+In this example, `users` is the name of the relationship, while `age` is the field that is being averaged. The name of the entry must be `users_avg_age`: the relationship, the function and the field.
+
+If you'd like to scope the relationship before aggregating, you can pass an object to the method, where the key is the relationship name and the value is the function to scope the Objection query with:
+
+```ts
+import { TextEntry } from '@navette-js/infolists';
+
+TextEntry.make('users_avg_age')
+    .avg({
+        users: (query) => query.where('is_active', true),
+    }, 'age')
+```
+
+You may also count the related records with `counts()`:
+
+```ts
+import { TextEntry } from '@navette-js/infolists';
+
+TextEntry.make('users_count')
+    .counts('users')
+```
+
+The aggregate is computed for the displayed record, when the entry is rendered, unless the record already has it (selected by the query that loaded it). It needs an Objection model record (`relationMappings`).
+
 ## Customizing the text size
 
 Text entries have small font size by default, but you may change this to `'xs'`, `'md'` (or `'base'`) or `'lg'`:
@@ -735,5 +770,5 @@ Browsers only allow copying to the clipboard on secure origins, so this feature 
 </Aside>
 
 <Aside variant="warning">
-Not available in Navette yet: prefix and suffix actions, aggregating relationships (`counts()`, `sum()`…), a different URL for each value of a list, and translated month and day names in date formats.
+Not available in Navette yet: prefix and suffix actions, a different URL for each value of a list, and translated month and day names in date formats.
 </Aside>

@@ -7,9 +7,9 @@ import { readFileSync, statSync } from 'node:fs';
 import { Action } from '@navette-js/actions';
 import { CheckboxList, FileUpload, Select } from '@navette-js/forms';
 import { Fieldset } from '@navette-js/schemas';
-import { configured, icons, type Enum } from '@navette-js/support';
+import { configured, icons, readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type Enum, type RelationshipAggregate } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
-import { getTableQuery } from '@navette-js/tables';
+import { addRelationshipsToQuery, ensureRelationshipSupport, getTableQuery } from '@navette-js/tables';
 import { Notification } from './notifications.ts';
 
 // ------------------------------------------------------------------ downloads
@@ -95,8 +95,25 @@ export class ExportColumn {
     /** `false`: unchecked in the export modal. */
     enabledByDefault(condition = true): this { this._enabledByDefault = condition; return this; }
     isEnabledByDefault(): boolean { return this._enabledByDefault; }
+    private _aggregates: RelationshipAggregates | null = null;
+    private aggregatesOf(): RelationshipAggregates { return (this._aggregates ??= new RelationshipAggregates(`ExportColumn ${this.name}`)); }
+    /** Number of related records (`withCount()`): `ExportColumn.make('posts_count').counts('posts')`; also `'posts as alias'` or `{ posts: (query) => … }`. */
+    counts(relationships: AggregatedRelationships | null): this { this.aggregatesOf().set('count', relationships); return this; }
+    /** Whether related records exist (`withExists()`): `ExportColumn.make('posts_exists').exists('posts')`. */
+    exists(relationships: AggregatedRelationships | null): this { this.aggregatesOf().set('exists', relationships); return this; }
+    /** Average of a column of the related records: `ExportColumn.make('posts_avg_rating').avg('posts', 'rating')`. */
+    avg(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('avg', relationship, column); return this; }
+    /** Sum of a column of the related records: `ExportColumn.make('orders_sum_total').sum('orders', 'total')`. */
+    sum(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('sum', relationship, column); return this; }
+    /** Minimum of a column of the related records: `ExportColumn.make('orders_min_total').min('orders', 'total')`. */
+    min(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('min', relationship, column); return this; }
+    /** Maximum of a column of the related records: `ExportColumn.make('orders_max_total').max('orders', 'total')`. */
+    max(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('max', relationship, column); return this; }
+    /** Relationship aggregates selected by the export query for this column. */
+    getRelationshipAggregates(): RelationshipAggregate[] { return this._aggregates?.all() ?? []; }
     getValue(record: any): unknown {
-        const state = this._state ? this._state(record) : this.name.split('.').reduce((value: any, key) => (value === null || value === undefined ? value : value[key]), record);
+        // `author.name` reads the eager-loaded relationship; a has-many relationship (`tags.name`) gives the list of values.
+        const state = this._state ? this._state(record) : readRecordPath(record, this.name);
         return this._format ? this._format(state, record) : state;
     }
 }
@@ -168,6 +185,9 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             const table = livewire.getTable();
             // The table's current query (filters, search, sort); a bulk export only takes the selected records.
             const query = { ...getTableQuery(table, livewire), modifiers: [...(getTableQuery(table, livewire).modifiers ?? []), (q: any) => exporter!.modifyQuery(q)] } as any;
+            // Relationships of the exported columns are eager-loaded, and their relationship aggregates selected.
+            addRelationshipsToQuery(query, columns);
+            ensureRelationshipSupport(adapter, query);
             if (bulk) query.keys = await livewire.getSelectedRecordKeys();
             const first = await adapter.paginate({ ...query, page: 1, perPage: CHUNK });
             const limit = Math.min(maxRows, HARD_MAX_EXPORT_ROWS);

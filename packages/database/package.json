@@ -1,1 +1,1 @@
-{ "name": "@navette-js/database", "version": "0.0.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "dependencies": { "knex": "^3.1.0", "objection": "^3.1.5", "better-sqlite3": "^12.0.0" } }
+{ "name": "@navette-js/database", "version": "0.0.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "dependencies": { "@navette-js/support": "*", "knex": "^3.1.0", "objection": "^3.1.5", "better-sqlite3": "^12.0.0" } }

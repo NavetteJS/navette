@@ -372,7 +372,7 @@ A value is considered empty when it is `null` or an empty string.
 
 ## Filtering a different column
 
-By default, a constraint filters the column of the query that has its name. To filter another column, or a [computed column](/tables/columns/overview#displaying-data-from-relationships) of the query, use the `attribute()` method:
+By default, a constraint filters the column of the query that has its name. To filter another column, or a computed column of the query, use the `attribute()` method (to filter an attribute of related records, use [`relationship()`](#filtering-an-attribute-of-related-records)):
 
 ```ts
 import { TextConstraint } from '@navette-js/tables';

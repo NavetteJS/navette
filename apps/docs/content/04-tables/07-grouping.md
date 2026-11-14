@@ -97,24 +97,22 @@ static table(table: Table<Post>): Table<Post> {
 }
 ```
 
-## Grouping by a related attribute
+## Grouping by a relationship attribute
 
-A group reads its value from the record's attribute with the group's name. To group by an attribute of a related record, add it to the list query of the data adapter as a [computed column](/tables/columns/overview#displaying-data-from-relationships), then pass that column to `column()`:
+You can also group by a relationship attribute using dot-syntax. For example, if you have an `author` relationship which has a `name` attribute, you can use `author.name` as the name of the attribute:
 
 ```ts
-import { Group, type Table } from '@navette-js/tables';
+import { type Table } from '@navette-js/tables';
 
-static table(table: Table<Task>): Table<Task> {
+static table(table: Table<Post>): Table<Post> {
     return table
         .groups([
-            Group.make<Task>('project.name')
-                .label('Project')
-                .column('project_name'),
+            'author.name',
         ]);
 }
 ```
 
-The column is used to read the group's value from each record, to sort the rows, and to compute [group summaries](#summarising-groups).
+The relationship is eager-loaded with the records, the rows are ordered by the related value (through a subquery, for relationships that hold a single record), and the [group summaries](#summarising-groups) are computed from the records of each group.
 
 ## Setting a grouping label
 
@@ -127,8 +125,7 @@ static table(table: Table<Post>): Table<Post> {
     return table
         .groups([
             Group.make('author.name')
-                .label('Author name')
-                .column('author_name'),
+                .label('Author name'),
         ]);
 }
 ```
@@ -288,14 +285,13 @@ static table(table: Table<Post>): Table<Post> {
     return table
         .groups([
             Group.make('author.name')
-                .column('author_name')
                 .collapsible(),
         ]);
 }
 ```
 
 ```preview
-// records: [{"title": "Introducing Navette", "author_name": "Ada Lovelace"}, {"title": "Building your first panel", "author_name": "Grace Hopper"}, {"title": "Ten tips for faster tables", "author_name": "Ada Lovelace"}]
+// records: [{"title": "Introducing Navette", "author": {"name": "Ada Lovelace"}}, {"title": "Building your first panel", "author": {"name": "Grace Hopper"}}, {"title": "Ten tips for faster tables", "author": {"name": "Ada Lovelace"}}]
 // In previews, `Group` is the schema layout component: take the table group class from a table.
 
 return new Table()
@@ -305,7 +301,6 @@ return new Table()
     ])
     .defaultGroup(
         TableGroup.make('author.name')
-            .column('author_name')
             .collapsible(),
     )
 ```
