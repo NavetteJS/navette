@@ -120,6 +120,151 @@ Navette picks the shades of each component using contrast ratios. The same palet
 
 A filled button uses white text on a dark enough shade. When the light shades of a palette are too light for white text, as with `Amber` or `Yellow`, the button keeps a light background and uses a dark shade of the palette for its text. Changing a registered palette updates these choices automatically.
 
+## Customizing shade selection
+
+If you need to override how a particular component picks its shades (for example, to target WCAG AAA contrast or prefer darker button backgrounds), register your own color map for it with `ColorManager.overrideColorMap()`, once, when your server starts. It applies to every panel.
+
+`@navette-js/support` exposes three color-map builders for this purpose. Each follows the same fluent shape: `make(palette)` to start, chained configuration setters, then `get()` to return an object mapping slot names (such as `bg`, `text`, `dark:hover:bg`) to shade numbers:
+
+- `ComponentColorMap`, for components that pick one shade per slot, like badges, links, text, icons, dropdown items and toggles.
+- `ButtonComponentColorMap`, for filled buttons. It picks a background shade and pairs it with a matching text shade.
+- `IconButtonComponentColorMap`, for icon-only buttons. It picks a single icon shade and derives a hover variant from it.
+
+### Components you can override
+
+The first argument of `overrideColorMap()` names the component:
+
+| Component | Used by |
+| --- | --- |
+| `'badge'` | Badges, including badge columns and entries, and navigation badges |
+| `'button'` | Filled buttons |
+| `'button-outlined'` | Outlined buttons |
+| `'icon-button'` | Icon-only buttons |
+| `'link'` | Links, and link actions |
+| `'toggle'` | Form toggles and toggle columns |
+| `'dropdown-item'` | Dropdown items and grouped actions |
+| `'text'` | Colored text of text columns, text entries and schema text |
+| `'icon-column'` | Icons of icon columns and icon entries |
+| `'stat-description'` | Descriptions of the stats overview widget |
+| `'stat-chart'` | Charts of the stats overview widget (no shades: only the `fi-color` classes) |
+
+The second argument is a function. It receives the palette of the color being rendered, and a context with the `gray` palette, the name of the `color` (`'primary'`, `'danger'`…), and `getDefault()`, which returns the map Navette would use. It returns the new map:
+
+```ts
+import { ColorManager, ComponentColorMap, WCAG_AAA_TEXT } from '@navette-js/support';
+
+ColorManager.overrideColorMap('badge', (palette, { gray, color, getDefault }) => color === 'gray'
+    ? getDefault()
+    : ComponentColorMap.make(palette)
+        .slot('text', { surface: palette[50], minRatio: WCAG_AAA_TEXT })
+        .slot('dark:text', { surface: gray[600], minRatio: WCAG_AAA_TEXT, maxShade: 500, shouldStartFromDarkest: true, fallback: 200 })
+        .get());
+```
+
+The slots are `bg`, `hover:bg`, `dark:bg`, `dark:hover:bg`, `text`, `hover:text`, `dark:text` and `dark:hover:text`, and the shades whole numbers from `0` (white) to `950`. Any other slot or shade throws an error when the component is rendered. Pass `null` to restore the default: `ColorManager.overrideColorMap('badge', null)`.
+
+<Aside variant="tip">
+The fastest way to write a custom map is to start from the default one: `getDefault()` returns it, and the default functions (`buttonColorMap()`, `badgeColorMap()`, `linkColorMap()`…) are exported by `@navette-js/support`. `ColorManager.getColorMap(component, palette, gray)` returns the map in use for a component.
+</Aside>
+
+### `ComponentColorMap`
+
+Builds a slot map one entry at a time. Call `slot()` once per output slot, then `get()`:
+
+```ts
+import { ComponentColorMap, WCAG_AA_TEXT } from '@navette-js/support';
+
+ComponentColorMap.make(palette)
+    .slot('text', { surface: gray[50], minRatio: WCAG_AA_TEXT, fallback: 900 })
+    .slot('dark:text', { surface: gray[700], maxShade: 500, shouldStartFromDarkest: true, fallback: 200 })
+    .get();
+```
+
+`slot()` options:
+
+- `surface`: the color the chosen shade must contrast against (typically `gray[50]`, `gray[700]`, or `'oklch(1 0 0)'`).
+- `minRatio`: minimum contrast ratio. Defaults to `WCAG_AA_TEXT` (`4.5`); use `WCAG_AA_NON_TEXT` (`3`) for icons or `WCAG_AAA_TEXT` (`7`) for AAA.
+- `maxShade`: optional upper bound on the shade number considered.
+- `minShade`: optional lower bound.
+- `shouldStartFromDarkest`: walk from the darkest shade to the lightest instead of the default lightest to darkest. Use it for dark-mode lookups.
+- `fallback`: shade returned when no candidate qualifies. Defaults to `900`; typically `200` for dark mode.
+
+### `ButtonComponentColorMap`
+
+Returns all eight slots a filled button needs (`bg`, `hover:bg`, `dark:bg`, `dark:hover:bg`, `text`, `hover:text`, `dark:text`, `dark:hover:text`) from one `get()` call. You configure which background shades to use; the matching text shade for each is found automatically. At least one `lightBackground()` and one `darkBackground()` are required:
+
+```ts
+import { ButtonComponentColorMap, WCAG_AA_TEXT } from '@navette-js/support';
+
+ButtonComponentColorMap.make(palette)
+    .minContrastRatio(WCAG_AA_TEXT)
+    .lightBackground(600, 500)
+    .lightBackground(400, 300, 500)
+    .darkBackground(600, 500, 700)
+    .get();
+```
+
+`minContrastRatio()` sets the minimum ratio between the background and the text. It defaults to `WCAG_AA_TEXT` (`4.5`); set it to `WCAG_AAA_TEXT` (`7`) for AAA.
+
+`lightBackground()` and `darkBackground()` accept `(bg, hover, alternateHover?)`. Chain candidates in preference order. Navette prefers candidates that support light text in both resting and hover states, using `alternateHover` when the main hover shade is unsuitable. The final candidate is the fallback.
+
+To express a color-aware cascade ("use 800 if the palette can carry it, otherwise 700, otherwise 600, falling back to a paler background with dark text for yellows"), chain candidates and end with a pale-friendly fallback:
+
+```ts
+ButtonComponentColorMap.make(palette)
+    .lightBackground(800, 700)
+    .lightBackground(700, 600)
+    .lightBackground(600, 500)
+    .lightBackground(400, 300, 500) // pale fallback
+    .darkBackground(600, 500, 700)
+    .get();
+```
+
 <Aside variant="warning">
-Customizing the shade selection of components is not available yet.
+The last candidate doubles as the fallback when no candidate produces light text on its background. If you configure only vibrant-friendly candidates and your palette is pale, that last candidate is used anyway, likely producing dark text on a dark background. Always end with a pale-friendly candidate (a background around `400`) to handle yellows, ambers and limes.
+</Aside>
+
+### `IconButtonComponentColorMap`
+
+Returns the four icon slots (`text`, `hover:text`, `dark:text`, `dark:hover:text`) for icon-only buttons. A `lightSurface()` and a `darkSurface()` are required:
+
+```ts
+import { IconButtonComponentColorMap, WCAG_AA_NON_TEXT } from '@navette-js/support';
+
+IconButtonComponentColorMap.make(palette)
+    .minContrastRatio(WCAG_AA_NON_TEXT)
+    .lightSurface(gray[50])
+    .darkSurface(gray[700])
+    .darkMaxShade(500)
+    .get();
+```
+
+- `minContrastRatio()`: minimum contrast ratio between the icon and the surface. Defaults to `WCAG_AA_NON_TEXT` (`3`).
+- `lightSurface()` / `darkSurface()`: the surface the icon must contrast against in each mode, typically `gray[50]` and `gray[700]`.
+- `darkMaxShade()`: upper bound on the shade considered for the dark-mode icon color. Defaults to `500`; lower it for lighter icons.
+
+### Worked example: AAA contrast for buttons
+
+Here is a complete configuration that targets WCAG AAA contrast and prefers darker button backgrounds, for filled and outlined buttons. Verify the rendered contrast with your palettes and backgrounds, since fallback shades may not meet the target:
+
+```ts
+import { ButtonComponentColorMap, ColorManager, ComponentColorMap, WCAG_AAA_TEXT } from '@navette-js/support';
+
+ColorManager.overrideColorMap('button', (palette) => ButtonComponentColorMap.make(palette)
+    .minContrastRatio(WCAG_AAA_TEXT)
+    .lightBackground(700, 600)
+    .lightBackground(400, 300, 500)
+    .darkBackground(600, 500, 700)
+    .get());
+
+ColorManager.overrideColorMap('button-outlined', (palette, { gray }) => ComponentColorMap.make(palette)
+    .slot('text', { surface: gray[50], minRatio: WCAG_AAA_TEXT, fallback: 900 })
+    .slot('dark:text', { surface: gray[700], minRatio: WCAG_AAA_TEXT, maxShade: 500, shouldStartFromDarkest: true, fallback: 200 })
+    .get());
+```
+
+The gray button gets no color classes, so its map is never used.
+
+<Aside variant="tip">
+The defaults work for the overwhelming majority of palettes. Only override these maps if you have specific accessibility requirements (such as AAA compliance) or a design system that mandates different shade preferences.
 </Aside>
