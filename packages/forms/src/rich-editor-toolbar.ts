@@ -1,5 +1,5 @@
 // Rich editor toolbars: dropdown groups of tools (`ToolbarButtonGroup`), plugins (`RichContentPlugin`), and the enable / disable
-// modifications applied to the toolbar buttons, as Filament's `InteractsWithToolbarButtons`.
+// modifications applied to the toolbar buttons.
 import { Attributes, e, icon, js } from '@navette-js/support';
 import type { Extensions } from '@tiptap/core';
 import type { Action } from '@navette-js/actions';
@@ -81,7 +81,7 @@ export class ToolbarButtonGroup {
  * and the actions those tools mount. Pass it to `RichEditor.plugins()` and `RichContentRenderer.plugins()`.
  */
 export interface RichContentPlugin {
-    /** Server-side TipTap extensions (Filament's `getTipTapPhpExtensions()`): the nodes and marks kept when the content is saved. */
+    /** Server-side TipTap extensions: the nodes and marks kept when the content is saved. */
     getTipTapServerExtensions(): Extensions;
     /** URLs of browser ES modules exporting a TipTap extension (or an array of them). */
     getTipTapJsExtensions(): string[];

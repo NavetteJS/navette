@@ -14,7 +14,7 @@ import { Notification } from './notifications.ts';
 import { readXlsx } from './xlsx.ts';
 
 // ------------------------------------------------------------------ runs and row context
-/** One import, as the hooks, the notification and the fake see it (Filament: the `Import` model). */
+/** One import, as the hooks, the notification and the fake see it. */
 export type ImportRun = {
     /** Key of the run in the import history, if the panel keeps one. */
     id: string | number | null;
@@ -55,7 +55,7 @@ const isBlank = (value: unknown) => value === null || value === undefined || (ty
 /** Thrown from an importer hook to fail the current row with this message (shown in the failed rows file). */
 export class RowImportFailedError extends Error {}
 /**
- * Thrown from an importer hook to fail the current row with validation errors (Filament: `ValidationException::withMessages()`):
+ * Thrown from an importer hook to fail the current row with validation errors:
  * `throw new ImportValidationError({ price: 'The price is too low.' })`.
  */
 export class ImportValidationError extends Error {
@@ -111,7 +111,7 @@ export class ImportColumn {
     getLabel(ctx?: Partial<ImportColumnContext>): string { return evaluate(this._label, this.ctx(ctx)) ?? this.name.replace(/[_.]+/g, ' ').replace(/^./, (c) => c.toUpperCase()); }
     /** Other file headers that map to this column (compared case-insensitively, with `-`, `_` and spaces alike). */
     guess(headers: ImportLazy<string[]>): this { this._guesses = headers; return this; }
-    /** Filament name of `guess()`. */
+    /** Alias of `guess()`. */
     guesses(headers: ImportLazy<string[]>): this { return this.guess(headers); }
     /** The headers this column matches: its label, its name and its guesses, lowercased, with `-`, `_` and spaces variants. */
     getGuesses(ctx?: Partial<ImportColumnContext>): string[] {
@@ -152,7 +152,7 @@ export class ImportColumn {
     isBlankStateIgnored(ctx?: Partial<ImportColumnContext>): boolean { return Boolean(evaluate(this._ignoreBlank, this.ctx(ctx))); }
     /** The cell holds several values, split by `separator`: the state is a list (each value cast, blank values dropped). */
     multiple(separator: ImportLazy<string | null> = ','): this { this._separator = separator; return this; }
-    /** Filament name of `multiple()`. */
+    /** Alias of `multiple()`. */
     array(separator: ImportLazy<string | null> = ','): this { return this.multiple(separator); }
     getArraySeparator(ctx?: Partial<ImportColumnContext>): string | null { const separator = evaluate(this._separator, this.ctx(ctx)); return separator === null || separator === '' ? null : separator; }
     isMultiple(ctx?: Partial<ImportColumnContext>): boolean { return this.getArraySeparator(ctx) !== null; }
@@ -173,7 +173,7 @@ export class ImportColumn {
     fillRecordUsing(fill: ((record: Record<string, unknown>, state: any, ctx: ImportColumnContext) => void) | null): this { this._fill = fill; return this; }
     /** Saves the value once the record is saved (related records…): `({ record, state, ctx }) => …`. */
     saveRelationshipsUsing(callback: ((args: { record: any; state: unknown; ctx: ImportColumnContext }) => void | Promise<void>) | null): this { this._saveRelationships = callback; return this; }
-    /** A non-empty value must be one of the enum's values (Filament: `ImportColumn::enum()`); the enum's values are the examples. */
+    /** A non-empty value must be one of the enum's values; the enum's values are the examples. */
     enum(enumeration: Enum<string | number> | null): this { this._enum = enumeration; return this; }
     /**
      * Imports a belongs-to relationship (the cell identifies the related record, whose key fills the foreign key) or, with
@@ -236,7 +236,7 @@ export class ImportColumn {
         if (this._cast) cast = this._cast(cast, { ...this.ctx(ctx), originalState });
         return cast;
     }
-    /** `castState()` of a cell (former name). */
+    /** Alias of `castState()`. */
     cast(value: string | null): unknown { return this.castState(value); }
 
     // ---- relationships
@@ -301,7 +301,7 @@ export class ImportColumn {
         }
         return failures;
     }
-    /** First rule the raw cell value fails, with its message (former API; `validateState()` checks the cast value). */
+    /** First rule the raw cell value fails, with its message (`validateState()` checks the cast value). */
     failedRule(value: string | null, row: Record<string, unknown>): FailedRule | null {
         let first: FailedRule | null = null;
         const state = this.castState(value);
@@ -336,7 +336,7 @@ export class ImportColumn {
         }
         values[this.name] = state;
     }
-    /** Fills the record's attributes (former name of `fillRecord()`, synchronous, without relationships). */
+    /** Alias of `fillRecord()`: synchronous, without relationships. */
     fill(record: Record<string, unknown>, value: unknown): void { if (this._fill) this._fill(record, value, this.ctx()); else record[this.name] = value; }
     /** Once the record is saved: links the records of a many-to-many relationship (those not linked yet), or runs `saveRelationshipsUsing()`. */
     async saveRelationships(record: any, state: unknown, ctx: ImportColumnContext, model: any = null): Promise<void> {
@@ -382,7 +382,7 @@ const keyOf = (adapter: DataAdapterLike, record: any): string | null => {
 const initialAttributes = (record: any): Record<string, unknown> => Object.fromEntries(Object.entries(record ?? {}).filter(([key, value]) => !key.startsWith('$') && typeof value !== 'function' && (value === null || typeof value !== 'object' || value instanceof Date)));
 
 /**
- * Imports one row (`row`: cells by header; `columnMap`: column name → header) like Filament's importer: the mapped columns
+ * Imports one row (`row`: cells by header; `columnMap`: column name → header): the mapped columns
  * are cast, `resolveRecord()` finds the record (`null` skips the row), then validation, filling and saving, with the hooks
  * around each step. A `RowImportFailedError` fails the row; an `ImportValidationError` fails it with validation errors.
  */
@@ -529,7 +529,7 @@ export abstract class Importer {
      */
     static test(options: TestableImportOptions): TestableImport { return new TestableImport(this, options); }
     static getColumns(): ImportColumn[] { return []; }
-    /** Components added to the import modal (Filament: import options); their values are the import's `options`. */
+    /** Components added to the import modal; their values are the import's `options`. */
     static getOptionsFormComponents(): any[] { return []; }
     /**
      * The record a row fills: an existing record to update, a new one to create (an object without a key: `{}`, the
@@ -550,7 +550,7 @@ export abstract class Importer {
     /** Like `beforeSave()`, only when updating a record. */
     static async beforeUpdate(_ctx: ImportRowContext): Promise<void> {}
     /**
-     * Saves the row's record (Filament's `saveRecord()`) and returns it: creates it with the attributes filled by the columns
+     * Saves the row's record and returns it: creates it with the attributes filled by the columns
      * (`values`), or updates the existing `record` (`ctx.key`). Override it to save another way (an upsert, a service...);
      * relationship columns are saved afterwards on the returned record.
      */
@@ -578,7 +578,7 @@ export abstract class Importer {
     static getFailedRowsDownloader(): Downloader { return sendDownload; }
     /**
      * Prefixes the cells of the failed rows file starting with `=`, `+`, `-`, `@`, a tab or a carriage return (numbers aside)
-     * with `'`, so that spreadsheet software does not run them as formulas. On by default in Navette (off in Filament);
+     * with `'`, so that spreadsheet software does not run them as formulas. On by default;
      * `Importer.preventFormulaInjection(false)` turns it off for every importer, `ProductImporter.preventFormulaInjection(false)` for one.
      */
     static preventFormulaInjection(condition = true): void { this.formulaInjectionPrevented = condition; }
@@ -773,7 +773,7 @@ export class ImportAction {
                 const headers = mapping ? headersOf(livewire, mounted?.data?.file) : [];
                 const file = FileUpload.make('file').label(t('navette-actions::import.modal.form.file.label')).placeholder(t('navette-actions::import.modal.form.file.placeholder'))
                     .acceptedFileTypes(['text/csv', 'text/plain', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv', '.xlsx']).maxSize(maxKilobytes).storeFiles(false).required();
-                // Duplicate headers would make the mapping ambiguous: the file is refused (Filament's rule).
+                // Duplicate headers would make the mapping ambiguous: the file is refused.
                 let duplicates: string[] = [];
                 file.rule({
                     name: 'duplicate_columns',
@@ -856,7 +856,7 @@ export class ImportAction {
                             run.processedRows++;
                             const error = rowError(result);
                             if (error) { await failRow(error); continue; }
-                            // A skipped row counts as successful, as in Filament.
+                            // A skipped row counts as successful.
                             run.successfulRows++;
                         }
                     }

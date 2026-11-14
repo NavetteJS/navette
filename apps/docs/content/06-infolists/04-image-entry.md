@@ -27,7 +27,7 @@ A [file upload](/forms/file-upload) field stores the key of each file, which is 
 
 ## Managing the image storage
 
-Like Filament's `disk()`, the `storage()` method sets the storage the keys are relative to. Any `FileStorage` of `@navette-js/forms` works, such as a `LocalFileStorage`:
+The `storage()` method sets the storage the keys are relative to. Any `FileStorage` of `@navette-js/forms` works, such as a `LocalFileStorage`:
 
 ```ts
 import { FileUpload } from '@navette-js/forms';

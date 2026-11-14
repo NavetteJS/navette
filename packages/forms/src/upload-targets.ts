@@ -1,5 +1,4 @@
-// Upload targets of a component's schemas (Filament's `RestrictsFileUploadsToSchemaComponents`): a temporary upload is
-// only accepted for the state path of a file upload field or of an editor that stores file attachments.
+// Upload targets of a component's schemas: a temporary upload is only accepted for the state path of a file upload field or of an editor that stores file attachments.
 import type { Component, Schema } from '@navette-js/schemas';
 import { FileUpload, MarkdownEditor, RichEditor } from './index.ts';
 

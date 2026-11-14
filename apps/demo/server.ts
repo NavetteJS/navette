@@ -28,7 +28,7 @@ import { liveNotificationsAssets, LiveNotificationsPage } from './pages/live-not
 import { appPanel, demoAuthProvider } from './app-panel.ts';
 import { labPanel } from './lab-panel.ts';
 import { labPrivateAttachments } from './lab-rich-editor-options.ts';
-import { LAB_PRIVATE_FILES_URL, labPrivateFiles } from './lab-d11.ts';
+import { LAB_PRIVATE_FILES_URL, labPrivateFiles } from './lab-ui.ts';
 import { shopWidgets } from './widgets/shop.ts';
 import { welcomeWidgets } from './widgets/welcome.ts';
 import { STATUSES } from './resources/OrderResource.ts';
@@ -179,8 +179,8 @@ if (process.env.NAVETTE_HOOK_PROBE) secondPanel.plugin((await import('./hook-pro
 app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 // Components outside any panel (`/outside/...`), with the lab: NAVETTE_NO_LAB turns them off too.
 if (!process.env.NAVETTE_NO_LAB) app.use((await import('./outside-panel/index.ts')).outsidePanel(key));
-// Third panel (`/lab`): recent features on the demo data, outside the pages compared with Filament. NAVETTE_NO_LAB turns it off.
-// Private files of the lab (temporary signed URLs, see apps/demo/lab-d11.ts).
+// Third panel (`/lab`): extra features on the demo data, outside the pages compared with reference screenshots. NAVETTE_NO_LAB turns it off.
+// Private files of the lab (temporary signed URLs, see apps/demo/lab-ui.ts).
 if (!process.env.NAVETTE_NO_LAB) app.use(LAB_PRIVATE_FILES_URL, labPrivateFiles(key).serve());
 if (!process.env.NAVETTE_NO_LAB) app.use(panelRouter(labPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 // Fourth panel (`/lab-nav`): navigation, menus and a strict Content-Security-Policy; left out of the parity screenshots.

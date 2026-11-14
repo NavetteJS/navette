@@ -1,5 +1,5 @@
-// @navette-js/panels/livewire — forms, tables, infolists, actions, widgets and notifications outside a panel (Filament's
-// "Rendering a form in a Blade view" pages): components rendered from your own EJS views, served by your own Express routes.
+// @navette-js/panels/livewire — forms, tables, infolists, actions, widgets and notifications outside a panel:
+// components rendered from your own EJS views, served by your own Express routes.
 //
 //     const livewire = new Livewire({ key: process.env.APP_KEY! });
 //     livewire.components([CreatePost, ListProducts]);
@@ -34,8 +34,7 @@ async function renderComponent(component: any, fallback: () => Promise<string>):
 }
 
 /**
- * A component hosting schemas (forms, infolists) and actions, rendered outside a panel: Filament's Livewire component with
- * `InteractsWithSchemas` and `InteractsWithActions`.
+ * A component hosting schemas (forms, infolists) and actions, rendered outside a panel.
  *
  * - Schemas are methods named after them, followed by `Schema`: `formSchema(schema)` (state path `data`), `infolistSchema()`…
  * - Actions are methods named after them, followed by `Action`: `deleteAction()` returns `Action.make('delete')`.
@@ -57,7 +56,7 @@ export abstract class LivewireComponent extends Page {
 }
 
 /**
- * A component with a table, rendered outside a panel: Filament's Livewire component with `InteractsWithTable`. It defines
+ * A component with a table, rendered outside a panel. It defines
  * `table(table)` and `getDataAdapterForTable()` (the records), and may host schemas and actions like `LivewireComponent`.
  * Without a view it renders the table; a view renders it with `<%- await table() %>` (the action modals come with it).
  */
@@ -173,20 +172,20 @@ export class Livewire {
         if (pending.length) publish(ctx.mailbox, pending);
         return result;
     }
-    /** HTML of a component, to embed in your page (Filament's `@livewire('create-post')`). Throws a `WireError` (403…) when refused. */
+    /** HTML of a component, to embed in your page. Throws a `WireError` (403…) when refused. */
     async mount(component: string | ComponentClass, params: Record<string, unknown> = {}, req: Request, res: Response): Promise<string> {
         if (!this._router) this.router();
         const name = this.nameOf(component);
         const ctx = await this.context(req, res);
         return this.inRequest(ctx, async () => (await this.runtime.mountWithInstance(name, params, { path: req.path, method: req.method, ctx })).html);
     }
-    /** The notifications container (Filament's `@livewire('notifications')`): once per page, in your layout. */
+    /** The notifications container: once per page, in your layout. */
     async notifications(req: Request, res: Response): Promise<string> {
         if (!this._router) this.router();
         const ctx = await this.context(req, res);
         return this.inRequest(ctx, () => this.runtime.mount('navette.notifications', {}, { path: req.path, method: req.method, ctx }));
     }
-    /** Tags for your layout's `<head>`: CSRF meta, fonts, colors, the Filament stylesheet and Livewire's styles. */
+    /** Tags for your layout's `<head>`: CSRF meta, fonts, colors, the panel stylesheet and Livewire's styles. */
     styles(req: Request, res: Response): string {
         const panel = this.panel;
         const theme = panel.resolveTheme(req);
@@ -203,7 +202,7 @@ export class Livewire {
             wireStyles(),
         ].filter(Boolean).join('\n');
     }
-    /** Tags for the end of your layout's `<body>`: the Filament scripts and livewire.js (with Alpine.js). */
+    /** Tags for the end of your layout's `<body>`: the panel scripts and livewire.js (with Alpine.js). */
     scripts(req: Request, res: Response): string {
         const panel = this.panel;
         return [
@@ -214,8 +213,7 @@ export class Livewire {
         ].filter(Boolean).join('\n');
     }
     /**
-     * A route handler serving the component as a full page (Filament's `Route::get('posts/create', CreatePost::class)`): a
-     * simple document with the component, the notifications and the assets, or your `layout`. 403 and 404 answer as such.
+     * A route handler serving the component as a full page: a simple document with the component, the notifications and the assets, or your `layout`. 403 and 404 answer as such.
      */
     page(component: string | ComponentClass, options: PageOptions = {}): RequestHandler {
         return async (req, res, next) => {

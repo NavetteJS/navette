@@ -159,7 +159,7 @@ Whatever the configuration, event handler attributes (`on…`), `<script>`, `<st
 
 ### Checking URLs
 
-To put a URL that comes from users into a link yourself, check it first. `isSafeUrl()` tells whether a URL can be put in a link: `http`, `https`, `mailto`, paths and anchors by default, never `javascript:` or `data:`. `sanitizeUrl()` returns the URL when it is relative or uses an allowed scheme (`http` and `https` by default), and `null` otherwise (Filament's `Str::sanitizeUrl()`):
+To put a URL that comes from users into a link yourself, check it first. `isSafeUrl()` tells whether a URL can be put in a link: `http`, `https`, `mailto`, paths and anchors by default, never `javascript:` or `data:`. `sanitizeUrl()` returns the URL when it is relative or uses an allowed scheme (`http` and `https` by default), and `null` otherwise:
 
 ```ts
 import { e, isSafeUrl, sanitizeUrl } from '@navette-js/support';
@@ -198,9 +198,9 @@ panel.middleware([
 ], true);
 ```
 
-Register it as a persistent middleware (`true`), so that component updates get the nonce too. Alpine.js evaluates the expressions written in the markup, which needs `'unsafe-eval'`, and `style` attributes cannot carry a nonce, which needs `style-src-attr 'unsafe-inline'`: Filament has the same requirements. The nonce must be base64 text, and new for every request.
+Register it as a persistent middleware (`true`), so that component updates get the nonce too. Alpine.js evaluates the expressions written in the markup, which needs `'unsafe-eval'`, and `style` attributes cannot carry a nonce, which needs `style-src-attr 'unsafe-inline'`. The nonce must be base64 text, and new for every request.
 
-In your own views and render hooks, `cspNonce()` returns the nonce of the request being rendered (Filament's `Vite::cspNonce()`), and `cspNonceAttribute()` the ` nonce="…"` attribute to write in an inline element:
+In your own views and render hooks, `cspNonce()` returns the nonce of the request being rendered, and `cspNonceAttribute()` the ` nonce="…"` attribute to write in an inline element:
 
 ```ts
 import { cspNonceAttribute } from '@navette-js/support';
@@ -228,7 +228,7 @@ Uploaded files go to a temporary folder through a signed URL, valid for a few mi
 
 ### Restricting uploads to schema components
 
-The browser names the property an upload is for. Panel pages, resource pages, relation managers and widgets only accept a temporary upload for a visible upload field of their own schemas: a `FileUpload` (or a subclass), or the file attachments of a `RichEditor` or `MarkdownEditor`. The schemas checked are every `<name>Schema(schema)` builder of the component (`formSchema()`, `infolistSchema()`, `contentSchema()`…) and the forms of its mounted actions. Any other target, such as a text field, a hidden upload field or another public property, is rejected with a 403 error before the upload URL is signed, so a signed-in user cannot store files through a page that does not offer an upload. This is Filament's `RestrictsFileUploadsToSchemaComponents`, turned on by default for every panel component.
+The browser names the property an upload is for. Panel pages, resource pages, relation managers and widgets only accept a temporary upload for a visible upload field of their own schemas: a `FileUpload` (or a subclass), or the file attachments of a `RichEditor` or `MarkdownEditor`. The schemas checked are every `<name>Schema(schema)` builder of the component (`formSchema()`, `infolistSchema()`, `contentSchema()`…) and the forms of its mounted actions. Any other target, such as a text field, a hidden upload field or another public property, is rejected with a 403 error before the upload URL is signed, so a signed-in user cannot store files through a page that does not offer an upload. This restriction is turned on by default for every panel component.
 
 A custom field that uploads files itself (calling `$wire.upload()` with its own state path) declares it with an `acceptsFileUploads()` method:
 

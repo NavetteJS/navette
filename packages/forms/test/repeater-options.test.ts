@@ -144,7 +144,7 @@ test('maxItemsForProcessing(): too many items are refused with HTTP 413, before 
 test('lazyLoaded(): repeater and builder item schemas render a loading indicator until loaded, one per item', async () => {
     const loaded = new Set<string>();
     const livewire = host({ members: { a: { name: 'Ada' }, b: { name: 'Bob' } }, content: { x: { type: 'p', data: { body: 'Hello' } } } }, { isDeferredSchemaLoaded: async (schema: Schema) => loaded.has(schema.getLazyKey()) });
-    // On the component, or on the Schema given to schema() / Block.schema() (Filament's way).
+    // On the component, or on the Schema given to schema() / Block.schema().
     const viaComponent = Repeater.make('members').schema([TextInput.make('name')]).lazyLoaded();
     const builder = Builder.make('content').blocks([Block.make('p').schema(Schema.make().components([TextInput.make('body')]).lazyLoaded())]);
     const schema = form(livewire, [viaComponent, builder]);
@@ -210,7 +210,7 @@ test('distinct across items, fixIndistinctState() for booleans and options', asy
     // A required boolean must be on in one item.
     const required = host({ answers: { a: { correct: false }, b: { correct: false } } });
     const requiredSchema = form(required, [Repeater.make('answers').schema([Toggle.make('correct').required().fixIndistinctState()])]);
-    // Navette's `required()` already refuses `false`; the distinct rule gives Filament's message when it is reached.
+    // `required()` already refuses `false`; the distinct rule gives its own message when it is reached.
     assert.ok((await validateSchema(requiredSchema))['data.answers.a.correct']);
     const [, , mustBeSelected] = siblingDistinctRules();
     const requiredToggle = requiredSchema.getComponents()[0] as Repeater;

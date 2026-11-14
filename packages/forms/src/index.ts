@@ -124,8 +124,7 @@ export abstract class Field extends FieldBase {
     async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> { return this._loadStateFromRelationships ? { state: await this._loadStateFromRelationships(record, this.context()) } : null; }
     async saveRelationships(record: any): Promise<void> { if (this._saveRelationships) await this._saveRelationships({ record, state: await this.dehydrateState(this.context().state), ctx: this.context() }); }
     /**
-     * Adds a Laravel-style rule with parameters. A parameter may be a function of the field context (as Filament's
-     * closures): the rule is then built at validation time with the evaluated parameters (a list result is spread).
+     * Adds a Laravel-style rule with parameters. A parameter may be a function of the field context: the rule is then built at validation time with the evaluated parameters (a list result is spread).
      */
     private stringRuleWith(name: string, parameters: Lazy<unknown, ComponentContext>[] = []): this {
         if (!parameters.some((parameter) => typeof parameter === 'function')) return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name);
@@ -667,7 +666,7 @@ const stripCharactersOf = (field: Field, characters: StripCharacters): string[] 
     const value = typeof characters === 'function' ? characters(field.context()) : characters;
     return (Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]).map(String).filter((character) => character !== '');
 };
-/** Removes the characters from a string state (or from each string of a list), as Filament's `StripCharactersStateCast`. */
+/** Removes the characters from a string state (or from each string of a list). */
 const stripFromState = (state: unknown, characters: string[]): unknown => {
     if (!characters.length) return state;
     const strip = (value: unknown) => (typeof value === 'string' ? characters.reduce((text, character) => text.split(character).join(''), value) : value);
@@ -1652,7 +1651,7 @@ export class Repeater extends Field {
         const hooks = this._relationshipHooks;
         const existing = new Map((await this.existingRecords(record)).map((row: any) => [String(row[related.idColumn]), row]));
         const keys = Object.keys(this.getItems());
-        // Like Filament: the records of removed items are deleted first (one by one, for `afterDelete()`).
+        // The records of removed items are deleted first, one by one, so that `afterDelete()` runs for each.
         const kept = new Set(keys.filter((key) => key.startsWith('record-')).map((key) => key.slice('record-'.length)).filter((id) => existing.has(id)));
         const removed = [...existing.keys()].filter((id) => !kept.has(id));
         if (removed.length) {
@@ -1821,7 +1820,7 @@ export class Repeater extends Field {
             }
             return html;
         };
-        /** "Add" (and "Insert between") button: Filament's small gray button, with the action's icon and color if changed. */
+        /** "Add" (and "Insert between") button: a small gray button, with the action's icon and color if changed. */
         const addButton = (resolved: ResolvedAction, expr: string) => {
             const iconHtml = resolved.icon ? icon(resolved.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expr }) }) : '';
             return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" class="${cls(['nv-ac-btn-action', 'nv-btn', 'nv-size-sm', ...colorClassesOf(colorManager, 'button', resolved.color, 'gray', [])])}" wire:click="${e(expr)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expr }), 'sm')}${e(resolved.label)}</button>`;
@@ -1977,7 +1976,7 @@ export class Repeater extends Field {
     }
 }
 
-/** PHP date format (`M j, Y H:i`) to day.js (`MMM D, YYYY HH:mm`), as Filament's `convert_date_format()`. Escaped characters (`\at`) become literals. */
+/** PHP date format (`M j, Y H:i`) to day.js (`MMM D, YYYY HH:mm`). Escaped characters (`\at`) become literals. */
 export function phpDateFormatToDayjs(format: string): string {
     const tokens: Record<string, string> = { d: 'DD', D: 'ddd', j: 'D', l: 'dddd', N: 'd', w: 'd', S: '', F: 'MMMM', m: 'MM', M: 'MMM', n: 'M', Y: 'YYYY', y: 'YY', a: 'a', A: 'A', g: 'h', G: 'H', h: 'hh', H: 'HH', i: 'mm', s: 'ss', v: 'SSS', e: 'z', T: 'z', P: 'Z', O: 'ZZ', U: 'X' };
     let out = '';
@@ -2016,7 +2015,7 @@ function normalizeDateTime(value: unknown): string | null {
 
 type DateLimit = Lazy<string | null, ComponentContext>;
 /**
- * Base of the date, time and date-time pickers: native browser input by default, or Filament's JavaScript picker with
+ * Base of the date, time and date-time pickers: native browser input by default, or a JavaScript picker with
  * `native(false)` (display format, disabled dates, first day of the week, locale). Limits and disabled dates are checked on the server.
  */
 abstract class TemporalField extends Field {
@@ -2040,7 +2039,7 @@ abstract class TemporalField extends Field {
     protected _temporalPlaceholder: string | null = null;
     seconds(condition = true): this { this._seconds = condition; return this; }
     hasSeconds(): boolean { return this.hasTime() && this._seconds; }
-    /** `false`: Filament's JavaScript picker instead of the browser's native input. */
+    /** `false`: a JavaScript picker instead of the browser's native input. */
     native(condition = true): this { this._native = condition; return this; }
     isNative(): boolean { return this._native; }
     /** Display format of the JavaScript picker, in PHP's notation (`'d/m/Y'`, `'M j, Y H:i'`). */
@@ -2106,7 +2105,7 @@ abstract class TemporalField extends Field {
         const prefixIconName = await evaluate(a.prefixIcon, ctx), suffixIconName = await evaluate(a.suffixIcon, ctx);
         const prefix = inputAffixHtml('prefix', { label: prefixLabel ?? null, icon: iconHtml(prefixIconName ?? null, a.prefixIconColor), actions: await actionsHtml(a.prefixActions), inline: a.prefixInline });
         const suffix = inputAffixHtml('suffix', { label: suffixLabel ?? null, icon: iconHtml(suffixIconName ?? null, a.suffixIconColor), actions: await actionsHtml(a.suffixActions), inline: a.suffixInline });
-        // As Filament, the input's inline classes count every declared affix action, visible or not.
+        // The input's inline classes count every declared affix action, visible or not.
         const inlinePrefix = a.prefixInline && (a.prefixActions.length > 0 || Boolean(prefixIconName) || (prefixLabel !== null && prefixLabel !== undefined && prefixLabel !== ''));
         const inlineSuffix = a.suffixInline && (a.suffixActions.length > 0 || Boolean(suffixIconName) || (suffixLabel !== null && suffixLabel !== undefined && suffixLabel !== ''));
         return { prefix, suffix, inlinePrefix, inlineSuffix };
@@ -2595,7 +2594,7 @@ export class ToggleButtons extends Field {
 // Server-side TipTap schema: the nodes and marks the rich editor can produce, and the extensions your application registers.
 /** Options of the server schema of one editor or renderer: allowed link protocols, extensions of its plugins. */
 export type RichSchemaOptions = { linkProtocols?: string[] | null; extensions?: Extensions };
-/** Link protocols allowed by default (as Filament and TipTap). */
+/** Link protocols allowed by default (TipTap's list). */
 export const DEFAULT_LINK_PROTOCOLS = ['http', 'https', 'ftp', 'ftps', 'mailto', 'tel', 'callto', 'sms', 'cid', 'xmpp'];
 /** A link is kept if it has no scheme (`/page`, `#anchor`) or one of the allowed protocols. */
 export function isAllowedLinkUrl(url: unknown, protocols: string[] = DEFAULT_LINK_PROTOCOLS): boolean {
@@ -2710,9 +2709,9 @@ export class RichEditor extends Field {
     private _contentAttributeApplied = false;
     static make(name: string): RichEditor { return configured(new RichEditor(name)); }
     /**
-     * Fake rich content for seeders and tests (Filament's `fake()->filamentRichContent()`): chain blocks, then `toHtml()`,
-     * `toArray()` or `toValue()`. With `editor`, its merge tags, mentions, custom blocks, text colors, plugins, link protocols and
-     * JSON mode are used; `seed` makes the output reproducible.
+     * Fake rich content for seeders and tests: chain blocks, then `toHtml()`, `toArray()` or `toValue()`. With `editor`, its
+     * merge tags, mentions, custom blocks, text colors, plugins, link protocols and JSON mode are used; `seed` makes the output
+     * reproducible.
      */
     static fake(options: RichContentFakerOptions = {}): RichContentFaker { return RichContentFaker.make(options); }
     /**
@@ -2787,7 +2786,7 @@ export class RichEditor extends Field {
     /** Server schema of this editor: link protocols and plugin extensions. */
     /**
      * Options left unset default to the rich content attribute the record registers under the field's name
-     * (`registerRichContent()` of `InteractsWithRichContent`, Filament's `HasRichContent`); plugins are added to the editor's.
+     * (`registerRichContent()` of `InteractsWithRichContent`); plugins are added to the editor's.
      */
     private applyContentAttribute(): void {
         if (this._contentAttributeApplied || !this.container) return;
@@ -2863,7 +2862,7 @@ export class RichEditor extends Field {
         const definition = BUILT_IN_TOOLS.get(name);
         return definition ? RichEditorTool.fromDefinition(definition) : null;
     }
-    /** Default toolbar, as Filament's: `customBlocks` and `mergeTags` join the table group when they are used. */
+    /** Default toolbar: `customBlocks` and `mergeTags` join the table group when they are used. */
     getDefaultToolbarButtons(): ToolbarItems {
         return [...RICH_EDITOR_TOOLS.slice(0, 4), ['table', 'attachFiles', ...(this.blockGroups().some(([, blocks]) => blocks.length) ? ['customBlocks'] : []), ...(Object.keys(this._mergeTags).length ? ['mergeTags'] : [])], ...RICH_EDITOR_TOOLS.slice(5)];
     }
@@ -2899,7 +2898,7 @@ export class RichEditor extends Field {
     async dehydrateState(state: unknown): Promise<unknown> {
         const document = await this.saveFileAttachments(state);
         const provider = this.getFileAttachmentProvider();
-        // Attachments removed from the content are deleted by the provider (Filament's `cleanUpFileAttachments()`).
+        // Attachments removed from the content are deleted by the provider.
         if (provider && !this.waitsForRecord()) await provider.cleanUpFileAttachments(await attachmentIdsOf(document), { ...(await this.attachmentContext()), previousIds: await this.getOriginalFileAttachmentPaths() });
         const html = richDocumentToHtml(document, this.schemaOptions());
         if (html === null) return null;
@@ -2934,9 +2933,8 @@ export class RichEditor extends Field {
         return visibility === 'private' ? 'private' : 'public';
     }
     /**
-     * Record-aware storage of the attached images (Filament's `FileAttachmentProvider`): it stores each upload for the record,
-     * gives the URL of the ids it manages for that record only, and deletes the attachments removed from the content when it
-     * is saved. See `StorageFileAttachmentProvider`. Used instead of `fileAttachmentsStorage()`.
+     * Record-aware storage of the attached images: it stores each upload for the record, gives the URL of the ids it manages
+     * for that record only, and deletes the attachments removed from the content when it is saved. See `StorageFileAttachmentProvider`. Used instead of `fileAttachmentsStorage()`.
      */
     fileAttachmentProvider(provider: FileAttachmentProvider | null): this { this._attachmentProvider = provider; return this; }
     getFileAttachmentProvider(): FileAttachmentProvider | null { this.applyContentAttribute(); return this._attachmentProvider; }
@@ -2961,7 +2959,7 @@ export class RichEditor extends Field {
     saveUploadedFileAttachmentUsing(callback: ((file: TemporaryUpload, ctx: ComponentContext) => string | null | Promise<string | null>) | null): this { this._saveUploadedFileAttachmentUsing = callback; return this; }
     /**
      * Rejects content whose images reference a `data-id` the record does not already hold (new uploads always pass), so that a
-     * forged request cannot reference another record's file. On by default in Navette; `allowFilePathUsing` approves other ids.
+     * forged request cannot reference another record's file. On by default; `allowFilePathUsing` approves other ids.
      */
     preventFileAttachmentPathTampering(condition: Lazy<boolean, ComponentContext> = true, allowFilePathUsing: ((file: string, ctx: ComponentContext) => boolean | Promise<boolean>) | null = null): this {
         this._preventAttachmentTampering = condition;
@@ -3013,8 +3011,8 @@ export class RichEditor extends Field {
         return key;
     }
     /**
-     * Stores the images uploaded in the document (Filament's `saveFileAttachments()`): each `data-id` naming an upload becomes the
-     * stored key, with its URL. The field state is updated, so saving twice stores once.
+     * Stores the images uploaded in the document: each `data-id` naming an upload becomes the stored key, with its URL.
+     * The field state is updated, so saving twice stores once.
      */
     async saveFileAttachments(state: unknown = this.context().state): Promise<unknown> {
         if (!isRichDocument(state)) return state;
@@ -3365,7 +3363,7 @@ export class Checkbox extends Field {
 /** Checkboxes for a list of values: static options or a many-to-many relationship, with search and bulk toggling. */
 /** Order in which options fill a grid: `'column'` (top to bottom, then the next column) or `'row'` (left to right). */
 export type GridDirection = 'row' | 'column';
-/** `class` and `style` of an options grid with `columns` columns from `lg`, as Filament's `grid()` attribute macro. */
+/** `class` and `style` of an options grid with `columns` columns from `lg`. */
 function optionsGridAttributes(columns: number | null, direction: GridDirection | null, extraClass: string | null): string {
     const count = columns && columns > 1 ? Math.floor(columns) : null;
     const isColumn = direction !== 'row';
@@ -3658,7 +3656,7 @@ export class MarkdownEditor extends Field {
     private _maxHeight: string | null = null;
     private _placeholder: string | null = null;
     static make(name: string): MarkdownEditor { return configured(new MarkdownEditor(name)); }
-    /** Fake Markdown for seeders and tests (Filament's `fake()->filamentMarkdown()`): chain blocks, then `toString()`; `seed` makes it reproducible. */
+    /** Fake Markdown for seeders and tests: chain blocks, then `toString()`; `seed` makes it reproducible. */
     static fake(options: ContentFakerOptions = {}): MarkdownFaker { return MarkdownFaker.make(options); }
     /** Toolbar buttons, grouped (`[['bold', 'italic'], ['undo', 'redo']]`) or flat. */
     toolbarButtons(buttons: (string | string[])[]): this { this._toolbarButtons = buttons; return this; }
@@ -4395,7 +4393,7 @@ export interface FileStorage extends FileUrlStorage {
     info(key: string): Promise<UploadedFileInfo | null>;
     /** Public URL of a stored file, without reading it (used by `fetchFileInformation(false)`; `info()` otherwise). */
     url?(key: string): string | null | Promise<string | null>;
-    /** `'private'`: files are shown through `temporaryUrl()` (Filament's private visibility). `'public'` when left out. */
+    /** `'private'`: files are shown through `temporaryUrl()`. `'public'` when left out. */
     readonly visibility?: 'public' | 'private';
     /** Temporary URL of a private file, valid until `expiresAt`, that nobody can forge or extend. */
     temporaryUrl?(key: string, expiresAt: Date): string | null | Promise<string | null>;
@@ -4662,8 +4660,7 @@ export class FileUpload extends Field {
     directory(directory: FieldLazy<string | null>): this { this._directory = directory; return this; }
     storage(storage: FieldLazy<FileStorage | null>): this { this._storage = storage; return this; }
     /**
-     * Visibility of the stored files (Filament's `visibility()`): `'private'` files are shown through temporary URLs of the
-     * storage. By default, the storage's own visibility (`'public'` for a storage without one).
+     * Visibility of the stored files: `'private'` files are shown through temporary URLs of the storage. By default, the storage's own visibility (`'public'` for a storage without one).
      */
     visibility(visibility: FieldLazy<'public' | 'private' | null>): this { this._visibility = visibility; return this; }
     async getVisibility(): Promise<'public' | 'private'> {
@@ -4672,9 +4669,9 @@ export class FileUpload extends Field {
         return (await this.getStorage())?.visibility === 'private' ? 'private' : 'public';
     }
     /**
-     * Called when the user removes a stored file from the field (Filament's `deleteUploadedFileUsing()`), with the file's key
-     * and the storage: `({ file, storage }) => storage?.delete?.(file)`. Only files the record really holds reach it (never a
-     * path sent by the browser), and only when the field is enabled and `deletable()`.
+     * Called when the user removes a stored file from the field, with the file's key and the storage:
+     * `({ file, storage }) => storage?.delete?.(file)`. Only files the record really holds reach it (never a path sent by the
+     * browser), and only when the field is enabled and `deletable()`.
      */
     deleteUploadedFileUsing(callback: ((args: ComponentContext & { file: string; storage: FileStorage | null }) => unknown) | null): this { this._deleteUploadedFileUsing = callback; return this; }
     /** `false`: the field stores nothing itself; the data receives `FileUploadEntry` items for the adapter to process (media). */
@@ -4684,7 +4681,7 @@ export class FileUpload extends Field {
     /** `false`: saved files are listed without reading their size and type from the storage (only their URL). */
     fetchFileInformation(condition: FieldLazy<boolean> = true): this { this._fetchFileInformation = condition; return this; }
     /**
-     * Navette always checks the stored keys sent back by the browser against the record; this method only adds
+     * The stored keys sent back by the browser are always checked against the record; this method only adds
      * `allowFilePathUsing`, which approves other keys (a template file, for example). The check cannot be turned off.
      */
     preventFilePathTampering(condition: FieldLazy<boolean> = true, allowFilePathUsing: ((file: string, ctx: ComponentContext) => boolean | Promise<boolean>) | null = null): this {
@@ -4780,7 +4777,7 @@ export class FileUpload extends Field {
                 const url = !storage ? null : storage.url ? await storage.url(value) : ((await storage.info(value))?.url ?? null);
                 info = url === null ? null : { name: value.split('/').pop() ?? value, size: 0, type: null, url };
             }
-            // Private files: a temporary URL of the storage (Filament's `temporaryUrl()`), when it can make one.
+            // Private files: a temporary URL of the storage, when it can make one.
             if (info && !this._getUploadedFileUsing && visibility === 'private' && storage?.temporaryUrl) {
                 try { const temporary = await storage.temporaryUrl(value, temporaryFileUrlExpiry()); if (temporary) info = { ...info, url: temporary }; } catch { /* no temporary URLs */ }
             }
@@ -4902,7 +4899,7 @@ export class FileUpload extends Field {
         return multiple ? out : (out[0] ?? null);
     }
 
-    /** Filament's image editor dialog (Cropper.js), rendered once per field. */
+    /** Image editor dialog (Cropper.js), rendered once per field. */
     private imageEditorHtml(options: { explicit: boolean; circleCropper: boolean; editorAspectRatios: (string | null)[]; cropAspectRatio: string | null }): string {
         const tr = (key: string, replace: Record<string, string> = {}) => t(`navette-forms::components.file_upload.editor.${key}`, replace);
         const explicit = options.explicit;

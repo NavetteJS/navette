@@ -123,7 +123,7 @@ Files stored under a folder served by `express.static()` are public for anyone w
 
 ### Temporary URLs for private files
 
-A `LocalFileStorage` created with `{ visibility: 'private', key }` keeps its files private: they are only served by its own `serve()` handler, behind temporary signed URLs, like the private disks of Filament:
+A `LocalFileStorage` created with `{ visibility: 'private', key }` keeps its files private: they are only served by its own `serve()` handler, behind temporary signed URLs:
 
 ```ts
 import path from 'node:path';
@@ -142,7 +142,7 @@ FileUpload.make('contract').storage(contracts);
 
 `url()`, `info()` and `temporaryUrl(key, expiresAt)` give URLs such as `/contracts/2026/3f2a….pdf?expires=1767225599&signature=…`. The signature is an HMAC-SHA256, made with the key, of the storage's base URL, the file's key and the expiry: it cannot be forged without the key, it cannot be reused for another file, and it cannot be extended. Without a valid and unexpired signature, `serve()` answers 403. The file is sent with its detected type, `X-Content-Type-Options: nosniff` and a sandboxing `Content-Security-Policy`, so that an uploaded file is never run as a page of your site. Keys containing `..` or unexpected characters, metadata files, folders and symbolic links leading out of the folder are refused.
 
-Temporary URLs expire after `fileUrlConfig.temporaryFileUrlExpiryMinutes` (30 by default, Filament's `temporary_file_url_expiry_minutes`), rounded up to the end of that hour, so that the same URL is reused for a while and the browser can cache the file:
+Temporary URLs expire after `fileUrlConfig.temporaryFileUrlExpiryMinutes` (30 by default), rounded up to the end of that hour, so that the same URL is reused for a while and the browser can cache the file:
 
 ```ts
 import { fileUrlConfig } from '@navette-js/support';

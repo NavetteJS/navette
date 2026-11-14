@@ -1,6 +1,6 @@
 // Components outside any panel (`@navette-js/panels/livewire`): a contact form, a product table and a page of the application
 // embedding the table, served by plain Express routes under `/outside`. Mounted by server.ts with the lab (NAVETTE_NO_LAB
-// turns both off), so the pages compared with Filament are unchanged.
+// turns both off), so the pages compared with reference screenshots are unchanged.
 import express, { type Router } from 'express';
 import { Action } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
@@ -17,7 +17,7 @@ class OutsideProduct extends Model { static tableName = 'products'; declare id: 
 /** Messages received by the contact form (in memory: the demo database is not changed). */
 export const contactMessages: Record<string, unknown>[] = [];
 
-/** A form in a component view: Filament's "Rendering a form in a Blade view". */
+/** A form rendered in a component view, outside any panel. */
 export class ContactForm extends LivewireComponent {
     static title = 'Contact us';
     static callable = ['send'];
@@ -55,7 +55,7 @@ export class ContactForm extends LivewireComponent {
     }
 }
 
-/** A table in a component: Filament's "Rendering a table in a Blade view". */
+/** A table rendered in a component, outside any panel. */
 export class ProductCatalog extends TableComponent {
     static title = 'Catalog';
     table(table: Table): Table {

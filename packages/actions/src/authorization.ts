@@ -1,4 +1,4 @@
-// Authorization responses: a policy decision that may carry a message (Laravel's `Illuminate\Auth\Access\Response`).
+// Authorization responses: a policy decision that may carry a message.
 
 /**
  * Result of an authorization check. A policy rule may return one instead of a boolean, to explain a denial:
@@ -31,7 +31,7 @@ export class AuthorizationResponse {
 export type DenyMessage = string | ((failureCount: number, totalCount: number) => string | null | undefined);
 
 /**
- * A denial identified by a key (Filament's `DenyResponse`). In a bulk action using `authorizeIndividualRecords()`, the records
+ * A denial identified by a key. In a bulk action using `authorizeIndividualRecords()`, the records
  * denied with the same key are grouped, and the failure notification shows one message per key, computed from the number of
  * records denied with that key and the number selected:
  * `DenyResponse.make('cannot_delete_admin', (failureCount, totalCount) => `${failureCount} of the selected users were admins.`)`.

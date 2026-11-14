@@ -100,7 +100,7 @@ export const ASSET_VERSION = '5.11.2.0';
 
 /** The signed-in user. Your auth provider may add any field (role, team…): policies receive it as-is. */
 export type User = { id: string | number; name: string; email: string; [key: string]: unknown };
-/** Avatar URL of a user or tenant without one of its own (Filament's `AvatarProvider`): a function, or an object with `get()`. */
+/** Avatar URL of a user or tenant without one of its own: a function, or an object with `get()`. */
 export type AvatarProvider = ((record: unknown, name: string, type: 'user' | 'tenant') => string) | { get(record: unknown, name: string, type: 'user' | 'tenant'): string };
 
 /**
@@ -134,7 +134,7 @@ export interface AuthProvider {
     getPasswordFingerprint?(user: User): MaybePromise<string>;
     /** Can this user use this panel? Checked on every request and at login (`false`: 403, or "credentials do not match" at login). */
     canAccessPanel?(user: User, panel: Panel): MaybePromise<boolean>;
-    /** The user's own avatar URL (Filament's `HasAvatar::getFilamentAvatarUrl()`); `null` uses the panel's default avatar provider. */
+    /** The user's own avatar URL; `null` uses the panel's default avatar provider. */
     getAvatarUrl?(user: User): string | null;
     // --- multi-factor authentication (`AppAuthentication`, `SecurityKeyAuthentication`): `knexAuthProvider` implements them all.
     /** Stored authenticator app secret (encrypted by Navette), or `null`. */
@@ -231,7 +231,7 @@ export class Panel {
     getDownloads(): DownloadStorage { return (this._downloads ??= new DiskDownloadStore({ directory: join(process.env.NAVETTE_DOWNLOADS ?? join('storage', 'downloads'), this._id.replace(/[^A-Za-z0-9_-]/g, '-')) })); }
     private _downloadDisks: Record<string, DownloadStorage> = {};
     /**
-     * Named download stores ("disks", as Filament's `fileDisk('s3')`): an export action's `fileDisk(name)` or an exporter's
+     * Named download stores ("disks"): an export action's `fileDisk(name)` or an exporter's
      * `getFileDiskName()` keeps its files in one of them instead of the `downloads()` store.
      */
     downloadDisks(disks: Record<string, DownloadStorage>): this { this._downloadDisks = { ...this._downloadDisks, ...disks }; return this; }
@@ -366,8 +366,6 @@ export class Panel {
         return items.map(({ sort: _sort, ...item }) => item);
     }
     navigationItems(items: NavigationItem[]): this { this._navigationItems.push(...items); return this; }
-    /** Order of navigation groups. */
-    /** Order of the navigation groups: labels, or `NavigationGroup.make('Shop').icon('o-shopping-cart').collapsible(false)`. */
     private _darkMode = true;
     private _darkModeForced = false;
     private _defaultThemeMode: 'light' | 'dark' | 'system' = 'system';
@@ -463,7 +461,7 @@ export class Panel {
      */
     guestAccess(condition = true): this { this._guestAccess = condition; return this; }
     allowsGuests(): boolean { return this._guestAccess; }
-    // --- resources, relation managers and authentication forms (D10)
+    // --- resources, relation managers and authentication forms
     private _globalSearchResourceOptIn = false;
     /** Global search only covers resources that declare `static isGloballySearchable = true` themselves. */
     globalSearchResourceOptIn(condition = true): this { this._globalSearchResourceOptIn = condition; return this; }
@@ -526,7 +524,7 @@ export class Panel {
     authMiddleware(middleware: PanelMiddleware[], isPersistent = false): this { this._authMiddleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent }))); return this; }
     /** Middleware run once the tenant of the request is known, on its pages. */
     tenantMiddleware(middleware: PanelMiddleware[], isPersistent = false): this { this._tenantMiddleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent }))); return this; }
-    /** Middleware run on component updates only (Filament's `persistentMiddleware()`). */
+    /** Middleware run on component updates only. */
     persistentMiddleware(middleware: PanelMiddleware[]): this { this._middleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent: true, componentOnly: true }))); return this; }
     getMiddleware(): PanelMiddlewareEntry[] { return this._middleware; }
     getAuthMiddleware(): PanelMiddlewareEntry[] { return this._authMiddleware; }
@@ -730,7 +728,7 @@ export class Panel {
     /** The login challenge of this panel (enabled providers, rate limiting). */
     getMultiFactorChallenge(): MultiFactorChallenge { return MultiFactorChallenge.make(this); }
     /**
-     * An identifier of the user unique across the panels of the application (Filament's `getUserScopedAuthIdentifier()`): the
+     * An identifier of the user unique across the panels of the application: the
      * panel id and a hash of the user id. Key per-user data with it (pending codes, rate limits), as panels may share user ids.
      */
     getUserScopedAuthIdentifier(user: User): string { return userScopedAuthIdentifier(this, user); }
@@ -759,7 +757,6 @@ export class Panel {
     passwordResetRoutePrefix(prefix: string): this { this._authSlugs.passwordResetPrefix = this.authSlug(prefix); return this; }
     passwordResetRequestRouteSlug(slug: string): this { this._authSlugs.passwordResetRequest = this.authSlug(slug); return this; }
     passwordResetRouteSlug(slug: string): this { this._authSlugs.passwordReset = this.authSlug(slug); return this; }
-    /** Paths of the authentication pages, relative to the panel. */
     /** URL segment of the logout route (`logout` by default). */
     logoutRouteSlug(slug: string): this { this._authSlugs.logout = this.authSlug(slug); return this; }
     /** URL segments of email verification: `<prefix>/<prompt>` and `<prefix>/<verify>/…` (`email-verification/prompt`, `email-verification/verify`). */
@@ -1040,7 +1037,6 @@ export class Panel {
         return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials).replace(/%20/g, '+')}&format=svg&color=FFFFFF&background=${encodeURIComponent(background)}`;
     }
 
-    /** Navigation groups: registered pages plus custom items, sorted, grouped in the declared order. */
     /** Computed navigation badges: page URL → value. */
     async resolveNavigationBadges(): Promise<Map<string, string | number | null>> {
         const badges = new Map<string, string | number | null>();
@@ -1092,7 +1088,7 @@ export class Panel {
         const order = [null, ...declared, ...items.map(keyOf).filter((key): key is string => key !== null && !declared.includes(key))];
         return [...new Set(order)].map((key) => {
             const inGroup = items.filter((item) => keyOf(item) === key);
-            // An item with a parent item is shown below it (an unknown parent hides it, as in Filament).
+            // An item with a parent item is shown below it (an unknown parent hides it).
             const isChildOf = (child: NavigationItem, parent: NavigationItem) => child._parentItem !== null && (child._parentItem === parent.getKey() || child._parentItem === navigationLabelText(parent._label));
             const own = inGroup.filter((item) => item._parentItem === null && (item._url || item._childItems.length || inGroup.some((child) => isChildOf(child, item))))
                 .map((item) => navigationItemView(item, [...item._childItems, ...inGroup.filter((child) => isChildOf(child, item))], viewOptions));
@@ -1227,7 +1223,7 @@ abstract class BasePage extends Component implements SchemaHost {
     contentSchema(schema: Schema): Schema { return schema.components([]); }
     /**
      * Temporary uploads (`_startUpload` / `_finishUpload`) are only accepted for a visible `FileUpload`, `RichEditor` or
-     * `MarkdownEditor` of this component's schemas (Filament's `RestrictsFileUploadsToSchemaComponents`, here on by default).
+     * `MarkdownEditor` of this component's schemas (on by default).
      * Set `static restrictFileUploadsToSchemaComponents = false` on a component that receives uploads another way.
      */
     static restrictFileUploadsToSchemaComponents = true;
@@ -1294,7 +1290,7 @@ abstract class BasePage extends Component implements SchemaHost {
     mountedActions: MountedActionState[] = [];
     /** Files uploaded by rich editors (`componentFileAttachments.<state path>.<id>`), stored by the editor when it asks for their URL. */
     componentFileAttachments: Record<string, unknown> = {};
-    // --- action opened when the page loads (`?action=…`, Filament's `#[Url]` properties). Set from the URL on the first
+    // --- action opened when the page loads (`?action=…`). Set from the URL on the first
     // render, or by a page (`defaultAction = 'onboarding'`); never by the browser afterwards.
     /** Name of an action of this component opened when it loads (`?action=`). */
     defaultAction: string | null = null;
@@ -1794,7 +1790,7 @@ abstract class BasePage extends Component implements SchemaHost {
 }
 
 const coloredNavigationItem = (item: NavigationItemView) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] });
-/** The lists of a navigation group's dropdown: an item with children forms its own list with them (Filament's `$lists`). */
+/** The lists of a navigation group's dropdown: an item with children forms its own list with them. */
 function navigationDropdownLists(items: NavigationItemView[]): (NavigationItemView & { colorClasses: string[] })[][] {
     const lists: (NavigationItemView & { colorClasses: string[] })[][] = [];
     for (const item of items) {
@@ -1824,9 +1820,9 @@ export class Page extends BasePage {
     static navigationSort = 0;
     static navigationBadge: string | number | null = null;
     static navigationBadgeColor = 'primary';
-    /** Tooltip of the navigation badge (Filament's `$navigationBadgeTooltip`). */
+    /** Tooltip of the navigation badge. */
     static navigationBadgeTooltip: string | null = null;
-    /** Icon of the navigation item while the page is open (Filament's `$activeNavigationIcon`). */
+    /** Icon of the navigation item while the page is open. */
     static activeNavigationIcon: string | null = null;
     /** Label of another menu item of the group, below which this page is shown. */
     static navigationParentItem: string | null = null;
@@ -1906,7 +1902,7 @@ export class Page extends BasePage {
     getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
     getHeaderActions(): Action[] { return []; }
     getPageClasses(): string[] { return []; }
-    /** Alignment of the header actions: `start` (default), `center`, `end`, `between`… (Filament's `$headerActionsAlignment`). */
+    /** Alignment of the header actions: `start` (default), `center`, `end`, `between`… */
     static headerActionsAlignment: string | null = null;
     getHeaderActionsAlignment(): string | null { return (this.constructor as typeof Page).headerActionsAlignment; }
     /** Text under the heading: a string is escaped, an `HtmlString` is inserted as is. */
@@ -2074,8 +2070,7 @@ export class Dashboard extends Page {
     static navigationSort = -2;
     /** Filters form state. Stays `null` while the page has no filters. */
     filters: Record<string, unknown> | null = null;
-    /** Dashboard widgets. Defaults to the panel's (`panel.widgets([...])`). */
-    /** The panel's widgets, ordered by their `sort` (stable). */
+    /** Dashboard widgets: the panel's (`panel.widgets([...])`), ordered by their `sort` (stable). */
     getWidgets(): WidgetEntry[] { return [...this.panel.getWidgets()].map((widget, index) => ({ widget, index })).sort((a, b) => (widgetClassOf(a.widget).sort ?? Infinity) - (widgetClassOf(b.widget).sort ?? Infinity) || a.index - b.index).map(({ widget }) => widget); }
     /** Grid columns: a number (at the `lg` breakpoint), or one number per breakpoint. */
     getColumns(): number | Record<string, number> { return 2; }
@@ -2652,7 +2647,7 @@ export class Login extends SimplePage {
         }
         // The password is checked on every submission, the challenge's included: a password changed meanwhile ends it.
         const user = await panel.getAuth().attempt(String(this.data.email), String(this.data.password));
-        // As in Filament: a valid account that may not use this panel gets the same message as wrong credentials.
+        // A valid account that may not use this panel gets the same message as wrong credentials.
         if (!user || !(await panel.userCanAccess(user))) { this.cancelMultiFactorChallenge(); this.addError('data.email', t('navette-panels::auth/pages/login.messages.failed')); return; }
         if (this.isUndertakingMultiFactorAuthentication() && String(this._multiFactorUser!.id) === String(user.id)) {
             const challenge = panel.getMultiFactorChallenge();
@@ -2787,7 +2782,7 @@ export abstract class Resource {
     /** Who can do what on this resource. Without a policy, any signed-in user can do everything. */
     static policy: Policy | null = null;
     /**
-     * `true`: no authorization at all for this resource (Filament's `$shouldSkipAuthorization`): every ability is granted to
+     * `true`: no authorization at all for this resource: every ability is granted to
      * any user who can use the panel, without asking the policy nor the panel's `authorizeUsing()` hook.
      */
     static shouldSkipAuthorization = false;
@@ -2815,7 +2810,7 @@ export abstract class Resource {
     /** Simple resource: a single page, with create and edit in modals. */
     static isSimple = false;
 
-    // -------------------------------------------------------------- nesting (Filament's $parentResource)
+    // -------------------------------------------------------------- nesting
     /**
      * Nested resource: the parent resource under whose records this one is served (`/projects/{project}/tasks/create`).
      * It has no list nor menu item: its records are listed by a relation manager or related page of the parent
@@ -2827,7 +2822,7 @@ export abstract class Resource {
     /** How this resource is nested: from `parentResource` by default; override it to change the relationship names or the foreign key. */
     static getParentResourceRegistration(): ParentResourceRegistration | null { return resolveResourceReference(this.parentResource)?.asParent(this) ?? null; }
     /**
-     * Limits the adapter to the records of a parent record (Filament's `scopeEloquentQueryToParent()`). Defaults to
+     * Limits the adapter to the records of a parent record. Defaults to
      * `adapter.scopedTo(<foreign key>, parentKey)`; `parentRecord` is `null` when called for a relation manager.
      */
     static scopeAdapterToParent(adapter: DataAdapter, parentKey: string, _parentRecord: unknown = null): DataAdapter { return scopeAdapterByForeignKey(this, adapter, parentKey); }
@@ -3038,7 +3033,6 @@ export abstract class Resource {
 
 /** Sub-navigation tab of a page; items with a `group` are gathered under its label. */
 export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
-/** A sidebar item, as rendered. */
 /** The cluster a page belongs to: its own, or its resource's. */
 export const clusterOf = (page: unknown): typeof Cluster | null => (page as any)?.cluster ?? (page as any)?.resource?.cluster ?? (page as any)?.parentResource?.cluster ?? null;
 type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
@@ -3095,7 +3089,7 @@ export abstract class Widget extends BasePage {
 }
 
 /**
- * Widget rendered by a JavaScript module (Filament's `HasJsRenderer`): plain DOM code, React, Vue, Svelte… The module's default
+ * Widget rendered by a JavaScript module: plain DOM code, React, Vue, Svelte… The module's default
  * export receives `{ host, props, utilities }`, where `props.configuration` is `getRendererConfiguration()` and `utilities.$wire`
  * calls the widget's `static callable` methods. When the widget renders again, the new configuration goes to the renderer's
  * `update()` without remounting it; another `getRenderer()` remounts it.
@@ -3626,7 +3620,7 @@ export abstract class ChartWidget extends Widget {
 
 /**
  * Table in a widget: search, sort, simple pagination (previous / next).
- * A subclass provides `table(table)` and `getDataAdapterForTable()`. No actions or filters yet.
+ * A subclass provides `table(table)` and `getDataAdapterForTable()`. It has no actions or filters.
  */
 export abstract class TableWidget extends Widget implements TableHost {
     static columnSpan: ColumnSpan = 'full';
@@ -4336,8 +4330,8 @@ export class ListRecords extends Page implements TableHost {
         // The trashed filter shows deleted records: their row actions must find them, no other key is reachable this way.
         const record = trashedFilterValue(this) !== null && adapter.findWithTrashed ? await adapter.findWithTrashed(context.recordKey) : await adapter.find(context.recordKey);
         if (!record) return null;
-        // As in Filament, the record must still match the active tab, unless the tab is `excludeQueryWhenResolvingRecord()`.
-        // As in Filament, it must also match the applied filters, except those marked `excludeWhenResolvingRecord()`.
+        // The record must still match the active tab, unless the tab is `excludeQueryWhenResolvingRecord()`.
+        // It must also match the applied filters, except those marked `excludeWhenResolvingRecord()`.
         if (!(await recordMatchesTableFilters(this.getTable(), this, adapter, adapter.getKey(record)))) return null;
         const tab = this.getTabs()[this.getActiveTabKey()];
         const modifier = tab?.getQuery();
@@ -4369,7 +4363,7 @@ export class ListRecords extends Page implements TableHost {
         // The selection comes from the browser: it is narrowed to records this table can actually display.
         if (!this.isTrackingDeselectedTableRecords) {
             keys = await adapter.keysInScope(clean(this.selectedTableRecords));
-            // As in Filament, the selection is narrowed to the filtered query unless `deselectAllRecordsWhenFiltered(false)`.
+            // The selection is narrowed to the filtered query unless `deselectAllRecordsWhenFiltered(false)`.
             if (keys.length && table.shouldDeselectAllRecordsWhenFiltered() && table.getFilters().length) keys = await adapter.listKeys({ ...getTableQuery(table, this), keys });
         } else {
             const excluded = new Set(clean(this.deselectedTableRecords));
@@ -4631,7 +4625,7 @@ export class TableSelectComponent extends ListRecords {
         return typeof context.schemaComponent === 'string' ? this.getSchemaComponentActions(context.schemaComponent) : [];
     }
     protected async resolveActionRecord(): Promise<unknown> { return null; }
-    /** The selection survives filtering and searching (Filament's `deselectAllRecordsWhenFiltered(false)`). */
+    /** The selection survives filtering and searching (`deselectAllRecordsWhenFiltered(false)`). */
     dispatch(name: string, params: Record<string, unknown> | unknown[] = {}, options: { self?: boolean } = {}): void {
         if (name === 'deselectAllTableRecords') return;
         super.dispatch(name, params, options);
@@ -4680,7 +4674,7 @@ export class RelationManager extends ListRecords {
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
     /**
-     * Nested resource managing these records (Filament's `$relatedResource`): its table, form, labels and policy are used, the
+     * Nested resource managing these records: its table, form, labels and policy are used, the
      * relationship comes from its nesting, and the create, edit and view actions open its pages instead of modals.
      * A function returning the resource (`() => TaskResource`) breaks circular imports.
      */
@@ -4711,7 +4705,7 @@ export class RelationManager extends ListRecords {
     static getBadgeTooltip(): string | null { return this.badgeTooltip; }
     /** `true`: the badge is loaded after the page is displayed (for an expensive count). */
     static isBadgeLazyLoaded: boolean | null = null;
-    /** Whether the badge is lazy loaded for this record and page (Filament's `isBadgeLazyLoaded()` method). */
+    /** Whether the badge is lazy loaded for this record and page. */
     static shouldLazyLoadBadge(_ownerRecord: any, _pageClass: typeof Page): boolean { return this.isBadgeLazyLoaded ?? false; }
     /**
      * The manager's tab: a `Tab` (from `@navette-js/schemas`) with its title, icon and badge. Override it to change them:
@@ -4799,7 +4793,7 @@ export class RelationManager extends ListRecords {
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
-        // As in Filament, the manager's class name prefixes its query string parameters (`?commentsRelationManagerPage=2`).
+        // The manager's class name prefixes its query string parameters (`?commentsRelationManagerPage=2`).
         const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()).queryStringIdentifier(lcfirst(manager.name))).withoutComponentsHiddenOn(this);
         // With a related resource, rows link to its view or edit page.
         if (manager.getRelatedResource()) return linkRelatedRecords(table, this.resource);
@@ -4808,7 +4802,7 @@ export class RelationManager extends ListRecords {
         return hasEdit ? table.recordAction('edit') : table;
     }
     /**
-     * Every record of the related model (Filament's relationship query without constraints): with it, `searchAttachable()`,
+     * Every record of the related model, without the relationship's constraints: with it, `searchAttachable()`,
      * `attachableLabel()`, `searchAssociable()` and `associableLabel()` need not be written. They offer its records matching
      * the search in `recordTitleAttribute` (or the action's `recordSelectSearchColumns()`), within the action's
      * `recordSelectOptionsQuery()`, except the records already related to the owner (`adapterFor()`), unless the table
@@ -4884,7 +4878,7 @@ export class ManageRelatedRecords extends ListRecords {
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
     static policy: Policy | null = null;
-    /** Nested resource managing these records (Filament's `$relatedResource`), as for a relation manager. */
+    /** Nested resource managing these records, as for a relation manager. */
     static relatedResource: ResourceReference | null = null;
     static getRelatedResource(): typeof Resource | null { return resolveResourceReference(this.relatedResource); }
     /** Data adapter limited to records related to the given owner (the related resource's adapter scoped to the owner, if any). */
@@ -5777,7 +5771,6 @@ const runtimePanels = new WeakMap<WireRuntime, Panel>();
 /** Reserved segments right after a multi-tenant panel's path (they are not tenant keys). */
 const RESERVED_SEGMENTS = new Set(['login', 'logout', 'register', 'password-reset', 'email-verification', 'multi-factor-authentication', 'profile', 'livewire']);
 
-/** Express router for a panel: assets, runtime endpoint, authentication, tenants, protected pages. */
 /** Panels sharing an auth guard: same key and same auth provider, otherwise a user id of one could be read as a user of the other. */
 const guardOwners = new Map<string, Panel>();
 function checkSharedGuard(panel: Panel): void {
@@ -5789,6 +5782,7 @@ function checkSharedGuard(panel: Panel): void {
     if (other.getAuth() !== panel.getAuth()) throw new Error(`Panels "${other.getId()}" and "${panel.getId()}" share the auth guard "${guard}" but not the same auth provider: share the provider, or give one of them authGuard(null) or another guard.`);
 }
 
+/** Express router for a panel: assets, runtime endpoint, authentication, tenants, protected pages. */
 export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     checkSharedGuard(panel);
     const owner = runtimePanels.get(runtime);
@@ -6043,7 +6037,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const guarded = async (res: Response, render: () => Promise<void>) => {
         try { await render(); } catch (error) {
             if (error instanceof WireError && (error.status === 404 || error.status === 403)) return renderErrorPage(panel, res.req, res, error.status);
-            // Too many items to process (`maxItemsForProcessing()`): 413, as in Filament.
+            // Too many items to process (`maxItemsForProcessing()`): 413.
             if (Number((error as any)?.status) === 413) return renderErrorPage(panel, res.req, res, 413);
             throw error;
         }
@@ -6178,7 +6172,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const requiresSubscription = async (PageClass: typeof Page, ctx: PanelContext): Promise<boolean> =>
         Boolean(ctx.tenant) && PageClass.isTenantSubscriptionRequired(panel) && !(await panel.getTenantBillingProvider()!.isSubscribed!(ctx.tenant));
     if (!panel.hasTenancy() && !panel.getPages().some((page) => page.slug === '')) {
-        // Panel root without a dashboard: the first menu page, as in Filament.
+        // Panel root without a dashboard: the first menu page.
         router.get(panel.getBaseUrl(), async (req, res) => {
             const ctx = await pageContext(req, res);
             if (!ctx) return;
@@ -6271,5 +6265,5 @@ function assertAuthCapabilities(panel: Panel): void {
     if (panel.hasEmailChangeVerification()) missing('Email change verification', ['update', 'findByEmail']);
 }
 
-/** @deprecated `ReplicateAction` is now a class: use it as the type. */
+/** @deprecated `ReplicateAction` is a class: use it as the type. */
 export type ReplicateActionInstance = import('./record-actions.ts').ReplicateAction;

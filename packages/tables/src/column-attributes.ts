@@ -1,6 +1,6 @@
 // Extra HTML attributes of columns, column groups, cells and images (`extraAttributes()`, `extraCellAttributes()`,
-// `extraHeaderAttributes()`, `extraImgAttributes()`). Unlike Filament, names are checked and values are escaped: a value
-// coming from a record cannot break out of its attribute.
+// `extraHeaderAttributes()`, `extraImgAttributes()`). Names are checked and values are escaped: a value coming from a record
+// cannot break out of its attribute.
 import { e } from '@navette-js/support';
 
 export type ExtraAttributes = Record<string, string | number | boolean | null | undefined>;
@@ -12,7 +12,7 @@ const ATTRIBUTE_NAME = /^[A-Za-z_@:][A-Za-z0-9_.:@\-]*$/;
 /** Event handler attributes would run scripts: never written. */
 const isEventHandler = (name: string) => /^on/i.test(name);
 
-/** Merges several attribute sets like Filament's `merge()`: classes and styles add up, other attributes are replaced. */
+/** Merges several attribute sets: classes and styles add up, other attributes are replaced. */
 export function mergeExtraAttributes(sets: (ExtraAttributes | null | undefined)[]): ExtraAttributes {
     const merged: ExtraAttributes = {};
     for (const set of sets) {

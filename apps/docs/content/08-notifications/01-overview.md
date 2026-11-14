@@ -56,7 +56,7 @@ Notification.make()
     .send();
 ```
 
-The title text can contain basic, safe HTML elements. To generate safe HTML with Markdown, you can use `markdownToHtml()` from `@navette-js/support`, wrapped in an `HtmlString` (`raw()`) or passed as a string: `title(markdownToHtml('Saved **successfully**'))`. Like Filament's `sanitizeHtml()`, the HTML is sanitized when the notification is rendered: formatting, links and lists stay, while scripts, event handler attributes, styles and `javascript:` links are removed. Plain text is shown as text (`<` and `&` are escaped).
+The title text can contain basic, safe HTML elements. To generate safe HTML with Markdown, you can use `markdownToHtml()` from `@navette-js/support`, wrapped in an `HtmlString` (`raw()`) or passed as a string: `title(markdownToHtml('Saved **successfully**'))`. The HTML is sanitized when the notification is rendered: formatting, links and lists stay, while scripts, event handler attributes, styles and `javascript:` links are removed. Plain text is shown as text (`<` and `&` are escaped).
 
 ## Setting a status
 
@@ -189,7 +189,7 @@ Notification.make()
     .send();
 ```
 
-Like in Filament, notification actions are small links by default (`size('sm')` and `link()`), unless they choose another style with `button()`, `iconButton()` or `badge()`, or another size with `size()`. At most ten actions are kept. An action's label defaults to its name in words (`'undoEdit'` becomes "Undo edit").
+Notification actions are small links by default (`size('sm')` and `link()`), unless they choose another style with `button()`, `iconButton()` or `badge()`, or another size with `size()`. At most ten actions are kept. An action's label defaults to its name in words (`'undoEdit'` becomes "Undo edit").
 
 ### Opening URLs from notification actions
 
@@ -363,7 +363,7 @@ The keys are `label`, `url`, `openUrlInNewTab`, `close`, `dispatch` (`{ event, d
 
 ### The array format of actions
 
-Notification actions are kept in Filament's array format, so that the notifications table can be shared with a Filament application. `Action.toArray()` and `ActionGroup.toArray()` return it, and `Action.fromArray()` and `ActionGroup.fromArray()` rebuild an action from it. Data read from the database or sent by the browser is checked: unknown names, colors, icons, sizes and views are dropped.
+Notification actions are stored in an array format. `Action.toArray()` and `ActionGroup.toArray()` return it, and `Action.fromArray()` and `ActionGroup.fromArray()` rebuild an action from it. Data read from the database or sent by the browser is checked: unknown names, colors, icons, sizes and views are dropped.
 
 ## Sending notifications from JavaScript
 
@@ -454,7 +454,7 @@ The position applies to every panel of the Node.js process.
 
 ## Notifications as arrays
 
-`Notification.fromArray(data)` builds a notification from Filament's array format (`Notification::toArray()`, the JSON of `NavetteNotification`), with its actions and action groups. The data is treated as untrusted: unknown statuses, colors, icons and event names are dropped, an unsafe id is replaced by a random one, and durations are bounded. `getData()` returns the notification's data, and `getBroadcastMessage()` the message that [`broadcast()`](broadcast-notifications) sends to the browser (the same data, with its actions in the array format and `format: 'navette'`; the page sends it back to the server, which reads it with `fromArray()`):
+`Notification.fromArray(data)` builds a notification from its array format (the JSON of `NavetteNotification`), with its actions and action groups. The data is treated as untrusted: unknown statuses, colors, icons and event names are dropped, an unsafe id is replaced by a random one, and durations are bounded. `getData()` returns the notification's data, and `getBroadcastMessage()` the message that [`broadcast()`](broadcast-notifications) sends to the browser (the same data, with its actions in the array format and `format: 'navette'`; the page sends it back to the server, which reads it with `fromArray()`):
 
 ```ts
 import { Notification } from '@navette-js/panels';

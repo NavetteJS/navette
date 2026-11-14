@@ -79,7 +79,7 @@ test('TextEntry: getCharacterLimit() and limit() functions', async () => {
     assert.equal(entry.getCharacterLimit(), 5);
     assert.equal(entry.getCharacterLimitEnd(), '...');
     assert.equal(TextEntry.make('x').getCharacterLimit(), null);
-    // The tooltip shows the full text only when it is cut, as in Filament's docs.
+    // The tooltip shows the full text only when it is cut.
     const limited = TextEntry.make('title').limit(5).tooltip((_record, state) => (String(state).length > (limited.getCharacterLimit() ?? Infinity) ? String(state) : null));
     let html = await render({ title: 'Hello world' }, [limited]);
     assert.match(html, />Hello\.\.\.</);

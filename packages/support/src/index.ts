@@ -1,8 +1,8 @@
+// @navette-js/support — shared building blocks: escaping, attribute bags, JS serialization, lazy evaluation, colors, icons,
+// namespaced EJS views.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { camel, compileComponentTags, isHtmlAttribute } from './components.ts';
 import { cspNonceAttribute } from './csp.ts';
-// @navette-js/support — shared building blocks: escaping, attribute bags, JS serialization, lazy evaluation, colors, icons,
-// namespaced EJS views.
 import ejs from 'ejs';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -219,7 +219,7 @@ export function isLight(color: string): boolean {
     return +m[1] >= 0.65;
 }
 
-/** Picks accessible background and text shades for a filled button (Filament's default `ButtonComponentColorMap` candidates). */
+/** Picks accessible background and text shades for a filled button (the default `ButtonComponentColorMap` candidates). */
 export function buttonColorMap(palette: Palette, minRatio = WCAG_AA_TEXT): Record<string, number> {
     return ButtonComponentColorMap.make(palette).minContrastRatio(minRatio).lightBackground(600, 500).lightBackground(400, 300, 500).darkBackground(600, 500, 700).get();
 }
@@ -303,8 +303,7 @@ export class ColorManager {
     /** Bumped by `overrideColorMap()`: the class caches of every color manager are keyed by it. */
     private static colorMapGeneration = 0;
     /**
-     * Replaces the shade selection of a component, for every panel (Filament: extending the component class, overriding
-     * `getColorMap()` and binding it in the container). `null` restores the default. The resolver receives the palette,
+     * Replaces the shade selection of a component, for every panel. `null` restores the default. The resolver receives the palette,
      * the gray palette, the color name and the default map, and returns slots (`bg`, `text`, `dark:hover:text`…) mapped to shades.
      */
     static overrideColorMap(component: ColoredComponent, resolver: ColorMapResolver | null): void {
@@ -395,7 +394,7 @@ const iconSets = new Map<string, IconSetResolver>();
 const ICON_SET_PREFIX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const ICON_SET_NAME = /^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$/;
 
-// Alternative spellings of Filament's aliases (Filament's `IconManager::ALIASES`): both resolve to the same icon.
+// Alternative spellings of some icon aliases: both resolve to the same icon.
 const RICH_EDITOR_TOOLS = 'align-center align-end align-justify align-start attach-files blockquote bold bullet-list clear_formatting code code-block custom-blocks details grid grid_add_column_after grid_add_column_before grid_delete grid_delete_column h1 h2 h3 h4 h5 h6 highlight horizontal-rule italic lead link merge-tags ordered-list paragraph redo small strike subscript superscript table table_add_column_after table_add_column_before table_add_row_after table_add_row_before table_delete table_delete_column table_delete_row table_merge_cells table_split_cell table_toggle_header_cell table_toggle_header_row text-color underline undo'.split(' ');
 const ALIAS_SPELLINGS: Record<string, string> = {
     ...Object.fromEntries(RICH_EDITOR_TOOLS.map((tool) => [`forms::components.rich-editor.toolbar.${tool.replace(/_/g, '-')}`, `forms:components.rich-editor.toolbar.${tool}`])),
@@ -454,7 +453,7 @@ function loadIconifyPackage(name: string): IconifyJson {
 }
 
 /**
- * Icon registry, like Filament's `FilamentIcon` facade and the Blade Icons sets:
+ * Icon registry:
  * - `alias()` replaces an icon of the interface by its alias (`panels::sidebar.collapse-button`),
  * - `registerSet()` and `registerIconify()` add other icon sets, used as `prefix:name` (`lucide:house`),
  * - `register()` adds a single icon.
@@ -477,7 +476,7 @@ export const icons = {
             else throw new Error(`icons.alias(${key}) expects an icon name or an HtmlString.`);
         }
     },
-    /** Icon registered for the first alias that has one (Filament's `FilamentIcon::resolve()`), or `null`. */
+    /** Icon registered for the first alias that has one, or `null`. */
     resolve(alias: string | string[]): string | null {
         for (const key of Array.isArray(alias) ? alias : [alias]) {
             const name = iconAliases.get(normalizeIconAlias(key));
@@ -504,7 +503,7 @@ export const icons = {
     },
     /** Registers a single icon (same as `registerIcon()`). */
     register(name: string, svg: string): void { registerIcon(name, svg); },
-    /** Whether the name designates an icon that can be rendered (Heroicons, Filament icons, registered icons and sets). */
+    /** Whether the name designates an icon that can be rendered (Heroicons, `nv-` icons, registered icons and sets). */
     has(name: string): boolean {
         try { iconSvg(name); return true; } catch { return false; }
     },
@@ -524,7 +523,7 @@ function iconSvg(name: string): string {
         if (typeof resolved !== 'string' || !/^<svg[\s>]/.test(resolved.trim())) throw new Error(`Icon not found: ${name}`);
         svg = resolved.trim();
     } else {
-        // `nv-o-crop`: Filament's own icons (MIT), shipped next to Heroicons.
+        // `nv-o-crop`: the icons of `icons/navette` (MIT, see its LICENSE.md), shipped next to Heroicons.
         const file = name.startsWith('nv-') ? here(`../icons/navette/${name.slice(3).replace(/[^a-z0-9-]/g, '')}.svg`) : here(`../icons/heroicons/${name.replace(/^heroicon-/, '').replace(/[^a-z0-9-]/g, '')}.svg`);
         if (!existsSync(file)) throw new Error(`Icon not found: ${name}`);
         svg = readFileSync(file, 'utf8').trim();
@@ -534,9 +533,9 @@ function iconSvg(name: string): string {
 }
 
 /**
- * Icon markup with the `nv-icon nv-size-<size>` classes: a Heroicons name (`m-eye`, `o-user`, `s-…`, `c-…`), a Filament
+ * Icon markup with the `nv-icon nv-size-<size>` classes: a Heroicons name (`m-eye`, `o-user`, `s-…`, `c-…`), a Navette
  * icon (`nv-o-crop`), a registered icon, an icon of a registered set (`lucide:house`) or HTML. With `alias`, the icon
- * registered for that alias (`icons.alias()`) replaces the given one, like Filament's `generate_icon_html()`.
+ * registered for that alias (`icons.alias()`) replaces the given one.
  */
 export function icon(name: IconValue, options: { size?: string; attributes?: Attributes; alias?: string | string[] } = {}): string {
     if (options.alias) name = icons.resolve(options.alias) ?? name;
@@ -554,8 +553,8 @@ export function registerIcon(name: string, svg: string): void {
 export type LoadingIndicatorRenderer = (attributes: Attributes) => string;
 let loadingIndicatorRenderer: LoadingIndicatorRenderer | null = null;
 /**
- * Replaces the loading indicator everywhere (buttons, tables, modals, `<x-loading-indicator>`): Filament's `LoadingIndicator`
- * contract. `null` restores the default spinner.
+ * Replaces the loading indicator everywhere (buttons, tables, modals, `<x-loading-indicator>`).
+ * `null` restores the default spinner.
  */
 export function useLoadingIndicator(renderer: LoadingIndicatorRenderer | null): void { loadingIndicatorRenderer = renderer; }
 /** Loading spinner SVG (or the indicator given to `useLoadingIndicator()`). */

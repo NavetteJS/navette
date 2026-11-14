@@ -94,7 +94,7 @@ export function relationshipPathOf(name: string): string | null {
 const isBlank = (value: unknown) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 
 /**
- * State of a dot-notation name read from a record, like Filament's `getStateFromRecord()`: `author.name` reads `record.author.name`.
+ * State of a dot-notation name read from a record: `author.name` reads `record.author.name`.
  * When a step is a list of related records (has-many, many-to-many), the state is the list of the non-blank values found in each of
  * them (`comments.author.name`); a single related record gives its value. An attribute of the record named like the full path
  * (`record['author.name']`, e.g. computed by a custom adapter) takes precedence.

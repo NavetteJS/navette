@@ -16,7 +16,7 @@ const relationOf = (model: any, name: string): any => {
 };
 
 /**
- * Resolves a dot-notation column name (`author.name`, `author.country.name`) on a model, like Filament's `getRelationshipName()`:
+ * Resolves a dot-notation column name (`author.name`, `author.country.name`) on a model:
  * the leading segments that are relationships of the model (`relationMappings`) form the relationship path, the rest is the
  * attribute. Returns `null` when the name is not a relationship column: no dot, a column qualified with the model's own table
  * (`posts.title`), or a first segment that is not a relationship (e.g. a JSON attribute).
@@ -59,7 +59,7 @@ export function whereRelationshipExists(query: any, model: any, column: Relation
 }
 
 /**
- * Correlated subquery of the value of a relationship column, for sorting (Filament's `RelationshipOrderer`): only single-record
+ * Correlated subquery of the value of a relationship column, for sorting: only single-record
  * relationships (belongs-to-one, has-one, has-one-through) can be sorted on.
  */
 export function relationshipValueQuery(model: any, column: RelationshipColumn): any {
@@ -175,7 +175,7 @@ export async function updateRelatedRecord(record: any, name: string, value: unkn
 
 /**
  * Query of the distinct related records of the records of `listQuery` through a relationship column (`items.price` → the items of
- * the listed orders), like Filament's relationship summaries: each related record is included once.
+ * the listed orders): each related record is included once.
  */
 export function relatedRecordsOf(listQuery: any, model: any, column: RelationshipColumn): any {
     const related = column.relatedModel;

@@ -1,4 +1,4 @@
-// Schemas a panel component accepts uploads for (Filament's `RestrictsFileUploadsToSchemaComponents`): its named
+// Schemas a panel component accepts uploads for: its named
 // schemas (`formSchema()`, `infolistSchema()`, `contentSchema()`, any `<name>Schema(schema)` builder) and the forms of
 // its mounted actions.
 import type { Schema } from '@navette-js/schemas';

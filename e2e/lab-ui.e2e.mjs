@@ -1,4 +1,4 @@
-// Notification actions (D11): real Actions with icons, tooltips, a disabled state and a group whose items dispatch events and
+// Notification actions: real Actions with icons, tooltips, a disabled state and a group whose items dispatch events and
 // close the notification; sanitized HTML body; text entry suffix actions; images of a private storage behind temporary signed
 // URLs. Run by e2e/run.mjs on the `/lab` "UI lab" page (not registered with NAVETTE_NO_THEMES).
 import { chromium } from 'playwright';
@@ -88,7 +88,7 @@ try {
 
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));
 } catch (error) {
-    await page.screenshot({ path: path.join(tmpDir, 'd11-ui.png') }).catch(() => {});
+    await page.screenshot({ path: path.join(tmpDir, 'lab-ui.png') }).catch(() => {});
     throw error;
 } finally {
     await browser.close();

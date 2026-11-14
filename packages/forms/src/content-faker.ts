@@ -1,6 +1,5 @@
 // Fake content for seeders and tests: `RichEditor.fake()` (a TipTap document, stored as HTML or JSON) and `MarkdownEditor.fake()`
-// (Markdown), as Filament's `fake()->filamentRichContent()` and `fake()->filamentMarkdown()`. Blocks are chained, then the
-// content is produced; a `seed` makes the output reproducible.
+// (Markdown). Blocks are chained, then the content is produced; a `seed` makes the output reproducible.
 import type { CustomBlockClass, MentionProvider, TextColor } from './rich-content.ts';
 
 // ------------------------------------------------------------------ random values
@@ -206,7 +205,7 @@ export class RichContentFaker extends ContentFaker {
     protected renderer: ((document: RichNode) => string | Promise<string>) | null = null;
     constructor(options: RichContentFakerOptions = {}) { super(options); this.editor = options.editor ?? null; }
     static make(options: RichContentFakerOptions = {}): RichContentFaker { return new this(options); }
-    /** Uses an editor's configuration (Filament's `attribute()`). */
+    /** Uses an editor's configuration (custom blocks, merge tags, mentions…). */
     attribute(editor: FakerEditor | null): this { this.editor = editor; return this; }
     protected step(callback: () => void | Promise<void>): this { this.steps.push(callback); return this; }
     protected addArticleIntroduction(): void { this.lead(); }

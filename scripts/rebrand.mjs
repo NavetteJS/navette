@@ -1,10 +1,10 @@
-// Renames the Filament-branded names of vendored Filament files (CSS, bundled JavaScript, markup) to Navette's own:
+// Renames the upstream-branded names of vendored files (CSS, bundled JavaScript, markup) to Navette's own:
 // `fi-*` classes and data attributes become `nv-*`, asset folders `filament` become `navette`, JavaScript globals,
 // Alpine component names, storage keys, view and translation namespaces and the notifications header follow.
 // License files and credits are left untouched.
 //
 // As a module: `import { rebrand, rebrandPath } from './rebrand.mjs'` (used by the vendoring tools, so that a new
-// Filament release is vendored with the same names). As a script: `node scripts/rebrand.mjs [--apply]` rewrites the
+// upstream release is vendored with the same names). As a script: `node scripts/rebrand.mjs [--apply]` rewrites the
 // tracked files of this repository and moves the renamed folders (dry run without `--apply`).
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -26,7 +26,7 @@ export const RULES = [
     [/\bjs\/filament\//g, 'js/navette/'],
     [/\b(dist|resources|assets|icons)\/filament\b/g, '$1/navette'],
     // View and translation namespaces (`filament-panels::`, `filament::`), and view overrides `views/vendor/filament-*`.
-    // Blade tags such as `<x-filament-actions::modals />` (Filament's own syntax, quoted in comments) are kept.
+    // Blade tags such as `<x-filament-actions::modals />` (upstream syntax, quoted in comments) are kept.
     [new RegExp(`(?<![\\w-])filament(-${PACKAGES})?::`, 'g'), 'navette$1::'],
     [/<(\/?)x-filament::link\b/g, '<$1x-navette::link'],
     [new RegExp(`\\bvendor/filament(-${PACKAGES})?/`, 'g'), 'vendor/navette$1/'],
@@ -46,7 +46,7 @@ export const RULES = [
     [/(?<![\w$\\-])Filament(?=(?:Notification\w*|RichEditor)\b)/g, 'Navette'],
 ];
 
-/** References to Filament's own API in prose ("Filament's `fake()->filamentMarkdown()`"), kept as they are. */
+/** References to the upstream API in prose ("Filament's `fake()->filamentMarkdown()`"), kept as they are. */
 const QUOTED = /Filament's `[^`\n]*`/g;
 const MARK = '\u{E000}';
 

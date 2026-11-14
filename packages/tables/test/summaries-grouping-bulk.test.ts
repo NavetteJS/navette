@@ -37,7 +37,7 @@ test('Count.icons(): occurrences of each icon of an icon column, by color, witho
     const table = new Table().pluralModelLabel('tasks').columns([TextColumn.make('title'), IconColumn.make('is_done').boolean().summarize(Count.make().icons())]);
     const html = clean(await renderTable(table, host(), adapter));
     const summary = html.slice(html.indexOf('nv-ta-summary-row'));
-    // 3 done (success check), 2 not done (danger x); the null state has no icon. No label: Filament's default for icon counts.
+    // 3 done (success check), 2 not done (danger x); the null state has no icon. Icon counts have no label by default.
     assert.match(summary, /<div class="nv-ta-icon-count-summary"><ul><li>/);
     assert.match(summary, /<li><span>3<\/span><svg[^>]*class="[^"]*nv-color nv-color-success[^"]*"/);
     assert.match(summary, /<li><span>2<\/span><svg[^>]*class="[^"]*nv-color nv-color-danger[^"]*"/);
@@ -56,7 +56,7 @@ test('Count.icons(): custom icons and colors, a label, the page and the group ro
     const table = new Table().pluralModelLabel('tasks').columns([TextColumn.make('title'), column]).defaultGroup('status');
     const html = clean(await renderTable(table, host({ tableRecordsPerPage: 5 }), adapter));
     assert.match(html, /<div class="nv-ta-icon-count-summary"><span class="nv-ta-icon-count-summary-label">Statuses<\/span><ul>/);
-    // The archived (gray) icon gets no color class, like Filament's default gray.
+    // The archived (gray) icon gets no color class.
     const archived = html.match(/archived summary<\/th>.*?<\/tr>/)?.[0] ?? '';
     assert.match(archived, /<li><span>2<\/span><svg[^>]*class="nv-icon nv-size-lg"/);
     // "This page" (5 records: 2 archived, 2 draft, 1 published) and "All tasks" (2 of each).
@@ -151,7 +151,7 @@ test('several BulkActionGroups: one menu each, with its own label, icon and colo
     assert.match(menus[1], /<button>C<\/button>/);
     // The rows get selection checkboxes.
     assert.match(html, /nv-ta-record-checkbox/);
-    // The single-menu option still works as before.
+    // A single menu through the `bulkActions` option.
     const single = clean(await renderTable(new Table().columns([TextColumn.make('title')]), host(), adapter, { bulkActions: ['<button>X</button>'] }));
     assert.match(single, /<button title="Bulk actions" type="button"[^>]*class="nv-ac-btn-group nv-icon-btn nv-size-md"><svg[^>]*>.*?<\/svg><\/button><button type="button"[^>]*class="nv-ac-btn-group nv-btn nv-size-md nv-labeled-from-sm"><svg[^>]*>.*?<\/svg> ?Bulk actions ?<\/button>/);
 });

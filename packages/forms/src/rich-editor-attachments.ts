@@ -30,7 +30,7 @@ export async function attachmentIdsOf(document: unknown): Promise<string[]> {
 
 /**
  * URL of a stored attachment: `null` if the storage does not have it. Private files get a temporary URL (until the end of the
- * hour following the next 30 minutes, as Filament), when the storage can sign one. Only local or http(s) URLs are returned.
+ * hour following the next 30 minutes), when the storage can sign one. Only local or http(s) URLs are returned.
  */
 export async function attachmentUrl(storage: AttachmentStorage | null, visibility: AttachmentsVisibility, key: string): Promise<string | null> {
     if (!storage || typeof key !== 'string' || key === '') return null;
@@ -38,8 +38,8 @@ export async function attachmentUrl(storage: AttachmentStorage | null, visibilit
     try { info = await storage.info(key); } catch { return null; }
     if (!info) return null;
     if (visibility === 'private' && typeof storage.temporaryUrl === 'function') {
-        // Expiry as Filament's: 30 minutes from now (`fileUrlConfig`), rounded up to the end of the hour. A storage that cannot
-        // sign (a public `LocalFileStorage` without a key) gives its usual URL.
+        // Expiry: 30 minutes from now, rounded up to the end of the hour. A storage that cannot sign (a public
+        // `LocalFileStorage` without a key) gives its usual URL.
         let temporary: string | null = null;
         try { temporary = await storage.temporaryUrl(key, temporaryFileUrlExpiry()); } catch { temporary = null; }
         if (temporary) return safeFileUrl(temporary);

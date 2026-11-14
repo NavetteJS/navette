@@ -1,4 +1,4 @@
-// Import and export options (Filament parity, checklist D8): import columns (casting, multiple values, relationships, blank
+// Import and export options: import columns (casting, multiple values, relationships, blank
 // state, sensitive data), importer hooks and options, reading options of the action, the fakes, export column formatting,
 // export action options, XLSX styling, and the durable download store.
 import assert from 'node:assert/strict';
@@ -39,7 +39,7 @@ class Item extends Model {
 let db: Knex;
 const user: User = { id: 7, name: 'U', email: 'u@x.test' };
 const adapter = new ObjectionAdapter(Item);
-const dir = mkdtempSync(path.join(tmpdir(), 'navette-d8-'));
+const dir = mkdtempSync(path.join(tmpdir(), 'navette-import-export-options-'));
 const csvFile = (name: string, content: string | Buffer) => { const file = path.join(dir, name); writeFileSync(file, content); return file; };
 
 const hooks: string[] = [];
@@ -113,16 +113,16 @@ class Items extends Resource {
             .groupedBulkActions([ExportBulkAction.make('exportSelected').exporter(ItemExporter)]);
     }
 }
-const panel = Panel.make().id('d8-test').key('k').downloads(new DownloadStore()).resources([Items]);
+const panel = Panel.make().id('import-export-options').key('k').downloads(new DownloadStore()).resources([Items]);
 const page = async () => {
     const ListPage = Items.getPages().index as any;
     const component = new ListPage();
-    component._ctx = { panel, user, mailbox: 'd8', req: { query: {} }, res: {} };
+    component._ctx = { panel, user, mailbox: 'import-export-options', req: { query: {} }, res: {} };
     component._id = 'items';
     await component.mount({});
     return component;
 };
-const run = <T>(fn: () => Promise<T>) => runInRequest('d8', fn);
+const run = <T>(fn: () => Promise<T>) => runInRequest('import-export-options', fn);
 const downloadOf = (url: string) => panel.getDownloads().get(decodeURIComponent(url.split('/downloads/')[1]), user.id) as any;
 const callImport = async (list: any, index: number, data: Record<string, unknown>) => run(() => list.getTable().getHeaderActions()[index].call({ livewire: list, record: null, arguments: {}, data }));
 /** The worksheet and the styles of an XLSX file. */
@@ -209,7 +209,7 @@ test('importer: hooks in order, options, custom messages, validation errors from
     assert.throws(() => created.assertSkipped(), /was imported/);
 });
 
-test('resolveRecord() returning null skips the row in the action too (counted as successful, as in Filament)', async () => {
+test('resolveRecord() returning null skips the row in the action too (counted as successful)', async () => {
     const list = await page();
     const file = csvFile('only-updates.csv', 'name,sku\nKnown,H-1\nUnknown,U-404\n');
     const { pending } = await callImport(list, 1, { file: { file: { path: file, name: 'only-updates.csv' } }, updateOnly: true });
@@ -394,6 +394,6 @@ test('downloads: kept on the disk across restarts, for their owner, until they e
     await downloaderOf(store.get(custom, 7)!)(store.get(custom, 7)!, 'res');
     assert.equal(sent, 'remote.csv:res');
     // The panel stores downloads on the disk by default.
-    assert.ok(Panel.make().id('d8-default').getDownloads() instanceof DiskDownloadStore);
+    assert.ok(Panel.make().id('default-downloads').getDownloads() instanceof DiskDownloadStore);
     void RowImportFailedError;
 });

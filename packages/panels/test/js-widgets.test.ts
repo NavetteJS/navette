@@ -1,4 +1,4 @@
-// JavaScript widgets (Filament's `HasJsRenderer`): markup of the renderer, configuration updates, renderer URL checks,
+// JavaScript widgets: markup of the renderer, configuration updates, renderer URL checks,
 // renderers registered as assets loaded on request, and dashboard filters passed to a renderer.
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -63,7 +63,7 @@ const attribute = (html: string, name: string): string => {
     return match![1].replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 };
 
-test('a JS widget renders Filament\'s js-widget markup in a section', async () => {
+test('a JS widget renders the js-widget markup in a section', async () => {
     const html = await render(RevenueOverview);
     assert.match(html, /^<div wire:snapshot="[^"]*"[^>]* class="nv-wi-widget nv-grid-col lg:nv-grid-col-span nv-wi-js"><section/);
     assert.match(html, /<section x-data="\{[\s\S]*?isCollapsed: {2}false ,[\s\S]*?\}" class="nv-section"><div class="nv-section-content-ctn"><div class="nv-section-content">/);

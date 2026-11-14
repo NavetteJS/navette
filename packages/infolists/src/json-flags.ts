@@ -1,5 +1,5 @@
 /**
- * PHP-compatible `json_encode()` flags, for `CodeEntry.jsonFlags()` (Filament's `jsonFlags(JSON_PRETTY_PRINT | ...)`).
+ * PHP-compatible `json_encode()` flags, for `CodeEntry.jsonFlags()` (`JsonFlags.PRETTY_PRINT | JsonFlags.UNESCAPED_SLASHES`).
  * The values are PHP's, so flags can be combined with `|`.
  */
 export const JsonFlags = {
@@ -77,7 +77,7 @@ function encode(value: unknown, flags: number, depth: number, seen: Set<object>)
     return `${open}${indent}${entries.join(`,${indent}`)}${closing}${close}`;
 }
 
-/** Encodes a value like PHP's `json_encode($value, $flags)`; `JsonFlags.PRETTY_PRINT` by default, as in Filament. */
+/** Encodes a value like PHP's `json_encode($value, $flags)`; `JsonFlags.PRETTY_PRINT` by default. */
 export function encodeJson(value: unknown, flags: number = JsonFlags.PRETTY_PRINT): string {
     return encode(value, flags, 0, new Set()) ?? 'null';
 }

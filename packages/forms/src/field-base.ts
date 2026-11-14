@@ -40,9 +40,9 @@ export abstract class FieldBase extends Component {
     private _lazyProperties: Record<string, (ctx: ComponentContext) => unknown> = {};
     constructor() {
         super();
-        // \`toHtml()\`, \`validate()\`, \`dehydrateState()\` (always awaited) and the asynchronous methods the browser calls see the
+        // `toHtml()`, `validate()`, `dehydrateState()` (always awaited) and the asynchronous methods the browser calls see the
         // values of the properties set with functions (the instance's own wrappers are copied along with the instance by
-        // \`cloneComponentTree()\`).
+        // `cloneComponentTree()`).
         for (const name of ['toHtml', 'validate', 'dehydrateState', 'getOptionsForJs', 'getSearchResultsForJs', 'getUploadedFileAttachmentTemporaryUrl', 'saveUploadedFileAttachmentAndGetUrl']) {
             const original = (this as any)[name];
             if (typeof original !== 'function') continue;
@@ -64,7 +64,7 @@ export abstract class FieldBase extends Component {
         }
         return this;
     }
-    /** Runs \`fn\` with the properties set by functions evaluated (restored afterwards). `a.b` properties are nested. */
+    /** Runs `fn` with the properties set by functions evaluated (restored afterwards). `a.b` properties are nested. */
     protected async withLazyProperties<T>(fn: () => Promise<T>): Promise<T> {
         const entries = Object.entries(this._lazyProperties);
         if (!entries.length) return fn();

@@ -1,4 +1,4 @@
-// Pages, resources, relation managers and users: the D10 options (Filament's pages, resources and relation manager options).
+// Options of pages, resources, relation managers and users.
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { after, before, test } from 'node:test';
@@ -98,10 +98,10 @@ class ReportPage extends Page {
 }
 class CustomHeaderPage extends Page { static slug = 'custom-header'; getHeader() { return '<div class="my-header">Custom</div>'; } }
 
-const adminPanel = Panel.make().id('d10-admin').path('admin').key('d10').authGuard('d10').auth(auth)
+const adminPanel = Panel.make().id('admin').path('admin').key('shared-key').authGuard('shared').auth(auth)
     .resources([AuthorResource, StrictResource, SearchedResource, NotOptedInResource]).pages([Dashboard, ReportPage, CustomHeaderPage]).widgets([Greeting]).globalSearchResourceOptIn();
 // The same resource in a second panel, which forbids deleting.
-const staffPanel = Panel.make().id('d10-staff').path('staff').key('d10').authGuard('d10').auth(auth).resources([AuthorResource]).pages([ReportPage])
+const staffPanel = Panel.make().id('staff').path('staff').key('shared-key').authGuard('shared').auth(auth).resources([AuthorResource]).pages([ReportPage])
     .authorizeUsing(({ ability }) => (ability === 'delete' ? false : undefined));
 
 before(async () => {
@@ -117,17 +117,17 @@ before(async () => {
 after(async () => { await db.destroy(); setCurrentPanel(null); });
 
 test('one resource in two panels: URLs and authorization follow the panel of the request, getUrl({ panel }) targets another', async () => {
-    assert.deepEqual(AuthorResource.getPanels().map((panel) => panel.getId()), ['d10-admin', 'd10-staff']);
+    assert.deepEqual(AuthorResource.getPanels().map((panel) => panel.getId()), ['admin', 'staff']);
     assert.equal(runWithPanel(adminPanel, () => AuthorResource.getUrl('edit', 1)), '/admin/authors/1/edit');
     assert.equal(runWithPanel(staffPanel, () => AuthorResource.getUrl('edit', 1)), '/staff/authors/1/edit');
-    assert.equal(runWithPanel(adminPanel, () => AuthorResource.getUrl('index', undefined, {}, { panel: 'd10-staff' })), '/staff/authors');
+    assert.equal(runWithPanel(adminPanel, () => AuthorResource.getUrl('index', undefined, {}, { panel: 'staff' })), '/staff/authors');
     assert.equal(AuthorResource.getUrl('view', 2, {}, { panel: staffPanel }), '/staff/authors/2');
-    assert.throws(() => StrictResource.getUrl('index', undefined, {}, { panel: 'd10-staff' }), /not registered/);
+    assert.throws(() => StrictResource.getUrl('index', undefined, {}, { panel: 'staff' }), /not registered/);
     assert.equal(await runWithPanel(adminPanel, () => AuthorResource.can('delete', ada)), true);
     assert.equal(await runWithPanel(staffPanel, () => AuthorResource.can('delete', ada)), false);
     // A page class in both panels.
     assert.equal(runWithPanel(staffPanel, () => ReportPage.getUrl()), '/staff/report');
-    assert.equal(ReportPage.getUrl({}, { panel: 'd10-admin' }), '/admin/report');
+    assert.equal(ReportPage.getUrl({}, { panel: 'admin' }), '/admin/report');
     // Each panel's list page links its rows to its own edit pages.
     const inStaff = livewire(AuthorResource.getPages().index, {}, { panel: staffPanel });
     await inStaff.assertOk().assertSeeHtml('/staff/authors/1').assertDontSeeHtml('/admin/authors/1');
@@ -150,7 +150,7 @@ test('one resource in two panels over HTTP: each panel serves the resource with 
         assert.match(await get('/admin/authors'), /href="\/admin\/authors\/1"/);
         // Page options: body attributes and content width of the page, subheading, alignment, footer, widget properties and columns.
         const report = await get('/admin/report');
-        assert.match(report, /<body data-report="yes" class="nv-body nv-panel-d10-admin [^"]*report-body">/);
+        assert.match(report, /<body data-report="yes" class="nv-body nv-panel-admin [^"]*report-body">/);
         assert.match(report, /nv-main nv-width-full/);
         assert.match(report, /<p class="nv-header-subheading">\s*Monthly &lt;figures&gt;\s*<\/p>/);
         assert.match(report, /nv-ac nv-align-end/);
@@ -181,7 +181,7 @@ test('Widget.make() carries properties; skipping authorization; title case label
         assert.equal(SearchedResource.canGloballySearch(), true);
         assert.equal(NotOptedInResource.canGloballySearch(), false);
     });
-    const plain = Panel.make().id('d10-search').key('k').authGuard('d10-search').auth(auth).resources([NotOptedInResource]);
+    const plain = Panel.make().id('search').key('k').authGuard('search').auth(auth).resources([NotOptedInResource]);
     assert.equal(runWithPanel(plain, () => NotOptedInResource.canGloballySearch()), true, 'only with globalSearchResourceOptIn()');
 });
 
@@ -219,7 +219,7 @@ test('view page: the disabled form when there is no infolist, with the fill hook
     // With an infolist, no form.
     class InfolistAuthorResource extends AuthorResource { static slug = 'infolist-authors'; static infolist(schema: Schema) { return schema.components([TextEntry.make('name')]); } }
     InfolistAuthorResource.pages = {};
-    const panel = Panel.make().id('d10-infolist').key('k').authGuard('d10-infolist').auth(auth).resources([InfolistAuthorResource]);
+    const panel = Panel.make().id('infolist').key('k').authGuard('infolist').auth(auth).resources([InfolistAuthorResource]);
     const view = livewire(InfolistAuthorResource.getPages().view, { record: 1 }, { panel });
     await view.assertOk();
     assert.deepEqual(view.instance().data, {});
@@ -244,7 +244,7 @@ test('relation managers: read-only on view pages, properties of make(), hiddenOn
     assert.deepEqual(onEdit.instance().getTable().getFilters().map((filter: any) => filter.name), []);
     await livewire(AuthorResource.getPages().index).assertOk().assertSeeHtml('nv-ta-header-cell-author-id');
     // The panel may keep relation managers editable on view pages.
-    const editable = Panel.make().id('d10-editable').key('k').authGuard('d10-editable').auth(auth).resources([AuthorResource]).readOnlyRelationManagersOnResourceViewPagesByDefault(false);
+    const editable = Panel.make().id('editable').key('k').authGuard('editable').auth(auth).resources([AuthorResource]).readOnlyRelationManagersOnResourceViewPagesByDefault(false);
     const viewInEditable = livewire(ViewAuthor, { record: 1 }, { panel: editable });
     await viewInEditable.assertOk();
     const managerInEditable = livewire(BooksRelationManager, { ownerRecord: '1', pageClass: (viewInEditable.instance() as any)._runtime.nameOf(AuthorResource.getPages().view) }, { panel: editable });
@@ -286,7 +286,7 @@ test('registration and profile forms reuse their components; revealablePasswords
     class CompanyRegister extends Register {
         formSchema(schema: Schema): Schema { return schema.components([this.getNameFormComponent(), this.getEmailFormComponent(), TextInput.make('company'), this.getPasswordFormComponent(), this.getPasswordConfirmationFormComponent()]); }
     }
-    const panel = Panel.make().id('d10-auth').key('k').authGuard('d10-auth').auth({ ...auth, findByEmail: async () => null, create: async () => ada }).login().registration(CompanyRegister).revealablePasswords(false);
+    const panel = Panel.make().id('auth').key('k').authGuard('auth').auth({ ...auth, findByEmail: async () => null, create: async () => ada }).login().registration(CompanyRegister).revealablePasswords(false);
     assert.equal(panel.arePasswordsRevealable(), false);
     const register = livewire(CompanyRegister, {}, { panel, user: null });
     await register.assertOk().assertFormFieldExists('company').assertFormFieldExists('passwordConfirmation');
@@ -297,7 +297,7 @@ test('registration and profile forms reuse their components; revealablePasswords
     class NoPasswordProfile extends EditProfile {
         protected getFormComponents() { return [this.getNameFormComponent(), this.getEmailFormComponent(), this.getCurrentPasswordFormComponent()]; }
     }
-    const profile = livewire(NoPasswordProfile, {}, { panel: Panel.make().id('d10-profile').key('k').authGuard('d10-profile').auth({ ...auth, update: async () => ada }).profile(NoPasswordProfile) });
+    const profile = livewire(NoPasswordProfile, {}, { panel: Panel.make().id('profile').key('k').authGuard('profile').auth({ ...auth, update: async () => ada }).profile(NoPasswordProfile) });
     await profile.assertOk().assertFormFieldExists('name').assertFormFieldDoesNotExist('password');
     // scopedUnique(): among the adapter's records only (soft-deleted ones are left out), unlike unique().
     await db('books').insert({ author_id: 1, title: 'Deleted', deleted_at: '2026-01-01 00:00:00' });
@@ -312,13 +312,13 @@ test('registration and profile forms reuse their components; revealablePasswords
     assert.equal(await rules[0].passes('Deleted', { livewire: {} } as any), true);
     assert.equal(await rules[0].passes('Notes', { livewire: {} } as any), false);
     assert.equal(await rules[1].passes('Notes', { livewire: {} } as any), true);
-    // As in Filament, scopedExists() also accepts soft-deleted records (only the other scopes apply).
+    // scopedExists() also accepts soft-deleted records (only the other scopes apply).
     assert.equal(await rules[1].passes('Deleted', { livewire: {} } as any), true);
 });
 
 test('MultiFactorChallenge outside the login page: enabled providers, form components and rate limiting', async () => {
     const provider = { getId: () => 'code', getLoginFormLabel: () => 'Code', isEnabled: async () => true, getChallengeFormComponents: () => [TextInput.make('code')], getManagementSchemaComponents: () => [] } as any;
-    const panel = Panel.make().id('d10-mfa').key('k').authGuard('d10-mfa').auth(auth).multiFactorAuthentication([provider]);
+    const panel = Panel.make().id('mfa').key('k').authGuard('mfa').auth(auth).multiFactorAuthentication([provider]);
     const challenge = MultiFactorChallenge.make(panel);
     assert.equal(await challenge.hasEnabledProviders(ada), true);
     assert.equal((await challenge.getFirstEnabledProvider(ada))?.getId(), 'code');
@@ -341,14 +341,14 @@ test('combined tabs with a list of relations: the content tab comes first and is
     }
     class ListAuthorResource extends AuthorResource { static slug = 'list-authors'; }
     ListAuthorResource.pages = { edit: ListEditAuthor };
-    const panel = Panel.make().id('d10-list').key('k').authGuard('d10-list').auth(auth).resources([ListAuthorResource]);
+    const panel = Panel.make().id('list').key('k').authGuard('list').auth(auth).resources([ListAuthorResource]);
     const page = livewire(ListEditAuthor, { record: 1 }, { panel });
     await page.assertOk().assertSet('activeRelationManager', '');
     assert.deepEqual([...page.html().matchAll(/data-tab-key="([^"]*)"/g)].map((match) => match[1]), ['', '0', '1']);
     class AfterEditAuthor extends ListEditAuthor { getContentTabPosition() { return ContentTabPosition.After; } }
     class AfterAuthorResource extends AuthorResource { static slug = 'after-authors'; }
     AfterAuthorResource.pages = { edit: AfterEditAuthor };
-    const afterPanel = Panel.make().id('d10-after').key('k').authGuard('d10-after').auth(auth).resources([AfterAuthorResource]);
+    const afterPanel = Panel.make().id('after').key('k').authGuard('after').auth(auth).resources([AfterAuthorResource]);
     const after = livewire(AfterEditAuthor, { record: 1 }, { panel: afterPanel });
     await after.assertOk().assertSet('activeRelationManager', '0');
     assert.deepEqual([...after.html().matchAll(/data-tab-key="([^"]*)"/g)].map((match) => match[1]), ['0', '1', '']);

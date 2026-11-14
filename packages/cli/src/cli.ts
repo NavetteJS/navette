@@ -41,7 +41,7 @@ async function ask(question: string, fallback = ''): Promise<string> {
 async function askSecret(question: string): Promise<string> {
     return process.stdin.isTTY ? readSecret(`  ${question}: `) : '';
 }
-/** A password typed twice; empty: `''`, one is generated. */
+/** Asks for the password twice; returns `''` when left empty (a password is then generated). */
 async function askPassword(): Promise<string> {
     for (;;) {
         const password = await askSecret('Password (at least 8 characters; leave empty to generate one)');

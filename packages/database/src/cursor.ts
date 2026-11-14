@@ -81,7 +81,7 @@ export function cursorOrdersOf(query: any): CursorOrder[] {
 }
 
 /**
- * Words of a search term, like Filament's `str_getcsv()` split: separated by spaces, a double-quoted phrase being one word.
+ * Words of a search term: separated by spaces, a double-quoted phrase being one word.
  */
 export function searchWords(search: string): string[] {
     const words: string[] = [];

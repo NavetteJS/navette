@@ -448,7 +448,7 @@ export abstract class Component {
                 .style([...placementStyle('start', start), ...placementStyle('order', order)]))
             .merge({ 'wire:key': this.getLivewireKey() });
         // A client-side visibility condition (`hiddenJs()` / `visibleJs()`) wraps the component in a `<fieldset>`, disabled
-        // while hidden so that the browser does not validate its controls, as in Filament.
+        // while hidden so that the browser does not validate its controls.
         const hiddenJs = isVisible ? await this.getHiddenJs() : null;
         const visibleJs = isVisible ? await this.getVisibleJs() : null;
         const visibilityJs = hiddenJs && visibleJs ? `(! (${hiddenJs})) && (${visibleJs})` : hiddenJs ? `! (${hiddenJs})` : visibleJs;
@@ -627,7 +627,7 @@ export class Schema {
         return this.getFlatComponents().find((component) => component.hasStatePath() && component.getStatePath() === path) ?? null;
     }
     /**
-     * Runs the `afterStateUpdated()` hooks for an updated state path, as Filament does: the components holding a parent path
+     * Runs the `afterStateUpdated()` hooks for an updated state path: the components holding a parent path
      * first (a repeater, then its item field), down to the component holding the path. Returns whether one was found.
      */
     async callAfterStateUpdated(path: string): Promise<boolean> {
@@ -1067,7 +1067,7 @@ export class Tabs extends Component {
         this.tabKeys = entries.map(([key]) => key);
         return this;
     }
-    /** Filament's name of `schema()`. */
+    /** Alias of `schema()`. */
     tabs(tabs: Tab[] | Record<string, Tab>): this { return this.schema(tabs); }
     /**
      * Binds the active tab to a public property of the host component: clicking a tab sets the property (`$set()`), and
@@ -1307,10 +1307,10 @@ export class Form extends LayoutComponent {
 /** Item rendered in an actions container: in practice an Action (actions package). */
 export interface Renderable { isVisible(ctx: ComponentContext): Promise<boolean>; toHtml(ctx: ComponentContext): Promise<string> }
 
-/** Row of actions in a schema. */
 /** Content placed around a component: text, components and actions, or a function of the context returning them. */
 export type ComponentSlotItem = string | HtmlString | InlineItem;
 export type ComponentSlot = Lazy<ComponentSlotItem | ComponentSlotItem[] | AlignedContent<ComponentSlotItem> | null, ComponentContext>;
+/** Row of actions in a schema. */
 export class Actions extends Component {
     private actions: Renderable[];
     private _fullWidth = false;
@@ -1663,7 +1663,6 @@ export class EmptyState extends Component {
     compact(condition = true): this { this._compact = condition; return this; }
     /** `false`: no surrounding card. */
     contained(condition = true): this { this._contained = condition; return this; }
-    /** Heading tag (`h2` by default). */
     /** Heading tag; by default it follows the heading level of the schema (`h2` at the root). */
     headingTag(tag: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | null): this { this._headingTag = tag; return this; }
     /** Footer: inline actions and components. */

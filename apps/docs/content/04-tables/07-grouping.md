@@ -468,8 +468,8 @@ new Table()
 
 ## Persisting the grouping in the session
 
-`persistGroupingInSession()` (or its Filament name, `persistGroupInSession()`) keeps the grouping chosen by the user when they come back to the page. See [persisting filters](/tables/filters/overview#persisting-filters-in-the-users-session) for where it is stored.
+`persistGroupingInSession()` (or its alias, `persistGroupInSession()`) keeps the grouping chosen by the user when they come back to the page. See [persisting filters](/tables/filters/overview#persisting-filters-in-the-users-session) for where it is stored.
 
 <Aside variant="info">
-As in Filament, grouping is turned off while the user [reorders records](/tables/overview#reordering-records): every record is then listed in the order of the reorder column.
+Grouping is turned off while the user [reorders records](/tables/overview#reordering-records): every record is then listed in the order of the reorder column.
 </Aside>

@@ -91,7 +91,7 @@ test('columns: `hidden()` and `visible()` remove the column from the table', () 
     assert.deepEqual(table.getColumns().map((column) => column.name), ['title', 'secret']);
 });
 
-test('`ImageColumn`: Filament markup, sizes, stacked, limit, default image, unsafe URLs dropped', async () => {
+test('`ImageColumn`: markup, sizes, stacked, limit, default image, unsafe URLs dropped', async () => {
     const row = { photo: '/img/a.png', photos: ['/img/a.png', 'https://cdn.test/b.png', 'javascript:alert(1)', '/img/c.png'], none: null };
     assert.equal(await ImageColumn.make('photo').alt('Photo').toHtml(row), '<div class="nv-ta-image"><img alt="Photo" src="/img/a.png" style="height: 2.5rem;" /></div>');
     assert.equal(await ImageColumn.make('photo').circular().toHtml(row), '<div class="nv-ta-image nv-circular"><img alt="" src="/img/a.png" style="height: 2.5rem; width: 2.5rem;" /></div>');

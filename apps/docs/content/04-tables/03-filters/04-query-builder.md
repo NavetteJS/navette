@@ -243,7 +243,7 @@ SelectConstraint.make('status')
 
 #### Searching select options on the server
 
-For a long list, `getSearchResultsUsing()` computes the options of each search on the server, as Filament's select constraint does. Give the labels of the picked values with `getOptionLabelUsing()` (or `getOptionLabelsUsing()` for several values at once): they are used by the select and by the filter indicator:
+For a long list, `getSearchResultsUsing()` computes the options of each search on the server. Give the labels of the picked values with `getOptionLabelUsing()` (or `getOptionLabelsUsing()` for several values at once): they are used by the select and by the filter indicator:
 
 ```ts
 import { SelectConstraint } from '@navette-js/tables';
@@ -307,7 +307,7 @@ RelationshipConstraint.make('creator') // Filter the `creator` relationship
     )
 ```
 
-The `IsRelatedToOperator` is used to configure the "Is" and "Is not" operators (or "Contains" and "Does not contain" for a [multiple relationship](#multiple-relationships)). It provides a select field which allows the user to filter the relationship by which records are attached to it. The `titleAttribute()` method is used to specify which attribute should be used to identify each related record in the list; the related records are listed in its order, up to 1,000. The `searchable()` method makes the list searchable: as in Filament, the related records are then searched on the server (at most `optionsLimit()` of them, 50 by default) instead of being listed, unless `preload()` is also called. `getOptionLabelFromRecordUsing()` computes the label of each related record from the record itself. The `multiple()` method allows the user to select multiple related records: the table is then filtered to show records that match any of them.
+The `IsRelatedToOperator` is used to configure the "Is" and "Is not" operators (or "Contains" and "Does not contain" for a [multiple relationship](#multiple-relationships)). It provides a select field which allows the user to filter the relationship by which records are attached to it. The `titleAttribute()` method is used to specify which attribute should be used to identify each related record in the list; the related records are listed in its order, up to 1,000. The `searchable()` method makes the list searchable: the related records are then searched on the server (at most `optionsLimit()` of them, 50 by default) instead of being listed, unless `preload()` is also called. `getOptionLabelFromRecordUsing()` computes the label of each related record from the record itself. The `multiple()` method allows the user to select multiple related records: the table is then filtered to show records that match any of them.
 
 ```ts
 import { IsRelatedToOperator, RelationshipConstraint } from '@navette-js/tables';
@@ -539,7 +539,7 @@ NumberConstraint.make('price')
     .unshiftOperators([EqualsOperator.make()]) // "equals" becomes the default operator
 ```
 
-The built-in operators are `IsFilledOperator` (any constraint), `ContainsOperator`, `StartsWithOperator`, `EndsWithOperator` and `EqualsOperator` (text), `IsMinOperator`, `IsMaxOperator` and `EqualsOperator` (number), `IsTrueOperator` (boolean), `IsAfterOperator`, `IsBeforeOperator`, `IsDateOperator`, `IsMonthOperator` and `IsYearOperator` (date), `IsOperator` (select), and `IsRelatedToOperator`, `HasMinOperator`, `HasMaxOperator`, `EqualsOperator` and `IsEmptyOperator` (relationship). Filament has an `EqualsOperator` class per constraint type; in Navette one `EqualsOperator` works as the constraint's own: it compares text on a text constraint, numbers on a number constraint, and the number of related records on a relationship constraint. A built-in operator follows its constraint's options (`integer()`, `time()`, `multiple()`…), even when they are set after `operators()`. `IsOperator` needs a select constraint, and `IsRelatedToOperator` and `IsEmptyOperator` a relationship constraint.
+The built-in operators are `IsFilledOperator` (any constraint), `ContainsOperator`, `StartsWithOperator`, `EndsWithOperator` and `EqualsOperator` (text), `IsMinOperator`, `IsMaxOperator` and `EqualsOperator` (number), `IsTrueOperator` (boolean), `IsAfterOperator`, `IsBeforeOperator`, `IsDateOperator`, `IsMonthOperator` and `IsYearOperator` (date), `IsOperator` (select), and `IsRelatedToOperator`, `HasMinOperator`, `HasMaxOperator`, `EqualsOperator` and `IsEmptyOperator` (relationship). A single `EqualsOperator` adapts to its constraint: it compares text on a text constraint, numbers on a number constraint, and the number of related records on a relationship constraint. A built-in operator follows its constraint's options (`integer()`, `time()`, `multiple()`…), even when they are set after `operators()`. `IsOperator` needs a select constraint, and `IsRelatedToOperator` and `IsEmptyOperator` a relationship constraint.
 
 ## Custom operators
 
@@ -584,7 +584,7 @@ CustomConstraint.make('popularity')
 
 ## Grouping constraints in the picker
 
-Like Filament's `['Group' => [...]]` arrays, pass an object of groups to group the constraints under labels in the constraint picker. It may be given alone, or among ungrouped constraints, which are listed first:
+Pass an object of groups to group the constraints under labels in the constraint picker. It may be given alone, or among ungrouped constraints, which are listed first:
 
 ```ts
 import { QueryBuilder, TextConstraint } from '@navette-js/tables';

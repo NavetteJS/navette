@@ -1,5 +1,5 @@
 /**
- * Global default display time zone, like Filament's `FilamentTimezone` facade. Components that show or edit a
+ * Global default display time zone. Components that show or edit a
  * date-time (`DateTimePicker` with a time, `TextColumn`, `TextEntry`) use it when they have no `timezone()` of
  * their own. Stored values stay in UTC; only their display (and the picker's input) is converted.
  */

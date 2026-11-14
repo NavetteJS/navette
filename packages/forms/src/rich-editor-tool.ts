@@ -2,7 +2,7 @@
 import { Attributes, e, icon, js } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 
-/** Plain description of a tool (the built-in tools are generated from Filament's definitions). */
+/** Plain description of a tool (the built-in tools are listed in `./rich-editor-tools.ts`). */
 export type RichEditorToolDefinition = {
     name: string;
     /** Translation key of the label. */

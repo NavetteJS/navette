@@ -21,7 +21,7 @@ class Billing extends Page {
 }
 
 const user: User = { id: 1, name: 'Ada', email: 'ada@example.test' };
-const panel = Panel.make().id('e3-actions').key('e3-actions-key').auth({ find: async () => user } as any).pages([Billing]);
+const panel = Panel.make().id('actions').key('actions-key').auth({ find: async () => user } as any).pages([Billing]);
 let db: Knex;
 before(() => { db = sqlite(':memory:'); setCurrentPanel(panel); actingAs(user); });
 after(() => db.destroy());

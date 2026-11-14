@@ -291,7 +291,7 @@ export class Constraint {
     /** Objection model of the table's records, used to list related records. */
     protected _model: any = null;
     constructor(name: string, type: ConstraintType, icon: string) {
-        // Dot syntax (`creator.name`, like Filament): each segment is a plain key; the attribute is the last segment, the
+        // Dot syntax (`creator.name`): each segment is a plain key; the attribute is the last segment, the
         // relationship the ones before it (`relationship('creator', 'name')`). Relationship constraints keep their whole name.
         if (!name.split('.').every((segment) => isItemKey(segment)) || name === OR || name.length > 128) throw new Error(`Invalid constraint name: ${name}`);
         this.name = name; this.type = type; this._icon = icon;
@@ -344,8 +344,7 @@ export class Constraint {
         return this;
     }
     /**
-     * Adds operators before the default ones (each one first, in turn). An operator with the name of an existing one replaces it,
-     * as in Filament.
+     * Adds operators before the default ones (each one first, in turn). An operator with the name of an existing one replaces it.
      */
     unshiftOperators(operators: OperatorInput[]): this {
         for (const operator of operators.map((entry) => toOperator(entry, this))) {
@@ -653,7 +652,7 @@ export class IsRelatedToOperator {
     /** Label of a related record computed from the record, instead of `titleAttribute()`. */
     getOptionLabelFromRecordUsing(callback: ((record: any) => string | Promise<string>) | null): this { this._labelFromRecord = callback; return this; }
     getOptionLabelFromRecordCallback(): ((record: any) => string | Promise<string>) | null { return this._labelFromRecord; }
-    /** As in Filament, `searchable()` without `preload()` searches the related records on the server instead of listing them. */
+    /** `searchable()` without `preload()` searches the related records on the server instead of listing them. */
     searchesOnServer(): boolean { return this._searchable && !this._preload; }
     /** The settings select: every related record, or a search on the server. */
     private settingsField(constraint: RelationshipConstraint, field: string): Field {
@@ -1106,8 +1105,8 @@ export class QueryBuilder implements TableFilter {
     maxNestingDepth(depth: number): this { this._maxNestingDepth = Math.min(MAX_NESTING_DEPTH, Math.max(1, Math.floor(depth))); return this; }
     getMaxNestingDepth(): number { return this._maxNestingDepth; }
     /**
-     * Constraints. Like Filament's `['Group label' => [...]]`, `{ 'Group label': [constraints] }` (alone or among the list) groups
-     * constraints in the constraint picker; ungrouped constraints come first, then each group in order.
+     * Constraints. `{ 'Group label': [constraints] }` (alone or among the list) groups constraints in the constraint picker;
+     * ungrouped constraints come first, then each group in order.
      */
     constraints(list: (Constraint | Record<string, Constraint[]>)[] | Record<string, Constraint[]>): this {
         const entries = Array.isArray(list) ? list : [list];

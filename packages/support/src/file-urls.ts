@@ -2,13 +2,12 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
- * Application-wide options of temporary file URLs. `temporaryFileUrlExpiryMinutes` is Filament's
- * `filament.temporary_file_url_expiry_minutes` setting (30 by default).
+ * Application-wide options of temporary file URLs. `temporaryFileUrlExpiryMinutes`: lifetime of a URL (30 by default).
  */
 export const fileUrlConfig = { temporaryFileUrlExpiryMinutes: 30 };
 
 /**
- * Expiry of a temporary file URL, like Filament: in `temporaryFileUrlExpiryMinutes`, rounded up to the end of that hour, so
+ * Expiry of a temporary file URL: in `temporaryFileUrlExpiryMinutes`, rounded up to the end of that hour, so
  * that the same URL is generated for a while and browsers can cache the file.
  */
 export function temporaryFileUrlExpiry(minutes: number = fileUrlConfig.temporaryFileUrlExpiryMinutes, now: number = Date.now()): Date {
@@ -63,7 +62,7 @@ export interface FileUrlStorage {
 }
 
 /**
- * URL of a stored file for display, like Filament's `getImageUrl()`: `null` when `checkExistence` is set and the file is
+ * URL of a stored file for display: `null` when `checkExistence` is set and the file is
  * missing; a temporary URL for private files (when the storage supports them); the storage's URL otherwise.
  */
 export async function resolveStoredFileUrl(storage: FileUrlStorage, key: string, options: { visibility?: 'public' | 'private' | null; checkExistence?: boolean } = {}): Promise<string | null> {

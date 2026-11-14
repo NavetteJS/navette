@@ -1,5 +1,5 @@
-// Shade selection of colored components, as in Filament's `ColorMaps` (ComponentColorMap, ButtonComponentColorMap,
-// IconButtonComponentColorMap): fluent builders returning a map of slots (`bg`, `text`, `dark:hover:bg`…) to shades.
+// Shade selection of colored components: fluent builders (`ComponentColorMap`, `ButtonComponentColorMap`,
+// `IconButtonComponentColorMap`) returning a map of slots (`bg`, `text`, `dark:hover:bg`…) to shades.
 import { calculateContrastRatio, findShade, isLight, WCAG_AA_TEXT, type Palette } from './index.ts';
 
 /** Minimum contrast for non-text elements (icons, toggles): WCAG AA. */

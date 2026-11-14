@@ -1,4 +1,4 @@
-// Markup shared by the Tabs component: lazy-loaded badges (Filament's `generateDeferredBadgePlaceholderHtml()`).
+// Markup shared by the Tabs component: placeholders of lazy-loaded badges.
 import { e, loadingIndicator, Attributes } from '@navette-js/support';
 
 /** Badge data returned by `Tabs.getLazyLoadedTabBadges()`, keyed like the tabs (`deferredBadges[key]` in the browser). */

@@ -1,5 +1,5 @@
-// Server-side syntax highlighting of the CodeEntry with Shiki (TextMate grammars and VS Code themes, the same as
-// Filament's Phiki). Shiki is an optional peer dependency: it is imported on first use, and when it is not installed
+// Server-side syntax highlighting of the CodeEntry with Shiki (TextMate grammars and VS Code themes). Shiki is an optional
+// peer dependency: it is imported on first use, and when it is not installed
 // (or the grammar or a theme is unknown) the entry falls back to single-color rendering.
 import { e } from '@navette-js/support';
 

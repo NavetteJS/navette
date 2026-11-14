@@ -49,7 +49,7 @@ ImageColumn.make<Product>('image')
     .alt((record) => record.name)
 ```
 
-Without `alt()`, the image gets an empty `alt` attribute, as Filament does: screen readers treat it as decorative. When the row is a link, the alt text is also part of the link's accessible name, so set `alt()` whenever the image carries information.
+Without `alt()`, the image gets an empty `alt` attribute: screen readers treat it as decorative. When the row is a link, the alt text is also part of the link's accessible name, so set `alt()` whenever the image carries information.
 
 ## Customizing the size
 

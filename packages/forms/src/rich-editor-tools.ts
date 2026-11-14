@@ -1,4 +1,4 @@
-// Built-in rich editor tools, as defined by Filament's RichEditor (generated from its source: do not edit by hand).
+// Built-in rich editor tools: name, label key, icon and JavaScript of each toolbar button.
 import type { RichEditorToolDefinition } from './rich-editor-tool.ts';
 
 export const RICH_EDITOR_TOOL_DEFINITIONS: RichEditorToolDefinition[] = [

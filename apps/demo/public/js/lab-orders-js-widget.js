@@ -1,4 +1,4 @@
-// Renderer of the lab's JavaScript widget (apps/demo/widgets/lab-d11-js-widget.ts): framework-free DOM code. It counts its
+// Renderer of the lab's JavaScript widget (apps/demo/widgets/lab-orders-js-widget.ts): framework-free DOM code. It counts its
 // mounts and updates on the host, so that the end-to-end test can check a configuration change updates it in place.
 /** @param {import('@navette-js/panels').JsWidgetRendererContext} context */
 export default function mountOrdersOverview({ host, props: initialProps, utilities }) {

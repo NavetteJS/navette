@@ -74,7 +74,7 @@ const safeLocale = (locale: string | null | undefined): string => {
     try { return Intl.NumberFormat.supportedLocalesOf([locale.replace('_', '-')]).length ? locale.replace('_', '-') : 'en-US'; } catch { return 'en-US'; }
 };
 
-/** Options of `numeric()`: Filament's `decimalPlaces`, `decimalSeparator`, `thousandsSeparator`, `maxDecimalPlaces` and `locale`. */
+/** Options of `numeric()`: `decimalPlaces`, `decimalSeparator`, `thousandsSeparator`, `maxDecimalPlaces` and `locale`. */
 export type NumericFormatOptions = { decimalPlaces?: number | null; decimalSeparator?: string | null; thousandsSeparator?: string | null; maxDecimalPlaces?: number | null; locale?: string | null };
 /** Options of `money()`: `divideBy` (100 for cents), `locale` and `decimalPlaces`. */
 export type MoneyFormatOptions = { divideBy?: number | null; locale?: string | null; decimalPlaces?: number | null };

@@ -386,7 +386,7 @@ export class ProductExporter extends Exporter {
 
 ### Adding a custom format
 
-Next to `'csv'` and `'xlsx'`, a format can be any object implementing `ExportFormatInterface` (Filament's `ExportFormat` contract): its extension (letters and digits, also its key), its MIME type, and `generate()`, which receives the exported rows (`columns` are the column names, `labels` the header labels, `rows` one array of values per record, in column order) and returns the file's content:
+Next to `'csv'` and `'xlsx'`, a format can be any object implementing `ExportFormatInterface`: its extension (letters and digits, also its key), its MIME type, and `generate()`, which receives the exported rows (`columns` are the column names, `labels` the header labels, `rows` one array of values per record, in column order) and returns the file's content:
 
 ```ts
 import { ExportAction, type ExportFormatInterface } from '@navette-js/panels';
@@ -435,7 +435,7 @@ In the XLSX file, every cell is text: a value starting with `=` is never evaluat
 
 ### Styling XLSX rows
 
-`getXlsxCellStyle()` returns the style of the cells, and `getXlsxHeaderCellStyle()` the style of the header cells (the cell style by default). An `XlsxStyle` sets fonts, colors and alignment, like OpenSpout's `Style` in Filament:
+`getXlsxCellStyle()` returns the style of the cells, and `getXlsxHeaderCellStyle()` the style of the header cells (the cell style by default). An `XlsxStyle` sets fonts, colors and alignment:
 
 ```ts
 import { Exporter, XlsxColor, XlsxStyle } from '@navette-js/panels';
@@ -654,7 +654,7 @@ You can then list the runs in a resource of your own. To store them elsewhere, i
 
 ### Using a polymorphic user relationship
 
-Runs store the id of their user in `user_id`. If users of several panels (with their own user tables) share the history, their ids may collide: like Filament's `polymorphicUserRelationship()`, the `polymorphicUser` option also stores the type of the user in a `user_type` column, which is the id of the panel the user ran the export from. Pass it to both the schema (it adds the column to existing tables) and the store:
+Runs store the id of their user in `user_id`. If users of several panels (with their own user tables) share the history, their ids may collide: the `polymorphicUser` option also stores the type of the user in a `user_type` column, which is the id of the panel the user ran the export from. Pass it to both the schema (it adds the column to existing tables) and the store:
 
 ```ts
 await importExportSchema(db, { polymorphicUser: true });

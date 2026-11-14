@@ -1,4 +1,4 @@
-// `/lab/js-widgets`: a JavaScript widget (Filament's `HasJsRenderer`) on the demo's orders. Its renderer module is registered
+// `/lab/js-widgets`: a JavaScript widget (rendered by a browser module) on the demo's orders. Its renderer module is registered
 // as an asset loaded on request, it receives the dashboard filters through its configuration, updates in place when they
 // change, and calls a server method through `$wire`.
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { STATUSES } from '../resources/OrderResource.ts';
 import { knex } from './dates.ts';
 
 NavetteAsset.register([
-    Js.make('orders-overview', fileURLToPath(new URL('../public/js/lab-d11-js-widget.js', import.meta.url))).loadedOnRequest(),
+    Js.make('orders-overview', fileURLToPath(new URL('../public/js/lab-orders-js-widget.js', import.meta.url))).loadedOnRequest(),
 ], 'navette/lab');
 
 /** The filter comes from the browser: only a known status is used. */

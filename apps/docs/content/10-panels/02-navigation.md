@@ -184,11 +184,11 @@ Panel.make()
     ])
 ```
 
-As in Filament, the items of a group with an icon are displayed without their own icons.
+The items of a group with an icon are displayed without their own icons.
 
 ### Collapsing navigation groups by default
 
-`collapsed()` makes a group start collapsed, the first time the user opens the panel. Afterwards, the browser remembers which groups the user collapsed (in `localStorage`, under `navette:sidebar:collapsed_groups`, shared by every panel of the site, as in Filament):
+`collapsed()` makes a group start collapsed, the first time the user opens the panel. Afterwards, the browser remembers which groups the user collapsed (in `localStorage`, under `navette:sidebar:collapsed_groups`, shared by every panel of the site):
 
 ```ts
 NavigationGroup.make('Settings').collapsed()

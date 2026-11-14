@@ -11,7 +11,7 @@ const render = (components: any[], livewire: any = host()) => Schema.make(livewi
 const md5 = (value: string) => createHash('md5').update(value).digest('hex');
 const decode = (value: string) => value.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-test('JsComponent: Filament markup, renderer URL, configuration and id', async () => {
+test('JsComponent: markup, renderer URL, configuration and id', async () => {
     const html = await render([JsComponent.make().key('chart').renderer('/js/components/chart.js').rendererConfiguration({ points: [1, 2, 3] })]);
     assert.ok(html.includes('x-data="navetteSchemaComponent('));
     assert.ok(html.includes(`wire:key="lw.form.chart.${md5('{"id":"form.chart"}/js/components/chart.js')}"`));
@@ -35,7 +35,7 @@ test('JsComponent: custom id, RawJs-like renderer, configuration function, extra
     ], livewire);
     assert.ok(html.includes('renderer: window.mountChart,'));
     assert.ok(html.includes("componentConfiguration: JSON.parse('{\\u0022id\\u0022:\\u0022sales-chart\\u0022}'),"));
-    // Without a key, the Livewire key is only the hash, as in Filament.
+    // Without a key, the Livewire key is only the hash.
     assert.ok(html.includes(`wire:key=".${md5('{"id":"sales-chart"}window.mountChart')}"`));
     assert.ok(html.includes(' class="my-chart"'));
     assert.equal(decode(html.match(/data-renderer-configuration="([^"]*)"/)![1]), '{"period":"week"}');

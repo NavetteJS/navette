@@ -59,7 +59,7 @@ try {
         await modal().getByLabel('Only update existing products').check();
         await modal().getByRole('button', { name: 'Import' }).click();
         await page.getByText('Import completed').waitFor({ timeout: 10000 });
-        // A skipped row counts as successful, as in Filament.
+        // A skipped row counts as successful.
         await page.getByText('2 rows imported').waitFor({ timeout: 5000 });
         assert.equal(db.prepare("select name from products where sku = 'E2E-1'").get()?.name, 'E2E Lamp v2');
         assert.equal(db.prepare("select count(*) as count from products where sku = 'E2E-404'").get().count, 0);

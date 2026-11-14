@@ -1,6 +1,6 @@
 // Minimal XLSX writer: one worksheet of text cells (inline strings), zipped with Node's zlib. Cells are never formulas, so
-// spreadsheet software does not evaluate them; numbers stay text, as in Filament's export. Cells and rows may be styled
-// (fonts, colors, alignment) and columns sized, like OpenSpout's `Style` and `Options` used by Filament.
+// spreadsheet software does not evaluate them; numbers stay text. Cells and rows may be styled (fonts, colors, alignment)
+// and columns sized.
 import { crc32, deflateRawSync, inflateRawSync } from 'node:zlib';
 
 /** Escapes a value for XML; characters not allowed in XML 1.0 are dropped. */
@@ -33,7 +33,7 @@ export class XlsxColor {
 }
 const colorOf = (color: string) => { const hex = color.replace(/^#/, '').toUpperCase(); if (!/^[0-9A-F]{6}$/.test(hex)) throw new Error(`Invalid XLSX color: ${color} (expected RRGGBB).`); return hex; };
 /**
- * Style of XLSX cells (Filament: OpenSpout's `Style`): `new XlsxStyle().setFontBold().setFontSize(14).setBackgroundColor(XlsxColor.rgb(0, 0, 0))`.
+ * Style of XLSX cells: `new XlsxStyle().setFontBold().setFontSize(14).setBackgroundColor(XlsxColor.rgb(0, 0, 0))`.
  * Only the properties that were set are applied.
  */
 export class XlsxStyle {
@@ -60,7 +60,7 @@ export class XlsxStyle {
     setCellAlignment(alignment: 'left' | 'center' | 'right' | 'justify'): this { this.cellAlignment = alignment; return this; }
     setCellVerticalAlignment(alignment: 'top' | 'center' | 'bottom' | 'justify'): this { this.cellVerticalAlignment = alignment; return this; }
     setShouldWrapText(condition = true): this { this.shouldWrapText = condition; return this; }
-    /** A copy of `base` with the properties set on `style` on top (Filament: OpenSpout's `StyleMerger`). */
+    /** A copy of `base` with the properties set on `style` on top. */
     static merge(style: XlsxStyle | null, base: XlsxStyle | null): XlsxStyle {
         const merged = new XlsxStyle();
         for (const source of [base, style]) if (source) for (const [key, value] of Object.entries(source)) if (value !== undefined) (merged as any)[key] = value;
@@ -74,7 +74,7 @@ export class XlsxCell {
     constructor(value: unknown, style: XlsxStyle | null = null) { this.value = value; this.style = style; }
     static fromValue(value: unknown, style: XlsxStyle | null = null): XlsxCell { return new XlsxCell(value, style); }
 }
-/** Options of the XLSX writer (Filament: OpenSpout's `Options`): column widths, in characters. Columns are numbered from 1. */
+/** Options of the XLSX writer: column widths, in characters. Columns are numbered from 1. */
 export class XlsxOptions {
     readonly columnWidths: { width: number; start: number; end: number }[] = [];
     defaultColumnWidth: number | null = null;
@@ -163,7 +163,7 @@ function sheetViewXml(view: XlsxSheetView | null): string {
 }
 
 /**
- * View of a sheet (OpenSpout's `SheetView`): frozen panes. `setFreezeRow(2)` keeps the first row visible while scrolling,
+ * View of a sheet: frozen panes. `setFreezeRow(2)` keeps the first row visible while scrolling,
  * `setFreezeColumn('B')` the first column.
  */
 export class XlsxSheetView {
@@ -174,7 +174,7 @@ export class XlsxSheetView {
     /** The first column that scrolls (a name like `'B'`, or a number from 1): the columns left of it stay visible. */
     setFreezeColumn(column: string | number | null): this { this.freezeColumn = column; return this; }
 }
-/** The sheet being written (OpenSpout's `Sheet`): its name (31 characters at most) and its view. */
+/** The sheet being written: its name (31 characters at most) and its view. */
 export class XlsxSheet {
     private _name = 'Sheet1';
     private _view: XlsxSheetView | null = null;
@@ -185,7 +185,7 @@ export class XlsxSheet {
 }
 /**
  * Writer of an export's XLSX file, as an exporter's `configureXlsxWriterAfterOpen()` and `configureXlsxWriterBeforeClose()`
- * receive it (OpenSpout's `Writer`): rows added after opening go above the header, rows added before closing go below the data;
+ * receive it: rows added after opening go above the header, rows added before closing go below the data;
  * `getCurrentSheet()` names the sheet and freezes panes.
  */
 export class XlsxWriter {
@@ -198,7 +198,7 @@ export class XlsxWriter {
     getCurrentSheet(): XlsxSheet { return this.sheet; }
     /** @internal Adds the header row (styled as the header). */
     addHeaderRow(row: XlsxRowInput): this { this._headerRow = this.rows.length; this.rows.push(row); return this; }
-    /** The file. */
+    /** The XLSX file, as bytes. */
     toBuffer(options: { headerStyle?: XlsxStyle | null; cellStyle?: XlsxStyle | null; writerOptions?: XlsxOptions | null } = {}): Buffer {
         return buildXlsx(this.rows, this.sheet.getName(), { ...options, headerRow: this._headerRow ?? 0, sheetView: this.sheet.getSheetView() });
     }

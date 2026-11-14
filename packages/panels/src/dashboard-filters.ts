@@ -69,7 +69,7 @@ export function sanitizeFilterState(value: unknown, depth = 0): unknown {
     return out;
 }
 
-/** Query string values are strings: `'null'`, `'true'` and `'false'` become `null`, `true` and `false` (as in Filament). */
+/** Query string values are strings: `'null'`, `'true'` and `'false'` become `null`, `true` and `false`. */
 export function normalizeFilterValuesFromQueryString(data: unknown): unknown {
     if (Array.isArray(data)) return data.map(normalizeFilterValuesFromQueryString);
     if (data && typeof data === 'object') return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, normalizeFilterValuesFromQueryString(value)]));
@@ -112,7 +112,7 @@ export function readQueryStringProperty(query: Record<string, unknown> | null | 
 }
 
 /**
- * Fills a filters form from restored filters, like Filament's `fill($filters)`: each field takes the restored value,
+ * Fills a filters form from restored filters: each field takes the restored value,
  * or `null` when it has none (defaults only apply when nothing was restored). Values that do not belong to a field
  * of the form are dropped.
  */

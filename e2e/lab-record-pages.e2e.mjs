@@ -34,13 +34,13 @@ try {
     });
     await step('creating a brand opens its view page, with the notification of the page', async () => {
         await page.goto(`${BASE}/lab/brand-pages/create`);
-        await page.locator('[id="form.name"]').fill('E2 Brand');
-        await page.locator('[id="form.slug"]').fill('e2-brand');
+        await page.locator('[id="form.name"]').fill('Record Pages Brand');
+        await page.locator('[id="form.slug"]').fill('record-pages-brand');
         await page.locator('form#form button[type=submit]').first().click();
         await page.waitForURL((url) => /\/lab\/brand-pages\/\d+$/.test(url.pathname), { timeout: 10000 });
         const notification = page.locator('.nv-no-notification', { hasText: 'Brand created' });
         await notification.waitFor({ timeout: 8000 });
-        assert.match(await notification.innerText(), /E2 Brand is ready\./);
+        assert.match(await notification.innerText(), /Record Pages Brand is ready\./);
     });
     await step('the relation manager reads its owner record; the modal heading uses the table record title', async () => {
         await page.goto(`${BASE}/lab/brand-pages/${brand.id}/edit`);

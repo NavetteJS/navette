@@ -1,4 +1,4 @@
-// Tabs (D11): lazy-loaded tab badges fetched after the page has rendered, tabs bound to a Livewire property (with and
+// Tabs: lazy-loaded tab badges fetched after the page has rendered, tabs bound to a Livewire property (with and
 // without content panels). Run by e2e/run.mjs on the `/lab` "Tabs lab" page (not registered with NAVETTE_NO_THEMES).
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
@@ -62,7 +62,7 @@ try {
 
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));
 } catch (error) {
-    await page.screenshot({ path: path.join(tmpDir, 'd11-tabs.png') }).catch(() => {});
+    await page.screenshot({ path: path.join(tmpDir, 'lab-tabs.png') }).catch(() => {});
     throw error;
 } finally {
     await browser.close();

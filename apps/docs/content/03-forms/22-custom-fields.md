@@ -603,7 +603,7 @@ If importing, mounting or `update()` fails, the field shows an accessible error 
 
 ### Customizing the markup around the renderer
 
-A `JsField` has no view to replace: its `toHtml()` returns the field already wrapped (label, helper text, error) around the renderer's host, like Filament's `toEmbeddedHtml()`. To add your own markup, subclass it and build on `super.toHtml()`, keeping your content outside the renderer's host:
+A `JsField` has no view to replace: its `toHtml()` returns the field already wrapped (label, helper text, error) around the renderer's host. To add your own markup, subclass it and build on `super.toHtml()`, keeping your content outside the renderer's host:
 
 ```ts
 import { JsField } from '@navette-js/forms';

@@ -1,4 +1,4 @@
-// App-wide defaults of every modal (Filament's `Filament\Support\View\Components\ModalComponent`): action modals and the
+// App-wide defaults of every modal: action modals and the
 // standalone `modal()` / `<x-modal>` component use them unless they set their own value.
 
 export class ModalComponent {

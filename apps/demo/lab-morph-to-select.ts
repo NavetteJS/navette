@@ -1,5 +1,5 @@
 // `/lab` "Comments": a `MorphToSelect` editing the polymorphic `commentable` of the seeded comments (a product or a blog
-// post, stored with the Laravel class names of the original demo), searchable, exercised by e2e/morph-to-select.e2e.mjs.
+// post, stored as Laravel-style class names such as `App\Models\Shop\Product`), searchable, exercised by e2e/morph-to-select.e2e.mjs.
 // Not in the parity screenshots (registered only without NAVETTE_NO_THEMES).
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { MorphToSelect, TextInput } from '@navette-js/forms';

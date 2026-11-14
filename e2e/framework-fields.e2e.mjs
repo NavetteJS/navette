@@ -33,7 +33,7 @@ try {
         await page.goto(`${BASE}/lab/framework-fields/${PRODUCT.id}/edit`);
         await input().waitFor();
         assert.equal(await input().inputValue(), String(PRODUCT.qty));
-        // Filament's label targets the renderer's primary input through `props.id`.
+        // The field's label targets the renderer's primary input through `props.id`.
         assert.equal(await page.getByLabel('Quantity').getAttribute('type'), 'number');
         const describedBy = await input().getAttribute('aria-describedby');
         assert.ok(describedBy?.endsWith('-helper-text'), `aria-describedby: ${describedBy}`);

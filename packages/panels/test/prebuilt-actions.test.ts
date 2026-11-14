@@ -1,4 +1,4 @@
-// Options and hooks of the prebuilt actions (Filament's create, edit, view, replicate, delete, restore, force-delete, attach,
+// Options and hooks of the prebuilt actions (create, edit, view, replicate, delete, restore, force-delete, attach,
 // associate and detach actions): `using()`, "create another", form lifecycle hooks, `mutateRecordDataUsing()`,
 // `skippableSteps()`, `fetchSelectedRecords()`, bulk notifications and redirects, `failureNotification()`, and the record
 // select of the relationship actions (options query, search columns, preload, multiple, duplicates, table select).
@@ -153,7 +153,7 @@ test('create another: `createAnother(false)` removes the button, `createAnotherA
     const ctx: any = { livewire: null, component: null, operation: null, record: null, get: () => undefined, state: undefined };
     assert.equal(await custom.getExtraModalFooterActions()[0].getLabel(ctx), 'Save & add another');
     assert.equal(custom.canCreateAnother(), true);
-    // Other footer actions replace it, as in Filament.
+    // Other footer actions replace it.
     assert.deepEqual(CreateAction.make().extraModalFooterActions([Action.make('draft')]).createAnother(true).getExtraModalFooterActions().map((a) => a.getName()), ['draft']);
     headerActions = () => [CreateAction.make().createAnother(false)];
     await livewire(List).mountTableAction('create').assertMountedActionModalDontSee('Create &amp; create another').assertMountedActionModalDontSee('Create & create another');

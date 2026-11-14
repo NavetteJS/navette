@@ -75,7 +75,7 @@ EditAction.make()
 
 `modalEyebrow()` also accepts a function of the action's context. The eyebrow is escaped, unless it is an `HtmlString`; it requires a heading and is not part of the modal's accessible name.
 
-Setting a heading, an eyebrow, a description or custom content is enough to give an action a modal: like Filament, clicking it then opens the modal, and the action runs when the modal is submitted.
+Setting a heading, an eyebrow, a description or custom content is enough to give an action a modal: clicking it then opens the modal, and the action runs when the modal is submitted.
 
 ### Rendering a schema in a modal
 

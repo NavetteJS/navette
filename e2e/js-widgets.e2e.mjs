@@ -62,7 +62,7 @@ try {
 
     await step('no JavaScript error', async () => assert.deepEqual(errors, []));
 } catch (error) {
-    await page.screenshot({ path: path.join(tmpDir, 'd11-js-widgets.png') }).catch(() => {});
+    await page.screenshot({ path: path.join(tmpDir, 'js-widgets.png') }).catch(() => {});
     throw error;
 } finally {
     await browser.close();

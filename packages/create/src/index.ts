@@ -35,7 +35,7 @@ async function secret(question: string): Promise<string> {
     rl = null;
     return readSecret(`  ${bold(question)} `);
 }
-/** The admin's password, typed twice; empty: `null`, one is generated. */
+/** Asks for the admin's password twice; returns `null` when left empty (a password is then generated). */
 async function choosePassword(): Promise<string | null> {
     for (;;) {
         const password = await secret(`Admin password ${dim('(at least 8 characters; leave empty to generate one)')}`);

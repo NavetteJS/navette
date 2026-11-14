@@ -32,7 +32,7 @@ export class ItemsProcessingLimitError extends Error {
     constructor(count: number, limit: number) { super(`Too many items to process (${count}, at most ${limit}).`); this.count = count; this.limit = limit; }
 }
 
-/** Stops before building item schemas for an unexpectedly large state (like Filament, nothing is truncated). */
+/** Stops before building item schemas for an unexpectedly large state (nothing is truncated). */
 export function ensureItemsCanBeProcessed(count: number, limit: number | null): void {
     if (limit !== null && count > limit) throw new ItemsProcessingLimitError(count, limit);
 }
@@ -102,7 +102,7 @@ const scalar = (value: unknown) => (value !== null && typeof value === 'object' 
 const same = (a: unknown, b: unknown) => a === b || (a !== null && b !== null && typeof a !== 'boolean' && typeof b !== 'boolean' && a !== undefined && b !== undefined && String(scalar(a)) === String(scalar(b)));
 
 /**
- * Validation that a field's state is unique across the items of its parent Repeater or Builder (Filament's `distinct()` on a
+ * Validation that a field's state is unique across the items of its parent Repeater or Builder (`distinct()` on a
  * repeated field): a boolean may be `true` in one item only (and, when required, in at least one); another value, or a value
  * of a list, may be picked in one item only. Outside a repeater, the rules pass.
  */

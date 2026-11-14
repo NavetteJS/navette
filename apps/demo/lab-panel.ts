@@ -1,5 +1,5 @@
-// `/lab` panel: a playground of recent features (tables, filters, actions, forms) on the demo's products.
-// It is kept apart from `/admin`, whose pages are compared with Filament's demo.
+// `/lab` panel: a playground of extra features (tables, filters, actions, forms) on the demo's products.
+// It is kept apart from `/admin`, whose pages are compared with reference screenshots.
 import { Action, ActionGroup } from '@navette-js/actions';
 import { Model, ObjectionAdapter } from '@navette-js/database';
 import { Checkbox, CheckboxList, ColorPicker, DatePicker, DateTimePicker, FileUpload, KeyValue, ModalTableSelect, Radio, Repeater, Select, Step, TagsInput, Textarea, TextInput, Toggle, ToggleButtons } from '@navette-js/forms';
@@ -15,9 +15,9 @@ import { labTableFeatureResources } from './lab-table-features.ts';
 import { LabColumns } from './lab-columns.ts';
 import { LabBrandPages } from './lab-record-pages.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
-import { labJsWidgets, LabJsWidgetsDashboard } from './widgets/lab-d11-js-widget.ts';
-import { LabTabsPage } from './lab-d11-tabs.ts';
-import { labPrivateFiles, LabUiPage } from './lab-d11.ts';
+import { labJsWidgets, LabJsWidgetsDashboard } from './widgets/lab-orders-js-widget.ts';
+import { LabTabsPage } from './lab-tabs.ts';
+import { labPrivateFiles, LabUiPage } from './lab-ui.ts';
 import { LabFrameworkFields } from './lab-framework-fields.ts';
 import { LabSpecificFields } from './lab-specific-fields.ts';
 import { LabRichEditorOptions } from './lab-rich-editor-options.ts';
@@ -245,7 +245,7 @@ class LabBrandNotes extends WireComponent {
     render() { return `<div class="lab-brand-notes"><p>Notes for ${e(this.brandName ?? 'a new brand')}</p><button type="button" wire:click="like">Like</button> <span data-likes>${this.likes}</span></div>`; }
 }
 
-/** A form page with the new field options. */
+/** A form page with more field options. */
 class LabFields extends Resource {
     static slug = 'fields';
     static modelLabel = 'brand';

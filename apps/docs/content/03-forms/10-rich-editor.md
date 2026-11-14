@@ -320,7 +320,7 @@ const contentEditor = () => RichEditor.make('content').customBlocks([CallToActio
 const html = await contentEditor().getRenderer(post.content).mergeTags({ name: customer.name }).toHtml();
 ```
 
-`renderRichDocument(content)` is the short form of `getRenderer(content).toHtml()`, like Filament's `renderRichContent()`:
+`renderRichDocument(content)` is the short form of `getRenderer(content).toHtml()`:
 
 ```ts
 const html = await contentEditor().renderRichDocument(post.content);
@@ -708,7 +708,7 @@ import { Mark } from '@tiptap/core';
 export class HighlightRichContentPlugin implements RichContentPlugin {
     static make() { return new this(); }
 
-    // Server side (Filament's `getTipTapPhpExtensions()`): what is kept when the content is saved or rendered.
+    // Server side: what is kept when the content is saved or rendered.
     getTipTapServerExtensions() {
         return [Mark.create({ name: 'marker', parseHTML: () => [{ tag: 'span[data-marker]' }], renderHTML: () => ['span', { 'data-marker': '' }, 0] })];
     }
@@ -745,7 +745,7 @@ A plugin tool with the name of another tool replaces it. Unlike `registerRichCon
 
 #### Enabling or disabling toolbar buttons from a plugin
 
-A plugin may also add buttons to the toolbar, or remove some, with the optional `getEnabledToolbarButtons()` and `getDisabledToolbarButtons()` methods (Filament's `HasToolbarButtons`). They work like [`enableToolbarButtons()` and `disableToolbarButtons()`](#customizing-the-toolbar-buttons), and apply before the field's own changes, which therefore take precedence:
+A plugin may also add buttons to the toolbar, or remove some, with the optional `getEnabledToolbarButtons()` and `getDisabledToolbarButtons()` methods. They work like [`enableToolbarButtons()` and `disableToolbarButtons()`](#customizing-the-toolbar-buttons), and apply before the field's own changes, which therefore take precedence:
 
 ```ts
 export class HighlightRichContentPlugin implements RichContentPlugin {
@@ -820,7 +820,7 @@ const html = await RichContentRenderer.make(post.content)
 
 ### Storing images with a file attachment provider
 
-A file attachment provider stores the images of a record's content for that record, like Filament's `FileAttachmentProvider` (the Spatie Media Library provider, for example). Navette ships `StorageFileAttachmentProvider`, which keeps each record's images in its own directory of a [storage](/advanced/file-storage):
+A file attachment provider stores the images of a record's content for that record. Navette ships `StorageFileAttachmentProvider`, which keeps each record's images in its own directory of a [storage](/advanced/file-storage):
 
 ```ts
 import { LocalFileStorage, RichEditor, StorageFileAttachmentProvider } from '@navette-js/forms';
@@ -873,7 +873,7 @@ class MediaAttachmentProvider implements FileAttachmentProvider {
 
 ### Securing file attachment IDs
 
-The `data-id` of an image is a key of the storage, and like any field value it comes from the browser: a forged request could replace it with the key of someone else's file, which the editor (or the renderer) would then show, with a signed URL for a private image. Navette therefore checks it by default (Filament's `preventFileAttachmentPathTampering()`, opt-in there): the record's saved content is parsed, and only the `data-id` values already present are accepted, besides new uploads. Any other one fails validation, with the `tampered` message, and gets no URL when the form is loaded.
+The `data-id` of an image is a key of the storage, and like any field value it comes from the browser: a forged request could replace it with the key of someone else's file, which the editor (or the renderer) would then show, with a signed URL for a private image. Navette therefore checks it by default (`preventFileAttachmentPathTampering()`): the record's saved content is parsed, and only the `data-id` values already present are accepted, besides new uploads. Any other one fails validation, with the `tampered` message, and gets no URL when the form is loaded.
 
 If your application legitimately references other files (an image library, a "copy from another record" action), approve them with the `allowFilePathUsing` argument. It receives the key exactly as submitted: compare it with exact trusted keys, never with a prefix:
 
@@ -911,7 +911,7 @@ Both checks run in the browser, and again on the server before the image is stor
 
 ## Registering rich content attributes
 
-Custom blocks, merge tags, mentions, plugins, link protocols and attachments must be the same wherever the content is edited or displayed. Instead of repeating them, register the attribute on the model with the `InteractsWithRichContent` mixin (Filament's `InteractsWithRichContent` trait and `HasRichContent` interface), in its `setUpRichContent()` method:
+Custom blocks, merge tags, mentions, plugins, link protocols and attachments must be the same wherever the content is edited or displayed. Instead of repeating them, register the attribute on the model with the `InteractsWithRichContent` mixin, in its `setUpRichContent()` method:
 
 ```ts
 import { InteractsWithRichContent, MentionProvider, TextColor } from '@navette-js/forms';
@@ -963,7 +963,7 @@ To render it yourself, call `renderRichContent()` on the record:
 
 ## Generating fake rich content
 
-`RichEditor.fake()` generates content for seeders and tests (Filament's `fake()->filamentRichContent()`). Chain blocks, then get the stored HTML with `toHtml()`, the TipTap document with `toArray()`, or the value as the editor stores it with `toValue()`. The output methods are asynchronous:
+`RichEditor.fake()` generates content for seeders and tests. Chain blocks, then get the stored HTML with `toHtml()`, the TipTap document with `toArray()`, or the value as the editor stores it with `toValue()`. The output methods are asynchronous:
 
 ```ts
 import { RichEditor } from '@navette-js/forms';
@@ -988,7 +988,7 @@ await RichEditor.fake().paragraphs(3, { links: true, bold: true, italic: true })
 
 ### Using an editor's configuration
 
-Pass an editor with `{ editor }` (Filament's rich content attribute): the faker uses its merge tags, mentions, custom blocks, text colors, link protocols, plugins and JSON mode. `toValue()` then returns the document when the editor uses `json()`, and HTML otherwise; `toRenderedHtml()` and `toText()` render it with the editor's [renderer](#rendering-rich-content):
+Pass an editor with `{ editor }`: the faker uses its merge tags, mentions, custom blocks, text colors, link protocols, plugins and JSON mode. `toValue()` then returns the document when the editor uses `json()`, and HTML otherwise; `toRenderedHtml()` and `toText()` render it with the editor's [renderer](#rendering-rich-content):
 
 ```ts
 const editor = RichEditor.make('content').mergeTags(['name']).mentions([users]).customBlocks([CallToActionBlock]).json();

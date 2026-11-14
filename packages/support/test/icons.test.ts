@@ -31,7 +31,7 @@ test('Aliases replace interface icons; without one, the given icon renders as be
     icons.alias({ 'section.collapse-button': 'm-chevron-down', 'panels::sidebar.collapse-button': 'o-arrow-left' });
     assert.equal(icon('m-chevron-up', { alias: 'section.collapse-button' }), icon('m-chevron-down'));
     assert.equal(icons.resolve(['nothing', 'panels::sidebar.collapse-button']), 'o-arrow-left');
-    // Filament's alternative spellings resolve to the same icon.
+    // Alternative alias spellings resolve to the same icon.
     icons.alias({ 'forms:components.rich-editor.toolbar.clear_formatting': 'm-x-mark' });
     assert.equal(icons.resolve('forms::components.rich-editor.toolbar.clear-formatting'), 'm-x-mark');
     // HTML: rendered inside a `nv-icon` span with the size and extra classes.

@@ -11,7 +11,7 @@ export type RelatedOptionsRequest = {
     limit?: number;
     /** Label of an option computed from the whole related record, instead of the title attribute. */
     labelFromRecord?: ((record: any) => string | Promise<string>) | null;
-    /** Called with the related query and the search, after `modify` (Filament's `modifyQueryUsing(query, search)`). */
+    /** Called with the related query and the search, after `modify`. */
     modify?: ((query: any, search: string | null) => unknown) | RelationshipQueryModifier | null;
 };
 

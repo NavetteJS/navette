@@ -132,7 +132,7 @@ test('SelectColumn: server-side search, labels, messages, aliases, and forged va
     assert.equal(await column.validateFor(post(), 'deleted'), 'The selected status is invalid.');
     assert.equal(await column.validateFor(post(), ['draft']), 'The selected status is invalid.');
     assert.equal(await column.validateFor(post(), { toString: () => 'draft' }), 'The selected status is invalid.');
-    // Defaults: Filament's table messages.
+    // Default messages of the table.
     const plain = decode(await SelectColumn.make('status').options(statuses).native(false).toHtml(post(), 1));
     assert.ok(plain.includes("noOptionsMessage: 'No options available.'") && plain.includes("searchPrompt: 'Start typing to search'"));
     assert.deepEqual(SelectColumn.make('s').searchOptionValues().getSearchableOptionFields(), ['label', 'value']);
@@ -309,7 +309,7 @@ test('query builder: unshiftOperators(), configureUsing(), constraint groups, se
         assert.equal(QueryBuilder.make().getMaxRules(), 7);
         assert.equal(TextConstraint.make('a').isNullable(), true);
     } finally { resetConfigurators(); }
-    // Filament's `[constraint, 'Group' => [...]]`: ungrouped constraints first, then the groups.
+    // Grouped constraints (`{ Group: [...] }` among the list): ungrouped constraints first, then the groups.
     const grouped = QueryBuilder.make().constraints([{ People: [TextConstraint.make('author')] }, TextConstraint.make('title'), { Dates: [TextConstraint.make('created')] }]);
     assert.deepEqual(grouped.getConstraints().map((c) => [c.name, c.getPickerGroup()]), [['title', null], ['author', 'People'], ['created', 'Dates']]);
 

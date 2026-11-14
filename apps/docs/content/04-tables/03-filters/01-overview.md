@@ -208,7 +208,7 @@ SelectFilter.make('country')
 
 ## Resolving records outside the filters
 
-As in Filament, when a row action (or a column action) runs, its record must still match the applied filters: a record that no longer matches, for example because another user changed it, is not found. `excludeWhenResolvingRecord()` leaves a filter out of that check, typically for a filter on a value that the action itself changes:
+When a row action (or a column action) runs, its record must still match the applied filters: a record that no longer matches, for example because another user changed it, is not found. `excludeWhenResolvingRecord()` leaves a filter out of that check, typically for a filter on a value that the action itself changes:
 
 ```ts
 import { Filter } from '@navette-js/tables';
@@ -222,7 +222,7 @@ The query builder accepts `excludeWhenResolvingRecord()` too.
 
 ## Keeping the selection when filtering
 
-By default, changing the filters, the search or the column searches clears the selected records, and the selected records are restricted to the filtered records. `deselectAllRecordsWhenFiltered(false)` keeps the selection instead, as in Filament: the user can select records, search for others and add them to the selection. "Select all" then selects the listed keys (the deselected records are not tracked):
+By default, changing the filters, the search or the column searches clears the selected records, and the selected records are restricted to the filtered records. `deselectAllRecordsWhenFiltered(false)` keeps the selection instead: the user can select records, search for others and add them to the selection. "Select all" then selects the listed keys (the deselected records are not tracked):
 
 ```ts
 table.deselectAllRecordsWhenFiltered(false)

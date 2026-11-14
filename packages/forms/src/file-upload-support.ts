@@ -4,7 +4,7 @@ import type { Lazy } from '@navette-js/support';
 
 /**
  * A URL that may be sent to the browser for a stored file: a local path (`/storage/a.png`) or an absolute http(s) URL.
- * Spaces are encoded (as Filament does); any other whitespace, control character or backslash is refused, because browsers
+ * Spaces are encoded; any other whitespace, control character or backslash is refused, because browsers
  * drop or rewrite them (`/\evil.example` or `/<tab>/evil.example` would open another site). Returns `null` when refused.
  */
 export function safeFileUrl(url: unknown): string | null {

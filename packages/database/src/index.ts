@@ -86,7 +86,7 @@ export interface DataAdapter<T = any> {
     count(): Promise<number>;
     paginate(query: ListQuery): Promise<Page<T>>;
     /**
-     * Cursor pagination (Filament's `paginationMode('cursor')`): the `perPage` records after (or before) `cursor`, without
+     * Cursor pagination (`paginationMode('cursor')`): the `perPage` records after (or before) `cursor`, without
      * counting the records; `page.cursor` holds the cursors of the previous and next pages. Optional.
      */
     cursorPaginate?(query: Omit<ListQuery, 'page'> & { cursor: string | null }): Promise<Page<T>>;
@@ -271,7 +271,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         for (const column of plain(columns.min)) q.min({ [`min_${column}`]: `t.${column}` });
         for (const column of plain(columns.max)) q.max({ [`max_${column}`]: `t.${column}` });
         const row = ((await q.first()) ?? {}) as Record<string, unknown>;
-        // A relationship column (`items.price`) is summarized over the related records of the listed records, each counted once (Filament).
+        // A relationship column (`items.price`) is summarized over the related records of the listed records, each counted once.
         for (const [fn, list] of Object.entries(columns) as ['sum' | 'avg' | 'min' | 'max', string[]][]) {
             for (const column of list ?? []) {
                 const relationship = resolveRelationshipColumn(this.model, column);
@@ -302,7 +302,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         for (const column of columns.min ?? []) q.min({ [`min_${column}`]: qualify(column) });
         for (const column of columns.max ?? []) q.max({ [`max_${column}`]: qualify(column) });
         group(q);
-        // The first grouping expression is selected too, to tell the groups apart (as Filament does).
+        // The first grouping expression is selected too, to tell the groups apart.
         const grouping = ((q as any)._statements as any[]).find((statement) => statement.grouping === 'group');
         if (!grouping) throw new Error('The group query of a summary must group the records, e.g. query.groupBy(column).');
         const expression = grouping.type === 'groupByRaw' ? grouping.value : Array.isArray(grouping.value) ? grouping.value[0] : grouping.value;

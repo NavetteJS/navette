@@ -1,4 +1,4 @@
-// Nested resources (Filament's `$parentResource`): a resource served under a record of its parent resource
+// Nested resources: a resource served under a record of its parent resource
 // (`/projects/{project}/tasks/{record}/edit`), every query scoped to that parent record.
 //
 // The pages of a nested resource are generated subclasses of the usual record pages. On every request (display and browser
@@ -116,7 +116,7 @@ export function nestedRoutePath(resource: typeof Resource): string {
 const hasPage = (resource: typeof Resource, name: string) => Object.prototype.hasOwnProperty.call(resource.getPages(), name);
 
 /**
- * URL of a resource page from named parameters (Filament's `getUrl('edit', ['project' => $project, 'record' => $task])`):
+ * URL of a resource page from named parameters:
  * `record` is the record (or its key), each parent resource's route parameter its record (or key), anything else goes
  * to the query string.
  */
@@ -197,7 +197,7 @@ function parentKeysFrom(resource: typeof Resource, params: Record<string, unknow
 /**
  * Loads the parent records of a nested page, outermost first: each one through its resource's adapter scoped to the record
  * above it, so a key of a record that belongs to another parent is not found (404). Access to every parent resource
- * (`viewAny`) is checked by the page on every request, as in Filament.
+ * (`viewAny`) is checked by the page on every request.
  */
 async function loadParentRecords(page: any, resource: typeof Resource): Promise<ParentRecord[]> {
     const keys: Record<string, string> = page.parentRecordKeys ?? {};
@@ -350,8 +350,8 @@ export function relatedResourceAdapter(related: typeof Resource, ownerKey: strin
 
 /**
  * The resource facade of a relation manager (or related records page) with a `relatedResource`: labels and policy come from
- * the related resource, and the create, edit and view actions link to its nested pages when it has them (Filament's
- * `getDefaultActionUrl()`), with the owner record as the parent.
+ * the related resource, and the create, edit and view actions link to its nested pages when it has them,
+ * with the owner record as the parent.
  */
 export function withRelatedResource<F extends Record<string, any>>(facade: F, related: typeof Resource | null | undefined, ownerKey: string, parentParameters: Record<string, string> = {}): F {
     if (!related) return facade;

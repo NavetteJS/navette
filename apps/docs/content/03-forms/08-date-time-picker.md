@@ -54,7 +54,7 @@ The record's value is still read in any of the formats above; `format()` only sh
 
 ## Enabling the JavaScript date picker
 
-By default, the fields use the browser's native inputs. `native(false)` switches to Filament's JavaScript picker, which looks the same in every browser and offers more options:
+By default, the fields use the browser's native inputs. `native(false)` switches to a JavaScript picker, which looks the same in every browser and offers more options:
 
 ```ts
 import { DatePicker } from '@navette-js/forms';

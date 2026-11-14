@@ -65,7 +65,7 @@ SelectColumn.make('country')
     .searchableOptions()
 ```
 
-The JavaScript select lists at most 50 options at a time: change it with `optionsLimit()`. `allowOptionsLabelsWrap(false)` (or Filament's name, `wrapOptionLabels(false)`) truncates long labels, `position('top')` or `position('bottom')` forces the side where the dropdown opens, and `placeholder()` changes the empty option's text.
+The JavaScript select lists at most 50 options at a time: change it with `optionsLimit()`. `allowOptionsLabelsWrap(false)` (or its alias, `wrapOptionLabels(false)`) truncates long labels, `position('top')` or `position('bottom')` forces the side where the dropdown opens, and `placeholder()` changes the empty option's text.
 
 The search runs in the browser on the option labels; `searchOptionValues()` also searches the values, and `searchOptionLabels(false)` stops searching the labels.
 
@@ -135,7 +135,7 @@ The second argument is the column displayed as the option label. A third argumen
 
 Up to 1,000 options are listed. When the value is saved, the server checks that it is the key of a related record that the (modified) query returns. The options are computed once per request ([`rememberOptions()`](#searching-options-on-the-server) is on by default for relationships).
 
-With `searchableOptions()`, the related records are searched on the server instead of being listed (like Filament, without `preloadOptions()`): the search matches the title attribute, or the columns given to `searchableOptions(['first_name', 'last_name'])`, and returns at most `optionsLimit()` records. `preloadOptions()` lists them up front and searches them in the browser:
+With `searchableOptions()`, the related records are searched on the server instead of being listed (unless `preloadOptions()` is called): the search matches the title attribute, or the columns given to `searchableOptions(['first_name', 'last_name'])`, and returns at most `optionsLimit()` records. `preloadOptions()` lists them up front and searches them in the browser:
 
 ```ts
 import { SelectColumn } from '@navette-js/tables';
@@ -150,7 +150,7 @@ SelectColumn.make('author_id')
 
 ## Allowing HTML in the option labels
 
-`allowHtml()` (or Filament's name, `allowOptionsHtml()`) displays the option labels as HTML in the JavaScript select. The labels are sanitized on the server with an allow-list; the native select shows their text only:
+`allowHtml()` (or its alias, `allowOptionsHtml()`) displays the option labels as HTML in the JavaScript select. The labels are sanitized on the server with an allow-list; the native select shows their text only:
 
 ```ts
 import { SelectColumn } from '@navette-js/tables';

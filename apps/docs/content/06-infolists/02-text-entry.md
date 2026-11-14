@@ -823,7 +823,7 @@ TextEntry.make('cost')
     )
 ```
 
-Like in Filament, affix actions are small icon buttons, unless they choose another style (`button()`, `link()`) or size. Several actions can be given with `prefixActions([...])` and `suffixActions([...])`, and each method also accepts a function of the context returning the action. The actions are mounted with the entry, so they open their modal and run their handler like any other schema action.
+Affix actions are small icon buttons, unless they choose another style (`button()`, `link()`) or size. Several actions can be given with `prefixActions([...])` and `suffixActions([...])`, and each method also accepts a function of the context returning the action. The actions are mounted with the entry, so they open their modal and run their handler like any other schema action.
 
 <Aside variant="warning">
 Not available in Navette yet: a different URL for each value of a list, and translated month and day names in date formats.

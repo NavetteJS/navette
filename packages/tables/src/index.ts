@@ -46,12 +46,11 @@ export const TablesRenderHook = {
     TOOLBAR_START: 'tables::toolbar.start',
     FILTER_INDICATORS: 'tables::filter.indicators',
     HEADER_CELL: 'tables::header.cell',
-    /** Legacy aliases of the column manager trigger slots. */
+    /** Aliases of the column manager trigger slots, kept for compatibility. */
     TOOLBAR_TOGGLE_COLUMN_TRIGGER_AFTER: 'tables::toolbar.toggle-column-trigger.after',
     TOOLBAR_TOGGLE_COLUMN_TRIGGER_BEFORE: 'tables::toolbar.toggle-column-trigger.before',
 } as const;
 
-/** Methods and properties that trigger the table's loading state (`wire:target`). */
 /** Screen size names of `visibleFrom()` and `hiddenFrom()`. */
 const BREAKPOINTS = ['sm', 'md', 'lg', 'xl', '2xl'];
 export const LOADING_TARGETS = 'activeTab,applyTableFilters,gotoPage,nextPage,previousPage,removeTableFilter,removeTableFilters,reorderTable,resetTableColumnSearch,resetTableFiltersForm,resetTableSearch,setPage,sortTable,tableColumnSearches,tableFilters,tableGrouping,tableRecordsPerPage,tableSearch,tableSort,toggleTableReordering';
@@ -81,7 +80,7 @@ export abstract class Column<R = any> {
     protected _url: ((record: R) => string | null) | null = null;
     /** Column group this column belongs to (set by ColumnGroup). */
     _group: ColumnGroup<R> | null = null;
-    // --- column options of Filament's Column (url in a new tab, click, tooltips, alignment, extra attributes)
+    // Column options: URL in a new tab, click, tooltips, alignment, extra attributes.
     protected _urlInNewTab: boolean | ((record: R) => boolean) = false;
     protected _clickDisabled = false;
     protected _headerTooltip: string | null = null;
@@ -143,7 +142,7 @@ export abstract class Column<R = any> {
     protected _sortColumns: string[] | null = null;
     protected _sortQuery: ((query: any, direction: SortDirection) => unknown) | null = null;
     getSortColumn(): string { return this._sortColumn ?? this.name; }
-    /** Database columns of the sort (Filament's `getSortColumns()`). */
+    /** Database columns of the sort. */
     getSortColumns(): string[] { return this._sortColumns?.length ? this._sortColumns : [this.getSortColumn()]; }
     getSortQuery(): ((query: any, direction: SortDirection) => unknown) | null { return this._sortQuery; }
     private _sortInverted = false;
@@ -164,7 +163,7 @@ export abstract class Column<R = any> {
     getAction(): { getName(): string } | null { return this._cellAction !== null && typeof this._cellAction === 'object' ? this._cellAction : null; }
     getActionName(): string | null { return this._cellAction === null ? null : typeof this._cellAction === 'string' ? this._cellAction : this._cellAction.getName(); }
     getUrl(record: R): string | null { return this._url ? this._url(record) : null; }
-    /** `isGlobal: false` excludes the column from the global search; `isIndividual` adds a search field for this column. */
+    /** Database column of the search (the column name by default). */
     getSearchColumn(): string { return this._searchColumn ?? this.name; }
     /**
      * Searchable column. A column name or a list searches those database columns (`searchable(['first_name', 'last_name'])`);
@@ -185,7 +184,7 @@ export abstract class Column<R = any> {
     protected _searchColumns: string[] | null = null;
     protected _searchQuery: ((query: any, search: string) => unknown) | null = null;
     protected _splitIndividualSearchTerms: boolean | null = null;
-    /** Database columns of the search (Filament's `getSearchColumns()`). */
+    /** Database columns of the search. */
     getSearchColumns(): string[] { return this._searchColumns?.length ? this._searchColumns : [this.getSearchColumn()]; }
     getSearchQuery(): ((query: any, search: string) => unknown) | null { return this._searchQuery; }
     /** Whether this column's own search field splits the term into words; `null` follows the table's `splitSearchTerms()`. */
@@ -250,8 +249,8 @@ export abstract class Column<R = any> {
     isDistinctList(): boolean { return this._distinctList; }
     protected _enum: Enum<string | number> | null = null;
     /**
-     * Displays values through an enum (label, color, icon), like Filament does for an attribute cast to an enum. Without it,
-     * the enum of the model's `static casts` is used, and so is a state that is already an enum case.
+     * Displays values through an enum (label, color, icon). Without it, the enum of the model's `static casts` is used, and so
+     * is a state that is already an enum case.
      */
     enum(enumeration: Enum<string | number> | null): this { this._enum = enumeration; return this; }
     /** Enum case of a state item, or `null`. */
@@ -395,7 +394,7 @@ export class TextColumn<R = any> extends Column<R> {
     isoDateTime(format: string | null = null, timeZone: string | null = null): this { return this.isoDate(format ?? 'LLL', timeZone); }
     /** Time in an `isoFormat()` format, `LT` by default ("2:30 PM"). */
     isoTime(format: string | null = null, timeZone: string | null = null): this { return this.isoDate(format ?? 'LT', timeZone); }
-    /** Relative date, e.g. "2 days ago". A string argument is the time zone (Filament's `since($timezone)`). */
+    /** Relative date, e.g. "2 days ago". A string argument is the time zone. */
     since(condition: boolean | string | null = true): this { this._since = condition !== false; if (typeof condition === 'string') this._timeZone = condition; return this; }
     /** Formats a date state for a tooltip; `null` for an empty or invalid state. */
     private dateTooltipUsing(kind: 'php' | 'iso' | 'since', format: string, timeZone: string | null): this {
@@ -418,13 +417,12 @@ export class TextColumn<R = any> extends Column<R> {
     isoDateTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'L', timeZone); }
     isoDateTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'LLL', timeZone); }
     isoTimeTooltip(format: string | null = null, timeZone: string | null = null): this { return this.dateTooltipUsing('iso', format ?? 'LT', timeZone); }
-    /** Time zone used by `date()`, `dateTime()` and `time()`. */
     /** Time zone dates are displayed in; defaults to `NavetteTimezone.get()` (`UTC` unless configured). */
     timezone(timeZone: string | null): this { this._timeZone = timeZone; return this; }
     getTimezone(): string { return this._timeZone ?? NavetteTimezone.get(); }
     private _numericOptions: NumericFormatOptions = {};
     /**
-     * Number formatted with thousands separators. `numeric(1)`: fixed number of decimals. Filament's other arguments follow
+     * Number formatted with thousands separators. `numeric(1)`: fixed number of decimals. The other arguments follow
      * (`decimalSeparator`, `thousandsSeparator`, `maxDecimalPlaces`, `locale`), or pass them in an object:
      * `numeric({ decimalPlaces: 2, locale: 'fr' })`. Without separators, the number is formatted for `locale` (`en-US` by default).
      */
@@ -510,7 +508,7 @@ export class TextColumn<R = any> extends Column<R> {
     }
 
     /**
-     * Displayed text of a state, as the cell shows it (Filament's `formatState()`): `formatStateUsing()`, enum label, date,
+     * Displayed text of a state, as the cell shows it: `formatStateUsing()`, enum label, date,
      * money or number, limits, prefix and suffix. A list state gives the text of each item.
      */
     formatState(state: unknown, record: R): string | string[] { return Array.isArray(state) ? state.map((item) => this.formatItem(item, record)) : this.formatItem(state, record); }
@@ -528,7 +526,7 @@ export class TextColumn<R = any> extends Column<R> {
         else if (currency && isNumericValue(item)) text = formatMoney(Number(item), currency, this._moneyOptions);
         else if (this._numeric && isNumericValue(item)) text = formatNumber(Number(item), this._numericOptions);
         else text = String(item);
-        // As in Filament, HTML and Markdown states are not truncated (cutting them could break their markup).
+        // HTML and Markdown states are not truncated: cutting them could break their markup.
         if (!resolveItem(this._html, record, item) && !resolveItem(this._markdown, record, item)) {
             if (this._limit !== null) text = limitText(text, this._limit, this._limitEnd);
             if (this._words !== null) text = limitWords(text, this._words, this._wordsEnd);
@@ -541,7 +539,7 @@ export class TextColumn<R = any> extends Column<R> {
         return [state];
     }
     private hasDescriptions(): boolean { return this._descriptionAbove !== null || this._descriptionBelow !== null; }
-    /** Plain value without per-item options: Filament's short markup. */
+    /** Plain value without per-item options: rendered with the short markup. */
     private canRenderOptimized(state: unknown, record: R): boolean {
         return !Array.isArray(state) && !(state instanceof RenderedRichContent) && this._separator === null && !isBlankState(state) && !this._bulleted && !this._listWithLineBreaks && this._icon === null && !this.enumCaseOf(record, state)?.getIcon() && this._tooltip === null
             && this._copyable === false && this._weight === null && this._fontFamily === null && this._lineClamp === null && this._size === null && !this.hasDescriptions() && !this._wrap && this._html === false && this._markdown === false;
@@ -549,7 +547,7 @@ export class TextColumn<R = any> extends Column<R> {
     private alignClass(): string | null { return this._alignment && this._alignment !== 'start' ? `nv-align-${this._alignment}` : null; }
     private containerClasses(): (string | null)[] { return ['nv-ta-text', this._inline ? 'nv-inline' : null, this._numeric || this._money ? 'nv-numeric' : null, this.alignClass()]; }
 
-    /** Cell content, as Filament renders it: a short markup for a plain value, the full markup as soon as an item option is set. */
+    /** Cell content: a short markup for a plain value, the full markup as soon as an item option is set. */
     async toHtml(record: R): Promise<string> {
         let state = await this.getState(record);
         // A rich content attribute the record registers (`registerRichContent()`): rendered with its configuration, sanitized.
@@ -695,7 +693,7 @@ export class Summarizer {
         return this;
     }
     /**
-     * Number formatting: `numeric(2)` for two decimals, then Filament's `decimalSeparator`, `thousandsSeparator`,
+     * Number formatting: `numeric(2)` for two decimals, then `decimalSeparator`, `thousandsSeparator`,
      * `maxDecimalPlaces` and `locale`, or an options object (`numeric({ locale: 'fr' })`).
      */
     numeric(decimals: number | null | NumericFormatOptions = null, decimalSeparator: string | null = null, thousandsSeparator: string | null = null, maxDecimalPlaces: number | null = null, locale: string | null = null): this {
@@ -789,7 +787,7 @@ export class Range extends Summarizer {
     /** `false`: empty values count as bounds too (null values never do: SQL's `min()` and `max()` skip them). */
     excludeNull(condition = true): this { this._excludeNull = condition; return this; }
     shouldExcludeNull(): boolean { return this._excludeNull; }
-    /** Filament's minimal textual difference of two bounds (case-insensitive comparison). */
+    /** Minimal textual difference of two bounds (case-insensitive comparison). */
     static minimalTextualBounds(fromValue: string, toValue: string): string[] {
         const originalFrom = fromValue.trim(), originalTo = toValue.trim();
         const state = [originalFrom, originalTo].filter((value, index) => (index === 1 ? !(originalFrom === originalTo || originalTo === '') : originalFrom !== ''));
@@ -934,7 +932,7 @@ export abstract class ColumnLayout<R = any> {
     protected _hiddenFrom: string | null = null;
     protected _columnSpan: Record<string, number | string> = { default: 1 };
     protected _collapsible = false;
-    // Collapsed until the user opens it, as in Filament.
+    // Collapsed until the user opens it.
     protected _collapsed = true;
     protected _hidden: boolean | (() => boolean) = false;
     constructor(children: (Column<R> | ColumnLayout<R>)[]) { this._children = children; }
@@ -1078,7 +1076,7 @@ export class ColumnGroup<R = any> {
     /** Extra HTML attributes of the group's header cell. */
     extraHeaderAttributes(attributes: ExtraAttributes, merge = false): this { this._extraHeaderAttributes = merge ? [...this._extraHeaderAttributes, attributes] : [attributes]; return this; }
     getExtraHeaderAttributes(): ExtraAttributes { return mergeExtraAttributes(this._extraHeaderAttributes); }
-    /** Classes of the group's `<th>`, as Filament renders it. */
+    /** Classes of the group's `<th>`. */
     getHeaderClasses(): string[] {
         return ['nv-ta-header-group-cell', ...(this._wrapHeader ? ['nv-wrapped'] : []), ...(this._alignment ? [`nv-align-${this._alignment}`] : []), ...(this._hiddenFrom ? [`${this._hiddenFrom}:nv-hidden`] : []), ...(this._visibleFrom ? [`${this._visibleFrom}:nv-visible`] : [])];
     }
@@ -1094,7 +1092,7 @@ const cssLength = (value: string | number | null): string | null => {
 const sanitizeCssColor = (value: unknown): string | null => (typeof value === 'string' && /^(#[0-9a-fA-F]{3,8}|(rgb|hsl|oklch)a?\([0-9.,%\s/deg-]+\))$/.test(value.trim()) ? value.trim() : null);
 /** Only local or http(s) URLs become image sources. */
 const safeImageUrl = (value: unknown): string | null => (typeof value === 'string' && isLocalOrHttpUrl(value) ? value : null);
-/** Attributes of a copyable element (Filament's `filamentCopyable` Alpine component). */
+/** Attributes of a copyable element (the `navetteCopyable` Alpine component). */
 const copyableAttributes = (copied: string, label: string, message: string, duration: number): string[] => [
     'x-data="navetteCopyable"', 'x-bind="bindings"',
     `x-bind:aria-label="isStandalone ? ${e(js(t('navette::components/copyable.label', { label })))} : null"`,
@@ -1220,7 +1218,6 @@ export class ImageColumn<R = any> extends Column<R> {
     }
 }
 
-/** Icon depending on the value; `boolean()` shows a green check or a red cross. */
 /**
  * Icon per state. `boolean()` shows a green check or a red cross; `icon()` and `color()` choose the icon and color from the
  * record and the state, e.g. `IconColumn.make('status').icon((record) => STATUSES[record.status].icon)`.
@@ -1354,12 +1351,12 @@ export abstract class EditableColumn<R = any> extends Column<R> {
     getValidationAttribute(): string { return this._validationAttribute ?? this.getLabel().replace(/^./, (c) => c.toLowerCase()); }
     /** Rules specific to the column type (e.g. select options). */
     protected getImplicitRules(): ColumnValidationRule[] { return []; }
+    /** Validation of a value for a given record (column types whose rules depend on the record override it). */
+    async validateFor(_record: R, input: unknown): Promise<string | null> { return this.validate(input); }
     /**
      * Error message, or `null` if the value is valid. An empty value is only checked by `required`, and several errors
      * produce the first message followed by "(and N more errors)".
      */
-    /** Validation of a value for a given record (column types whose rules depend on the record override it). */
-    async validateFor(_record: R, input: unknown): Promise<string | null> { return this.validate(input); }
     validate(input: unknown): string | null {
         const attribute = this.getValidationAttribute();
         const blank = isBlank(input);
@@ -1453,12 +1450,11 @@ export abstract class EditableColumn<R = any> extends Column<R> {
     protected static readonly STATUS_HTML = `<p x-cloak x-show="error" x-bind:id="$id('table-column-error')" x-ref="error" x-text="error" class="nv-sr-only"></p><p role="status" aria-live="polite" aria-atomic="true" x-text="status" class="nv-sr-only"></p>`;
 }
 
-/**
- * In-cell editable select (native select only). The received value must be one of the declared options.
- */
+/** Options of a select column: `[value, label]` pairs, `{ value: label }` or an enum. */
 export type SelectColumnOptions = [string, string][] | Record<string, string> | Enum<string | number>;
 const normalizeSelectOptions = (options: SelectColumnOptions): [string, string][] => isEnum(options) ? options.options() : (Array.isArray(options) ? options : Object.entries(options)).map(([value, label]): [string, string] => [String(value), String(label)]);
 
+/** In-cell editable select: the received value must be one of the record's options. */
 export class SelectColumn<R = any> extends EditableColumn<R> {
     private _options: [string, string][] | ((record: R) => SelectColumnOptions | Promise<SelectColumnOptions>) = [];
     private _selectablePlaceholder = true;
@@ -1580,7 +1576,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     private _allowHtml = false;
     /** Option labels are HTML, sanitized on the server (JavaScript select only; the native select shows their text). */
     allowHtml(condition = true): this { this._allowHtml = condition; return this; }
-    /** Filament's name of `allowHtml()`. */
+    /** Alias of `allowHtml()`. */
     allowOptionsHtml(condition = true): this { return this.allowHtml(condition); }
     private labelForDisplay(label: string): string { return !this._allowHtml ? label : this.isNative() ? label.replace(/<[^>]*>/g, '') : sanitizeHtml(label); }
     /**
@@ -1602,7 +1598,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
     optionsLimit(limit: number): this { this._optionsLimit = limit; return this; }
     /** `false`: long option labels are truncated in the JavaScript select instead of wrapping. */
     allowOptionsLabelsWrap(condition = true): this { this._canOptionLabelsWrap = condition; return this; }
-    /** Filament's name of `allowOptionsLabelsWrap()`. */
+    /** Alias of `allowOptionsLabelsWrap()`. */
     wrapOptionLabels(condition = true): this { return this.allowOptionsLabelsWrap(condition); }
     /** Side where the JavaScript select's dropdown opens (automatic by default). */
     position(position: 'top' | 'bottom' | null): this { this._position = position; return this; }
@@ -1614,8 +1610,8 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         return [{ name: 'in', passes: (v) => (typeof v === 'string' || typeof v === 'number') && options.some(([value]) => value === String(v)), message: (a) => `The selected ${a} is invalid.` }];
     }
     /**
-     * As in Filament, a value is valid when it has a label: one of the record's options, the related record (in the modified
-     * relationship query), or `getOptionLabelUsing()`. A disabled option is refused too.
+     * A value is valid when it has a label: one of the record's options, the related record (in the modified relationship
+     * query), or `getOptionLabelUsing()`. A disabled option is refused too.
      */
     async validateFor(record: R, input: unknown): Promise<string | null> {
         if (!isBlank(input)) {
@@ -1635,7 +1631,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         const isNative = this.isNative();
         const placeholder = this._placeholder ?? t('navette-forms::components.select.placeholder');
         const optionsForJs = isNative ? [] : this.optionsForJs(options, record);
-        // As in Filament: options depending on the record are fetched again when the select opens.
+        // Options depending on the record are fetched again when the select opens.
         const hasDynamicOptions = !isNative && (typeof this._options === 'function' || (this._optionsRelationship !== null && !this.hasLazyRelationshipOptions()));
         const hasInitialNoOptionsMessage = this._optionsRelationship !== null ? this._preloadOptions || !this._searchable : !this.hasDynamicSearchResults();
         const config = `selectTableColumn({
@@ -1854,7 +1850,6 @@ export async function updateTableColumnState<R>(table: Table<R>, host: TableHost
 // ------------------------------------------------------------------ filters
 /** Filter state: the values of its form. */
 export type FilterState = Record<string, unknown>;
-/** Active filter indicator: its label, and the filter field cleared when it is removed. */
 /** Active filter indicator: its label, the filter field cleared when it is removed (`''`: the whole filter), whether it can be removed, and its badge color. */
 export type FilterIndicator = { label: string; field: string; removable?: boolean; color?: string | null };
 /** Where the filters form is shown: in a toolbar dropdown (default) or modal, or in a panel around the table content. */
@@ -1957,7 +1952,7 @@ abstract class BaseFilter implements TableFilter {
     indicateUsing(callback: ((data: FilterState) => IndicatorResult) | null): this { this._indicateUsing = callback; return this; }
     /** Query condition built from the sanitized state, replacing the default one. */
     query(modifier: (query: any, data: FilterState) => void): this { this._query = modifier; return this; }
-    /** Filament's name of `query()`. */
+    /** Alias of `query()`. */
     modifyQueryUsing(modifier: (query: any, data: FilterState) => void): this { return this.query(modifier); }
     protected _baseQuery: ((query: any, data: FilterState) => void) | null = null;
     /**
@@ -1965,7 +1960,7 @@ abstract class BaseFilter implements TableFilter {
      * soft-deleted records or join a table. Its conditions are not grouped with the other filters'.
      */
     baseQuery(modifier: ((query: any, data: FilterState) => void) | null): this { this._baseQuery = modifier; return this; }
-    /** Filament's long name of `baseQuery()`. */
+    /** Alias of `baseQuery()`. */
     modifyBaseQueryUsing(modifier: ((query: any, data: FilterState) => void) | null): this { return this.baseQuery(modifier); }
     applyToBaseQuery(query: Omit<ListQuery, 'page' | 'perPage'>, state: FilterState): void {
         if (!this._baseQuery) return;
@@ -1989,7 +1984,7 @@ abstract class BaseFilter implements TableFilter {
     getColumnSpan(): Record<string, number | string> { return this._columnSpan; }
     protected _hidden: boolean | (() => boolean) = false;
     protected _visible: boolean | (() => boolean) = true;
-    /** Removes the filter from the table: its form field, its query and its indicators (Filament's `hidden()`). */
+    /** Removes the filter from the table: its form field, its query and its indicators. */
     hidden(condition: boolean | (() => boolean) = true): this { this._hidden = condition; return this; }
     visible(condition: boolean | (() => boolean) = true): this { this._visible = condition; return this; }
     isHidden(): boolean { return Boolean(typeof this._hidden === 'function' ? this._hidden() : this._hidden) || !(typeof this._visible === 'function' ? this._visible() : this._visible); }
@@ -2460,7 +2455,7 @@ export class Table<R = any> {
     private _filtersFormMaxHeight: string | null = null;
     private _filtersResetPosition: 'header' | 'footer' = 'header';
     private _filterIndicatorsHidden = false;
-    // As in Filament, the column manager state and the records per page are kept for the session unless turned off.
+    // The column manager state and the records per page are kept for the session unless turned off.
     private _persist = { filters: false, search: false, columnSearches: false, sort: false, columns: true, recordsPerPage: true };
     private _recordActionsPosition: 'before-columns' | 'before-cells' | 'after-columns' | 'after-cells' = 'after-columns';
     private _recordActionsAlignment: 'start' | 'center' | 'end' | null = null;
@@ -2622,7 +2617,7 @@ export class Table<R = any> {
     persistSortInSession(condition = true): this { this._persist.sort = condition; return this; }
     private _persistGrouping = false;
     persistGroupingInSession(condition = true): this { this._persistGrouping = condition; return this; }
-    /** Filament's name of `persistGroupingInSession()`. */
+    /** Alias of `persistGroupingInSession()`. */
     persistGroupInSession(condition = true): this { return this.persistGroupingInSession(condition); }
     persistsGroupingInSession(): boolean { return this._persistGrouping; }
     persistsFiltersInSession(): boolean { return this._persist.filters; }
@@ -2691,7 +2686,7 @@ export class Table<R = any> {
     stackedOnMobile(condition = true): this { this._stackedOnMobile = condition; return this; }
     pluralModelLabel(label: string): this { this._label = label; return this; }
 
-    // --- D4: table-level options (identity, pagination, reordering, header, loading, search, sort, persistence, column manager)
+    // Table-level options: identity, pagination, reordering, header, loading, search, sort, persistence, column manager.
     private _identifier: string | (() => string | null) | null = null;
     private _queryStringIdentifier: string | (() => string | null) | null = null;
     /** Tells two tables of the same component apart: it is part of their session keys (persisted state). */
@@ -2700,7 +2695,7 @@ export class Table<R = any> {
     /** Prefix of the table's query string parameters: `queryStringIdentifier('users')` gives `?usersPage=2`. Defaults to `identifier()`. */
     queryStringIdentifier(identifier: string | (() => string | null) | null): this { this._queryStringIdentifier = identifier; return this; }
     getQueryStringIdentifier(): string | null { const value = typeof this._queryStringIdentifier === 'function' ? this._queryStringIdentifier() : this._queryStringIdentifier; return value === null || value === '' ? this.getIdentifier() : String(value); }
-    /** Name of the page parameter (Filament's `getTablePaginationPageName()`): `page`, or `<identifier>Page`. */
+    /** Name of the page parameter: `page`, or `<identifier>Page`. */
     getPaginationPageName(): string { const identifier = this.getQueryStringIdentifier(); return identifier && /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(identifier) ? `${identifier}Page` : 'page'; }
     private _openRecordUrlInNewTab: boolean | ((record: R) => boolean) = false;
     /** Row links open in a new tab (for every record, or those for which the function returns `true`). */
@@ -2713,7 +2708,7 @@ export class Table<R = any> {
     /** The records per page value from the browser must be one of `paginationPageOptions()` (else the default option applies). */
     enforcePaginationPageOptions(condition = true): this { this._enforcePageOptions = condition; return this; }
     enforcesPaginationPageOptions(): boolean { return this._enforcePageOptions; }
-    /** Keeps the records per page for the user's session (on by default, as in Filament). */
+    /** Keeps the records per page for the user's session (on by default). */
     persistRecordsPerPageInSession(condition = true): this { this._persist.recordsPerPage = condition; return this; }
     persistsRecordsPerPageInSession(): boolean { return this._persist.recordsPerPage; }
     /** "First page" and "last page" buttons around the page numbers. */
@@ -2838,7 +2833,7 @@ export class Table<R = any> {
     persistInSession(condition = true): this {
         return this.persistFiltersInSession(condition).persistSearchInSession(condition).persistColumnSearchesInSession(condition).persistSortInSession(condition).persistGroupingInSession(condition).persistColumnsInSession(condition).persistRecordsPerPageInSession(condition);
     }
-    /** Keeps the column manager state (visible columns and their order) for the user's session (on by default, as in Filament). */
+    /** Keeps the column manager state (visible columns and their order) for the user's session (on by default). */
     persistColumnsInSession(condition = true): this { this._persist.columns = condition; return this; }
     persistsColumnsInSession(): boolean { return this._persist.columns; }
     private _columnManager: boolean | null = null;
@@ -2897,7 +2892,7 @@ export class Table<R = any> {
         const defaults = { label: t('navette-tables::table.column_manager.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const };
         const action = new TableTriggerAction();
         const view = { ...(this._columnManagerApply?.(action) ?? action).resolve(defaults), customized: this._columnManagerApply !== null };
-        // As in Filament, the "Apply" button only exists when the column manager is deferred.
+        // The "Apply" button only exists when the column manager is deferred.
         return { ...view, hidden: view.hidden || !this.hasDeferredColumnManager() };
     }
 
@@ -2971,7 +2966,7 @@ export function getVisibleColumns<R>(table: Table<R>, host: TableHost): Column<R
     const position = (column: Column<R>) => { const index = order.indexOf(column.name); return index < 0 ? order.length : index; };
     return visible.map((column, index) => ({ column, index })).sort((a, b) => position(a.column) - position(b.column) || a.index - b.index).map(({ column }) => column);
 }
-/** Whether a column is hidden by the column manager (Filament's `isToggledHidden()`). */
+/** Whether a column is hidden by the column manager. */
 export function isColumnToggledHidden<R>(column: Column<R>, host: TableHost): boolean { return column.isToggleable() && columnToggleStateOf(host.tableColumns).get(column.name) === false; }
 /**
  * Sanitizes column state from the browser (or the session): only declared columns and groups are kept, with their declared
@@ -2992,7 +2987,7 @@ function columnSort<R>(column: Column<R>, direction: SortDirection): NonNullable
     return { column: column.getSortColumn(), ...(columns.length > 1 ? { columns } : {}), direction: sortDirection, ...(query ?{ modify: (q: any, d: SortDirection) => { query(q, d); } } : {}) };
 }
 
-/** Search and per-column search of the query (Filament's `applySearchToTableQuery()`). */
+/** Search and per-column search of the query. */
 function tableSearchQuery<R>(table: Table<R>, host: TableHost): Pick<ListQuery, 'search' | 'searchColumns' | 'searchConstraints' | 'splitSearchTerms' | 'searchUsing' | 'columnSearches' | 'columnSearchOptions'> {
     const columns = table.getColumns();
     const global = columns.filter((c) => c.isGloballySearchable());
@@ -3017,7 +3012,7 @@ function tableSearchQuery<R>(table: Table<R>, host: TableHost): Pick<ListQuery, 
     };
 }
 
-/** Sort of the query (Filament's `applySortingToTableQuery()`): the user's column sort, then the default sort, then the key. */
+/** Sort of the query: the user's column sort, then the default sort, then the key. */
 function tableSortQuery<R>(table: Table<R>, host: TableHost): Pick<ListQuery, 'sort' | 'thenSort' | 'keySort'> {
     const [name, direction] = (host.tableSort ?? '').split(':');
     const column = name ? table.getColumn(name) : undefined;
@@ -3037,7 +3032,7 @@ function tableSortQuery<R>(table: Table<R>, host: TableHost): Pick<ListQuery, 's
 
 /**
  * Search term of a column's individual search field: `author.name` is bound as `tableColumnSearches.author.name`, which the
- * browser state may hold nested (`{ author: { name } }`), like Filament's `data_get()`. Only text is accepted.
+ * browser state may hold nested (`{ author: { name } }`). Only text is accepted.
  */
 function columnSearchOf(host: TableHost, name: string): string {
     const value = readRecordPath(host.tableColumnSearches ?? {}, name);
@@ -3072,7 +3067,7 @@ export function applyTableFilters<R>(table: Table<R>, host: TableHost, query: Om
     }
 }
 /**
- * Whether a record still matches the applied filters, as Filament checks when a row action resolves its record; filters marked
+ * Whether a record still matches the applied filters when a row action resolves its record; filters marked
  * `excludeWhenResolvingRecord()` are left out.
  */
 export async function recordMatchesTableFilters<R>(table: Table<R>, host: TableHost, adapter: Pick<DataAdapter<R>, 'listKeys'>, key: string): Promise<boolean> {
@@ -3178,7 +3173,7 @@ export function setTablePage<R>(table: Table<R>, host: TableHost, page: unknown)
 }
 
 /**
- * Saves a new order of rows (Filament's `reorderTable()`): only keys of records the table shows are kept, and each gets
+ * Saves a new order of rows: only keys of records the table shows are kept, and each gets
  * its position, counted from the current page's first position when the table stays paginated while reordering (from the
  * last one with `reorderable(..., direction: 'desc')`). `beforeReordering()` and `afterReordering()` run around it.
  */
@@ -3202,7 +3197,7 @@ export async function saveTableOrder<R>(table: Table<R>, host: TableHost, adapte
     await table.callAfterReordering(keys);
     return keys;
 }
-/** Moves one row up or down among the shown rows (keyboard reordering, Filament's `moveTableRecord()`). */
+/** Moves one row up or down among the shown rows (keyboard reordering). */
 export async function moveTableRecordOrder<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, recordKey: unknown, direction: unknown): Promise<string[] | null> {
     if (!host.isTableReordering || (direction !== 'up' && direction !== 'down') || (typeof recordKey !== 'string' && typeof recordKey !== 'number')) return null;
     const order = (await getTableReorderRecords(table, host, adapter)).records.map((record) => adapter.getKey(record));
@@ -3429,7 +3424,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     let previousGroup: { key: string | null; title: string | null } = { key: null, title: null };
     const columnsLayout = table.getColumnsLayout();
     const visibleSet = new Set(visible);
-    // Striped rows: every second row of each group (Filament's `$isRecordRowStriped`).
+    // Striped rows: every second row of each group.
     let striped = false;
     // Each row renders with its loop variable (`rowLoop` in column state callbacks, `getRowLoop()` elsewhere).
     for (const [rowIndex, record] of page.records.entries()) await withRowLoop(makeRowLoop(rowIndex, page.records.length), async () => {

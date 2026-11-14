@@ -164,7 +164,7 @@ export const kebab = (value: string): string => value.replace(/([a-z0-9])([A-Z])
 
 /**
  * JavaScript widget (`make:widget <Name> --js`): the widget class, which registers its renderer module as an asset loaded on
- * request, and the framework-free renderer (Filament's `JsWidgetRenderer` starter). Paths are relative to the project root.
+ * request, and its framework-free renderer module. Paths are relative to the project root.
  */
 export function generateJsWidget(name: string, panel: string): { classFile: string; rendererFile: string; files: Record<string, string> } {
     const id = kebab(name);
@@ -492,7 +492,6 @@ export class ${className} extends PanelPlugin {
 
     /** Called once, when \`panelRouter()\` serves the panel. Per-request work goes in \`panel.bootUsing()\`. */
     boot(_panel: Panel): void {
-        //
     }
 }
 `;

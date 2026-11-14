@@ -18,7 +18,7 @@ function checkNonce(nonce: string | null | undefined): string | null {
 }
 
 /**
- * Sets the nonce of the current request (Filament's `Vite::useCspNonce()`): call it in a middleware that runs before the
+ * Sets the nonce of the current request: call it in a middleware that runs before the
  * panel, with the nonce of the `Content-Security-Policy` header you send. It is kept in `res.locals.cspNonce`, where the
  * panel reads it. A new nonce must be generated for every request.
  */
@@ -36,7 +36,7 @@ export function runWithCspNonce<T>(nonce: string | null, fn: () => T): T {
     return storage.run({ nonce: checkNonce(nonce) }, fn);
 }
 
-/** Nonce of the request being rendered, or `null` when none is configured (Filament's `Vite::cspNonce()`). */
+/** Nonce of the request being rendered, or `null` when none is configured. */
 export function cspNonce(): string | null {
     return storage.getStore()?.nonce ?? null;
 }

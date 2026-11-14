@@ -1,4 +1,4 @@
-// `MorphToSelect` (Filament's): a polymorphic `belongsTo`, edited as two fields inside a fieldset, a "type" select and
+// `MorphToSelect`: a polymorphic `belongsTo`, edited as two fields inside a fieldset, a "type" select and
 // a "key" select listing the records of the chosen type. They save the `<name>_type` and `<name>_id` attributes of the
 // record, like any other field, through the resource's data adapter.
 import { Fieldset, type Component, type ComponentContext } from '@navette-js/schemas';
@@ -17,7 +17,7 @@ const humanize = (value: string) => {
 const COLUMN = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
 
 /**
- * A type of a `MorphToSelect`: a model whose records are listed by the key select (Filament's `MorphToSelect\Type`).
+ * A type of a `MorphToSelect`: a model whose records are listed by the key select.
  * Its alias, saved in `<name>_type`, is the model's static `morphClass`, else its class name; `alias()` sets another.
  */
 export class MorphToSelectType {
@@ -112,8 +112,8 @@ export class MorphToSelectType {
 }
 
 /**
- * Two fields in a fieldset editing a polymorphic relationship (Filament's `MorphToSelect`): the type of the related record,
- * saved in `<name>_type`, and its key, saved in `<name>_id`. The key select lists the records of the chosen type.
+ * Two fields in a fieldset editing a polymorphic relationship: the type of the related record, saved in `<name>_type`,
+ * and its key, saved in `<name>_id`. The key select lists the records of the chosen type.
  */
 export class MorphToSelect extends Fieldset {
     static Type = MorphToSelectType;
@@ -200,7 +200,7 @@ export class MorphToSelect extends Fieldset {
             ? ToggleButtons.make(typeColumn).label(label as any).hiddenLabel().options(typeOptions).inline().required(required).live().afterStateUpdated(clearKey)
             : Select.make(typeColumn).label(label as any).hiddenLabel().options(typeOptions).required(required).live().afterStateUpdated(clearKey);
         if (!toggle && this._native !== null) (typeSelect as Select).native(this._native);
-        // A cleared type also clears the key, which is hidden then (Filament's `dehydratedWhenHidden()`).
+        // A cleared type also saves the key as `null`, although the key select is hidden then.
         Object.assign(typeSelect, { getExtraDehydratedState: () => (typeOf((path: string) => (path === typeColumn ? typeSelect.context().state : null)) ? {} : { [keyColumn]: null }) });
 
         let keySelect = Select.make(keyColumn)

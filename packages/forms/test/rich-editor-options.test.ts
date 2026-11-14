@@ -180,7 +180,7 @@ test('private attachments: no URL saved, a temporary signed URL from the storage
     await recordSchema.toHtml();
     const src = (reloaded.data.body as any).content.find((node: any) => node.type === 'image').attrs.src as string;
     assert.match(src, new RegExp(`^/private-files/${key.replace('.', '\\.')}\\?expires=\\d+&signature=[0-9a-f]{64}$`));
-    // Valid until the end of the hour following the next 30 minutes, as Filament.
+    // Valid until the end of the hour following the next 30 minutes.
     const { expiresAt } = storage.calls.at(-1)!;
     assert.equal(expiresAt.getMinutes(), 59);
     assert.ok(expiresAt.getTime() - Date.now() >= 30 * 60 * 1000);

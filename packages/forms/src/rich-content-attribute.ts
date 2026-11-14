@@ -1,4 +1,4 @@
-// Rich content attributes registered on a model (Filament's `HasRichContent` / `InteractsWithRichContent`): one
+// Rich content attributes registered on a model (`HasRichContent` / `InteractsWithRichContent`): one
 // configuration (custom blocks, merge tags, mentions, plugins, attachments…) shared by the `RichEditor` editing the
 // attribute, `TextColumn` / `TextEntry` displaying it, and `renderRichContent()`.
 import type { FileAttachmentProvider } from './file-attachment-provider.ts';
@@ -89,8 +89,7 @@ type Constructor<T = object> = abstract new (...args: any[]) => T;
 const registered = new WeakMap<object, Record<string, RichContentAttribute>>();
 
 /**
- * Adds rich content attributes to a model class (Filament's `InteractsWithRichContent`): override `setUpRichContent()`
- * and register each attribute with `this.registerRichContent('content')`.
+ * Adds rich content attributes to a model class: override `setUpRichContent()` and register each attribute with `this.registerRichContent('content')`.
  */
 export function InteractsWithRichContent<TBase extends Constructor>(Base: TBase) {
     abstract class WithRichContent extends Base implements HasRichContent {

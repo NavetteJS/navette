@@ -1,4 +1,4 @@
-// Table-level features (phase D4): pagination options and cursor pagination, identity, record URL, reordering, header,
+// Table-level features: pagination options and cursor pagination, identity, record URL, reordering, header,
 // polling, lazy loading, search and sort options, persistence flags, striped rows, `pushColumns()`, `rowLoop` and the
 // column manager.
 import assert from 'node:assert/strict';
@@ -44,7 +44,7 @@ test('records per page: only declared options, the default one with enforcePagin
     assert.equal(getTableRecordsPerPage(table, { tableRecordsPerPage: 7 as any }), 10);
     assert.equal(getTableRecordsPerPage(table.enforcePaginationPageOptions(), { tableRecordsPerPage: 7 as any }), 25);
     assert.equal(getTableRecordsPerPage(table, { tableRecordsPerPage: 'all' }), 25);
-    // Persistence flags: on by default for the records per page and the column manager, as in Filament.
+    // Persistence flags: on by default for the records per page and the column manager.
     assert.equal(new Table().persistsRecordsPerPageInSession(), true);
     assert.equal(new Table().persistsColumnsInSession(), true);
     const all = new Table().persistInSession();

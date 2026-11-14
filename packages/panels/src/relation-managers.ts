@@ -3,7 +3,7 @@
 import type { PanelContext, RelationGroup, RelationManager } from './index.ts';
 import { relationshipNameOf } from './nested-resources.ts';
 
-/** A relation manager with properties of its own, mapped to its public properties (Filament's `RelationManagerConfiguration`). */
+/** A relation manager with properties of its own, mapped to its public properties. */
 export class RelationManagerConfiguration<M extends typeof RelationManager = typeof RelationManager> {
     readonly relationManager: M;
     readonly properties: Record<string, unknown>;

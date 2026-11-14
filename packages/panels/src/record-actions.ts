@@ -1,4 +1,4 @@
-// Prebuilt record actions (Filament's `CreateAction`, `EditAction`, `ViewAction`, `ReplicateAction`, `DeleteAction`,
+// Prebuilt record actions (`CreateAction`, `EditAction`, `ViewAction`, `ReplicateAction`, `DeleteAction`,
 // `ForceDeleteAction`, `RestoreAction`, their bulk variants, and the relationship actions `AttachAction`, `DetachAction`,
 // `AssociateAction`, `DissociateAction`): each one is an `Action` subclass set up by its `make()`.
 //
@@ -60,7 +60,7 @@ export async function sendActionFailure(action: Action, ctx: Context, counts: { 
     if (isSafeUrl(url)) ctx.livewire.redirect(url, true);
 }
 
-/** Counts of a bulk run, as Filament injects them into the failure notification and its title. */
+/** Counts of a bulk run, available to the failure notification and its title. */
 export type BulkOutcome = { total: number; success: number; unauthorized: number; failed: number };
 
 /**
@@ -89,7 +89,7 @@ export async function sendBulkActionOutcome(action: Action, ctx: Context, outcom
 }
 
 /**
- * Base of the prebuilt actions whose process can be replaced with `using()` (Filament's `CanCustomizeProcess`): the default
+ * Base of the prebuilt actions whose process can be replaced with `using()`: the default
  * process (creating, saving, deleting…) is skipped, the notifications and redirects stay.
  */
 export class CustomizableAction extends Action {
@@ -113,7 +113,7 @@ type FooterActions = Action[] | ((action: any) => Action[]);
 const anotherAction = (name: string, label: string) => Action.make(name).label(label).color('gray').action(`callMountedAction(${js({ another: true })})`);
 
 /**
- * The "… & … another" footer button of a prebuilt action: it is rebuilt when the option changes, and replaced (like Filament)
+ * The "… & … another" footer button of a prebuilt action: it is rebuilt when the option changes, and replaced
  * when `extraModalFooterActions()` is called with other actions.
  */
 class AnotherFooter {
@@ -159,7 +159,7 @@ export class CreateAction extends CustomizableAction {
                 await sendActionSuccess(action, { ...ctx, record } as Context, t('navette-actions::create.single.notifications.created.title'));
             });
         action.refreshFooter();
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
     /** `false`: no "Create & create another" button in the modal. */
@@ -209,7 +209,7 @@ export class EditAction extends CustomizableAction {
                 if (ctx.schema) await saveSchemaRelationships(ctx.schema, saved ?? ctx.record);
                 await sendActionSuccess(action, ctx as Context, t('navette-actions::edit.single.notifications.saved.title'));
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
     /** Changes the record's attributes before they fill the form: `(data) => ({ ...data, name: data.name.trim() })`. */
@@ -247,7 +247,7 @@ export class ViewAction extends Action {
                 return form;
             })
             .fillForm(async (ctx) => action.mutateRecordData(attributesOf(ctx.record), ctx as Context));
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
     /** Changes the record's attributes before they fill the (read-only) form. */
@@ -286,7 +286,7 @@ export class ReplicateAction extends CustomizableAction {
                 await action._afterSaved?.({ replica: saved, data: ctx.data ?? {}, record });
                 await sendActionSuccess(action, { ...ctx, replica: saved } as Context, t('navette-actions::replicate.single.notifications.replicated.title'));
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
     /** Attributes not copied (besides the key and timestamps). */
@@ -333,7 +333,7 @@ export class DeleteAction extends CustomizableAction {
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
                 await sendActionSuccess(action, ctx as Context, t('navette-actions::delete.single.notifications.deleted.title'), table ? null : livewire.resource.getUrl());
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -359,7 +359,7 @@ export class RestoreAction extends CustomizableAction {
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
                 await sendActionSuccess(action, ctx as Context, t('navette-actions::restore.single.notifications.restored.title'));
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -384,7 +384,7 @@ export class ForceDeleteAction extends CustomizableAction {
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
                 await sendActionSuccess(action, ctx as Context, t('navette-actions::force-delete.single.notifications.deleted.title'), table ? null : livewire.resource.getUrl());
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -446,7 +446,7 @@ export class DeleteBulkAction extends CustomizableAction {
                 const adapter = ctx.livewire.getDataAdapterForTable();
                 await runBulk(action, ctx as Context, (record) => adapter.delete(adapter.getKey(record)), (keys) => adapter.deleteMany(keys));
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -475,7 +475,7 @@ export class RestoreBulkAction extends CustomizableAction {
                 await runBulk(action, ctx as Context, (record) => adapter.isTrashed(record) && adapter.restore(adapter.getKey(record)),
                     async (keys) => (adapter.restoreMany ? adapter.restoreMany(keys) : (await Promise.all(keys.map((key) => adapter.restore(key)))).filter(Boolean).length));
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -503,7 +503,7 @@ export class ForceDeleteBulkAction extends CustomizableAction {
                 await runBulk(action, ctx as Context, (record) => adapter.forceDelete(adapter.getKey(record)),
                     async (keys) => (adapter.forceDeleteMany ? adapter.forceDeleteMany(keys) : (await Promise.all(keys.map((key) => adapter.forceDelete(key)))).filter(Boolean).length));
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -693,7 +693,7 @@ export class AttachAction extends RecordSelectAction {
                 if (!(await action.relate(ctx as Context))) { await sendActionFailure(action, ctx as Context); action.halt(); }
                 await sendActionSuccess(action, ctx as Context, null);
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
     /** `false`: no "Attach & attach another" button in the modal. */
@@ -716,7 +716,7 @@ export class AssociateAction extends RecordSelectAction {
                 if (!(await action.relate(ctx as Context))) { await sendActionFailure(action, ctx as Context); action.halt(); }
                 await sendActionSuccess(action, ctx as Context, null);
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
     /** `false`: no "Associate & associate another" button in the modal. */
@@ -742,7 +742,7 @@ export class DetachAction extends CustomizableAction {
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
                 await sendActionSuccess(action, ctx as Context, null);
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -766,7 +766,7 @@ export class DetachBulkAction extends CustomizableAction {
                 await runBulk(action, ctx as Context, async (record) => { await managerOf(livewire).detach(livewire.ownerRecord, [adapter.getKey(record)]); },
                     async (keys) => { await managerOf(livewire).detach(livewire.ownerRecord, keys); return keys.length; });
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -789,7 +789,7 @@ export class DissociateAction extends CustomizableAction {
                 if (result === false) { await sendActionFailure(action, ctx as Context); return; }
                 await sendActionSuccess(action, ctx as Context, null);
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }
@@ -813,7 +813,7 @@ export class DissociateBulkAction extends CustomizableAction {
                 await runBulk(action, ctx as Context, async (record) => { await managerOf(livewire).dissociate(livewire.ownerRecord, [adapter.getKey(record)]); },
                     async (keys) => { await managerOf(livewire).dissociate(livewire.ownerRecord, keys); return keys.length; });
             });
-        // `configureUsing()` setups run after the default setup, as in Filament.
+        // `configureUsing()` setups run after the default setup.
         return configured(action);
     }
 }

@@ -1,5 +1,5 @@
 // JavaScript renderers: components whose content is rendered in the browser by a module the application brings (React, Vue,
-// Svelte or plain DOM code). The browser side is Filament's `js-component.js` / `js-field.js` Alpine components; this file
+// Svelte or plain DOM code). The browser side is the `js-component.js` / `js-field.js` Alpine components; this file
 // builds their markup. It has no dependency on the schema classes, so that `index.ts` and `@navette-js/forms` can share it.
 import { createHash } from 'node:crypto';
 import { e, js } from '@navette-js/support';
@@ -56,7 +56,7 @@ export function normalizeRendererConfiguration(configuration: unknown): Record<s
     return configuration as Record<string, unknown>;
 }
 
-/** Markup of a schema component rendered by a JavaScript module, as Filament's `HasJsRenderer::toEmbeddedHtml()`. */
+/** Markup of a schema component rendered by a JavaScript module. */
 export function jsComponentHtml(options: {
     livewireKey: string | null;
     assetUrl: string;
@@ -106,7 +106,7 @@ export type JsFieldConfiguration = {
     isInvalid: boolean;
 };
 
-/** Debounce in milliseconds: a number, or a string such as `500ms` or `0.5s`, as Filament reads `live(debounce:)`. */
+/** Debounce in milliseconds: a number, or a string such as `500ms` or `0.5s` (as `live({ debounce })` accepts it). */
 export function debounceMilliseconds(debounce: number | string | null | undefined): number | null {
     if (debounce === null || debounce === undefined || debounce === '') return null;
     if (typeof debounce === 'number') return Math.trunc(debounce);

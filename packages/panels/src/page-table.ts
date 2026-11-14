@@ -1,4 +1,4 @@
-// Widgets bound to a list page's table (Filament's `InteractsWithPageTable`): any widget class receives the table state of the
+// Widgets bound to a list page's table (`InteractsWithPageTable()`): any widget class receives the table state of the
 // list page it is shown on (search, filters, tab, sort, pagination) and can query exactly the records that table displays.
 import type { DataAdapter, ListQuery } from '@navette-js/database';
 import { getTableQuery, getTableRecords, type FilterState } from '@navette-js/tables';

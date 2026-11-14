@@ -13,7 +13,7 @@ import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
 import { broadcastToUsers, dispatchDatabaseNotificationsSent, NOTIFICATION_BROADCAST_EVENT, type BroadcastOptions, type BroadcastRecipient } from './broadcasting.ts';
 
-/** `title` and `body` may hold HTML (Markdown converted with `markdownToHtml()`, for instance): it is sanitized when rendered, as in Filament. */
+/** `title` and `body` may hold HTML (Markdown converted with `markdownToHtml()`, for instance): it is sanitized when rendered. */
 export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; color?: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionItem[] };
 /** The part of a notification store needed to write to it (see `DatabaseNotificationStore`). */
 type NotificationSink = { send(user: string | number, notification: NotificationData): Promise<void> };
@@ -71,7 +71,7 @@ export class Notification {
     }
     static make(id?: string): Notification { return new Notification(id); }
     /**
-     * A notification in Filament's array format (`Notification::toArray()`, `NavetteNotification.toJSON()`), e.g. sent from the
+     * A notification in array format (as produced by `NavetteNotification.toJSON()`), e.g. sent from the
      * browser. The data is untrusted: unknown values are dropped and the id is replaced when it is not a safe one.
      */
     static fromArray(raw: unknown): Notification {
@@ -92,7 +92,7 @@ export class Notification {
     }
     getId(): string { return this.data.id; }
     id(id: string): this { if (!NOTIFICATION_ID.test(id)) throw new Error(`Invalid notification id: ${id}`); this.data.id = id; return this; }
-    /** Title: text or HTML (an `HtmlString`, or Markdown through `markdownToHtml()`), sanitized when rendered like Filament's `sanitizeHtml()`. */
+    /** Title: text or HTML (an `HtmlString`, or Markdown through `markdownToHtml()`), sanitized when rendered. */
     title(title: string | HtmlString | null): this { this.data.title = title instanceof HtmlString ? title.html : title; return this; }
     /** Body under the title: text or HTML, sanitized when rendered. */
     body(body: string | HtmlString | null): this { this.data.body = body instanceof HtmlString ? body.html : body; return this; }
@@ -111,7 +111,7 @@ export class Notification {
     seconds(seconds: number): this { return this.duration(seconds * 1000); }
     persistent(): this { this.data.duration = 'persistent'; return this; }
     /**
-     * Actions under the text, as in Filament: `Action`s of `@navette-js/actions` (`Action.make('view').button().url('/posts/1')`,
+     * Actions under the text: `Action`s of `@navette-js/actions` (`Action.make('view').button().url('/posts/1')`,
      * `.close()`, `.dispatch('undo', { id })`, `.dispatchTo()`, `.dispatchSelf()`, `.markAsRead()`, with `icon()`, `iconPosition()`,
      * `size()`, `tooltip()`, `extraAttributes()`, `disabled()`), `ActionGroup`s (a dropdown), or plain objects
      * (`{ label, url, close, dispatch: { event, data, to | self }, button, … }`). Actions are small links unless they chose a style.
@@ -132,7 +132,7 @@ export class Notification {
         if (isEventDispatched) await dispatchDatabaseNotificationsSent(user, options);
         return this;
     }
-    /** The notification as sent to the browser by `broadcast()`: its actions in Filament's array format, read back by `fromArray()`. */
+    /** The notification as sent to the browser by `broadcast()`: its actions in array format, read back by `fromArray()`. */
     getBroadcastMessage(): Omit<NotificationData, 'actions'> & { actions?: Record<string, unknown>[]; format: 'navette' } {
         const { actions, ...data } = this.data;
         return { ...data, ...(actions ? { actions: actions.map(notificationActionToArray) } : {}), format: 'navette' };
@@ -162,7 +162,7 @@ export class Notification {
 /** Classes of a notification's background color (none for gray, the default). */
 export const notificationColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' && COLOR.test(color) ? ['nv-color', `nv-color-${color}`] : []);
 
-/** Renders a flash notification (no date or inline mode). Title and body are sanitized HTML (like Filament's `sanitizeHtml()`); action labels are escaped. */
+/** Renders a flash notification (no date or inline mode). Title and body are sanitized HTML; action labels are escaped. */
 export function renderNotification(n: NotificationData): string {
     const closeLabel = t('navette-notifications::notification.actions.close.label');
     const attributes = new Attributes()

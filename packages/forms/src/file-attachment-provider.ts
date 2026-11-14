@@ -1,5 +1,5 @@
-// Record-aware storage of the images attached in a rich editor (Filament's `FileAttachmentProvider`): the provider stores
-// each upload for the record being edited, gives the URL of the ids it manages, and deletes the files removed from the content.
+// Record-aware storage of the images attached in a rich editor: the provider stores each upload for the record being edited,
+// gives the URL of the ids it manages, and deletes the files removed from the content.
 import type { AttachmentsVisibility } from './rich-editor-attachments.ts';
 import type { FileStorage, TemporaryUpload } from './index.ts';
 

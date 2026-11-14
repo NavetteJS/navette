@@ -1,4 +1,4 @@
-// Rich content attributes registered on a record (Filament's `HasRichContent`), read by text columns and entries without
+// Rich content attributes registered on a record, read by text columns and entries without
 // depending on the forms package: any record with `hasRichContentAttribute(name)` and `getRichContentAttribute(name)`.
 
 /** What a column or an entry needs from a registered rich content attribute (`RichContentAttribute` of `@navette-js/forms`). */

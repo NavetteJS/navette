@@ -1,4 +1,4 @@
-// Phase E3: export file disks, custom export formats, XLSX writer hooks, Importer.saveRecord(), history with a polymorphic
+// Export file disks, custom export formats, XLSX writer hooks, Importer.saveRecord(), history with a polymorphic
 // user, and the context handed to the background runner.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -69,16 +69,16 @@ class Gadgets extends Resource {
     }
 }
 const reports = new DownloadStore();
-const panel = Panel.make().id('e3-ie').key('k').downloads(new DownloadStore()).downloadDisks({ reports }).resources([Gadgets]);
+const panel = Panel.make().id('import-export').key('k').downloads(new DownloadStore()).downloadDisks({ reports }).resources([Gadgets]);
 const page = async (targetPanel = panel) => {
     const ListPage = Gadgets.getPages().index as any;
     const component = new ListPage();
-    component._ctx = { panel: targetPanel, user, mailbox: 'e3', req: { query: {} }, res: {} };
+    component._ctx = { panel: targetPanel, user, mailbox: 'import-export', req: { query: {} }, res: {} };
     component._id = 'gadgets';
     await component.mount({});
     return component;
 };
-const run = <T>(fn: () => Promise<T>) => runInRequest('e3', fn);
+const run = <T>(fn: () => Promise<T>) => runInRequest('import-export', fn);
 const tokenOf = (url: string) => decodeURIComponent(url.split('/downloads/')[1].split('?')[0]);
 function xlsxParts(file: Buffer): Record<string, string> {
     const parts: Record<string, string> = {};
@@ -148,7 +148,7 @@ test('import: Importer.saveRecord() replaces the adapter writes; queued runs han
     const { mkdtempSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const path = await import('node:path');
-    const csv = path.join(mkdtempSync(path.join(tmpdir(), 'navette-e3-')), 'gadgets.csv');
+    const csv = path.join(mkdtempSync(path.join(tmpdir(), 'navette-import-export-')), 'gadgets.csv');
     writeFileSync(csv, 'name,price\nLamp,15\nChair,40\n');
     file.file.path = csv;
     await run(() => list.getTable().getHeaderActions()[2].call({ livewire: list, record: null, arguments: {}, data: { file, columnMap: { name: 'name', price: 'price' } } }));
@@ -157,7 +157,7 @@ test('import: Importer.saveRecord() replaces the adapter writes; queued runs han
 
     // Queued: the runner receives the importer / exporter, the run and the queue name.
     const store = { send: async () => {}, list: async () => [], count: async () => 0, unreadCount: async () => 0, delete: async () => {}, markAsRead: async () => {}, markAllAsRead: async () => {} } as any;
-    const queuedPanel = Panel.make().id('e3-queued').key('k').downloads(new DownloadStore()).downloadDisks({ reports }).resources([Gadgets]).databaseNotifications(store);
+    const queuedPanel = Panel.make().id('queued').key('k').downloads(new DownloadStore()).downloadDisks({ reports }).resources([Gadgets]).databaseNotifications(store);
     const contexts: BackgroundTaskContext[] = [];
     const tasks: (() => Promise<void>)[] = [];
     useBackgroundRunner((task, context) => { tasks.push(task); contexts.push(context!); });
@@ -166,8 +166,8 @@ test('import: Importer.saveRecord() replaces the adapter writes; queued runs han
         await run(() => queued.getTable().getHeaderActions()[0].queued().call({ livewire: queued, record: null, arguments: {}, data: { columns: ['name'] } }));
         await run(() => queued.getTable().getHeaderActions()[2].queued().call({ livewire: queued, record: null, arguments: {}, data: { file, columnMap: { name: 'name', price: 'price' } } }));
         assert.deepEqual(contexts.map((context) => [context.type, (context.exporter ?? context.importer)?.name, context.queue, context.connection, context.panel, context.userId]), [
-            ['export', 'GadgetExporter', 'exports', null, 'e3-queued', 3],
-            ['import', 'GadgetImporter', 'imports', null, 'e3-queued', 3],
+            ['export', 'GadgetExporter', 'exports', null, 'queued', 3],
+            ['import', 'GadgetImporter', 'imports', null, 'queued', 3],
         ]);
         assert.ok(contexts[0].run.fileName);
         for (const task of tasks) await task();
@@ -179,12 +179,12 @@ test('import: Importer.saveRecord() replaces the adapter writes; queued runs han
 test('history with a polymorphic user: user_type is the panel id', async () => {
     await importExportSchema(db, { polymorphicUser: true });
     assert.ok(await db.schema.hasColumn('exports', 'user_type'));
-    const historyPanel = Panel.make().id('e3-history').key('k').downloads(new DownloadStore()).downloadDisks({ reports }).resources([Gadgets])
+    const historyPanel = Panel.make().id('history').key('k').downloads(new DownloadStore()).downloadDisks({ reports }).resources([Gadgets])
         .importExportHistory(knexImportExportHistory((table) => db(table), { polymorphicUser: true }));
     const list = await page(historyPanel);
     await run(() => list.getTable().getHeaderActions()[0].call({ livewire: list, record: null, arguments: {}, data: { columns: ['name'] } }));
     const [row] = await db('exports');
-    assert.deepEqual([row.user_id, row.user_type], [3, 'e3-history']);
+    assert.deepEqual([row.user_id, row.user_type], [3, 'history']);
     // Without the option, the column is left alone.
     const plain = knexImportExportHistory((table) => db(table));
     const id = await plain.startExport({ userId: 4, userType: 'other', exporter: 'X', fileName: 'x', totalRows: 0 });

@@ -6,7 +6,7 @@
 
 /**
  * Table configuration of a `TableSelect`: a class (or an object) with a `name` and a `configure(table)` method returning the
- * table, like Filament's table configuration classes. A resource class works as well (its `table()` and its `adapter`).
+ * table. A resource class works as well (its `table()` and its `adapter`).
  * The records come from its `adapter` (or `getDataAdapter()`) when it has one, otherwise from the field's relationship.
  */
 export type TableConfiguration = {

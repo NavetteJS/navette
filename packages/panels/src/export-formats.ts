@@ -1,4 +1,4 @@
-// Custom export formats (Filament's `ExportFormat` contract): a file type of its own (JSON, PDF, ODS...) next to the built-in
+// Custom export formats: a file type of its own (JSON, PDF, ODS...) next to the built-in
 // CSV and XLSX files, with its extension, MIME type, content generator, download link and downloader.
 import type { Action } from '@navette-js/actions';
 import type { Downloader } from './downloads.ts';

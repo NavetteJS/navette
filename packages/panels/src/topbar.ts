@@ -99,7 +99,6 @@ export class GlobalSearch extends Component {
     }
 }
 
-/** An action of a database notification: a link or a button (`button`), which may close the notification, dispatch a Livewire event or change its read state. */
 /** An action or an action group of a database notification. */
 export type DatabaseNotificationAction = NotificationActionItem;
 export type DatabaseNotificationRecord = { id: string; title: string | null; body: string | null; icon: string | null; iconColor: string | null; status: string | null; color?: string | null; actions: DatabaseNotificationAction[]; createdAt: Date | null; unread: boolean };

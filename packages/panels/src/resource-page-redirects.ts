@@ -1,5 +1,5 @@
-// Where resource create and edit pages send the user after creating or saving a record (Filament's `getRedirectUrl()`
-// defaults, with the panel's `resourceCreatePageRedirect()` and `resourceEditPageRedirect()`).
+// Where resource create and edit pages send the user after creating or saving a record (the defaults,
+// and the panel's `resourceCreatePageRedirect()` and `resourceEditPageRedirect()`).
 import type { Resource } from './index.ts';
 
 /** A resource page name (`'index'`, `'view'`, `'edit'`), a function returning one, or `null` for the default. */

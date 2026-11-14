@@ -193,7 +193,7 @@ static table(table: Table<Order>): Table<Order> {
 }
 ```
 
-The default sort does not need to match a column of the table. When it names a sortable column, that column's own sort is used (its [sort columns or query](/tables/columns/overview#sorting)). As in Filament, the default sort also applies after the user's sort, as a secondary order.
+The default sort does not need to match a column of the table. When it names a sortable column, that column's own sort is used (its [sort columns or query](/tables/columns/overview#sorting)). The default sort also applies after the user's sort, as a secondary order.
 
 To order the query yourself, pass a function instead of a column name. It receives the query and the direction:
 
@@ -436,7 +436,7 @@ new Table()
 
 ### Keeping the page in the URL
 
-The current page is kept in the URL (`?page=2`), like Livewire's pagination, so a reload or a shared link opens the same page. When a page shows several tables, give each one a `queryStringIdentifier()`: its parameters are prefixed with it (`?ordersPage=2`). Relation managers use their class name (`?commentsRelationManagerPage=2`), as in Filament:
+The current page is kept in the URL (`?page=2`), like Livewire's pagination, so a reload or a shared link opens the same page. When a page shows several tables, give each one a `queryStringIdentifier()`: its parameters are prefixed with it (`?ordersPage=2`). Relation managers use their class name (`?commentsRelationManagerPage=2`):
 
 ```ts
 import { type Table } from '@navette-js/tables';

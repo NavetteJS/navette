@@ -31,7 +31,7 @@ export function useActionRateLimitStore(store: ActionRateLimitStore): void { rat
 export function getActionRateLimitStore(): ActionRateLimitStore { return rateLimitStore; }
 
 /**
- * Key of an action's rate limit, as Filament's: the IP address, the component class and the mounted actions (names,
+ * Key of an action's rate limit: the IP address, the component class and the mounted actions (names,
  * arguments and contexts, without form data), so each record and each set of arguments has its own limit.
  */
 export function actionRateLimitKey(componentClass: string, ip: string, mountedActions: { name: string; arguments?: unknown; context?: unknown }[]): string {
@@ -41,7 +41,7 @@ export function actionRateLimitKey(componentClass: string, ip: string, mountedAc
 
 // ------------------------------------------------------------------ actions opened from the URL
 
-/** URL parameters of the action to open when the page loads (Filament's `#[Url]` properties of `InteractsWithActions`). */
+/** URL parameters of the action to open when the page loads. */
 export type DefaultActionQuery = {
     action?: string; actionArguments?: Record<string, unknown>; actionContext?: Record<string, unknown>;
     tableAction?: string; tableActionRecord?: string; tableActionArguments?: Record<string, unknown>; actionComponent?: string;

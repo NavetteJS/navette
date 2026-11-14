@@ -59,7 +59,7 @@ test('tenant domains: the host designates the tenant, links to other tenants go 
     panel.logIn({ cookie: (_name: string, _value: string, options: any) => { cookie = options.domain; }, req: {} } as any, ada, false);
     assert.equal(cookie, '.example.test');
     await serve(panel, async (get) => {
-        // A host outside the pattern (`www` would be a tenant key, as in Filament) leads to the user's first tenant.
+        // A host outside the pattern (`www` would be a tenant key) leads to the user's first tenant.
         assert.equal((await get('/app', 'example.test')).location, '//1.example.test:8080/app');
         const page = await get('/app', '1.example.test');
         assert.equal(page.status, 200);

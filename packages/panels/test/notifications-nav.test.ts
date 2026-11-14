@@ -25,7 +25,7 @@ test('Notification.fromArray(): the JSON of NavetteNotification is read, and wha
     assert.deepEqual(data.actions, [
         { name: 'viewPost', label: 'View post', url: '/posts/1', openUrlInNewTab: true, close: false, dispatch: null, color: 'gray', button: true, outlined: false, markAsRead: false, markAsUnread: false },
         { name: 'undo', label: 'Undo', url: null, openUrlInNewTab: false, close: true, dispatch: { event: 'undoEditingPost', data: [5], direction: 'to', component: 'posts-table' }, color: null, button: false, outlined: false, markAsRead: false, markAsUnread: false },
-        // Action groups are read too (Filament's `ActionGroup::fromArray()`).
+        // Action groups are read too.
         { group: true, actions: [{ name: 'grouped', label: 'Grouped', url: null, openUrlInNewTab: false, close: false, dispatch: null, color: null, button: false, outlined: false, markAsRead: false, markAsUnread: false }], label: null, icon: null, color: null, size: 'sm', tooltip: null, view: 'link', dropdown: true, placement: null, width: null, offset: null, maxHeight: null, extraAttributes: undefined },
     ]);
 
@@ -46,7 +46,7 @@ test('Notification.fromArray(): the JSON of NavetteNotification is read, and wha
     assert.equal(Notification.make().seconds(3).getData().duration, 3000);
 });
 
-test('notification actions: Filament click handlers, colors from the panel, URLs checked', () => {
+test('notification actions: click handlers, colors from the panel, URLs checked', () => {
     useNotificationsColorManager(new ColorManager());
     const html = notificationActionsHtml(Notification.make().actions([
         { label: 'Undo', dispatch: { event: 'undo', data: { id: 5 }, self: true }, close: true, button: true },
@@ -58,7 +58,7 @@ test('notification actions: Filament click handlers, colors from the panel, URLs
     assert.match(html, /<button type="button" x-on:click="\$wire\.\$dispatchSelf\(&#039;undo&#039;, [^"]+\); close\(\)" class="nv-ac-btn-action nv-btn nv-size-sm nv-color nv-color-primary nv-bg-color-\d+ /);
     assert.match(html, /x-on:click="Livewire\.dispatchTo\(&#039;orders-table&#039;, &#039;refresh&#039;, [^"]+\)" class="nv-ac-btn-action nv-btn nv-size-sm nv-outlined nv-color nv-color-gray/);
     assert.match(html, /<button type="button" x-on:click="markAsRead\(\)" class="nv-ac-link-action nv-link nv-size-sm nv-color nv-color-primary nv-text-color-\d+ dark:nv-text-color-\d+"><span class="nv-link-label">Read<\/span><\/button>/);
-    // Closing before following a link in the same tab closes at once, like Filament.
+    // Closing before following a link in the same tab closes at once.
     assert.match(html, /<a href="\/orders\/5" wire:navigate x-on:click="close\(true\)"/);
     assert.doesNotMatch(html, /data:|Evil/);
     assert.throws(() => Notification.make().actions([{ label: 'x', dispatch: { event: 'ok', to: 'a" b' } }]), /Invalid component name/);
@@ -76,7 +76,7 @@ test('notifications component: a notification sent from JavaScript is pushed, cl
     const dispatch = (snap: Snapshot, event: string, params: unknown) => runtime.update(JSON.parse(JSON.stringify(snap)), {}, [{ method: '__dispatch', params: [event, params] }], { mailbox: 'm' });
     // `NavetteNotification.send()` dispatches `notificationSent` with `{ notification }`.
     let next = await dispatch(snapshot, 'notificationSent', { notification: { id: 'js-1', title: '<b>Saved</b><img src=x onerror=alert(1)><script>alert(2)</script>', status: 'success', duration: 'persistent' } });
-    // Title and body are sanitized HTML, as in Filament: formatting stays, scripts and event handlers go.
+    // Title and body are sanitized HTML: formatting stays, scripts and event handlers go.
     assert.match(next.effects.html!, /<h3 class="nv-no-notification-title"><b>Saved<\/b>/);
     assert.doesNotMatch(next.effects.html!, /onerror|<script|alert\(2\)/);
     assert.match(next.effects.html!, /x-on:close-notification\.window="if \(\$event\.detail\.id == &#039;js-1&#039;\) close\(\)"|x-on:close-notification\.window="if \(\$event\.detail\.id == 'js-1'\) close\(\)"/);
@@ -104,7 +104,7 @@ test('notifications component: a notification sent from JavaScript is pushed, cl
     }
 });
 
-test('database notifications: action buttons are stored in the Filament format and read back', async () => {
+test('database notifications: action buttons are stored in the notification array format and read back', async () => {
     const knex = sqlite(':memory:');
     try {
         await knex.schema.createTable('notifications', (table) => {
@@ -129,12 +129,12 @@ test('database notifications: action buttons are stored in the Filament format a
         assert.deepEqual(read.actions.map((action) => [action.label, action.button, action.markAsRead, action.close, action.dispatch?.event ?? null]), [
             ['Open', true, false, false, null], ['Mark as read', false, true, false, null], ['Archive', false, false, true, 'archiveInvoice'],
         ]);
-        // Rows written by Filament are read the same way; `mapUrl` rewrites their URLs.
+        // Rows written by another application in this format are read the same way; `mapUrl` rewrites their URLs.
         assert.equal(notificationActionFromArray({ name: 'view', url: 'https://old.example/posts/1' }, (url) => url.replace(/^https?:\/\/[^/]+/, ''))?.url, '/posts/1');
     } finally { await knex.destroy(); }
 });
 
-test('collapsed sidebar: a navigation group with an icon has a dropdown of its items, like Filament', async () => {
+test('collapsed sidebar: a navigation group with an icon has a dropdown of its items', async () => {
     class Orders extends Page { static slug = 'orders'; static navigationGroup = 'Shop'; static navigationIcon = 'o-shopping-bag'; }
     class Refunds extends Page { static slug = 'refunds'; static navigationGroup = 'Shop'; static navigationParentItem = 'Orders'; static navigationIcon = 'o-receipt-refund'; }
     class Products extends Page { static slug = 'products'; static navigationGroup = 'Shop'; static navigationIcon = 'o-cube'; static navigationSort = 1; }

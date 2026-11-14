@@ -38,7 +38,7 @@ try {
         await flash('Hello from JavaScript').waitFor({ timeout: 5000 });
         const notification = flash('Hello from JavaScript');
         assert.ok(await notification.evaluate((el) => el.classList.contains('nv-status-success')));
-        // The body is sanitized HTML, as in Filament: the image with an event handler is removed.
+        // The body is sanitized HTML: the image with an event handler is removed.
         assert.equal(await notification.locator('.nv-no-notification-body img').count(), 0);
         // The default label comes from the action name; only a local or http(s) URL becomes a link.
         const view = notification.locator('a.nv-btn', { hasText: 'View customers' });

@@ -279,7 +279,7 @@ A record is new when it has no key. The data adapter creates it, or updates the 
 
 ### Updating existing records only
 
-Return `null` to skip a row: nothing is saved, and the row is neither an error nor a failure (it counts as successful, as in Filament). An importer that only updates records returns `null` when none is found:
+Return `null` to skip a row: nothing is saved, and the row is neither an error nor a failure (it counts as successful). An importer that only updates records returns `null` when none is found:
 
 ```ts
 import { Importer } from '@navette-js/panels';
@@ -421,7 +421,7 @@ ImportColumn.make('sku')
 
 ### Setting the CSV encoding
 
-By default, a CSV file is read as UTF-8 when it is valid UTF-8, and as Windows-1252 otherwise. `csvEncoding()` sets the encoding, with a [`TextDecoder` label](https://developer.mozilla.org/docs/Web/API/Encoding_API/Encodings) (`windows-1252`, `shift_jis`, `euc-kr`…; Filament's `SJIS-win` is accepted too); `null` restores the detection:
+By default, a CSV file is read as UTF-8 when it is valid UTF-8, and as Windows-1252 otherwise. `csvEncoding()` sets the encoding, with a [`TextDecoder` label](https://developer.mozilla.org/docs/Web/API/Encoding_API/Encodings) (`windows-1252`, `shift_jis`, `euc-kr`…; `SJIS-win` is accepted too); `null` restores the detection:
 
 ```ts
 ImportAction.make()
@@ -546,7 +546,7 @@ You can then list the runs in a resource of your own. To store them elsewhere, i
 
 ### Using a polymorphic user relationship
 
-If users of several panels (with their own user tables) share the history, pass `{ polymorphicUser: true }` to `importExportSchema()` and `knexImportExportHistory()` (Filament's `polymorphicUserRelationship()`): runs then also store the id of the panel the user imported from in a `user_type` column. See [the export history](/actions/export#using-a-polymorphic-user-relationship).
+If users of several panels (with their own user tables) share the history, pass `{ polymorphicUser: true }` to `importExportSchema()` and `knexImportExportHistory()`: runs then also store the id of the panel the user imported from in a `user_type` column. See [the export history](/actions/export#using-a-polymorphic-user-relationship).
 
 ## Security
 
@@ -554,4 +554,4 @@ If users of several panels (with their own user tables) share the history, pass 
 - Only the uploaded file of the request is read, never a path sent by the browser. Its type is detected from its content.
 - The chosen columns can only be headers of the uploaded file, and only the components of the options form give options.
 - Values are validated with your rules, then written through the data adapter, which only writes declared attributes as bound parameters. Relationship lookups use the columns your code names, with the cells as bound parameters.
-- The failed rows file holds the uploaded cells. Cells that start like a formula (`=`, `+`, `-`, `@`, a tab or a carriage return; numbers such as `-5` aside) are prefixed with `'`, so that spreadsheet software does not run them. This is on by default in Navette (off in Filament). As the prefix stays when the file is corrected and uploaded again, you may turn it off for every importer with `Importer.preventFormulaInjection(false)`, or for one with `ProductImporter.preventFormulaInjection(false)` (or by overriding `shouldPreventFormulaInjection()`), when the files come from trusted users.
+- The failed rows file holds the uploaded cells. Cells that start like a formula (`=`, `+`, `-`, `@`, a tab or a carriage return; numbers such as `-5` aside) are prefixed with `'`, so that spreadsheet software does not run them. This is on by default. As the prefix stays when the file is corrected and uploaded again, you may turn it off for every importer with `Importer.preventFormulaInjection(false)`, or for one with `ProductImporter.preventFormulaInjection(false)` (or by overriding `shouldPreventFormulaInjection()`), when the files come from trusted users.

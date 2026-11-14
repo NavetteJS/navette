@@ -52,7 +52,7 @@ test('resource create and edit pages: default redirects, the panel-wide redirect
         await runInRequest('r', () => page.create());
         return page._effects.redirect;
     };
-    // Filament's default: the view page when there is one, else the edit page.
+    // Default: the view page when there is one, else the edit page.
     assert.match(await create(Posts, 'A'), /^\/posts\/\d+$/);
     assert.match(await create(Notes, 'B'), /^\/notes\/\d+\/edit$/);
     panel.resourceCreatePageRedirect('index');
@@ -152,7 +152,7 @@ test('relation managers: getOwnerRecord() through the owner resource (once per r
     const staff = Object.assign(new Staff() as any, { _ctx: manager._ctx, _runtime: manager._runtime, ownerRecord: '1', pageClass: 'edit' });
     assert.equal(staff.resource.getRecordTitle(members[1]), 'TURING');
     assert.deepEqual((await searchRelatedRecords(Staff as any, '1', '', { ...options, recordTitle: staff.getRelatableRecordTitleResolver() }))[0], ['m1', 'HOPPER']);
-    // Without a title: the attribute (or the key), as before.
+    // Without a title: no resolver, so the default labels (the attribute, else the key) apply.
     class Plain extends RelationManager { static relationship = 'plain'; static adapterFor() { return membersAdapter; } static relatedAdapter() { return membersAdapter; } }
     const plain = Object.assign(new Plain() as any, { _ctx: manager._ctx, ownerRecord: '1' });
     assert.equal(plain.getRelatableRecordTitleResolver(), null);

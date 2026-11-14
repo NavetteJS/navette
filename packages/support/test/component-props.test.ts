@@ -77,7 +77,7 @@ test('tabs: <x-tabs.item> with active and alpine-active', () => {
     assert.match(html, /<a href="\/x" aria-current="page" class="nv-tabs-item nv-active">/);
 });
 
-test('input wrapper: alpine-valid and alpine-disabled; Filament tag names', () => {
+test('input wrapper: alpine-valid and alpine-disabled; alternative tag names', () => {
     const html = unescape(render(`<div x-data="{ errors: ['name'] }"><x-input.wrapper alpine-valid="! errors.includes('name')"><x-input type="text" wire:model="name" /></x-input.wrapper></div>`));
     assert.match(html, /<div x-bind:class="\{\s*'nv-invalid': ! \(! errors\.includes\('name'\)\),\s*\}" class="nv-input-wrp">/);
     const both = unescape(render(`<x-input-wrapper alpine-disabled="locked" alpine-valid="ok" :valid="false" disabled>x</x-input-wrapper>`));

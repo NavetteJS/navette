@@ -1,6 +1,5 @@
-// Methods of a column called by its JavaScript (Filament's `callTableColumnMethod()`), e.g. the server-side search of a
-// select column. Everything comes from the browser: only a few read-only methods of a declared, visible column are reachable,
-// for a record within the table's scope.
+// Methods of a column called by its JavaScript, e.g. the server-side search of a select column. Everything comes from the
+// browser: only a few read-only methods of a declared, visible column are reachable, for a record within the table's scope.
 import type { DataAdapter } from '@navette-js/database';
 import { getVisibleColumns, SelectColumn, type Table, type TableHost } from './index.ts';
 

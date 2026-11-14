@@ -93,12 +93,12 @@ export abstract class Component {
         if (navigate) this._effects.redirectUsingNavigate = true;
     }
     skipRender(): void { this._skipRender = true; }
-    /** Partial render: only the `wire:partial="<name>"` fragment is sent back (effects.partials), the component is not re-rendered. */
-/**
+    /**
      * JavaScript run once in the browser for this component, with `$wire` in scope (Livewire's `@script`). Call it while rendering;
      * `key` identifies the script: it is sent again only if the browser has not run it yet.
      */
     addScript(key: string, js: string): void { ((this._effects.scripts ??= {}) as Record<string, string>)[key] = `<script${nonceAttribute()}>${js}</script>`; }
+    /** Partial render: only the `wire:partial="<name>"` fragment is sent back (effects.partials), the component is not re-rendered. */
     renderPartial(name: string, html: string): void { (this._effects.partials ??= {})[name] = html; this._skipRender = true; }
     addError(path: string, message: string): void { (this._errors[path] ??= []).push(message); }
     resetErrorBag(): void { this._errors = {}; }

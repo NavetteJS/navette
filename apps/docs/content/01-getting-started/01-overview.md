@@ -10,6 +10,8 @@ You describe your interface in TypeScript — resources, forms, tables, actions,
 
 Navette uses a Server-Driven UI approach: interfaces are configuration objects (`TextInput.make('name').required()`, `TextColumn.make('email').searchable()`), and the server turns them into HTML. The browser runs a small client, built on Alpine.js, that sends user interactions back to the server: validating a field, sorting a table, opening a modal. Most features need no custom JavaScript, and you can still write your own components when you need them.
 
+Navette is inspired by [FilamentPHP](https://filamentphp.com) (MIT license); see the [credits](/advanced/credits).
+
 Create a project and start the server in two commands:
 
 ```bash

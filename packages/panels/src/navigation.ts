@@ -27,7 +27,7 @@ export function navigationGroupKey(group: NavigationGroupReference | NavigationG
 }
 const evaluateCondition = (condition: Condition, context: NavigationContext) => (typeof condition === 'function' ? Boolean(condition(context)) : condition);
 
-/** One link of the navigation (Filament's `NavigationItem`). */
+/** One link of the navigation. */
 export class NavigationItem {
     _label: NavigationLabel;
     _key: string | null = null;
@@ -86,7 +86,7 @@ export class NavigationItem {
     getBadgeTooltip(badge: string | number | null = this.getBadge()): string | null { return typeof this._badgeTooltip === 'function' ? this._badgeTooltip(badge) : this._badgeTooltip; }
     /** By default an item is active on its exact URL: a function receives the current path, a boolean forces it. */
     isActiveWhen(fn: ((path: string) => boolean) | boolean | null): this { this._isActive = fn; return this; }
-    /** Filament's name for `isActiveWhen()`. */
+    /** Alias of `isActiveWhen()`. */
     activeWhen(fn: ((path: string) => boolean) | boolean | null): this { return this.isActiveWhen(fn); }
     isActive(path: string): boolean {
         if (typeof this._isActive === 'boolean') return this._isActive;
@@ -102,7 +102,7 @@ export class NavigationItem {
     getExtraAttributes(): Record<string, string | number | boolean | null> { return this._extraAttributes; }
 }
 
-/** A navigation group: label (text or HTML), icon (then its items have none, as in Filament), collapsible and collapsed by default. */
+/** A navigation group: label (text or HTML), icon (then its items have none), collapsible and collapsed by default. */
 export class NavigationGroup {
     private _label: NavigationLabel | null;
     private _icon: string | null = null;
@@ -220,7 +220,6 @@ export function navigationGroupView(group: NavigationGroup | null, items: Naviga
     return {
         label: label === null ? null : navigationLabelText(label), labelHtml: label === null ? null : navigationLabelHtml(label), isHtmlLabel: label instanceof HtmlString,
         key, itemsId: label === null ? '' : navigationGroupItemsId(key), isActive: items.some((item) => item.isActive || item.activeChildItems), icon,
-        // Items of a group with an icon have none (as in Filament).
         items: icon ? items.map((item) => ({ ...item, icon: null })) : items, dropdownItems: items,
         collapsible: group?.isCollapsible(panelCollapsibleDefault) ?? panelCollapsibleDefault, collapsed: group?.isCollapsed() ?? false,
         extraSidebarAttributes: attributesHtml(group?.getExtraSidebarAttributes() ?? {}), extraTopbarAttributes: attributesHtml(group?.getExtraTopbarAttributes() ?? {}),
@@ -235,7 +234,7 @@ export function builtNavigationViews(groups: NavigationGroup[], options: Navigat
 }
 
 /**
- * Breadcrumbs leading to a navigation item (Filament's navigation hierarchy in breadcrumbs): the group label, then the
+ * Breadcrumbs leading to a navigation item: the group label, then the
  * parent items. `null` when no item links to this URL.
  */
 export function navigationHierarchyBreadcrumbs(groups: NavigationGroupView[], url: string): { label: string; url: string | null }[] | null {

@@ -17,7 +17,7 @@ export const useColorManager = (manager: ColorManager) => { colorManager = manag
 
 // ------------------------------------------------------------------ helpers
 type AttrMap = Record<string, AttrValue>;
-/** Filament-style merge: the defaults come first (and keep their position), `class` and `style` are concatenated defaults-first. */
+/** Merges attributes: the defaults come first (and keep their position), `class` and `style` are concatenated defaults-first. */
 function mergeAttrs(defaults: AttrMap, attributes: AttrMap): AttrMap {
     const out: AttrMap = {};
     for (const [key, value] of Object.entries(defaults)) if (value !== null && value !== undefined && value !== false) out[key] = value;
@@ -83,7 +83,7 @@ const FONT_WEIGHTS = new Set(['thin', 'extralight', 'light', 'normal', 'medium',
 const FONT_FAMILIES = new Set(['sans', 'serif', 'mono']);
 const fontClass = (value: string | null | undefined, allowed: Set<string>) => (!value ? null : allowed.has(value) ? `nv-font-${value}` : safeName(value) || null);
 
-/** Text color classes of a text entry item (Filament's `TextEntryComponent\ItemComponent` color map). */
+/** Text color classes of a text entry item. */
 const itemColorCache = new Map<string, string[]>();
 function itemColorClasses(color: string | null | undefined): string[] {
     if (!color) return [];
@@ -232,8 +232,8 @@ abstract class Entry extends Component {
     hasStatePath(): boolean { return true; }
     protected _enum: Enum<string | number> | null = null;
     /**
-     * Displays values through an enum (label, color, icon), like Filament does for an attribute cast to an enum. Without it,
-     * the enum of the model's `static casts` is used, and so is a state that is already an enum case.
+     * Displays values through an enum (label, color, icon). Without it, the enum of the model's `static casts` is used, and so
+     * is a state that is already an enum case.
      */
     enum(enumeration: Enum<string | number> | null): this { this._enum = enumeration; return this; }
     /** Enum case of a state item, or `null`. */
@@ -371,7 +371,7 @@ abstract class Entry extends Component {
         return html;
     }
 
-    // `hiddenJs()` / `visibleJs()`: the schema component wraps the entry in a `<fieldset>` toggled by Alpine, as in Filament.
+    // `hiddenJs()` / `visibleJs()`: the schema component wraps the entry in a `<fieldset>` toggled by Alpine.
 }
 
 let htmlSanitizer: ((html: string) => string) | null = null;
@@ -500,7 +500,6 @@ export class TextEntry extends Entry {
     isoDateTimeTooltip(format: string | null = null, timezone: string | null = null): this { return this.dateTooltipFor('iso', format ?? 'LLL', timezone); }
     isoTimeTooltip(format: string | null = null, timezone: string | null = null): this { return this.dateTooltipFor('iso', format ?? 'LT', timezone); }
     sinceTooltip(timezone: string | null = null): this { return this.dateTooltipFor('since', '', timezone); }
-    /** IANA time zone in which dates are displayed (`UTC` by default). */
     /** Time zone dates are displayed in; defaults to `NavetteTimezone.get()` (`UTC` unless configured). */
     timezone(timezone: string | null): this { this._timezone = timezone; return this; }
     getTimezone(): string { return this._timezone ?? NavetteTimezone.get(); }
@@ -554,10 +553,10 @@ export class TextEntry extends Entry {
     getCharacterLimitEnd(state: unknown = undefined, record: any = undefined): string | null { return resolveItem(this._characterLimitEnd, record === undefined ? this.currentRecord() : record, state) ?? null; }
     /** Record of the entry, or `null` before it is placed in a schema. */
     private currentRecord(): any { try { return this.context().record; } catch { return null; } }
-    /** Action before the text (Filament's `prefixAction()`), an icon button by default; a function returns it from the context. */
+    /** Action before the text, an icon button by default; a function returns it from the context. */
     prefixAction(action: Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null)): this { return this.prefixActions([action]); }
     prefixActions(actions: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[]): this { this._prefixActions = [...this._prefixActions, ...actions]; return this; }
-    /** Action after the text (Filament's `suffixAction()`), an icon button by default. */
+    /** Action after the text, an icon button by default. */
     suffixAction(action: Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null)): this { return this.suffixActions([action]); }
     suffixActions(actions: (Renderable | ((ctx: ComponentContext) => Renderable | Renderable[] | null))[]): this { this._suffixActions = [...this._suffixActions, ...actions]; return this; }
     /** Prefix actions, small icon buttons unless their size or style was chosen. */
@@ -651,7 +650,7 @@ export class TextEntry extends Entry {
         }
         const isNumeric = this._isMoney || this._isNumeric;
         if (isBlank(state)) {
-            // Without placeholder, Filament renders an empty item, except for money, date and badge entries reading the record.
+            // Without placeholder, an empty item is rendered, except for money, date and badge entries reading the record.
             if (this._placeholder === null && (this._state !== null || (!this._isMoney && !this._isDate && !this._badge))) return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-text-item', 'nv-size-sm', 'nv-in-text', { 'nv-wrapped': this._wrap }]));
             return this.wrapEmbeddedHtml(this.emptyHtml(['nv-in-text', { 'nv-numeric': isNumeric }]));
         }
@@ -813,12 +812,12 @@ export class ImageEntry extends Entry {
     private _visibility: Lazy<'public' | 'private' | null, ComponentContext> = null;
     private _checkFileExistence: Lazy<boolean, ComponentContext> = true;
     /**
-     * Application-wide storage of the images whose state is a stored file key (Filament's default disk), e.g.
+     * Application-wide storage of the images whose state is a stored file key, e.g.
      * `ImageEntry.storage = FileUpload.storage`. Without one, only URLs are displayed.
      */
     static storage: FileUrlStorage | null = null;
     static make(name: string): ImageEntry { return configured(new ImageEntry(name)); }
-    /** Storage of the images (Filament's `disk()`): a `FileStorage` of `@navette-js/forms`, or anything giving URLs of keys. */
+    /** Storage of the images: a `FileStorage` of `@navette-js/forms`, or anything giving URLs of keys. */
     storage(storage: Lazy<FileUrlStorage | null, ComponentContext>): this { this._storage = storage; return this; }
     /** `'private'`: images are shown through temporary URLs of the storage. By default, the storage's own visibility. */
     visibility(visibility: Lazy<'public' | 'private' | null, ComponentContext>): this { this._visibility = visibility; return this; }
@@ -832,7 +831,7 @@ export class ImageEntry extends Entry {
     }
     async shouldCheckFileExistence(): Promise<boolean> { return Boolean(await evaluate(this._checkFileExistence, this.context())); }
     /**
-     * URL of an image of the state, like Filament's `getImageUrl()`: a local or http(s) URL as is; a stored file key through
+     * URL of an image of the state: a local or http(s) URL as is; a stored file key through
      * the storage (`null` when it is missing and `checkFileExistence()` is on, a temporary URL when private).
      */
     async getImageUrl(state: unknown): Promise<string | null> {
@@ -981,7 +980,7 @@ export class KeyValueEntry extends Entry {
 /** Background and text colors of the default themes (github-light / github-dark-high-contrast). */
 const PHIKI_DEFAULT_STYLE = 'background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;';
 /**
- * Read-only code, rendered as `<pre class="phiki …">` like Filament's (Phiki) markup. With Shiki installed
+ * Read-only code, rendered as `<pre class="phiki …">` (Phiki's markup). With Shiki installed
  * (optional peer dependency), it is highlighted on the server in a light and a dark theme; without it, each line
  * is a single escaped text token. An array or object is shown as indented JSON.
  */
@@ -1101,7 +1100,7 @@ export class RepeatableEntry extends Entry {
     private _maxItemsForProcessing: number | null = null;
     static make(name: string): RepeatableEntry { return configured(new RepeatableEntry(name)); }
     /**
-     * Refuses to build more item schemas than this (Filament's `maxItemsForProcessing()`): above it, rendering stops with an
+     * Refuses to build more item schemas than this: above it, rendering stops with an
      * HTTP 413 error instead of truncating the data. `null` (default) disables the limit.
      */
     maxItemsForProcessing(count: number | null): this { this._maxItemsForProcessing = count === null || !Number.isFinite(count) ? null : Math.max(0, Math.floor(count)); return this; }

@@ -56,7 +56,7 @@ export class TableTriggerAction {
     }
 }
 
-/** Loop variable of the row being rendered (Filament's `$rowLoop`, Blade's `$loop`). */
+/** Loop variable of the row being rendered (same fields as Blade's `$loop`). */
 export type RowLoop = { index: number; iteration: number; remaining: number; count: number; first: boolean; last: boolean; odd: boolean; even: boolean; depth: number; parent: null };
 const rowLoops = new AsyncLocalStorage<RowLoop>();
 /** Builds the loop variable of the row at `index` among `count` rows. */
@@ -85,7 +85,7 @@ function parseItems(state: unknown, depth = 0): { type: 'column' | 'group'; name
     }
     return items;
 }
-/** An item of the browser's state, with every attribute but `isToggled` taken from the table's declaration (Filament's `syncTableColumnStateItemAttributes()`). */
+/** An item of the browser's state, with every attribute but `isToggled` taken from the table's declaration. */
 function syncItem(item: ReturnType<typeof parseItems>[number] | null, declared: ColumnState): ColumnState {
     const synced: ColumnState = { ...declared, columns: undefined };
     delete synced.columns;
@@ -119,11 +119,11 @@ export function syncColumnManagerState(declared: ColumnState[], state: unknown, 
     return [...kept, ...declared.filter((item) => !find(kept, item))].map(sync);
 }
 
-/** Column and group keys in state order, groups followed by their columns (Filament's `flattenTableColumnStateItems()`). */
+/** Column and group keys in state order, groups followed by their columns. */
 function flatten(items: ColumnState[]): string[] {
     return items.flatMap((item) => [keyOf(item), ...(item.type === 'group' ? (item.columns ?? []).map((column) => `${keyOf(item)}:${column.name}`) : [])]);
 }
-/** Whether the state's order differs from the declared order (Filament's `hasReorderedTableColumns()`). */
+/** Whether the state's order differs from the declared order. */
 export function hasReorderedColumns(declared: ColumnState[], state: ColumnState[]): boolean {
     const current = flatten(state);
     const defaults = flatten(declared).filter((key) => current.includes(key));
@@ -143,7 +143,7 @@ export function columnToggleStateOf(state: unknown): Map<string, boolean> {
     return map;
 }
 
-/** Default width of the column manager: wider with more grid columns (Filament's `getColumnManagerWidth()`). */
+/** Default width of the column manager: wider with more grid columns. */
 export function defaultColumnManagerWidth(columns: number | Record<string, number | null>): string {
     return ({ 2: '2xl', 3: '4xl', 4: '6xl' } as Record<number, string>)[typeof columns === 'number' ? columns : -1] ?? 'xs';
 }

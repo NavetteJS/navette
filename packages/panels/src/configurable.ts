@@ -234,13 +234,13 @@ export function resolveUrlTarget<T extends Function>(cls: T, configuration: stri
     return selected ? (getConfiguredClass<T>(selected) ?? cls) : cls;
 }
 
+/** Whether a page is served for a configured registration (its own, or its resource's). */
+const isConfigured = (page: unknown): boolean => [page, (page as any)?.resource, (page as any)?.parentResource].some((cls) => typeof cls === 'function' && ownConfiguration(cls) !== null);
+
 /**
  * Order in which page routes are added: fixed slugs before slugs with parameters, so `orders/archived` (a configuration)
  * is not taken for the record `archived` of `orders/{record}`.
  */
-/** Whether a page is served for a configured registration (its own, or its resource's). */
-const isConfigured = (page: unknown): boolean => [page, (page as any)?.resource, (page as any)?.parentResource].some((cls) => typeof cls === 'function' && ownConfiguration(cls) !== null);
-
 export function routeOrder<T extends { slug: string }>(pages: T[]): T[] {
     const seen = new Map<string, T>();
     for (const page of pages) {

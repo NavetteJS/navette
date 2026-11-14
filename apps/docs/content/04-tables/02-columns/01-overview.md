@@ -603,7 +603,7 @@ new Table()
     ])
 ```
 
-The first argument is the label of the group, and `columns()` takes the columns inside it; like in Filament, they may also be passed as the second argument of `make()`: `ColumnGroup.make('Details', [...])`. A header row is added above the column headers, with one cell spanning each group.
+The first argument is the label of the group, and `columns()` takes the columns inside it; they may also be passed as the second argument of `make()`: `ColumnGroup.make('Details', [...])`. A header row is added above the column headers, with one cell spanning each group.
 
 The group's header cell can be customized:
 
@@ -642,7 +642,7 @@ TextColumn.make<Order>('status')
 ```
 
 <Aside variant="info">
-Unlike Filament, Navette escapes the values and checks the names: a value computed from a record cannot break out of its attribute, and event handler attributes (`onclick`...) are dropped. Alpine attributes (`x-tooltip`, `x-on:click`...) are kept: never build them from user input.
+Navette escapes the values and checks the names: a value computed from a record cannot break out of its attribute, and event handler attributes (`onclick`...) are dropped. Alpine attributes (`x-tooltip`, `x-on:click`...) are kept: never build them from user input.
 </Aside>
 
 ## Hiding columns
@@ -770,7 +770,7 @@ The record is the object returned by the data adapter: with `ObjectionAdapter`, 
 
 ### Using the row loop
 
-Filament's `$rowLoop` is the `rowLoop` of the state functions: `getStateUsing()` receives `({ record, rowLoop })`, and a function given to `state()` receives `(record, { rowLoop })`. It describes the row being rendered, like Blade's `$loop`: `index` (from 0), `iteration` (from 1), `count`, `remaining`, `first`, `last`, `odd` and `even`. For example, to number the rows of the page:
+The `rowLoop` of the state functions describes the row being rendered: `getStateUsing()` receives `({ record, rowLoop })`, and a function given to `state()` receives `(record, { rowLoop })`. Its properties are `index` (from 0), `iteration` (from 1), `count`, `remaining`, `first`, `last`, `odd` and `even`. For example, to number the rows of the page:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';

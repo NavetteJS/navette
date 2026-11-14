@@ -1,4 +1,4 @@
-// Customizable actions of list fields (Repeater, Builder, KeyValue, CheckboxList), as Filament's `addAction(fn)`,
+// Customizable actions of list fields (Repeater, Builder, KeyValue, CheckboxList): `addAction(fn)`,
 // `deleteAction(fn)`... A field builds each action with its defaults, then passes it to the developer's function.
 import { Action } from '@navette-js/actions';
 import { icons, type ColorManager } from '@navette-js/support';
@@ -30,22 +30,22 @@ export async function resolveAction(action: Action, ctx: ComponentContext, args:
 }
 
 /**
- * Color classes of a rendered action: the field's usual classes for its default color (so the markup stays the one of
- * Filament), the color manager's classes otherwise.
+ * Color classes of a rendered action: the field's usual classes for its default color (so the default markup does not
+ * change), the color manager's classes otherwise.
  */
 export function colorClassesOf(colors: ColorManager | null, component: string, color: string, defaultColor: string, defaultClasses: string[]): string[] {
     if (color === defaultColor) return defaultClasses;
     return colors && color !== 'gray' ? colors.getComponentClasses(component as any, color) : (colors?.getComponentClasses(component as any, 'gray') ?? []);
 }
 
-/** Extra item actions, as Filament prepares them: gray small icon buttons unless they say otherwise. */
+/** Extra item actions: gray small icon buttons unless they say otherwise. */
 export function prepareExtraItemAction(action: Action): Action {
     action.defaultColor('gray').defaultSize('sm');
     if (action.getView() === null) action.iconButton();
     return action;
 }
 
-/** Default icons of the field actions, by component and action (Filament's `FormsIconAlias` names). */
+/** Default icons of the field actions, by component and action. */
 const FIELD_ACTION_ICONS = {
     repeater: { clone: 'm-square-2-stack', collapse: 'm-chevron-up', delete: 'm-trash', expand: 'm-chevron-down', 'move-down': 'm-arrow-down', 'move-up': 'm-arrow-up', reorder: 'm-arrows-up-down' },
     builder: { clone: 'm-square-2-stack', collapse: 'm-chevron-up', delete: 'm-trash', edit: 'm-cog-6-tooth', expand: 'm-chevron-down', 'move-down': 'm-arrow-down', 'move-up': 'm-arrow-up', reorder: 'm-arrows-up-down' },

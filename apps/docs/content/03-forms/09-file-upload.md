@@ -80,7 +80,7 @@ The functions are evaluated each time they are needed (rendering, validation and
 
 ### Setting the visibility of files
 
-Files can be public, served under a permanent URL, or private, shown through [temporary signed URLs](/advanced/file-storage#temporary-urls-for-private-files). Like Filament's `visibility()`, the method sets the visibility of the field's files:
+Files can be public, served under a permanent URL, or private, shown through [temporary signed URLs](/advanced/file-storage#temporary-urls-for-private-files). The `visibility()` method sets the visibility of the field's files:
 
 ```ts
 import { FileUpload } from '@navette-js/forms';
@@ -237,7 +237,7 @@ When the form is saved, the browser sends back the keys of the files that are al
 
 A key that the record doesn't hold fails validation ("The avatar field contains a file path that is not permitted."), so the record is never saved with a tampered value. Newly uploaded files always pass, the field can still be cleared, and with `multiple()` each key is checked on its own. The same check runs before the field returns the information and URLs of existing files.
 
-This check is always enabled. Filament's `preventFilePathTampering()` exists so that the same code works in both, but it cannot turn the check off: `preventFilePathTampering(false)` throws an error.
+This check is always enabled. `preventFilePathTampering()` is accepted but cannot turn the check off: `preventFilePathTampering(false)` throws an error.
 
 This protection only covers the field. Your own routes that serve files must still check access.
 
@@ -669,7 +669,7 @@ FileUpload.make('attachments')
     .deleteUploadedFileUsing(({ file, storage }) => storage?.delete?.(file))
 ```
 
-The callback receives the key of the removed file (`file`), the field's `storage`, and the [field context](/forms/overview#using-the-field-context). Like in Filament, it runs as soon as the user removes the file, before the form is saved. It only runs for a stored file that the record holds: a key sent by the browser that is not one of the record's files never reaches it (see [authorizing existing file paths](#authorizing-existing-file-paths)), and nothing happens when the field is disabled or not [deletable](#hiding-the-remove-file-button). `LocalFileStorage.delete()` never removes a file outside of its folder.
+The callback receives the key of the removed file (`file`), the field's `storage`, and the [field context](/forms/overview#using-the-field-context). It runs as soon as the user removes the file, before the form is saved. It only runs for a stored file that the record holds: a key sent by the browser that is not one of the record's files never reaches it (see [authorizing existing file paths](#authorizing-existing-file-paths)), and nothing happens when the field is disabled or not [deletable](#hiding-the-remove-file-button). `LocalFileStorage.delete()` never removes a file outside of its folder.
 
 To delete files only once the record is saved, compare the old and the new keys after saving (in your data adapter or in the page's `afterSave()` hook) and call `storage.delete(key)` for the keys that are gone.
 

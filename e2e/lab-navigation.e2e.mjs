@@ -19,7 +19,7 @@ const notification = (title) => page.locator('.nv-no-notification-title', { hasT
 let inactiveIcon = '';
 await login(page, BASE, user);
 try {
-    // The collapsed groups are remembered per origin (as in Filament): the admin panel opened by the login wrote them first.
+    // The collapsed groups are remembered per origin: the admin panel opened by the login wrote them first.
     await page.goto(`${BASE}/lab-nav`);
     await page.evaluate(() => localStorage.removeItem('navette:sidebar:collapsed_groups'));
     await page.waitForLoadState('networkidle');

@@ -17,7 +17,7 @@ const colorsOf = (component: Parameters<ColorManager['getComponentClasses']>[0],
 };
 
 export type Attrs = Record<string, string | number | boolean | null | undefined>;
-/** Alpine tooltip of a button, link or icon button (Filament's `tooltip` attribute). */
+/** Alpine tooltip of a button, link or icon button. */
 const tooltipAttribute = (tooltip: string | null | undefined): Attrs => (tooltip ? { 'x-tooltip': `{\n content: ${js(tooltip)},\n theme: $store.theme,\n allowHTML: false,\n }` } : {});
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
@@ -404,7 +404,7 @@ views
     .component('spinner', (props) => spinner(props.attributes))
     .component('tabs', (props, slot) => tabs(props as any, props.items ?? [], slot))
     .component('tabs.item', (props, slot) => tabItem({ ...props, label: props.label ?? '', labelHtml: props.label === undefined ? slot.trim() : null } as TabItem));
-// Filament's names for the same components: `<x-input.wrapper>`, `<x-dropdown.list>`, `<x-dropdown.list.item>`.
+// Alternative tag names for the same components: `<x-input.wrapper>`, `<x-dropdown.list>`, `<x-dropdown.list.item>`.
 views
     .component('input.wrapper', withSlot(inputWrapper))
     .component('dropdown.list', (props, slot) => (props.items ? dropdownList(props.items) : `<div class="nv-dropdown-list">${slot}</div>`))

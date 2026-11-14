@@ -1,4 +1,4 @@
-// Built-in query builder operators (Filament's IsFilledOperator, ContainsOperator...) in operators(), pushOperators() and
+// Built-in query builder operators (IsFilledOperator, ContainsOperator...) in operators(), pushOperators() and
 // unshiftOperators().
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

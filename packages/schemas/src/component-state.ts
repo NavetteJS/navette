@@ -24,7 +24,7 @@ export function writeStatePath(target: unknown, path: string, value: unknown): v
 }
 
 /**
- * Resolves a path relative to a container state path, as Filament does: `../` climbs one level, a leading `/` (or
+ * Resolves a path relative to a container state path: `../` climbs one level, a leading `/` (or
  * `isAbsolute`) makes the path absolute (from the root of the Livewire component: `data.name`).
  */
 export function resolveRelativePath(containerPath: string | null, path: string, isAbsolute = false): string {
@@ -43,7 +43,7 @@ export function resolveRelativePath(containerPath: string | null, path: string, 
 /** Truthy as Laravel's `filled()`: not null, not an empty or blank string, not an empty list. */
 const isFilled = (value: unknown): boolean => !(value === null || value === undefined || (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0));
 
-/** `get()` of the context object, with typed helpers (`get.string('email')`…), as Filament's `Get` utility. */
+/** `get()` of the context object, with typed helpers (`get.string('email')`…). */
 export interface StateGetter {
     (path?: string, isAbsolute?: boolean): any;
     string(path: string, isNullable?: boolean, isAbsolute?: boolean): string | null;

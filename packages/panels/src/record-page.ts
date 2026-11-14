@@ -1,4 +1,4 @@
-// Custom resource pages bound to a record (Filament's `InteractsWithRecord` on a resource page): registered in a resource's
+// Custom resource pages bound to a record (`InteractsWithRecord()`): registered in a resource's
 // `relatedPages`, served at `<slug>/{record}/<name>`, they read the record through the resource's adapter (in the current
 // tenant, and under the parent records of a nested resource), authorize it on every request, and show the resource's
 // breadcrumbs and record sub-navigation.
@@ -16,7 +16,7 @@ export interface RecordPage {
     _record: any;
     readonly resource: typeof Resource;
     getDataAdapter(): DataAdapter;
-    /** The record (Filament's `getRecord()`). */
+    /** The record. */
     getRecord(): any;
     getRecordKey(): string | null;
     /** Whether the record is loaded. */
@@ -97,7 +97,7 @@ export function InteractsWithRecord<T extends PageClass>(Base: T): T & (abstract
     return RecordPageBase as any;
 }
 
-/** The record's breadcrumb (Filament's): only with a `recordTitleAttribute`; links to the view page, else the edit page, if the user may open it. */
+/** The record's breadcrumb: only with a `recordTitleAttribute`; links to the view page, else the edit page, if the user may open it. */
 async function recordBreadcrumb(resource: typeof Resource, record: any, key: string, user: User | null, title: string): Promise<{ label: string; url: string | null } | null> {
     if (!resource.recordTitleAttribute) return null;
     const pages = resource.getPages();

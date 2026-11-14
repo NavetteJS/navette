@@ -1,4 +1,4 @@
-// `/lab` table-level features (Filament's table options): reordering (paginated, custom trigger, callbacks), extreme
+// `/lab` table-level features: reordering (paginated, custom trigger, callbacks), extreme
 // pagination links, enforced page options, the page in the URL under a query string identifier, table search options,
 // sort queries, striped rows, the row loop, a reorderable live column manager with a column group; and on a large table,
 // cursor pagination, lazy loading, a loading skeleton, polling, a custom header and a column manager in a modal.

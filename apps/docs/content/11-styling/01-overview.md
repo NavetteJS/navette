@@ -122,7 +122,7 @@ Panel.make()
     .darkMode(false)
 ```
 
-To know how a panel is set up, for instance in a plugin or a view, read `hasDarkMode()` (dark mode is available) and `hasDarkModeForced()` (the panel is always dark, Filament's `isDarkModeForced()`), on the panel or on `getCurrentPanel()` during a request:
+To know how a panel is set up, for instance in a plugin or a view, read `hasDarkMode()` (dark mode is available) and `hasDarkModeForced()` (the panel is always dark), on the panel or on `getCurrentPanel()` during a request:
 
 ```ts
 import { getCurrentPanel } from '@navette-js/panels';

@@ -1,5 +1,5 @@
-// Widget configurations: `StatsOverview.make({ status: 'active' })` registers a widget with properties of its own
-// (Filament's `Widget::make([...])` / `WidgetConfiguration`). Pages, dashboards and resources accept them wherever they
+// Widget configurations: `StatsOverview.make({ status: 'active' })` registers a widget with properties of its own.
+// Pages, dashboards and resources accept them wherever they
 // accept a widget class.
 import type { Widget } from './index.ts';
 

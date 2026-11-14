@@ -89,7 +89,7 @@ test('sort through a belongs-to relationship, nested and self-referencing', asyn
     assert.deepEqual((await titles('author.country.name', 'asc')).slice(2), ['Second', 'First']);
     const authors = new ObjectionAdapter(Author);
     assert.deepEqual((await authors.paginate({ page: 1, perPage: 10, sort: { column: 'mentor.name', direction: 'desc' } })).records.map((r) => r.name)[0], 'Amy');
-    // Has-many relationships cannot be sorted on (like Filament).
+    // Has-many relationships cannot be sorted on.
     await assert.rejects(list({ sort: { column: 'comments.body', direction: 'asc' } }), /single-record relationships/);
 });
 

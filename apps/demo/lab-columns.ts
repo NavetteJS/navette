@@ -1,4 +1,4 @@
-// `/lab/columns-lab`: column, filter and selection options of the demo's products (Filament's column URL in a new tab, header
+// `/lab/columns-lab`: column, filter and selection options of the demo's products (column URL opening in a new tab, header
 // tooltips, column groups, extra cell attributes, number and money locales, select columns searched on the server, filter
 // labels from records, `excludeWhenResolvingRecord()`, the remove-all filters action, `selectable()` with an action using
 // `accessSelectedRecords()`, and record actions modified with `modifyUngroupedRecordActionsUsing()`).

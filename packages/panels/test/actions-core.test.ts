@@ -173,7 +173,7 @@ test('URL-opened actions: arguments and context, mounted after load with the usu
     // Without the URL, nothing to open.
     page = await board('/admin/board');
     assert.doesNotMatch(await page.renderActionModals(), /wire:init/);
-    // The page's own `defaultAction` (D10's `$defaultAction`) uses the same mechanism.
+    // The page's own `defaultAction` uses the same mechanism.
     page = await board('/admin/board');
     page.defaultAction = 'invite';
     page.defaultActionArguments = { source: 'page' };
@@ -188,7 +188,7 @@ test('URL-opened table actions: the record is resolved by the table, unauthorize
     await list.renderActionModals();
     await list.mountDefaultActions();
     assert.deepEqual(list.mountedActions.map((m: any) => [m.name, m.context.recordKey]), [['view', '1']]);
-    // Closing a table action keeps the table parameters (as Filament).
+    // Closing a table action keeps the table parameters.
     await list.unmountAction(false);
     assert.equal(list.defaultTableAction, 'view');
     // Forged: a record the user may not act on, a missing record, an action of another location.

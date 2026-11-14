@@ -48,8 +48,7 @@ export type HtmlSanitizerConfigOptions = {
 };
 
 /**
- * What `sanitizeHtml()` keeps: Navette's equivalent of Symfony's `HtmlSanitizerConfig`, which Filament configures. Each
- * method returns a new configuration. Event handler attributes (`on…`), `<script>`, `<style>`, frames, plugins and forms
+ * What `sanitizeHtml()` keeps, modeled on Symfony's `HtmlSanitizerConfig`. Each method returns a new configuration. Event handler attributes (`on…`), `<script>`, `<style>`, frames, plugins and forms
  * can never be allowed, and URL attributes always follow the scheme allowlists: `javascript:` is only kept if you add it
  * to `allowLinkSchemes()` yourself.
  *
@@ -204,8 +203,7 @@ let customized = false;
 /** The configuration used by `sanitizeHtml()` when none is given. */
 export function getHtmlSanitizerConfig(): HtmlSanitizerConfig { return (defaultConfig ??= HtmlSanitizerConfig.default()); }
 /**
- * Replaces the process-wide configuration of `sanitizeHtml()` (Filament: binding or extending `HtmlSanitizerConfig` in the
- * container). A function receives the current one and returns the new one; `null` restores Navette's default.
+ * Replaces the process-wide configuration of `sanitizeHtml()`. A function receives the current one and returns the new one; `null` restores Navette's default.
  */
 export function useHtmlSanitizerConfig(config: HtmlSanitizerConfig | ((current: HtmlSanitizerConfig) => HtmlSanitizerConfig) | null): void {
     if (config === null) { defaultConfig = null; customized = false; return; }
@@ -256,7 +254,7 @@ export function isSafeUrl(value: string, options: { schemes?: string[]; allowRel
 
 /**
  * The URL when it has no scheme (relative) or one of the allowed schemes (`http` and `https` by default), otherwise
- * `null` (Filament's `Str::sanitizeUrl()`). URLs with control characters or raw whitespace are refused. The value is
+ * `null`. URLs with control characters or raw whitespace are refused. The value is
  * returned unchanged: it still has to be escaped when it is written into HTML (Navette's components do).
  */
 export function sanitizeUrl(url: string | null | undefined, allowedSchemes: string[] = ['http', 'https']): string | null {

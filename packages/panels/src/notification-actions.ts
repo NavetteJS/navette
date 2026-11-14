@@ -1,4 +1,4 @@
-// Actions of notifications (flash, database and broadcast): Filament's array format, checked, and their markup.
+// Actions of notifications (flash, database and broadcast): their array format, checked, and their markup.
 import { Attributes, cls, e, icon, icons, js, type ColorManager, localOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Action, ActionGroup } from '@navette-js/actions';
@@ -17,7 +17,7 @@ export type NotificationActionData = {
     /** Extra HTML attributes: `data-*`, `aria-*`, `id`, `class`, `title`, `role`, `rel`, `lang`, `dir` only (never event handlers or directives). */
     extraAttributes?: Record<string, string | true>;
 };
-/** An action group of a notification: a dropdown (a link "Actions" by default, like Filament) or a section of the dropdown. */
+/** An action group of a notification: a dropdown (a link "Actions" by default) or a section of the dropdown. */
 export type NotificationActionGroupData = {
     group: true; actions: NotificationActionItem[]; label: string | null; icon: string | null; color: string | null; size: string; tooltip: string | null;
     view: 'link' | 'button' | 'icon-button'; dropdown: boolean; placement: string | null; width: string | null; offset: number | null; maxHeight: string | null;
@@ -67,7 +67,7 @@ const actionColorClasses = (component: ColoredView, color: string): string[] => 
     return component === 'button' || component === 'button-outlined' ? [] : ['nv-color', `nv-color-${color}`];
 };
 
-/** Filament's default action label: the name, in words, capitalized (`undoEdit` → "Undo edit"). */
+/** Default action label: the name, in words, capitalized (`undoEdit` → "Undo edit"). */
 const labelFromName = (name: string): string => {
     const words = name.split('.')[0].replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase().replace(/[-_]+/g, ' ').trim();
     return words.charAt(0).toUpperCase() + words.slice(1);
@@ -89,8 +89,7 @@ const viewOf = (view: unknown): NotificationActionView | null => {
 };
 
 /**
- * Reads an action or an action group (`actions` key) in Filament's array format (`Action::toArray()`, `ActionGroup::toArray()`,
- * `NavetteNotificationAction.toJSON()`), as stored in the `notifications` table or sent from the browser. Untrusted: unknown
+ * Reads an action or an action group (`actions` key) in the notification array format (`NavetteNotificationAction.toJSON()`), as stored in the `notifications` table or sent from the browser. Untrusted: unknown
  * values are dropped, URLs are checked when rendered. Groups nest two levels deep at most.
  */
 export function notificationActionFromArray(raw: unknown, mapUrl?: (url: string) => string, depth = 0): NotificationActionItem | null {
@@ -146,7 +145,7 @@ export function notificationActionFromArray(raw: unknown, mapUrl?: (url: string)
 const viewName = (view: NotificationActionView): string => (view === 'button' ? 'navette::components.button.index' : view === 'icon-button' ? 'navette::components.icon-button' : view === 'badge' ? 'navette::components.badge' : 'navette::components.link');
 const actionView = (action: NotificationActionData): NotificationActionView => action.view ?? (action.button ? 'button' : 'link');
 
-/** Writes an action or a group in Filament's array format (for the `notifications` table and broadcast messages). */
+/** Writes an action or a group in the notification array format (for the `notifications` table and broadcast messages). */
 export function notificationActionToArray(action: NotificationActionItem): Record<string, unknown> {
     if (isNotificationActionGroup(action)) {
         return {
@@ -173,8 +172,8 @@ export type NotificationActionInput = {
 };
 
 /**
- * One item of `Notification.actions()`: an `Action` or an `ActionGroup` of `@navette-js/actions` (a small link by default, as in
- * Filament), or a plain object. Event and component names are checked; the rest goes through `notificationActionFromArray()`.
+ * One item of `Notification.actions()`: an `Action` or an `ActionGroup` of `@navette-js/actions` (a small link by default), or a
+ * plain object. Event and component names are checked; the rest goes through `notificationActionFromArray()`.
  */
 export function normalizeNotificationAction(input: Action | ActionGroup | NotificationActionInput): NotificationActionItem | null {
     if (input instanceof ActionGroup) return notificationActionFromArray(prepareGroup(input).toArray());
@@ -191,7 +190,7 @@ export function normalizeNotificationAction(input: Action | ActionGroup | Notifi
         size: input.size ?? 'sm', tooltip: input.tooltip ?? null, isDisabled: input.disabled === true, extraAttributes: input.extraAttributes ?? {},
     });
 }
-/** Filament's notification defaults: small links, unless the action chose its style or size. */
+/** Notification defaults: small links, unless the action chose its style or size. */
 function prepareAction(action: Action): Action {
     action.defaultSize('sm');
     if (action.getView() === null) action.link();
@@ -209,12 +208,12 @@ const extraAttributesHtml = (extra: Record<string, string | true> | undefined, s
     const safe = safeNotificationAttributes(extra) ?? {};
     return Object.entries(safe).filter(([name]) => !skip.includes(name)).map(([name, value]) => (value === true ? ` ${name}` : ` ${name}="${e(value)}"`)).join('');
 };
-/** Icon size of a trigger, as Filament's button, link and icon button components choose it from their size. */
+/** Icon size of a trigger, from its size (as the button, link and icon button components choose it). */
 const iconSizeFor = (view: NotificationActionView, size: string): string => (view === 'icon-button' ? (size === 'xs' ? 'sm' : size === 'lg' || size === 'xl' ? 'lg' : 'md') : size === 'xs' || size === 'sm' ? 'sm' : 'md');
 
 /**
- * One action of a notification: a link (only a local or http(s) URL), a button, an icon button or a badge. Like Filament, the
- * Alpine handler closes the notification or changes its read state, and the Livewire handler dispatches the event. A disabled
+ * One action of a notification: a link (only a local or http(s) URL), a button, an icon button or a badge. The Alpine handler
+ * closes the notification or changes its read state, and the Livewire handler dispatches the event. A disabled
  * action has neither a link nor a click handler. `navigate`: local links use `wire:navigate`.
  */
 export function renderNotificationAction(action: NotificationActionData, options: RenderOptions = {}): string {

@@ -1,4 +1,4 @@
-// Panel configuration, navigation, menus and styling options (phase D9): CSP nonce, middleware, error notifications,
+// Panel configuration, navigation, menus and styling options: CSP nonce, middleware, error notifications,
 // navigation items and groups, the navigation builder, user and tenant menus.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

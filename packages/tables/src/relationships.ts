@@ -8,8 +8,8 @@ type RelationshipSource = { name: string; getRelationshipAggregates?(): Relation
 
 /**
  * Adds to a list query the relationships to eager-load (the relationship part of dot-notation names: `author.name` loads
- * `author`) and the relationship aggregates of the given columns (`counts()`, `exists()`, `avg()`…), like Filament's
- * `applyEagerLoading()` / `applyRelationshipAggregates()`. Aggregates with the same alias are only added once.
+ * `author`) and the relationship aggregates of the given columns (`counts()`, `exists()`, `avg()`…). Aggregates with the same
+ * alias are only added once.
  */
 export function addRelationshipsToQuery(query: Omit<ListQuery, 'page' | 'perPage'>, sources: RelationshipSource[], groupColumns: string[] = []): void {
     const paths = [...sources.map((source) => source.name), ...groupColumns].map((name) => relationshipPathOf(name)).filter((path): path is string => path !== null);
@@ -30,7 +30,7 @@ export function ensureRelationshipSupport(adapter: Pick<DataAdapter, 'getLabel'>
 }
 
 /**
- * Where an editable column with a dot-notation name writes, like Filament's `CanUpdateState`: the single related record of a
+ * Where an editable column with a dot-notation name writes: the single related record of a
  * relationship column (`author.name` → the author's `name`), or a key of a JSON attribute of the record (`meta.lang`).
  */
 export async function relationshipWriteTarget(record: unknown, name: string): Promise<{ relatedRecord: unknown | null; save: ((state: unknown) => Promise<void>) | null }> {

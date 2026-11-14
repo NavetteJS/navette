@@ -1,6 +1,5 @@
-// JavaScript widgets (Filament's `HasJsRenderer` widgets): the content of the widget is rendered in the browser by an ES
-// module the application brings (plain DOM code, React, Vue, Svelte…). The browser side is Filament's `js-widget.js` Alpine
-// component; this file builds its markup, as Filament's `filament-widgets::js-widget` view does.
+// JavaScript widgets: the content of the widget is rendered in the browser by an ES module the application brings (plain
+// DOM code, React, Vue, Svelte…). The browser side is the `js-widget` Alpine component; this file builds its markup.
 import { e, isLocalOrHttpUrl } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import {
@@ -30,7 +29,7 @@ export function resolveJsWidgetRenderer(renderer: unknown): JsWidgetRendererSour
 }
 
 /**
- * Inner markup of a JavaScript widget (Filament's `filament-widgets::js-widget` view, without the widget wrapper): the section,
+ * Inner markup of a JavaScript widget, without the widget wrapper: the section,
  * the keyed renderer element and the configuration it receives as `props.configuration`.
  */
 export function jsWidgetContentHtml(options: { widgetId: string; assetUrl: string; renderer: unknown; rendererConfiguration: unknown }): string {

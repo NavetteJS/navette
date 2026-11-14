@@ -1,7 +1,7 @@
-<%# Items of the column manager (Filament's column-manager/content): toggles and, with reorderable columns, move buttons and drag handles. %>
+<%# Items of the column manager: toggles and, with reorderable columns, move buttons and drag handles. %>
 <%
     const cm = columnManager;
-    // Grid of the items, in column direction (Filament's `grid($columns, GridDirection::Column)`).
+    // Grid of the items, filled column by column.
     const gridColumns = typeof cm.columns === 'number' ? { lg: cm.columns } : { ...cm.columns };
     for (const key of Object.keys(gridColumns)) if (!gridColumns[key]) delete gridColumns[key];
     gridColumns.default ??= 1;

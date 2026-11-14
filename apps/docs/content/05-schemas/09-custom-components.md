@@ -552,7 +552,7 @@ Render only inside `host`, whose content is ignored when the page is updated, an
 
 ### Customizing the markup around the renderer
 
-A `JsComponent` has no view to replace: its `toHtml()` returns the renderer's host with its configuration, like Filament's `toEmbeddedHtml()`. To add your own markup, subclass it and build on `super.toHtml()`, keeping your content outside the host:
+A `JsComponent` has no view to replace: its `toHtml()` returns the renderer's host with its configuration. To add your own markup, subclass it and build on `super.toHtml()`, keeping your content outside the host:
 
 ```ts
 import { JsComponent } from '@navette-js/schemas';

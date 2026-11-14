@@ -1,4 +1,4 @@
-// Table hosts and table-level features (phase D4): records per page and column manager in the session, the page in the
+// Table hosts and table-level features: records per page and column manager in the session, the page in the
 // URL under the table's page name, cursor pages, lazy loading and reordering through the list page.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -91,7 +91,7 @@ test('page in the URL: read on mount under the page name, tracked by a URL effec
     assert.deepEqual(list._effects.url['paginators.page'], { as: 'page', use: 'push', alwaysShow: false, except: null });
     const forged = await page(Tasks, 'browser-5', { page: '-4' });
     assert.equal(forged.paginators.page, 1);
-    // A relation manager prefixes its parameters with its class name, as in Filament.
+    // A relation manager prefixes its parameters with its class name.
     const manager = new CommentsRelationManager();
     assert.equal(manager.getTable().getPaginationPageName(), 'commentsRelationManagerPage');
 });

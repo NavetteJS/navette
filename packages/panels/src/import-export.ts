@@ -54,12 +54,12 @@ export function parseCsv(text: string, maxRows = Infinity, delimiter = ','): str
 }
 
 // ------------------------------------------------------------------ export
-/** Formats of an export (Filament: the `ExportFormat` enum). */
+/** Built-in formats of an export. */
 export const ExportFormat = { Csv: 'csv', Xlsx: 'xlsx' } as const;
 export type ExportFormatValue = 'csv' | 'xlsx';
 /** A format of an export: `'csv'`, `'xlsx'`, or a custom format (`ExportFormatInterface`). */
 export type ExportFormatType = ExportFormatValue | ExportFormatInterface;
-/** One export, as the exporter's methods, the notification and the fake see it (Filament: the `Export` model). */
+/** One export, as the exporter's methods, the notification and the fake see it. */
 export type ExportRun = {
     /** Key of the run in the export history, if the panel keeps one. */
     id: string | number | null;
@@ -176,7 +176,7 @@ export class ExportColumn {
         if (evaluateExport(this._preventFormulaInjection, full) === true && typeof value === 'string' && startsLikeFormula(value)) value = `'${value}`;
         return value;
     }
-    /** The written value, without options (former name of `getFormattedState()`). */
+    /** Alias of `getFormattedState()`. */
     getValue(record: any): unknown { return this.getFormattedState(record); }
 }
 /** Describes an export: its columns, and optionally the options form, the query, the files and the notification. */
@@ -184,7 +184,7 @@ export abstract class Exporter {
     static getColumns(): ExportColumn[] { return []; }
     /** The columns that are not hidden (offered in the modal). */
     static getVisibleColumns(ctx: Partial<ExportColumnContext> = {}): ExportColumn[] { return this.getColumns().filter((column) => column.isVisible(ctx)); }
-    /** Components added to the export modal (Filament: export options); their values are the export's `options`. */
+    /** Components added to the export modal; their values are the export's `options`. */
     static getOptionsFormComponents(): any[] { return []; }
     /** Changes the query of the exported records (e.g. eager loading). */
     static modifyQuery(_query: any, _options: Record<string, unknown> = {}): void {}
@@ -202,7 +202,7 @@ export abstract class Exporter {
     /** How a file of this format is sent (see `Downloader`): a custom format's own `getDownloader()` by default. */
     static getDownloader(format: ExportFormatType): Downloader { return typeof format === 'object' ? format.getDownloader?.() ?? sendDownload : sendDownload; }
     /**
-     * Name of the download disk where the files are kept (Filament's `getFileDiskName()`): one of the panel's
+     * Name of the download disk where the files are kept: one of the panel's
      * `downloadDisks({ ... })`; `null` (the default) uses the panel's `downloads()` store. An action's `fileDisk()` wins.
      */
     static getFileDiskName(): string | null { return null; }
@@ -558,7 +558,7 @@ const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 /** Options of the import and export history tables. */
 export type ImportExportHistoryOptions = {
     /**
-     * Filament's `polymorphicUserRelationship()`: runs also store the type of their user (`user_type`, the panel's id), for
+     * Runs also store the type of their user (`user_type`, the panel's id), for
      * users of several panels (several user tables) whose ids may collide.
      */
     polymorphicUser?: boolean;

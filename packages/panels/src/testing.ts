@@ -1,4 +1,4 @@
-// @navette-js/panels/testing — test pages, forms, tables and actions without a browser, like Filament's Livewire testing helpers.
+// @navette-js/panels/testing — test pages, forms, tables and actions without a browser.
 // `livewire(Page, params, { panel, user })` mounts the page in a real WireRuntime: every later call is a browser-like update
 // (signed snapshot, `static callable`, `static locked`), so tests go through the same security checks as the browser.
 import { AssertionError, deepStrictEqual } from 'node:assert';
@@ -16,7 +16,7 @@ import { panelRouter, RelationManager, type Panel, type PanelContext, type User 
 import { installTestingExtras, normalizeListLikeState, type TestableExtras } from './testing-extras.ts';
 export { assertNotified, assertNotNotified, clearSentNotifications, type TestableExtras } from './testing-extras.ts';
 
-// ------------------------------------------------------------------ defaults (Filament: actingAs(), setCurrentPanel(), setTenant())
+// ------------------------------------------------------------------ defaults (actingAs(), setCurrentPanel(), setTenant())
 let defaultPanel: Panel | null = null;
 let defaultUser: User | null = null;
 let defaultTenant: unknown = undefined;
@@ -63,7 +63,7 @@ function componentNameOf(runtime: WireRuntime, panel: Panel, cls: any): string {
     return fallback;
 }
 
-// ------------------------------------------------------------------ fake files (Laravel: UploadedFile::fake())
+// ------------------------------------------------------------------ fake files (UploadedFile.fake())
 /** A file to put in a FileUpload field with `fillForm()` or `set()`: it is uploaded like the browser would. */
 export class UploadedFile {
     readonly name: string;
@@ -89,7 +89,7 @@ function png(width: number, height: number): Buffer {
     return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// ------------------------------------------------------------------ TestAction (Filament\Actions\Testing\TestAction)
+// ------------------------------------------------------------------ TestAction
 type ActionName = string | { getDefaultName?(): string | null; make(...args: any[]): { getName(): string } };
 /** An action name, or an action class: its `getDefaultName()` (or the name of an instance made without arguments). */
 const actionNameOf = (name: ActionName): string => (typeof name === 'string' ? name : name.getDefaultName?.() ?? name.make().getName());

@@ -63,7 +63,7 @@ test('signatures: bound to the key, the file and the expiry; expired and forged 
         assert.equal(verifyFileUrlSignature(KEY, 'docs/a.pdf', e, s, '/files'), false);
     }
     assert.throws(() => signFileUrl('short', 'a', Date.now()), /at least 16/);
-    // Filament's expiry: in 30 minutes, at the end of that hour.
+    // Expiry: in 30 minutes, at the end of that hour.
     const expiry = temporaryFileUrlExpiry(30, Date.UTC(2026, 0, 1, 10, 45, 0));
     assert.equal(expiry.toISOString(), '2026-01-01T11:59:59.000Z');
 });

@@ -1,4 +1,4 @@
-// More testing helpers of `@navette-js/panels/testing` (Filament's table column, filter, wizard and modal assertions, Livewire's
+// More testing helpers of `@navette-js/panels/testing` (table column, filter, wizard and modal assertions,
 // `assertSeeLivewire()`), installed on `Testable`, plus the standalone `assertNotified()` / `assertNotNotified()`.
 import { AssertionError, deepStrictEqual } from 'node:assert';
 import { ActionGroup } from '@navette-js/actions';
@@ -32,7 +32,7 @@ const wireCopy = <T>(value: T): T => (value === undefined ? value : JSON.parse(J
 const same = (actual: unknown, expected: unknown): boolean => { try { deepStrictEqual(normalizeListLikeState(wireCopy(actual), wireCopy(expected)), wireCopy(expected)); return true; } catch { return false; } };
 const escapeAttribute = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' } as Record<string, string>)[c]);
 
-// ------------------------------------------------------------------ standalone notification assertions (Filament's `Notification::assertNotified()`)
+// ------------------------------------------------------------------ standalone notification assertions
 let sentNotifications: NotificationData[] = [];
 listenToSentNotifications((notification) => { sentNotifications.push(notification); });
 const titleOf = (expected: string | Notification) => (typeof expected === 'string' ? expected : expected.getData().title);
@@ -68,7 +68,7 @@ const actionNameOf = (name: ActionName): string => (typeof name === 'string' ? n
 /** A component class (registered in the runtime) or its name. */
 type ComponentReference = string | (abstract new (...args: any[]) => Component);
 
-/** Methods added to `Testable` by this file (Filament's and Livewire's names). */
+/** Methods added to `Testable` by this file. */
 export interface TestableExtras {
     /** The column is visible and rendered in every row of the current page. */
     assertCanRenderTableColumn(name: string): this;
@@ -88,7 +88,7 @@ export interface TestableExtras {
     assertTableFilterHidden(name: string): this;
     /** These row actions come in this order (other actions may come between them; groups are flattened). */
     assertTableRecordActionsExistInOrder(names: ActionName[]): this;
-    /** v3 name of `assertTableRecordActionsExistInOrder()`. */
+    /** Alias of `assertTableRecordActionsExistInOrder()`. */
     assertTableActionsExistInOrder(names: ActionName[]): this;
     assertTableHeaderActionsExistInOrder(names: ActionName[]): this;
     assertTableEmptyStateActionsExistInOrder(names: ActionName[]): this;
@@ -143,7 +143,7 @@ async function pageRecordKeys(component: any): Promise<string[]> {
     const adapter = component.getDataAdapterForTable();
     return (await getTableRecords(component.getTable(), component, adapter)).records.map((record: unknown) => String(adapter.getKey(record)));
 }
-/** A record of the table, by key: it must be in the table's scope (Filament's `assertTableRecordKeyExists()`). */
+/** A record of the table, by key: it must be in the table's scope. */
 async function tableRecord(self: Internals, component: any, record: unknown): Promise<unknown> {
     const found = await self.loadRecord(component, record);
     const adapter = component.getDataAdapterForTable();
@@ -158,7 +158,7 @@ async function extraAttributesOf(column: any, record: unknown): Promise<Record<s
     const value = typeof raw === 'function' ? await raw({ record }) : raw;
     return value && typeof value === 'object' ? value : {};
 }
-/** Names of a list of actions, groups flattened (Filament's `assertActionListInOrder()`). */
+/** Names of a list of actions, groups flattened. */
 function actionNames(actions: unknown[]): string[] {
     return actions.flatMap((action: any) => (action instanceof ActionGroup ? actionNames(action.getActions()) : typeof action?.getActions === 'function' && typeof action?.getName !== 'function' ? actionNames(action.getActions()) : [action.getName()]));
 }

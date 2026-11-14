@@ -1,22 +1,21 @@
 // Enums: a fixed set of values, each with an optional label, color, icon and description.
-// Navette's equivalent of PHP enums implementing Filament's `HasLabel`, `HasColor`, `HasIcon` and `HasDescription`
-// contracts: an enum can be passed wherever Filament accepts an enum class (field options, filters), and columns and
-// entries display a value through its enum (label, badge color, icon).
+// An enum can be passed as field and filter options, and columns and entries display a value through its enum (label,
+// badge color, icon).
 
 /** Text that may be computed when it is read (a translation), e.g. `() => t('statuses.draft')`. */
 export type EnumText = string | (() => string);
 
 /** What a case may declare. Every property is optional; a plain string is the label. */
 export type EnumCaseDefinition = {
-    /** Displayed instead of the value (Filament's `getLabel()`). */
+    /** Displayed instead of the value. */
     label?: EnumText | null;
-    /** A color name (`gray`, `success`, `danger`…), used by badges, icons and toggle buttons (`getColor()`). */
+    /** A color name (`gray`, `success`, `danger`…), used by badges, icons and toggle buttons. */
     color?: string | null;
-    /** An icon name (`m-pencil`, `o-check`…), shown next to the label (`getIcon()`). */
+    /** An icon name (`m-pencil`, `o-check`…), shown next to the label. */
     icon?: string | null;
-    /** Helper text under the label, in radio buttons and checkbox lists (`getDescription()`). */
+    /** Helper text under the label, in radio buttons and checkbox lists. */
     description?: EnumText | null;
-    /** A navigation group built from this case (`NavigationGroup.fromEnum()`) starts collapsed (Filament's `Collapsible` contract). */
+    /** A navigation group built from this case (`NavigationGroup.fromEnum()`) starts collapsed. */
     collapsed?: boolean | null;
     /** Whether that navigation group can be collapsed. */
     collapsible?: boolean | null;
@@ -29,11 +28,11 @@ const ENUM_CASE = Symbol.for('navette.enumCase');
 
 const read = (text: EnumText | null | undefined): string | null => (typeof text === 'function' ? text() : text ?? null);
 
-/** One value of an enum (Filament: an enum case). Converts to its value in strings and JSON. */
+/** One value (case) of an enum. Converts to its value in strings and JSON. */
 export class EnumCase<V extends string | number = string> {
-    /** The stored value (Filament: `$case->value`). */
+    /** The stored value. */
     readonly value: V;
-    /** The case name: the key of a TypeScript `enum`, or the value (Filament: `$case->name`). */
+    /** The case name: the key of a TypeScript `enum`, or the value. */
     readonly name: string;
     readonly #definition: EnumCaseDefinition;
 
@@ -92,18 +91,18 @@ export class Enum<V extends string | number = string> {
         }
     }
 
-    /** Every case, in definition order (Filament: `Status::cases()`). */
+    /** Every case, in definition order. */
     cases(): EnumCase<V>[] { return [...this.#cases]; }
     /** Every value, in definition order. */
     values(): V[] { return this.#cases.map((item) => item.value); }
     /** Whether the value (or a case) belongs to the enum. */
     has(value: unknown): boolean { return this.tryFrom(value) !== null; }
-    /** The case of a value, or `null` (Filament: `Status::tryFrom()`). Numbers and numeric strings are interchangeable. */
+    /** The case of a value, or `null`. Numbers and numeric strings are interchangeable. */
     tryFrom(value: unknown): EnumCase<V> | null {
         const key = valueKey(value);
         return key === null ? null : this.#byKey.get(key) ?? null;
     }
-    /** The case of a value; throws when the value is not in the enum (Filament: `Status::from()`). */
+    /** The case of a value; throws when the value is not in the enum. */
     from(value: unknown): EnumCase<V> {
         const found = this.tryFrom(value);
         if (!found) throw new RangeError(`"${String(value)}" is not a valid value of this enum.`);
@@ -151,7 +150,7 @@ export function defineEnum<const D extends Record<string, EnumText | EnumCaseDef
 
 /**
  * Wraps a TypeScript `enum` (string or numeric): the keys are the case names, the members their values. Labels, colors,
- * icons and descriptions can be added by case name or by value; without a label, a case shows its name, like Filament.
+ * icons and descriptions can be added by case name or by value; without a label, a case shows its name.
  *
  * ```ts
  * enum Priority { Low = 1, High = 2 }
@@ -182,8 +181,7 @@ export function isEnumCase(value: unknown): value is EnumCase<string | number> {
 }
 
 /**
- * The enum a model casts an attribute to: `static casts = { status: Status }` on the record's class (Filament: an Eloquent
- * enum cast). Values stay as stored; columns, entries and table groups display them through the enum.
+ * The enum a model casts an attribute to: `static casts = { status: Status }` on the record's class. Values stay as stored; columns, entries and table groups display them through the enum.
  */
 export function enumCast(record: unknown, attribute: string): Enum<string | number> | null {
     if (record === null || typeof record !== 'object') return null;

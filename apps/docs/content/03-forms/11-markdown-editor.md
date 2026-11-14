@@ -125,7 +125,7 @@ The Markdown editor accepts `live()`, `live({ onBlur: true })` and `live({ debou
 
 ## Generating fake Markdown
 
-`MarkdownEditor.fake()` generates Markdown for seeders and tests (Filament's `fake()->filamentMarkdown()`). Chain blocks, then get the content with `toString()`:
+`MarkdownEditor.fake()` generates Markdown for seeders and tests. Chain blocks, then get the content with `toString()`:
 
 ```ts
 import { MarkdownEditor } from '@navette-js/forms';

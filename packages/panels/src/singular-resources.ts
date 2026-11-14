@@ -1,7 +1,7 @@
 // Singular resources: a resource bound to a single record (site settings, the homepage...), managed from one edit page
 // (and optionally a view page) at the resource's URL, without a list. If the record does not exist yet, the form shows its
-// defaults and the first save creates it. Filament documents this pattern as a custom page with a form; Navette offers it
-// as a resource option (`static isSingular = true`) so policies, hooks and URLs work as on any resource page.
+// defaults and the first save creates it. It is a resource option (`static isSingular = true`), so policies, hooks and
+// URLs work as on any resource page.
 import { WireError } from '@navette-js/wire';
 import { can, type EditRecord, type Page, type Resource, type ViewRecord } from './index.ts';
 

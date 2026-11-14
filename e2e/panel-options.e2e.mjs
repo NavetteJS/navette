@@ -34,7 +34,7 @@ try {
             `/shop/products/${firstKey('products')}/edit`, '/shop/products/create',
             `/shop/orders/${firstKey('orders')}/edit`, '/shop/orders/create',
             `/blog/posts/${firstKey('posts')}/edit`, `/shop/customers/${firstKey('customers')}/edit`,
-            // Not the employee: its phone mask reformats the value as the page loads, as in Filament.
+            // Not the employee: its phone mask reformats the value as the page loads.
         ];
         for (const url of pages) {
             await page.goto(`${BASE}${url}`);

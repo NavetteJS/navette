@@ -1,5 +1,4 @@
-// The owner record and the titles of related records, for relation managers and related-records pages
-// (Filament's `RelationManager::getOwnerRecord()` and the table's `recordTitle()`).
+// The owner record and the titles of related records, for relation managers and related-records pages.
 import type { Resource } from './index.ts';
 
 /** What the helpers need from a relation manager or a `ManageRelatedRecords` page. */

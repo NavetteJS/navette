@@ -134,7 +134,7 @@ new Table()
 Without `color()`, a badge uses the `primary` color.
 
 <Aside variant="info">
-`BadgeColumn` is deprecated, as in Filament: `BadgeColumn.make('status')` is the same as `TextColumn.make('status').badge()`. Likewise, `BooleanColumn` is `IconColumn.make(name).boolean()`.
+`BadgeColumn` is deprecated: `BadgeColumn.make('status')` is the same as `TextColumn.make('status').badge()`. Likewise, `BooleanColumn` is `IconColumn.make(name).boolean()`.
 </Aside>
 
 You may add other things to the badge, like an [icon](#adding-an-icon), and a label instead of the raw value with [`formatStateUsing()`](#formatting). When the attribute is cast to an [enum](/advanced/enums#casting-model-attributes-to-an-enum) on the model, or with `enum()`, the label, color and icon of each value come from the enum instead:
@@ -224,7 +224,7 @@ new Table()
 
 #### Customizing the date format
 
-`date()`, `dateTime()` and `time()` accept a format, written with the PHP date characters that Filament uses: `d`, `j`, `D`, `l`, `S`, `m`, `n`, `M`, `F`, `Y`, `y`, `H`, `G`, `h`, `g`, `i`, `s`, `a`, `A` and `T`. Escape a letter with a backslash to print it as it is:
+`date()`, `dateTime()` and `time()` accept a format, written with PHP date characters: `d`, `j`, `D`, `l`, `S`, `m`, `n`, `M`, `F`, `Y`, `y`, `H`, `G`, `h`, `g`, `i`, `s`, `a`, `A` and `T`. Escape a letter with a backslash to print it as it is:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
@@ -323,7 +323,7 @@ TextColumn.make('hours')
     .numeric(1)
 ```
 
-Numbers are formatted for the `en-US` locale (`1,234.5`) by default. Like Filament's `numeric($decimalPlaces, $decimalSeparator, $thousandsSeparator, $maxDecimalPlaces, $locale)`, the other arguments set fixed separators, a maximum number of decimals, or a locale. You may pass them in an object instead:
+Numbers are formatted for the `en-US` locale (`1,234.5`) by default. The other arguments of `numeric(decimalPlaces, decimalSeparator, thousandsSeparator, maxDecimalPlaces, locale)` set fixed separators, a maximum number of decimals, or a locale. You may pass them in an object instead:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
@@ -371,7 +371,7 @@ TextColumn.make<Payment>('amount')
     .money((record) => record.currency)
 ```
 
-The state is the amount itself (`19.99`). For an amount stored in cents, pass `divideBy`: `money('eur', 100)` shows `1999` as `€19.99`. The next arguments are the locale and the number of decimal places, as in Filament's `money($currency, $divideBy, $locale, $decimalPlaces)`, or pass an object in place of `divideBy`:
+The state is the amount itself (`19.99`). For an amount stored in cents, pass `divideBy`: `money('eur', 100)` shows `1999` as `€19.99`. The next arguments are the locale and the number of decimal places (`money(currency, divideBy, locale, decimalPlaces)`), or pass an object in place of `divideBy`:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
@@ -440,7 +440,7 @@ const title = TextColumn.make<Task>('title').limit(40);
 title.tooltip((record) => (record.title.length > (title.getCharacterLimit() ?? Infinity) ? record.title : null));
 ```
 
-As in Filament, `limit()` and `words()` do not apply to [HTML or Markdown](#rendering-html) states: cutting them could break their markup.
+`limit()` and `words()` do not apply to [HTML or Markdown](#rendering-html) states: cutting them could break their markup.
 
 A tooltip may also be a fixed string. Tooltip content is displayed as text, never as HTML.
 
@@ -622,7 +622,7 @@ TextColumn.make('description')
 The HTML is sanitized before it is rendered. Only formatting elements are kept: paragraphs, line breaks, emphasis, headings, lists, quotes, code, and links with safe URLs. Their `style`, `class` and event attributes are removed, as are scripts, images, frames and forms. `sanitizeHtml()` and `markdownToHtml()` from `@navette-js/support` do the same work if you need them elsewhere.
 
 <Aside variant="warning">
-This is stricter than Filament, whose HTML sanitizer keeps inline `style` attributes (which allow CSS-based attacks such as `background: url(...)`). Navette always sanitizes, even for trusted content: to render your own markup as it is, use a [view column](/tables/columns/custom-columns) and escape the record data yourself.
+Inline `style` attributes are removed too, since they allow CSS-based attacks such as `background: url(...)`. Navette always sanitizes, even for trusted content: to render your own markup as it is, use a [view column](/tables/columns/custom-columns) and escape the record data yourself.
 </Aside>
 
 Both `html()` and `markdown()` accept a function of the record and of the value, to render only some values as HTML. `limit()` and `words()` are not applied to an HTML or Markdown state.

@@ -88,7 +88,7 @@ export class Action implements Renderable {
 
     constructor(name: string) { this.name = name; }
     /**
-     * Name used by `make()` without a name (Filament's `getDefaultName()`): `null` for `Action`, so a name is required; a
+     * Name used by `make()` without a name: `null` for `Action`, so a name is required; a
      * subclass may return its own (`class SendEmailAction extends Action { static getDefaultName() { return 'sendEmail'; } }`).
      * The prebuilt actions return theirs (`EditAction.getDefaultName()` is `'edit'`).
      */
@@ -144,9 +144,9 @@ export class Action implements Renderable {
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     /** Navigation action, rendered as `<a href wire:navigate>`. */
     url(url: string | null | ((ctx: ComponentContext) => string | null)): this { if (typeof url === 'function') this._lazyUrl = url; else { this._url = url; this._lazyUrl = null; } return this; }
-    /** A string: host component method called on click (`wire:click`). A function: the action handler, mounted through `mountAction()` (with its modal, if any). */
     /** On click, dispatches a Livewire event (to a listener of the page or of another component), with parameters. */
     dispatch(event: string, params: unknown[] | Record<string, unknown> = []): this { this.recordDispatch(event, params, false, null); return this.action(`$dispatch(${js(event)}${Array.isArray(params) ? params.map((param) => `, ${js(param)}`).join('') : `, ${js(params)}`})`); }
+    /** A string: host component method called on click (`wire:click`). A function: the action handler, mounted through `mountAction()` (with its modal, if any). */
     action(action: string | ((ctx: ActionCallContext) => unknown | Promise<unknown>) | null): this {
         if (typeof action === 'function') { this._handler = action; this._action = null; } else { this._action = action; this._handler = null; }
         return this;
@@ -165,7 +165,7 @@ export class Action implements Renderable {
     modalSubmitActionLabel(label: string | null | ((ctx: ActionCallContext) => string | null)): this { if (typeof label === 'function') { this._lazySubmitLabel = label; this._modalSubmitActionLabel = null; } else { this._modalSubmitActionLabel = label; this._lazySubmitLabel = null; } return this; }
     modalIcon(name: string | null): this { this._modalIcon = name; return this; }
 
-    // --- modal getters (Filament's `getModalHeading()`, `getModalDescription()`…), e.g. for `assertActionExists(name, (action) => …)`.
+    // --- modal getters, e.g. for `assertActionExists(name, (action) => …)`.
     // A function value is evaluated with `ctx`; without it, with the context given by the test helpers
     // (`useEvaluationContext()`), or an empty one.
     private _evaluationContext: ActionCallContext | null = null;
@@ -408,7 +408,7 @@ export class Action implements Renderable {
      */
     unsavedChangesAlert(condition: Lazy<boolean | null, ActionCallContext> = true): this { this._unsavedChangesAlert = condition; return this; }
     async hasUnsavedChangesAlert(ctx: ActionCallContext): Promise<boolean> { const value = await evaluate(this._unsavedChangesAlert, ctx); return value ?? !(await this.isSchemaDisabled(ctx)); }
-    /** The page behind the modal stays usable: no backdrop, no scroll lock; clicking away no longer closes the modal. */
+    /** The page behind the modal stays usable: no backdrop, no scroll lock; clicking away does not close the modal. */
     modalClickThrough(condition: Lazy<boolean, ActionCallContext> = true): this { this._clickThrough = condition; return this; }
     /** `false`: the first focusable element of the modal is not focused when it opens. */
     modalAutofocus(condition: Lazy<boolean | null, ActionCallContext> = true): this { this._autofocus = condition; return this; }
@@ -542,7 +542,7 @@ export class Action implements Renderable {
     missingBulkProcessingFailureNotificationMessage(message: BulkMessage | null): this { this._missingProcessingMessage = message; return this; }
     getMissingBulkProcessingFailureNotificationMessage(count: number, total: number): string | null { const message = this._missingProcessingMessage; return typeof message === 'function' ? message(count, total) : message; }
 
-    // --- selected table records (Filament's `accessSelectedRecords()`)
+    // --- selected table records (`accessSelectedRecords()`)
     private _accessSelectedRecords = false;
     private _bulk = false;
     private _fetchSelectedRecords = true;
@@ -669,8 +669,7 @@ export class Action implements Renderable {
         return Object.fromEntries(this._preserveData.filter((field) => Object.hasOwn(data, field)).map((field) => [field, data[field]]));
     }
 
-    // --- failure outcome, selected records, form lifecycle hooks, wizard (Filament's CanNotify, CanRedirect,
-    // CanFetchSelectedRecords, HasLifecycleHooks and HasWizard)
+    // --- failure outcome, selected records, form lifecycle hooks, wizard
     private _failureNotification: ((notification: any, ctx: ActionCallContext & Record<string, unknown>) => any) | null = null;
     private _failureNotificationDisabled = false;
     private _failureRedirectUrl: string | ((ctx: ActionCallContext & Record<string, unknown>) => string | null | Promise<string | null>) | null = null;
@@ -833,7 +832,7 @@ export class Action implements Renderable {
                 + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_BEFORE) + (await customContent(this._modalContentFooter)) + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_AFTER);
         } finally { this._modalActionMountContext = null; }
         if (content !== null || hooked !== '') content = hooked;
-        // Footer: submit, extra actions, cancel (reversed when centered, as in Filament).
+        // Footer: submit, extra actions, cancel (reversed when centered).
         const footerAlignment = this._footerAlignment ?? (confirmation ? 'center' : 'start');
         const footer: string[] = [];
         if (this._hasSubmit) {
@@ -899,7 +898,7 @@ export class Action implements Renderable {
     keyBindings(bindings: string[]): this { this._keyBindings = bindings; return this; }
     getName(): string { return this.name; }
 
-    // --- authorization (Filament's `CanBeAuthorized`)
+    // --- authorization
     private _authorization: ActionAuthorization | Lazy<boolean | AuthorizationResponse, ComponentContext> | null = null;
     private _authorizationMessage: Lazy<string | null, ComponentContext> = null;
     private _authorizationTooltip: Lazy<boolean, ComponentContext> = false;
@@ -1096,7 +1095,7 @@ export class Action implements Renderable {
         });
     }
 
-    // Notification actions (Filament's `CanClose`, `CanMarkAsRead`, `CanDispatch`) and the array format.
+    // Notification actions (close, mark as read or unread, dispatch) and the array format.
     private _shouldClose = false;
     private _shouldMarkAsRead = false;
     private _shouldMarkAsUnread = false;
@@ -1137,7 +1136,7 @@ export class Action implements Renderable {
     getSize(): string { return this._size; }
     getIconPosition(): 'before' | 'after' { return this._iconAfter ? 'after' : 'before'; }
     isOutlined(): boolean { return this._outlined; }
-    /** Filament's array of the action (notifications store their actions this way). */
+    /** Array of the action (notifications store their actions this way). */
     toArray(): ActionArray { return actionToArray(this); }
     /** Rebuilds an action from its array (data from the database or the browser is checked). */
     static fromArray(data: unknown): Action { return actionFromArray(Action, data); }
@@ -1148,7 +1147,6 @@ function stripClickAttributes(attributes: string): string {
     return attributes.replace(/\s*(?:href|x-on:[^\s=]+|wire:click[^\s=]*|wire:navigate)(?:="[^"]*")?/g, '').trim();
 }
 
-/** Group of actions collapsed into a dropdown behind a "⋮" icon button. */
 /**
  * Actions in a dropdown menu ("⋮" icon button by default). A nested group with `dropdown(false)` is shown as a section of
  * the menu, separated by a divider. `buttonGroup()` shows the actions side by side instead.
@@ -1202,7 +1200,7 @@ export class ActionGroup {
     dropdownOffset(offset: number | null): this { this._offset = offset !== null && Number.isFinite(offset) ? Math.max(0, Math.round(offset)) : null; return this; }
     /** Maximum height of the menu, as a CSS length; it scrolls beyond. */
     maxHeight(height: string | null): this { this._maxHeight = height !== null && /^[0-9.]+(px|rem|em|vh|%)$/.test(height) ? height : null; return this; }
-    /** Filament's name of `maxHeight()`. */
+    /** Alias of `maxHeight()`. */
     dropdownMaxHeight(height: string | null): this { return this.maxHeight(height); }
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     visible(condition: Lazy<boolean, ComponentContext> = true): this { return this.hidden(typeof condition === 'function' ? async (ctx) => !(await condition(ctx)) : !condition); }
@@ -1266,7 +1264,7 @@ export class ActionGroup {
     getColor(): string { return this._color; }
     getSize(): string { return this._size; }
     getTooltip(): string | null { return this._tooltip; }
-    /** Filament's array of the group and its actions. */
+    /** Array of the group and its actions. */
     toArray(): ActionGroupArray { return actionGroupToArray(this); }
     /** Rebuilds a group from its array (data from the database or the browser is checked). */
     static fromArray(data: unknown): ActionGroup { return actionGroupFromArray(Action, ActionGroup, data); }

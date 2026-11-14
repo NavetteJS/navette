@@ -19,7 +19,7 @@ const md5 = (value: string) => createHash('md5').update(value).digest('hex');
 const decode = (value: string) => value.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const attribute = (html: string, name: string) => { const match = html.match(new RegExp(`${name}="([^"]*)"`)); assert.ok(match, `missing ${name}`); return decode(match[1]); };
 
-test('JsField: Filament markup, entangled state, renderer URL and Alpine component', async () => {
+test('JsField: markup, entangled state, renderer URL and Alpine component', async () => {
     const html = await form(host({ location: { latitude: 51.5, longitude: -0.12 } }), [JsField.make('location').renderer('/js/fields/location-picker.js')]).toHtml();
     assert.match(html, /<label for="form\.location" class="nv-fo-field-label">/);
     // The key changes with the renderer and the state binding (which remount it), not with the configuration.
