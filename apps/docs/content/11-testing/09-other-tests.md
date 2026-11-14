@@ -1,28 +1,16 @@
 ---
-title: Testing
+title: Other kinds of tests
 ---
 
 ## Introduction
 
-A panel is ordinary TypeScript running on Node.js, so you can test it with the tools of Node.js. This page shows three levels of tests, from the fastest to the most complete:
+A panel is ordinary TypeScript running on Node.js, so you can test it with the tools of Node.js. Most tests of pages, forms, tables and actions are written with the [testing helpers](/testing/overview), without a browser. This page shows the other levels of tests, from the fastest to the most complete:
 
-1. **Unit tests** of your rules and adapters, without HTTP.
-2. **HTTP tests** of your pages, against the Express application started in the test.
-3. **End-to-end tests** in a real browser, with [Playwright](https://playwright.dev).
+1. **Unit tests** of your rules and adapters, without a page.
+2. **HTTP tests** of your routes, against the Express application started in the test.
+3. **End-to-end tests** in a real browser, with [Playwright](https://playwright.dev), for what runs in the browser.
 
 It ends with how Navette itself is tested, which you may use as a model.
-
-<Aside variant="warning">
-Helpers to fill forms and call actions without a browser are not available yet. Test forms and actions through a browser.
-</Aside>
-
-## Running tests
-
-Node.js 24 runs TypeScript files directly, and includes a test runner. Write your tests in `*.test.ts` files, and run them with:
-
-```bash
-node --test
-```
 
 The examples below use `node:test` and `node:assert`; any test framework works.
 
@@ -54,7 +42,7 @@ test('readers cannot create or update tasks', async () => {
 
 `Resource.can()` and `panel.canAccessPage()` go through the [`authorizeUsing()` hook](/resources/authorization#plugging-in-your-own-permission-system) of the panel, then through the policy, exactly like the pages. `panel.resolveInaccessiblePages(user)` returns the slugs of the pages hidden from a user's navigation.
 
-Write at least one test per role. A complete check also covers the interface, in a browser: the buttons are hidden, the direct URLs answer 403, and forged requests change nothing.
+Write at least one test per role. A complete check also covers the interface: the buttons are hidden, the direct URLs answer 403, and forged requests change nothing. The [testing helpers](/testing/resources#testing-authorization) check all three without a browser.
 
 ## Testing adapters
 
@@ -82,7 +70,7 @@ Import the resources after creating the connection when your adapters read it at
 
 ## Testing pages over HTTP
 
-`panelRouter()` returns an Express router: start your application on a free port in the test, and request its pages with `fetch()`. To act as a user, create a session cookie with `panel.logIn()`, which writes the cookie on an Express response; in a test, give it an object with a `cookie()` method:
+The testing helpers mount components directly. To test the HTTP layer too (redirects of the router, cookies, your own routes), `panelRouter()` returns an Express router: start your application on a free port in the test, and request its pages with `fetch()`. To act as a user, create a session cookie with `panel.logIn()`, which writes the cookie on an Express response; in a test, give it an object with a `cookie()` method:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -116,7 +104,7 @@ For this test, the panel needs a user provider whose `find()` returns the test u
 
 ## End-to-end testing
 
-End-to-end tests drive a real browser through your panel: log in, fill a form, click an action, and check the result in the page and in the database. They are the only way to test what runs in the browser.
+End-to-end tests drive a real browser through your panel: log in, fill a form, click an action, and check the result in the page and in the database. They are the only way to test what runs in the browser: JavaScript, Alpine behaviour, the layout.
 
 1. Start your application in a separate process, with an environment variable pointing to a **copy** of a known database, and with the `fileMailer()` [mailer](/panels/users#sending-emails) when emails are involved.
 2. Wait until the login page answers.
@@ -152,5 +140,5 @@ End-to-end tests create and delete records. Never point them at a database you c
 
 Navette's own tests follow the same levels, and are good examples of each:
 
-- **Unit tests**, in `packages/*/test/*.test.ts`, run with `npm test` at the root of the repository: the component runtime (signed state, locked properties, callable methods), the data adapter, tables, forms, authorization, authentication tokens, render hooks, colors and themes.
+- **Unit tests**, in `packages/*/test/*.test.ts`, run with `npm test` at the root of the repository: the component runtime (signed state, locked properties, callable methods), the data adapter, tables, forms, authorization, authentication tokens, render hooks, colors and themes. `packages/panels/test/testing.test.ts` exercises the testing helpers themselves.
 - **End-to-end journeys** with Playwright, one per screen of the demo application: they start the demo on a copy of the reference database, and check behaviour, security (forged requests, direct URLs per role) and the absence of JavaScript errors. `apps/starter` has a journey of its own, which checks that a read-only account sees no write buttons and gets 403 on direct URLs.

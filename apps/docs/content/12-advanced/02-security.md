@@ -94,7 +94,7 @@ A hidden, unauthorized or disabled action cannot be mounted nor run, even by a f
 
 ### Testing authorization
 
-Write at least one test per role: that buttons are hidden, that direct URLs answer 403, and that forged requests change nothing. See [testing](/advanced/testing#testing-authorization).
+Write at least one test per role: that buttons are hidden, that direct URLs answer 403, and that forged requests change nothing. See [testing](/testing/other-tests#testing-authorization).
 
 ## Validating user input
 

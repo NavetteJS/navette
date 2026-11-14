@@ -131,7 +131,23 @@ export class ProductImporter extends Importer {
 }
 ```
 
+To reject a row from one of these methods, or from `resolveRecord()`, throw a `RowImportFailedError`: the row is skipped, and listed in the failed rows file with your message. Any other error is logged, and the row is listed with a generic message.
+
+```ts
+import { Importer, RowImportFailedError } from '@navette-js/panels';
+
+export class ProductImporter extends Importer {
+    static async resolveRecord(data: Record<string, unknown>): Promise<Product | null> {
+        const product = await Product.query().findOne({ sku: data.sku });
+        if (!product) throw new RowImportFailedError(`No product found with SKU [${data.sku}].`);
+        return product;
+    }
+}
+```
+
 `getCompletedNotificationBody(imported, failed)` customizes the text of the notification.
+
+To test an importer, see [testing imports](/testing/imports).
 
 ## Limiting the size of the file
 

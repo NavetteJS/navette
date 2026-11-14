@@ -11,7 +11,7 @@ Navette separates two questions:
 
 Navette does not ship roles or permissions. It provides checkpoints, enforces them everywhere (navigation, buttons, direct URLs, forged requests), and lets you plug in your own logic: a `role` column, a permissions table, an external service.
 
-Without any rule, every logged-in user may list, create, edit and delete every record. If your users do not all have the same rights, write the rules, and [test them](/advanced/testing#testing-authorization).
+Without any rule, every logged-in user may list, create, edit and delete every record. If your users do not all have the same rights, write the rules, and [test them](/testing/other-tests#testing-authorization).
 
 ## The user object
 

@@ -12,8 +12,9 @@ With the starter template, a user panel and teams, the project looks like this:
 my-app/
 ├── .env                      settings and secrets (never commit it)
 ├── .env.example              the same keys, without secrets
-├── package.json              scripts: dev, start, navette
+├── package.json              scripts: dev, start, test, navette
 ├── tsconfig.json             editor support and type checking
+├── tests/                    tests of the panels, run with npm test
 └── src/
     ├── server.ts             starts Express, runs migrations, serves the panels
     ├── database.ts           database connection and migration runner
@@ -70,6 +71,7 @@ The `package.json` scripts start it:
 | --- | --- | --- |
 | `npm run dev` | `node --env-file=.env --watch src/server.ts` | Development: restarts on every change |
 | `npm start` | `node --env-file=.env src/server.ts` | Production |
+| `npm test` | `node --test "tests/**/*.test.ts"` | Runs the [tests](/testing/overview), on a throwaway database |
 | `npx navette …` | the [Navette CLI](/getting-started/cli) | Migrations, users, generators |
 
 ## Panels and discovery
