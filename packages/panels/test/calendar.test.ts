@@ -80,3 +80,12 @@ test('labels and day names follow the current locale', async () => {
     // A Laravel-style locale name is accepted by Intl.
     assert.match(renderCalendar(model({ locale: 'pt_BR' })), /novembro de 2026/);
 });
+
+test('rewriting SPA links: other sites, exceptions, panels without SPA mode, table click handlers', async () => {
+    const { rewriteSpaLinks } = await import('../src/spa.ts');
+    const click = ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"`;
+    const html = `<a href="/admin/a" wire:navigate>a</a><a href="https://discord.com/oauth2/authorize" wire:navigate>d</a><a href="/oauth/x" wire:navigate>x</a><a href="/admin/b"${click}>b</a><a href="https://steam.example/"${click}>s</a>`;
+    const options = { exceptions: ['/oauth/*'], prefetch: false, origin: 'https://app.example' };
+    assert.equal(rewriteSpaLinks(html, options), `<a href="/admin/a" wire:navigate>a</a><a href="https://discord.com/oauth2/authorize">d</a><a href="/oauth/x">x</a><a href="/admin/b"${click}>b</a><a href="https://steam.example/">s</a>`);
+    assert.equal(rewriteSpaLinks(html, { ...options, enabled: false }), '<a href="/admin/a">a</a><a href="https://discord.com/oauth2/authorize">d</a><a href="/oauth/x">x</a><a href="/admin/b">b</a><a href="https://steam.example/">s</a>');
+});

@@ -314,13 +314,17 @@ test('user menu: groups, an action group, a POST item, a modal action, the logou
 
 test('SPA URL exceptions and other sites load normally; the simple page width; render hooks of the tabs', async () => {
     const panel = makePanel().pages([Dashboard, Reports]).spa().spaUrlExceptions([`/nav*/reports`]).login(Login).simplePageMaxContentWidth('xl')
-        .navigationItems([NavigationItem.make('Elsewhere').url('https://example.org/')]);
+        .navigationItems([NavigationItem.make('Elsewhere').url('https://example.org/'), NavigationItem.make('Legacy').url('/legacy').spa(false)]);
     await serve(panel, async ({ get }) => {
         const html = await (await get(`/${panel.getId()}`)).text();
+        assert.match(html, /<a href="\/legacy" x-on:click/, 'spa(false) on a navigation item');
         assert.match(html, new RegExp(`<a href="/${panel.getId()}/reports" x-on:click`), 'the exception has no wire:navigate');
         assert.match(html, new RegExp(`<a href="/${panel.getId()}" wire:navigate`));
         assert.match(html, /<a href="https:\/\/example\.org\/" x-on:click/);
     });
+    // Without SPA mode, no link uses SPA navigation.
+    panel.spa(false);
+    await serve(panel, async ({ get }) => assert.doesNotMatch(await (await get(`/${panel.getId()}`)).text(), / wire:navigate[\s>.]|Alpine\.navigate\(/));
     panel.logOut({ clearCookie: () => {} } as any);
     const guest = makePanel().pages([Dashboard]).login(Login).simplePageMaxContentWidth('xl');
     const app = express();

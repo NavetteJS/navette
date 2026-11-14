@@ -5,7 +5,7 @@ import { addRelationshipsToQuery, ensureRelationshipSupport, groupScopeThroughRe
 export { addRelationshipsToQuery, ensureRelationshipSupport } from './relationships.ts';
 import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
-import { getRegisteredRichContent, NavetteTimezone, RenderedRichContent } from '@navette-js/support';
+import { getRegisteredRichContent, isSpaNavigableUrl, NavetteTimezone, RenderedRichContent } from '@navette-js/support';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
 import { modal } from '@navette-js/support/ui';
 import { applyConditions, loadRelationshipOptions, modelOfHost, type RelationshipQueryModifier } from './query-builder.ts';
@@ -82,6 +82,7 @@ export abstract class Column<R = any> {
     _group: ColumnGroup<R> | null = null;
     // Column options: URL in a new tab, click, tooltips, alignment, extra attributes.
     protected _urlInNewTab: boolean | ((record: R) => boolean) = false;
+    protected _urlSpa = true;
     protected _clickDisabled = false;
     protected _headerTooltip: string | null = null;
     protected _verticalAlignment: 'start' | 'center' | 'end' | null = null;
@@ -91,6 +92,10 @@ export abstract class Column<R = any> {
     /** Opens the column's `url()` in a new tab. */
     openUrlInNewTab(condition: boolean | ((record: R) => boolean) = true): this { this._urlInNewTab = condition; return this; }
     shouldOpenUrlInNewTab(record?: R): boolean { return typeof this._urlInNewTab === 'function' ? Boolean(this._urlInNewTab(record as R)) : this._urlInNewTab; }
+    /** `spa(false)`: the cell link loads its page normally, without SPA navigation. Links to another site never use it. */
+    spa(condition = true): this { this._urlSpa = condition; return this; }
+    /** Whether the cell link to this URL uses SPA navigation. */
+    navigatesTo(url: string | null): boolean { return this._urlSpa && isSpaNavigableUrl(url); }
     /** The cell is neither a link nor a button: the row's URL, the row's action and the column's own `url()` / `action()` are ignored. */
     disabledClick(condition = true): this { this._clickDisabled = condition; return this; }
     /** Tooltip on the column's header label. */
@@ -2700,6 +2705,11 @@ export class Table<R = any> {
     private _openRecordUrlInNewTab: boolean | ((record: R) => boolean) = false;
     /** Row links open in a new tab (for every record, or those for which the function returns `true`). */
     openRecordUrlInNewTab(condition: boolean | ((record: R) => boolean) = true): this { this._openRecordUrlInNewTab = condition; return this; }
+    private _spaRecordUrls = true;
+    /** `spaRecordUrls(false)`: row links load their page normally, without SPA navigation. Links to another site never use it. */
+    spaRecordUrls(condition = true): this { this._spaRecordUrls = condition; return this; }
+    /** Whether a row link to this URL uses SPA navigation. */
+    navigatesToRecordUrl(url: string | null): boolean { return this._spaRecordUrls && isSpaNavigableUrl(url); }
     shouldOpenRecordUrlInNewTab(record: R): boolean { return Boolean(typeof this._openRecordUrlInNewTab === 'function' ? this._openRecordUrlInNewTab(record) : this._openRecordUrlInNewTab); }
     private _enforcePageOptions = false;
     private _extremePaginationLinks = false;
@@ -3457,7 +3467,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             const cellAttributes = splitExtraAttributes(column.getExtraCellAttributes(record));
             cells.push({
                 name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url, html: await column.renderHtml(record, key), plain: clickDisabled,
-                urlInNewTab: url !== null && column.shouldOpenUrlInNewTab(record),
+                urlInNewTab: url !== null && column.shouldOpenUrlInNewTab(record), urlSpa: column.navigatesTo(url),
                 // `nv-vertical-align-*` and `extraCellAttributes()` of the `<td>`.
                 classes: [...(column.getVerticalAlignment() ? [`nv-vertical-align-${column.getVerticalAlignment()}`] : []), ...cellAttributes.classes], attributes: cellAttributes.html, style: cellAttributes.style,
                 mountExpression: !reordering && column.getActionName() !== null && !clickDisabled ? `mountAction(${js(column.getActionName())}, {}, ${js({ table: true, recordKey: key })})` : null,
@@ -3476,7 +3486,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             reorder: reordering ? { id: `${host.id}-table-reorder-${createHash('md5').update(key).digest('hex')}`, label: String((record as any)[table.getColumns()[0]?.name ?? ''] ?? key), position: rows.length + 1 } : null,
             wasClickable: reordering && (recordAction !== null || table.getRecordUrl(record) !== null),
             key, url: reordering ? null : recordAction ? null : table.getRecordUrl(record), cells, actions: groupsOnly ? [] : ((await options.rowActions?.(record)) ?? []),
-            newTab: !reordering && table.shouldOpenRecordUrlInNewTab(record), striped: isStriped,
+            newTab: !reordering && table.shouldOpenRecordUrlInNewTab(record), spa: table.navigatesToRecordUrl(table.getRecordUrl(record)), striped: isStriped,
             actionsHtml: options.rowActionsHtml && !groupsOnly ? await options.rowActionsHtml(record) : null, classes: table.getRecordClasses(record),
             // Row click: the action is mounted with the record key.
             mountExpression: reordering ? null : recordAction ? `mountAction(${js(recordAction)}, {}, ${js({ table: true, recordKey: key })})` : null,
@@ -3511,8 +3521,9 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         grouping: { active: grouping !== null, trigger: table.getGroupRecordsTriggerActionView(), directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
         id: host.id, targets: LOADING_TARGETS, table, rows, page, number,
         reorder: reorderColumn !== null ? { active: reordering, trigger: table.getReorderRecordsTriggerActionView(reordering) } : null,
-        // Row links: in a new tab (`openRecordUrlInNewTab()`), or else through SPA navigation unless a modifier key is held.
-        recordLinkAttributes: (newTab: boolean) => (newTab ? ' target="_blank"' : ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"`),
+        // Row links: in a new tab (`openRecordUrlInNewTab()`), or else through SPA navigation (paths of this site only) unless
+        // a modifier key is held. A panel without SPA mode removes it.
+        recordLinkAttributes: (newTab: boolean, spa = true) => (newTab ? ' target="_blank"' : spa ? ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"` : ''),
         isLoaded: loaded, hasLoadingSkeleton: table.hasLoadingSkeleton(), pollingInterval: reordering || !loaded ? null : table.getPollingInterval(),
         description: table.getDescription(), header: await table.getHeader(), defaultSortOptionLabel: table.getDefaultSortOptionLabel(),
         search: { placeholder: table.getSearchPlaceholder() ?? t('navette-tables::table.fields.search.placeholder'), model: table.isSearchOnBlur() ? 'wire:model.live.blur' : `wire:model.live.debounce.${table.getSearchDebounce()}` },

@@ -75,7 +75,7 @@ Action.make('edit')
     .url('/admin/posts/1/edit')
 ```
 
-Only a relative path (`/…`) or an `http://` / `https://` address is rendered as a link. Any other value (`javascript:`, `data:`…) is never output as an `href`, so a URL built from user data cannot inject script through this attribute. A local link navigates without a full page reload; use `openUrlInNewTab()` to open it in a new tab instead:
+Only a relative path (`/…`) or an `http://` / `https://` address is rendered as a link. Any other value (`javascript:`, `data:`…) is never output as an `href`, so a URL built from user data cannot inject script through this attribute. In a panel with [SPA mode](/panels/configuration#spa-mode), a link to a path of the site navigates without a full page reload; a link to another site (an OAuth provider, for example) always loads normally, and `spa(false)` turns SPA navigation off for one link. Use `openUrlInNewTab()` to open the link in a new tab instead:
 
 ```ts
 import { Action } from '@navette-js/actions';

@@ -3032,7 +3032,7 @@ export abstract class Resource {
 }
 
 /** Sub-navigation tab of a page; items with a `group` are gathered under its label. */
-export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
+export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; /** `false`: no SPA navigation for this link. */ spa?: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
 /** The cluster a page belongs to: its own, or its resource's. */
 export const clusterOf = (page: unknown): typeof Cluster | null => (page as any)?.cluster ?? (page as any)?.resource?.cluster ?? (page as any)?.parentResource?.cluster ?? null;
 type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
@@ -5918,8 +5918,9 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         }, next);
     });
     router.use((req, _res, next) => { if (!belongsToPanel(req.path)) return next(); panel.boot(req).then(() => next(), next); });
-    // SPA mode: `wire:navigate` only on links to the application's pages outside `spaUrlExceptions()`; with prefetching, `wire:navigate.hover`.
-    const spaLinks = (html: string, req: Request): string => (panel.hasSpaMode() ? rewriteSpaLinks(html, { exceptions: panel.getSpaUrlExceptions(), prefetch: panel.hasSpaPrefetching(), origin: panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}` }) : html);
+    // SPA mode: `wire:navigate` only on links to the application's pages outside `spaUrlExceptions()`; with prefetching,
+    // `wire:navigate.hover`. Without SPA mode, links load their page normally.
+    const spaLinks = (html: string, req: Request): string => rewriteSpaLinks(html, { enabled: panel.hasSpaMode(), exceptions: panel.getSpaUrlExceptions(), prefetch: panel.hasSpaPrefetching(), origin: panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}` });
     /** `authMiddleware()` and `tenantMiddleware()` of a request whose user (and tenant) are known; `false` once one answered. */
     const runAccessMiddleware = async (req: Request, res: Response, ctx: PanelContext, kind: 'page' | 'component'): Promise<boolean> => {
         res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };

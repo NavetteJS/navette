@@ -496,7 +496,7 @@
                             <div class="nv-ta-record-content-ctn">
                                 <div>
                                     <% if (row.url) { %>
-                                    <a href="<%= row.url %>"<%- recordLinkAttributes(row.newTab) %> class="nv-ta-record-content"><%- row.contentHtml %></a>
+                                    <a href="<%= row.url %>"<%- recordLinkAttributes(row.newTab, row.spa) %> class="nv-ta-record-content"><%- row.contentHtml %></a>
                                     <% } else if (row.mountExpression) { %>
                                     <button type="button" wire:click="<%= row.mountExpression %>" wire:loading.attr="disabled" wire:target="<%= row.mountExpression %>" class="nv-ta-record-content"><%- row.contentHtml %></button>
                                     <% } else { %>
@@ -755,7 +755,7 @@
                                             <% if (table.isStackedOnMobile()) { %></div><% } %>
                                         <% } else if (cell.url) { %>
                                             <% if (table.isStackedOnMobile()) { %><div class="nv-ta-cell-label"><%= cell.label %></div><div class="nv-ta-cell-content"><% } %>
-                                            <a href="<%= cell.url %>"<% if (cell.urlInNewTab) { %> target="_blank"<% } else { %> x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"<% } %> class="nv-ta-col nv-ta-col-has-column-url">
+                                            <a href="<%= cell.url %>"<% if (cell.urlInNewTab) { %> target="_blank"<% } else if (cell.urlSpa) { %> x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"<% } %> class="nv-ta-col nv-ta-col-has-column-url">
                                                 <%- cell.html %>
                                             </a>
                                             <% if (table.isStackedOnMobile()) { %></div><% } %>
@@ -769,7 +769,7 @@
                                         <%# The content wrapper only exists in stacked mode. %>
                                         <% if (table.isStackedOnMobile()) { %><div class="nv-ta-cell-label"><%= cell.label %></div><div class="nv-ta-cell-content"><% } %>
                                             <% if (row.url && !cell.plain) { %>
-                                                <a href="<%= row.url %>"<%- recordLinkAttributes(row.newTab) %> class="nv-ta-col">
+                                                <a href="<%= row.url %>"<%- recordLinkAttributes(row.newTab, row.spa) %> class="nv-ta-col">
                                                     <%- cell.html %>
                                                 </a>
                                             <% } else { %>

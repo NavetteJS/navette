@@ -171,7 +171,29 @@ panel
     ]);
 ```
 
-Links to other sites never use SPA navigation.
+Links to other sites never use SPA navigation: the background request of SPA navigation cannot load a page of another origin, so a link to an OAuth provider (Steam, Discord…) or to an external site always loads normally. Without `spa()`, no link of the panel uses SPA navigation.
+
+### Disabling SPA navigation for one link
+
+Pass `false` to `spa()` on the link itself:
+
+```ts
+Action.make('signInWithSteam')
+    .url('/auth/steam/redirect')
+    .spa(false);
+
+NavigationItem.make('Reports')
+    .url('/reports')
+    .spa(false);
+
+TextColumn.make('author.name')
+    .url((record) => `/authors/${record.author_id}`)
+    .spa(false);
+
+table.recordUrl((record) => `/legacy/orders/${record.id}`).spaRecordUrls(false);
+```
+
+A sub-navigation item (`getSubNavigation()`) takes `spa: false`.
 
 ## Unsaved changes alerts
 

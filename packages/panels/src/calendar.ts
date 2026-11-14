@@ -1,6 +1,6 @@
 // Calendar: date helpers, grid and rendering.
 // `CalendarWidget` (index.ts) builds on this module; every part of the rendering can be replaced.
-import { Attributes, e, icon, isLocalOrHttpUrl } from '@navette-js/support';
+import { Attributes, e, icon, isLocalOrHttpUrl, isSpaNavigableUrl } from '@navette-js/support';
 import { intlLocale, t, tc } from '@navette-js/support/i18n';
 
 /** A calendar event. `start` and `end` are `YYYY-MM-DD` dates or ISO date-times (`2026-11-12T09:30`); `end` is inclusive. */
@@ -117,7 +117,7 @@ export function renderCalendarEvent(event: CalendarEvent, context: { day: string
     const time = context.day === start ? timeOf(event.start) : null;
     const attributes = new Attributes({
         title: event.description ?? event.title, 'data-event': String(event.id),
-        ...(url ? { href: url, ...(event.openUrlInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : url.startsWith('/') ? { 'wire:navigate': '' } : {}) } : context.clickable ? { type: 'button', 'wire:click': call('selectEvent', event.id) } : {}),
+        ...(url ? { href: url, ...(event.openUrlInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : isSpaNavigableUrl(url) ? { 'wire:navigate': '' } : {}) } : context.clickable ? { type: 'button', 'wire:click': call('selectEvent', event.id) } : {}),
     }).class(['nv-cal-event', 'nv-color', `nv-color-${color}`, context.day > start ? 'nv-cal-event-continued' : null, context.day < end ? 'nv-cal-event-continues' : null]);
     const tag = url ? 'a' : context.clickable ? 'button' : 'div';
     return `<${tag} ${attributes.toHtml()}>${time ? `<time class="nv-cal-event-time">${e(time)}</time>` : ''}<span class="nv-cal-event-title">${e(event.title)}</span></${tag}>`;

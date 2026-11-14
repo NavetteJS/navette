@@ -62,6 +62,14 @@ test('column options: URL in a new tab, disabled click, header tooltip, alignmen
     // Neither column links to the record: one has its own URL, the other a disabled click.
     assert.doesNotMatch(html, /href="\/posts\//);
     assert.match(clean(await renderTable(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')]), host(), adapter)), /<a href="\/posts\/2"/);
+    // SPA navigation (`Alpine.navigate()`) only for paths of this site, unless turned off.
+    const links = async (table: Table<Post>) => clean(await renderTable(table, host(), adapter));
+    assert.match(await links(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')])), /<a href="\/posts\/2" x-on:click="[^"]*Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().recordUrl((record) => `https://example.org/posts/${record.id}`).columns([TextColumn.make('title')])), /Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).spaRecordUrls(false).columns([TextColumn.make('title')])), /Alpine\.navigate/);
+    assert.match(await links(new Table<Post>().columns([TextColumn.make('title').url((record) => `/posts/${record.id}`)])), /<a href="\/posts\/2" x-on:click="[^"]*Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().columns([TextColumn.make('title').url('https://example.org/')])), /Alpine\.navigate/);
+    assert.doesNotMatch(await links(new Table<Post>().columns([TextColumn.make('title').url('/legacy').spa(false)])), /Alpine\.navigate/);
     assert.equal(TextColumn.make('a').alignLeft().getAlignment(), 'left');
     assert.equal(TextColumn.make('a').alignStart(false).getAlignment(), null);
     assert.equal(TextColumn.make('a').verticalAlignment('middle' as any).getVerticalAlignment(), null);

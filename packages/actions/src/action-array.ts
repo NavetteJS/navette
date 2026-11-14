@@ -9,6 +9,8 @@ export type ActionArray = {
     iconPosition: 'before' | 'after'; iconSize: string | null; isOutlined: boolean; isDisabled: boolean; label: string | null; shouldClose: boolean;
     shouldMarkAsRead: boolean; shouldMarkAsUnread: boolean; shouldOpenUrlInNewTab: boolean; shouldPostToUrl: boolean; size: string;
     tooltip: string | null; url: string | null; view: 'button' | 'link' | 'icon-button' | 'badge' | null;
+    /** Present (`false`) only for a link that never uses SPA navigation (`spa(false)`). */
+    isSpa?: false;
 };
 /** Array of an action group: its `actions` key tells it apart from an action. */
 export type ActionGroupArray = {
@@ -69,6 +71,7 @@ export function actionToArray(action: Action): ActionArray {
         shouldMarkAsRead: a._shouldMarkAsRead === true,
         shouldMarkAsUnread: a._shouldMarkAsUnread === true,
         shouldOpenUrlInNewTab: a._newTab === true,
+        ...(a._spa === false ? { isSpa: false as const } : {}),
         shouldPostToUrl: false,
         size: a._size ?? 'md',
         tooltip: str(now(a._tooltip, null)),
@@ -113,6 +116,7 @@ export function actionFromArray(ActionClass: typeof Action, raw: unknown): Actio
     const url = str(data.url);
     if (url !== null) action.url(url);
     if (data.shouldOpenUrlInNewTab === true) action.openUrlInNewTab();
+    if (data.isSpa === false) action.spa(false);
     if (data.isOutlined === true) action.outlined();
     if (data.isDisabled === true) action.disabled();
     const view = data.view === 'navette::components.button.index' ? 'button' : data.view === 'navette::components.link' ? 'link' : data.view;
