@@ -198,6 +198,14 @@ import { renderHook } from '@navette-js/support';
 const html = renderHook('app::report.footer', [ReportPage], { report });
 ```
 
+Inside a page, `this.getRenderHookScopes()` returns the scopes of the page: its class, plus its resource for a resource page (the owner's resource for a relation page). Pass them so that hooks scoped to the page or its resource are rendered:
+
+```ts
+async getViewData() {
+    return { footer: renderHook('app::report.footer', this.getRenderHookScopes(), { period: this.period }) };
+}
+```
+
 In a schema, the `RenderHook` component renders a location with the scopes of the page:
 
 ```ts

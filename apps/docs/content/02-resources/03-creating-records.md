@@ -57,7 +57,17 @@ When the same logic is needed by every way of creating a record (page, modal, im
 
 ## Customizing redirects
 
-By default, after saving the form, the user will be redirected to the Edit page of the new record. To change it, override `getRedirectUrl()`:
+By default, after saving the form, the user will be redirected to the View page of the new record if the resource has one and they may view it, otherwise to its Edit page if they may edit it, otherwise to the list.
+
+To change it for every resource of the panel, use `resourceCreatePageRedirect()` with `'index'` (the list), `'view'` or `'edit'`:
+
+```ts
+panel.resourceCreatePageRedirect('index');
+```
+
+The panel's choice is skipped when the resource has no such page, or when the user may not open it (the `view` or `update` ability of the policy): the default order applies instead.
+
+To change it for one page, override `getRedirectUrl()`, which may be async:
 
 ```ts
 class CreateTask extends CreateRecord {
@@ -79,13 +89,47 @@ class CreateTask extends CreateRecord {
 }
 ```
 
+To change the whole notification (its body, icon, actions or duration), override `getCreatedNotification()`, which receives the new record. Return `null` to send no notification:
+
+```ts
+import { CreateRecord, Notification } from '@navette-js/panels';
+
+class CreateTask extends CreateRecord {
+    protected getCreatedNotification(record: any): Notification | null {
+        return Notification.make()
+            .success()
+            .title('Task created')
+            .body(`"${record.title}" has been added to the board.`)
+            .duration(3000);
+    }
+}
+```
+
 ## Creating another record
 
 The form has a "Create & create another" button, which creates the record and resets the form instead of redirecting.
 
 ### Disabling create another
 
-The buttons under the form are returned by `getFormActions()`. To remove "Create & create another", filter it out:
+To remove the "Create & create another" button, set the static `canCreateAnother` property of the create page to `false`:
+
+```ts
+class CreateTask extends CreateRecord {
+    static canCreateAnother = false;
+}
+```
+
+For a condition computed on each request (the user's role, a setting…), override the `canCreateAnother()` method instead. It also stops the `createAnother` method, which the browser may still call:
+
+```ts
+class CreateTask extends CreateRecord {
+    canCreateAnother(): boolean {
+        return this.panel.getId() === 'admin';
+    }
+}
+```
+
+The buttons under the form are returned by `getFormActions()`. You may also filter "Create & create another" out of them:
 
 ```ts
 class CreateTask extends CreateRecord {
@@ -123,7 +167,7 @@ The hooks run in this order when the user submits the form:
 | Before the creation | `beforeCreate(data)` |
 | The record is created | `handleRecordCreation(data)` |
 | After the creation | `afterCreate(record)` |
-| The notification is sent | `getCreatedNotificationTitle()` |
+| The notification is sent | `getCreatedNotification(record)` (by default from `getCreatedNotificationTitle()`) |
 | The user is redirected | `getRedirectUrl(record)` |
 
 When the page opens, `beforeFill()` runs before the form is filled with its defaults, and `afterFill()` after. The edit page runs the same hooks around filling the form with the record.

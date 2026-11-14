@@ -86,6 +86,8 @@ async function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
 // ------------------------------------------------------------------ helpers
 const contextOf = (livewire: any): PanelContext => livewire?._ctx as PanelContext;
 const userKey = (user: User) => createHash('sha256').update(String(user.id)).digest('base64url').slice(0, 22);
+/** An identifier of the user unique across panels (whose auth providers may reuse ids): the panel id and a hash of the user id. */
+export const userScopedAuthIdentifier = (panel: Panel, user: User): string => `${panel.getId()}:${userKey(user)}`;
 /** The signed-in user of the request the action runs in; the action stops if they changed since it was mounted. */
 function currentUser(livewire: any): User {
     const user = contextOf(livewire)?.user;
@@ -176,8 +178,8 @@ export class MultiFactorChallenge {
     /** Seconds before the user may try again (0: now). */
     getRateLimiterAvailableInSeconds(user: User): number { return (this.constructor as typeof MultiFactorChallenge).limiter().availableIn(this.getRateLimiterKey(user)); }
     getMaxRateLimiterAttempts(): number { return (this.constructor as typeof MultiFactorChallenge).maxAttempts; }
-    /** Rate limiter key: per panel and user. */
-    getRateLimiterKey(user: User): string { return `${this.panel.getId()}:${userKey(user)}`; }
+    /** Rate limiter key: per panel and user (`panel.getUserScopedAuthIdentifier(user)`). */
+    getRateLimiterKey(user: User): string { return userScopedAuthIdentifier(this.panel, user); }
 }
 
 // ------------------------------------------------------------------ authenticator apps (TOTP)

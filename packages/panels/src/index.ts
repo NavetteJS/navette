@@ -30,7 +30,7 @@ import { streamBroadcasts, userBroadcastChannel, type BroadcastRecipient } from 
 export { broadcastToUsers, DATABASE_NOTIFICATIONS_SENT_EVENT, dispatchDatabaseNotificationsSent, getBroadcaster, MemoryBroadcaster, NOTIFICATION_BROADCAST_EVENT, useBroadcaster, userBroadcastChannel, type BroadcastMessage, type BroadcastOptions, type BroadcastRecipient, type Broadcaster } from './broadcasting.ts';
 import { NavetteAsset, type Asset } from './assets.ts';
 export { AlpineComponent, Asset, AssetManager, Css, Js, NavetteAsset } from './assets.ts';
-import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
+import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, userScopedAuthIdentifier, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
 export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
 export { qrCodeDataUri, qrCodeMatrix, qrCodeSvg, type QrCodeSvgOptions, type QrErrorCorrection } from './qr-code.ts';
@@ -712,6 +712,11 @@ export class Panel {
     getSetUpRequiredMultiFactorAuthenticationUrl(): string { return this.getBaseUrl(this.getAuthPaths().setUpRequiredMultiFactor); }
     /** The login challenge of this panel (enabled providers, rate limiting). */
     getMultiFactorChallenge(): MultiFactorChallenge { return MultiFactorChallenge.make(this); }
+    /**
+     * An identifier of the user unique across the panels of the application (Filament's `getUserScopedAuthIdentifier()`): the
+     * panel id and a hash of the user id. Key per-user data with it (pending codes, rate limits), as panels may share user ids.
+     */
+    getUserScopedAuthIdentifier(user: User): string { return userScopedAuthIdentifier(this, user); }
     /** Whether the user must set up multi-factor authentication before using the panel. */
     async mustSetUpMultiFactorAuthentication(user: User | null): Promise<boolean> {
         if (!user || !this.isMultiFactorAuthenticationRequired()) return false;

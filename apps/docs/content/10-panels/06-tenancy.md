@@ -60,7 +60,7 @@ Optional methods:
 | Method | Description |
 |---|---|
 | `getCurrentTenantLabel(tenant)` | Text above the name of the tenant in the menu ("Current team"), or `null`. |
-| `getAvatarUrl(tenant)` | Avatar of the tenant. By default, generated from its initials. |
+| `getAvatarUrl(tenant)` | Avatar of the tenant, or `null`. By default, the panel's [default avatar provider](/panels/users#changing-the-default-avatar-provider) builds it from the tenant's initials. |
 | `create(data, user)` | Creates a tenant from the registration form; the user becomes a member. Enables tenant registration. |
 | `update(tenant, data)` | Saves the tenant profile form. Enables the tenant profile page. |
 

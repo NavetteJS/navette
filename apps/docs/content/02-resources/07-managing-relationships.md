@@ -600,6 +600,23 @@ class CustomerAddresses extends ObjectionAdapter<Address> {
 
 ## Accessing the relationship's owner record
 
+The owner record is the record of the page showing the manager. `getOwnerRecord()` loads it through the adapter of the owner's resource, in the current tenant, once per request (later calls in the same request reuse it):
+
+```ts
+static table(table: Table): Table {
+    return table.headerActions([
+        Action.make('notify')
+            .action(async ({ livewire }) => {
+                const project = await livewire.getOwnerRecord();
+
+                await notifyMembersOf(project);
+            }),
+    ]);
+}
+```
+
+`getOwnerResource()` returns the owner's resource. On a [relation page](#relation-pages), `getOwnerRecord()` returns the owner the page has already loaded and authorized.
+
 The key of the owner record is passed to `adapterFor()`. Inside the manager, it is `this.ownerRecord`; in the closures of the form, the table and the actions, read it from the component:
 
 ```ts
@@ -640,11 +657,33 @@ static title = 'Customer payments';
 
 ## Customizing the relation manager record title
 
-`recordTitleAttribute` names the column used in the headings of the edit, delete and detach modals:
+`recordTitleAttribute` names the column used in the headings of the edit, delete and detach modals, and in the options of the attach and associate selects:
 
 ```ts
 static recordTitleAttribute = 'full_address';
 ```
+
+When the title is made of several columns, give the table a `recordTitle()` function. It is used by the modal headings and by the attach and associate options; `recordTitleAttribute` still names the column searched for those options:
+
+```ts
+static table(table: Table): Table {
+    return table
+        .recordTitle((record) => `${record.first_name} ${record.last_name}`)
+        .columns([/* ... */]);
+}
+```
+
+To compute it yourself (from the owner record, the user…), override the manager's `getRecordTitle()` method:
+
+```ts
+export class MembersRelationManager extends RelationManager {
+    getRecordTitle(record: any): string {
+        return `${record.name} (${record.role})`;
+    }
+}
+```
+
+Relation pages (`ManageRelatedRecords`) offer the same `recordTitle()` and `getRecordTitle()`.
 
 ## Authorizing relation managers
 
