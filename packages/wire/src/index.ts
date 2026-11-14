@@ -4,6 +4,13 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { UploadStore } from './uploads.ts';
 export { UploadStore, type TemporaryFile } from './uploads.ts';
 
+/** CSP nonce of the request being handled, shared with `@navette-js/support` (`useCspNonce()`, `runWithCspNonce()`). */
+export function currentCspNonce(): string | null {
+    const store = (globalThis as any)[Symbol.for('navette.csp-nonce')] as AsyncLocalStorage<{ nonce: string | null }> | undefined;
+    return store?.getStore()?.nonce ?? null;
+}
+const nonceAttribute = () => { const nonce = currentCspNonce(); return nonce ? ` nonce="${nonce}"` : ''; };
+
 export type Effects = {
     html?: string;
     returns?: unknown[];
@@ -91,7 +98,7 @@ export abstract class Component {
      * JavaScript run once in the browser for this component, with `$wire` in scope (Livewire's `@script`). Call it while rendering;
      * `key` identifies the script: it is sent again only if the browser has not run it yet.
      */
-    addScript(key: string, js: string): void { ((this._effects.scripts ??= {}) as Record<string, string>)[key] = `<script>${js}</script>`; }
+    addScript(key: string, js: string): void { ((this._effects.scripts ??= {}) as Record<string, string>)[key] = `<script${nonceAttribute()}>${js}</script>`; }
     renderPartial(name: string, html: string): void { (this._effects.partials ??= {})[name] = html; this._skipRender = true; }
     addError(path: string, message: string): void { (this._errors[path] ??= []).push(message); }
     resetErrorBag(): void { this._errors = {}; }

@@ -1,5 +1,5 @@
-<%# User menu (sidebar or topbar), with the theme switcher %>
-<% const topbar = locals.position === 'topbar'; const collapsible = locals.isSidebarCollapsibleOnDesktop === true; const before = locals.itemsBefore ?? []; const after = locals.itemsAfter ?? []; %>
+<%# User menu (sidebar or topbar): items before the theme switcher (negative sort), the switcher, then the other groups (logout last) %>
+<% const topbar = locals.position === 'topbar'; const collapsible = locals.isSidebarCollapsibleOnDesktop === true; const before = locals.listsBefore ?? []; const after = locals.listsAfter ?? []; %>
 <%- renderHook('panels::user-menu.before') %>
 <div x-data="filamentDropdown({ isMenu: true })" class="fi-dropdown fi-user-menu">
     <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
@@ -19,17 +19,17 @@
     </div>
 
     <div x-cloak x-float.placement.<%= topbar ? 'bottom-end' : 'top-end' %>.flip<% if (topbar) { %>.teleport<% } %>.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel " style="">
-<% if (!locals.profileUrl) { %>
+<% if (locals.profileHeader) { %>
         <%- renderHook('panels::user-menu.profile.before') %>
         <div class="fi-dropdown-header">
-            <%- icon('m-user-circle', { alias: 'panels::user-menu.profile-item' }) %>
+            <%- icon(profileHeader.icon ?? 'm-user-circle', { alias: 'panels::user-menu.profile-item' }) %>
             <span>
-                <%= user.name %>
+                <%= profileHeader.label %>
             </span>
         </div>
         <%- renderHook('panels::user-menu.profile.after') %>
 <% } %>
-<% if (before.length) { %>        <div class="fi-dropdown-list"><%- before.join('') %></div>
+<% for (const list of before) { %>        <div class="fi-dropdown-list"><%- list.join('') %></div>
 <% } %>
 <% if (locals.hasThemeSwitcher !== false) { %>        <div class="fi-dropdown-list">
             <div x-data="{ theme: null }" x-init="
@@ -66,18 +66,8 @@
             </div>
         <% } %>
 
-<% if (after.length) { %>        <div class="fi-dropdown-list"><%- after.join('') %></div>
+<% for (const list of after) { %>        <div class="fi-dropdown-list"><%- list.join('') %></div>
 <% } %>
-        <div class="fi-dropdown-list">
-            <form action="<%= logoutUrl %>" method="post"><input type="hidden" name="_token" value="<%= csrf %>" autocomplete="off">
-                <button role="menuitem" tabindex="-1" type="submit" class="fi-dropdown-list-item">
-                    <%- icon('m-arrow-left-on-rectangle', { alias: 'panels::user-menu.logout-button' }) %>
-                    <span class="fi-dropdown-list-item-label">
-                        <%= t('filament-panels::layout.actions.logout.label') %>
-                    </span>
-                </button>
-            </form>
-        </div>
     </div>
 </div>
 <%- renderHook('panels::user-menu.after') %>

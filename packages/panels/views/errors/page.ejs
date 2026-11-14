@@ -21,7 +21,7 @@
 
         <% if (font.url) { %><link href="<%= font.url %>" rel="stylesheet" /><% } %>
 
-        <style>
+        <style<%- cspNonceAttribute() %>>
             :root {
                 --font-family: '<%- font.family %>';
                 --font-family-mono: 'ui-monospace';
@@ -32,11 +32,11 @@
         </style>
 
         <% if (locals.darkMode === false) { %><% } else if (locals.darkModeForced) { %>
-        <script>
+        <script<%- cspNonceAttribute() %>>
             document.documentElement.classList.add('dark')
         </script>
         <% } else { %>
-        <script>
+        <script<%- cspNonceAttribute() %>>
             const theme = localStorage.getItem('filament:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
 
             if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -45,7 +45,7 @@
         </script>
         <% } %>
 
-        <% if (locals.themeCss) { %><style data-navette-theme><%- themeCss %></style><% } %>
+        <% if (locals.themeCss) { %><style<%- cspNonceAttribute() %> data-navette-theme><%- themeCss %></style><% } %>
     </head>
 
     <body class="<%- cls(['fi-body', 'fi-panel-' + panelId, 'fi-error-body', 'fi-error-' + status]) %>">
@@ -83,5 +83,9 @@
                 </main>
             </div>
         </div>
+        <%# No inline event handler: a strict Content-Security-Policy refuses them. %>
+        <script<%- cspNonceAttribute() %>>
+            document.querySelectorAll('[data-history-back]').forEach((button) => button.addEventListener('click', () => history.back()))
+        </script>
     </body>
 </html>

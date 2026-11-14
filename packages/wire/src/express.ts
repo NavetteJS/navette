@@ -5,7 +5,7 @@ import nodePath from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Request, Response, Router } from 'express';
 import express from 'express';
-import { WireError, type WireRuntime } from './index.ts';
+import { currentCspNonce, WireError, type WireRuntime } from './index.ts';
 
 const vendor = (f: string) => fileURLToPath(new URL(`../vendor/${f}`, import.meta.url));
 const versionHash = JSON.parse(readFileSync(vendor('manifest.json'), 'utf8'))['/livewire.js'] as string;
@@ -55,8 +55,9 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
             // A `WireError`, or an error carrying an HTTP client error status (a Repeater's `maxItemsForProcessing()`: 413).
             const status = e instanceof WireError ? e.status : httpClientErrorStatus(e) ?? 500;
             if (status === 500) console.error(e);
-            else if (process.env.NODE_ENV !== 'production') console.warn(`[wire] ${status} ${(e as Error).message} — calls=${JSON.stringify(req.body?.components?.map((c: any) => c.calls))} updates=${JSON.stringify(req.body?.components?.map((c: any) => c.updates))}`);
-            res.status(status).send(e instanceof Error ? e.message : 'Error');
+            else if (status !== 499 && process.env.NODE_ENV !== 'production') console.warn(`[wire] ${status} ${(e as Error).message} — calls=${JSON.stringify(req.body?.components?.map((c: any) => c.calls))} updates=${JSON.stringify(req.body?.components?.map((c: any) => c.updates))}`);
+            // A panel middleware may have answered the request itself.
+            if (!res.headersSent) res.status(status).send(e instanceof Error ? e.message : 'Error');
         }
     });
     // File uploads: URL signed by `_startUpload`, CSRF token in a header, files stored in the temporary directory.
@@ -71,7 +72,7 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
         } catch (e) {
             const status = e instanceof WireError ? e.status : Number((e as any)?.status) || 500;
             if (status === 500) console.error(e);
-            res.status(status).json({ message: e instanceof Error ? e.message : 'Error' });
+            if (!res.headersSent) res.status(status).json({ message: e instanceof Error ? e.message : 'Error' });
         }
     });
     // Temporary image previews (`UploadStore.temporaryUrl()`): the signature binds the file id and an expiry.
@@ -85,7 +86,8 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
 
 /** `<script>` tag that loads livewire.js with its CSRF token and endpoint URLs. */
 export function wireScripts(req: Request, res: Response, prefix = '/livewire'): string {
-    return `<script src="${prefix}/livewire.js?id=${versionHash}" data-csrf="${csrfToken(req, res)}" data-module-url="${prefix}" data-update-uri="${prefix}/update" data-navigate-once="true"></script>`;
+    const nonce = currentCspNonce();
+    return `<script src="${prefix}/livewire.js?id=${versionHash}"${nonce ? ` nonce="${nonce}"` : ''} data-csrf="${csrfToken(req, res)}" data-module-url="${prefix}" data-update-uri="${prefix}/update" data-navigate-once="true"></script>`;
 }
 
 /** Styles livewire.js expects (loading states, cloak, progress bar); place them in `<head>`. */
@@ -93,7 +95,9 @@ export function wireStyles(progressBarColor = '#2299dd'): string {
     const BS = String.fromCharCode(92); // backslash: escapes `:` and `.` in CSS selectors
     const sel = (n: string) => `[wire${BS}:${n.replaceAll('.', BS + '.')}]`;
     const doubled = (names: string[]) => names.map((n) => sel(n) + sel(n)).join(', ');
-    return '<!-- Livewire Styles --><style>'
+    const nonce = currentCspNonce();
+    // With a nonce, livewire.js reads it from this element for the styles and scripts it adds itself.
+    return `<!-- Livewire Styles --><style${nonce ? ` nonce="${nonce}" data-livewire-style` : ''}>`
         + doubled(['loading', 'loading.delay', 'loading.list-item', 'loading.inline-block', 'loading.inline', 'loading.block', 'loading.flex', 'loading.table', 'loading.grid', 'loading.inline-flex']) + ' {display: none;}'
         + doubled(['loading.delay.none', 'loading.delay.shortest', 'loading.delay.shorter', 'loading.delay.short', 'loading.delay.default', 'loading.delay.long', 'loading.delay.longer', 'loading.delay.longest']) + ' {display: none;}'
         + doubled(['offline']) + ' {display: none;}'

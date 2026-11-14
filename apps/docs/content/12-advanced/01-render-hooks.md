@@ -94,16 +94,11 @@ Authentication and resources:
 | `AUTH_PASSWORD_RESET_RESET_FORM_BEFORE`, `AUTH_PASSWORD_RESET_RESET_FORM_AFTER` | `panels::auth.password-reset.reset.form.before`, `…after` | Around the new password form |
 | `RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE`, `RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER` | `panels::resource.pages.list-records.table.before`, `…after` | Around the table of a list page |
 | `RESOURCE_RELATION_MANAGER_BEFORE`, `RESOURCE_RELATION_MANAGER_AFTER` | `panels::resource.relation-manager.before`, `…after` | Around the table of a relation manager or of a relation page |
+| `RESOURCE_PAGES_LIST_RECORDS_TABS_START`, `RESOURCE_PAGES_LIST_RECORDS_TABS_END` | `panels::resource.pages.list-records.tabs.start`, `…end` | Inside the tabs of a list page, before the first tab and after the last one |
+| `RESOURCE_TABS_START`, `RESOURCE_TABS_END` | `panels::resource.tabs.start`, `…end` | Inside the tabs of the relation managers of a record page, before the first tab and after the last one |
+| `RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE`, `…_AFTER` | `panels::resource.pages.manage-related-records.table.before`, `…after` | Around the table of a relation page (`ManageRelatedRecords`) |
 
-#### Declared but not rendered
-
-A few names are declared, but rendered nowhere. `UNPLACED_RENDER_HOOKS`, exported by `@navette-js/panels`, lists them:
-
-| Constant | Reason |
-|---|---|
-| `RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE`, `…_AFTER` | Relation pages render the relation manager hooks instead. |
-| `RESOURCE_PAGES_LIST_RECORDS_TABS_START`, `…_END` | Reserved: no page renders it yet. |
-| `RESOURCE_TABS_START`, `RESOURCE_TABS_END` | Reserved: no page renders it yet. |
+Every declared name is rendered somewhere: `UNPLACED_RENDER_HOOKS`, still exported by `@navette-js/panels` for compatibility, is empty.
 
 ### Table render hooks
 

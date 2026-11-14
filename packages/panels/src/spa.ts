@@ -1,0 +1,47 @@
+// SPA mode links: `wire:navigate` is kept on links to the application's own pages, except the URLs of
+// `panel.spaUrlExceptions()`; links to other sites load normally. With prefetching, it becomes `wire:navigate.hover`.
+
+/** `*` matches anything; the rest is literal (Laravel's `Str::is()`). */
+function patternToRegExp(pattern: string): RegExp {
+    return new RegExp(`^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
+}
+
+const decodeAttribute = (value: string) => value.replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+export type SpaLinkOptions = {
+    /** Patterns of `spaUrlExceptions()`, matched against the path and the absolute URL of each link. */
+    exceptions: string[];
+    prefetch: boolean;
+    /** Origin of the request (`https://example.com`): absolute links to it are the application's. */
+    origin: string | null;
+};
+
+/** Whether a link may use SPA navigation: a path, or an absolute URL of the application, outside the exceptions. */
+export function isSpaUrl(url: string, options: SpaLinkOptions): boolean {
+    let path = url;
+    let absolute: string | null = null;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) {
+        let parsed: URL;
+        try { parsed = new URL(url, options.origin ?? 'http://localhost'); } catch { return false; }
+        if (!options.origin || parsed.origin !== options.origin) return false;
+        path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        absolute = parsed.href;
+    } else if (options.origin) absolute = `${options.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+    const pathname = path.split(/[?#]/)[0];
+    return !options.exceptions.some((pattern) => {
+        const regexp = patternToRegExp(pattern);
+        return regexp.test(path) || regexp.test(pathname) || (absolute !== null && (regexp.test(absolute) || regexp.test(absolute.split(/[?#]/)[0])));
+    });
+}
+
+const ANCHOR = /<a\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+/** Rewrites the `wire:navigate` attributes of the links of a page or a component update. */
+export function rewriteSpaLinks(html: string, options: SpaLinkOptions): string {
+    if (!html.includes('wire:navigate')) return html;
+    return html.replace(ANCHOR, (tag) => {
+        if (!/ wire:navigate(?:\.hover)?(?=[\s>/=])/.test(tag)) return tag;
+        const href = /\shref="([^"]*)"/.exec(tag)?.[1] ?? /\shref='([^']*)'/.exec(tag)?.[1] ?? null;
+        if (href !== null && !isSpaUrl(decodeAttribute(href), options)) return tag.replace(/ wire:navigate(?:\.hover)?(?:="[^"]*")?(?=[\s>/])/g, '');
+        return options.prefetch ? tag.replace(/ wire:navigate(?=[\s>/])/g, ' wire:navigate.hover') : tag;
+    });
+}

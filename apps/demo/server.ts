@@ -178,6 +178,8 @@ if (process.env.NAVETTE_HOOK_PROBE) secondPanel.plugin((await import('./hook-pro
 app.use(panelRouter(secondPanel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 // Third panel (`/lab`): recent features on the demo data, outside the pages compared with Filament. NAVETTE_NO_LAB turns it off.
 if (!process.env.NAVETTE_NO_LAB) app.use(panelRouter(labPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
+// Fourth panel (`/lab-nav`): navigation, menus and a strict Content-Security-Policy; left out of the parity screenshots.
+if (!process.env.NAVETTE_NO_LAB && !process.env.NAVETTE_NO_THEMES) app.use(panelRouter((await import('./lab-navigation.ts')).labNavigationPanel({ key, login: DemoLogin, auth: accounts, canAccess: (user) => String(user.id) === String(users[0].id) }), new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 app.use(panelRouter(panel, new WireRuntime({ key, uploads: new UploadStore(path.join(uploads, 'tmp'), key) })));
 // The admin panel is at the root: URLs that nothing answered get its 404 page.
 app.use(panelNotFound(panel));

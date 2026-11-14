@@ -1783,7 +1783,7 @@ export class TextInputColumn<R = any> extends EditableColumn<R> {
         return `<div wire:ignore.self ${outer.toHtml()}><input type="hidden" value="${e(state)}" x-ref="serverState" /><div x-bind:class="{
                     'fi-disabled': isLoading || ${js(isDisabled)},
                     'fi-invalid': error !== undefined,
-                }" x-on:click.prevent.stop class="fi-input-wrp">${prefix}<div class="fi-input-wrp-content-ctn"><input${type === 'color' ? ` onclick="if (typeof this.showPicker === 'function') { this.showPicker() }"` : ''} x-model.lazy="state" ${input.toHtml()} /></div>${suffix}</div>${EditableColumn.STATUS_HTML}</div>`;
+                }" x-on:click.prevent.stop class="fi-input-wrp">${prefix}<div class="fi-input-wrp-content-ctn"><input${type === 'color' ? ` x-on:click="if (typeof $el.showPicker === 'function') { $el.showPicker() }"` : ''} x-model.lazy="state" ${input.toHtml()} /></div>${suffix}</div>${EditableColumn.STATUS_HTML}</div>`;
     }
 }
 

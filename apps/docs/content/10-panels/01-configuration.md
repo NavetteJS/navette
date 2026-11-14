@@ -124,6 +124,12 @@ By default, the content of a page is at most `7xl` wide. Change it with `maxCont
 panel.maxContentWidth('full');
 ```
 
+Simple pages (login, registration, password reset and the other pages without navigation) are `lg` wide. Change them with `simplePageMaxContentWidth()`, which takes the same sizes. A page's own static `maxContentWidth` wins over both settings:
+
+```ts
+panel.simplePageMaxContentWidth('md');
+```
+
 ## Setting the default sub-navigation position
 
 Sub-navigation is rendered at the start of the page by default. You may change it for every page of the panel with `subNavigationPosition()`, which takes `'start'`, `'end'` or `'top'` (tabs):
@@ -151,6 +157,21 @@ panel.spa(true, { prefetch: true });
 ```
 
 Prefetched pages are requested like any other page: each hovered link makes a request, even if the user does not click it.
+
+### Disabling SPA navigation for some URLs
+
+Some pages need a full page load: a page with its own scripts, a download, a page of another part of the application. List them with `spaUrlExceptions()`, as paths or absolute URLs, where `*` matches anything. It also accepts a function returning the list:
+
+```ts
+panel
+    .spa()
+    .spaUrlExceptions([
+        '/admin/reports/*',
+        'https://example.com/legacy/*',
+    ]);
+```
+
+Links to other sites never use SPA navigation.
 
 ## Unsaved changes alerts
 
@@ -233,6 +254,10 @@ By default, the panel has a topbar, with the user menu and global search, and a 
 | `userMenuPosition('sidebar')` | Moves the user menu to the sidebar. |
 | `globalSearchPosition('sidebar')` | Moves [global search](/resources/global-search) to the sidebar. |
 | `databaseNotificationsPosition('sidebar')` | Moves the notifications bell to the sidebar. |
+| `userMenu(false)` | Removes the [user menu](/panels/navigation#disabling-the-user-menu). |
+| `themeSwitcher(false)` | Removes the light and dark mode switcher from the user menu. |
+| `sidebarWidth()`, `collapsedSidebarWidth()` | Change the [width of the sidebar](/panels/navigation#changing-the-width-of-the-sidebar). |
+| `sidebarLivewireComponent()`, `topbarLivewireComponent()` | [Replace the sidebar or the topbar](/panels/navigation#replacing-the-sidebar-and-the-topbar) with your own component. |
 
 The three positions default to the topbar when there is one, and to the sidebar otherwise.
 
@@ -253,6 +278,40 @@ app.use(panelRouter(panel, runtime));
 ```
 
 A middleware mounted before the panel can also fill an `AsyncLocalStorage` with request data (the logged-in user, a locale) for your adapters to read. To know the user, call `await panel.user(req)`, which reads the session cookie of the panel.
+
+### Registering middleware on the panel
+
+The panel can run Express middleware itself, with `middleware()`. They run on every request of the panel (its pages, its authentication pages, its downloads), before its routes. A middleware may answer the request itself instead of calling `next()`, and an error passed to `next(error)` goes to the Express error handler:
+
+```ts
+panel.middleware([
+    (req, res, next) => {
+        res.setHeader('X-Frame-Options', 'DENY');
+        next();
+    },
+]);
+```
+
+By default, they do not run on the component updates (the requests a page sends while it is open: actions, form changes, table pagination). Pass `true` as the second argument to make them persistent, so that they run on these requests too:
+
+```ts
+panel.middleware([auditLog], true);
+```
+
+### Running middleware after authentication
+
+`authMiddleware()` registers middleware that run once the user is authenticated, on the pages that need a signed-in user (not on the login page). `res.locals.navette` holds `{ panel, user, tenant }`. The second argument works as for `middleware()`:
+
+```ts
+panel.authMiddleware([
+    (req, res, next) => {
+        if (res.locals.navette.user.suspended) return void res.status(403).send('Your account is suspended.');
+        next();
+    },
+], true);
+```
+
+With [tenancy](/panels/tenancy#running-middleware-once-the-tenant-is-known), `tenantMiddleware()` runs middleware once the tenant of the request is known.
 
 ## Customizing error pages
 
@@ -300,6 +359,36 @@ app.use((req, res, next) => {
 The `description` option replaces the text of the status: `renderErrorPage(panel, req, res, 403, { description: 'Your trial has ended.' })`.
 
 The page is the `filament-panels::errors.page` view: [override it](/styling/css-hooks#overriding-views) to change its layout. Its elements have `fi-error-*` CSS hook classes, and its `<body>` has the `fi-error-<status>` class.
+
+## Error notifications
+
+When a component update fails (a server error, an expired session, a forbidden action), the panel shows a notification instead of Livewire's error dialog. With `NODE_ENV=development`, the dialog stays, with the error. To keep the dialog everywhere, pass `false` to `errorNotifications()`:
+
+```ts
+panel.errorNotifications(false);
+```
+
+`registerErrorNotification()` changes the title and the body of the notification, for every error or for one status code. `hiddenErrorNotification()` shows nothing at all for a status, and `disabledErrorNotification()` keeps the error dialog for it:
+
+```ts
+panel
+    .registerErrorNotification('Something went wrong', 'Try again in a few minutes.')
+    .registerErrorNotification('Not allowed', 'Ask an administrator for access.', 403)
+    .hiddenErrorNotification(404)
+    .disabledErrorNotification(419);
+```
+
+The title and the body may also be functions, evaluated on each page, for instance to translate them.
+
+A page changes the notifications of its own updates in `setUpErrorNotifications()`, with the same three methods, or keeps the error dialog with `static hasErrorNotifications = false`:
+
+```ts
+export class ImportData extends Page {
+    protected setUpErrorNotifications(): void {
+        this.registerErrorNotification('The import failed', 'Check the file and try again.', 500);
+    }
+}
+```
 
 ## Running multiple panels in one application
 

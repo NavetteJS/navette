@@ -25,6 +25,14 @@ export const ActionsRenderHook = {
 } as const;
 let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
+let csrfTokenResolver: ((ctx: ComponentContext) => string | null) | null = null;
+/** Gives `postToUrl()` actions the CSRF token of the request (set by the panel router). */
+export const useCsrfToken = (resolver: ((ctx: ComponentContext) => string | null) | null) => { csrfTokenResolver = resolver; };
+/** `<form>` sending a `POST` request to the URL, with the CSRF token: the markup of a `postToUrl()` action. */
+function postForm(url: string, ctx: ComponentContext, formClasses: string[], button: string): string {
+    const token = csrfTokenResolver?.(ctx) ?? null;
+    return `<form action="${e(url)}" method="post"${formClasses.length ? ` class="${formClasses.join(' ')}"` : ''}>${token !== null ? `<input type="hidden" name="_token" value="${e(token)}" autocomplete="off">` : ''}${button}</form>`;
+}
 
 /** Execution context of a mounted action. */
 export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action; /** Form data of the parent action, for an action of its modal footer (changes are kept). */ parentData?: Record<string, unknown>; /** For an action of a form component (affix action...): the component's state. */ state?: unknown; /** For an action of a form component: changes a field of the same form (`set('slug', value)`). */ set?: (name: string, value: unknown) => void; get?: (name: string) => unknown; /** The modal's form, once validated (to save its relationships). */ schema?: any; /** For an action of a schema component: the component (a Repeater for its item actions...). */ component?: any };
@@ -151,6 +159,11 @@ export class Action implements Renderable {
     tooltip(text: Lazy<string | null, ComponentContext>): this { this._tooltip = text; return this; }
     /** Opens the action's URL in a new tab. */
     openUrlInNewTab(condition = true): this { this._newTab = condition; return this; }
+    private _postToUrl = false;
+    /** Sends a `POST` request to the action's URL (a form with the CSRF token) instead of following a link. */
+    postToUrl(condition = true): this { this._postToUrl = condition; return this; }
+    shouldPostToUrl(): boolean { return this._postToUrl; }
+    shouldOpenUrlInNewTab(): boolean { return this._newTab; }
     private async tooltipAttribute(ctx: ComponentContext): Promise<string> {
         const text = await this.getTooltip(ctx);
         return text ? `x-tooltip="${e(`{
@@ -170,18 +183,35 @@ export class Action implements Renderable {
     sort(sort: number): this { this._sort = sort; return this; }
     getSort(): number { return this._sort; }
     /**
-     * Item of a panel menu (user menu, tenant menu). Only URL actions are rendered: these menus are not components
-     * that can mount actions.
+     * Item of a panel menu (user menu, tenant menu): a link, a `postToUrl()` form, or a button mounting the action on the
+     * menu's component (its modal opens there). Links only keep http(s) URLs and site paths.
      */
     async toMenuItemHtml(ctx: ComponentContext, options: { navigate?: boolean } = {}): Promise<string> { return this.withExtraAttributes(await this.renderMenuItemHtml(ctx, options), ctx); }
     private async renderMenuItemHtml(ctx: ComponentContext, options: { navigate?: boolean }): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const href = this.resolveUrl(ctx);
-        if (!href || !/^(\/(?!\/)|https?:\/\/)/.test(href)) return '';
         const iconName = await this.getIcon(ctx);
-        const colors = this._color !== 'gray' && this._color !== 'primary' ? colorManager.getComponentClasses('dropdown-item', this._color) : [];
-        const glyph = iconName ? icon(iconName, { attributes: new Attributes().class(colors.length ? ['fi-color', `fi-color-${this._color}`] : []) }) : '';
-        return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}<span class="fi-dropdown-list-item-label">${e(await this.getLabel(ctx))}</span></a>`;
+        const color = this._lazyColor ? await this._lazyColor(ctx) : this._color;
+        const colors = color !== 'gray' && color !== 'primary' ? colorManager.getComponentClasses('dropdown-item', color) : [];
+        const glyph = iconName ? icon(iconName, { attributes: new Attributes().class(colors.length ? ['fi-color', `fi-color-${color}`] : []) }) : '';
+        const label = `<span class="fi-dropdown-list-item-label">${e(await this.getLabel(ctx))}</span>`;
+        const tooltip = await this.tooltipAttribute(ctx);
+        const disabled = this._disabled !== false && (await this.isDisabled(ctx));
+        if (href !== null) {
+            if (!/^(\/(?!\/)|https?:\/\/)/.test(href)) return '';
+            if (this._postToUrl) return postForm(href, ctx, ['fi-ac-grouped-action'], `<button ${tooltip}role="menuitem" tabindex="-1" type="submit"${disabled ? ' disabled aria-disabled="true"' : ''} class="${cls(['fi-dropdown-list-item', ...colors, { 'fi-disabled': disabled }])}">${glyph}${label}</button>`);
+            if (disabled) return `<span ${tooltip}aria-disabled="true" class="${cls(['fi-dropdown-list-item', 'fi-ac-grouped-action', 'fi-disabled', ...colors])}" role="menuitem" tabindex="-1">${glyph}${label}</span>`;
+            return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} ${tooltip}class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}${label}</a>`;
+        }
+        // A handler or a modal: mounted on the menu's component; a string action is a method or a `$dispatch()`.
+        const expression = this._handler || this._schema ? this.mountExpressionFor({}) : this._action;
+        if (!expression && !this._alpineClick) return '';
+        const target = expression ?? null;
+        const attributes = new Attributes({
+            type: 'button', role: 'menuitem', tabindex: '-1', 'aria-disabled': disabled ? 'true' : null, disabled: disabled ? true : null,
+            'wire:loading.attr': 'aria-disabled', 'wire:loading.class': 'fi-disabled', 'wire:target': target, 'wire:click': disabled ? null : expression, 'x-on:click': disabled ? null : this._alpineClick,
+        }).class(['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors, disabled ? 'fi-disabled' : null]);
+        return `<button ${tooltip}${attributes.toHtml()}>${glyph}${target ? loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': target })) : ''}${label}</button>`;
     }
     /** A computed URL depends on the record, so the host checks it again on mount (`resolveUrl`). */
     isMountable(): boolean { return (this._handler !== null || this._schema !== null || this.hasModalContentOnly()) && this._url === null; }
@@ -922,6 +952,10 @@ export class Action implements Renderable {
                 } finally { this._view = previousView; this._labeledFrom = previousLabeled; }
             }
             return this.styledTriggerHtml(ctx, this._view as 'link' | 'icon-button' | 'badge', click.trim(), tag, target, disabled);
+        }
+        if (linkUrl !== null && this._postToUrl && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl)) {
+            const classes = cls(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
+            return postForm(linkUrl, ctx, [], `<button type="submit" ${await this.tooltipAttribute(ctx)}class="${classes}">${this._icon ? icon(this._icon) : ''}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}</button>`);
         }
         const tooltip = await this.tooltipAttribute(ctx);
         if (linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl)) {

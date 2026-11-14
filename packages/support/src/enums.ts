@@ -16,6 +16,10 @@ export type EnumCaseDefinition = {
     icon?: string | null;
     /** Helper text under the label, in radio buttons and checkbox lists (`getDescription()`). */
     description?: EnumText | null;
+    /** A navigation group built from this case (`NavigationGroup.fromEnum()`) starts collapsed (Filament's `Collapsible` contract). */
+    collapsed?: boolean | null;
+    /** Whether that navigation group can be collapsed. */
+    collapsible?: boolean | null;
 };
 
 export type EnumValueOf<D> = D extends readonly (infer V)[] ? V & (string | number) : Extract<keyof D, string>;
@@ -45,6 +49,10 @@ export class EnumCase<V extends string | number = string> {
     getColor(): string | null { return this.#definition.color ?? null; }
     getIcon(): string | null { return this.#definition.icon ?? null; }
     getDescription(): string | null { return read(this.#definition.description); }
+    /** `collapsed` of the definition (`null` when unset). */
+    isCollapsed(): boolean | null { return this.#definition.collapsed ?? null; }
+    /** `collapsible` of the definition (`null` when unset). */
+    isCollapsible(): boolean | null { return this.#definition.collapsible ?? null; }
     get label(): string { return this.getLabel(); }
     get color(): string | null { return this.getColor(); }
     get icon(): string | null { return this.getIcon(); }

@@ -117,6 +117,99 @@ Html.make(({ record }) => `<p>${e(record.title)}</p>`)
 
 In an EJS view, `<%= value %>` escapes, `<%- html %>` does not.
 
+### Configuring the HTML sanitizer
+
+`sanitizeHtml()` from `@navette-js/support` is the sanitizer used by Navette. By default, it keeps formatting elements, lists, headings, code and links (to `http`, `https`, `mailto` and relative URLs, with `rel="noopener noreferrer nofollow"`), and drops everything else. Change what it keeps for the whole application with `useHtmlSanitizerConfig()`, which receives the current configuration and returns a new one (each method returns a copy):
+
+```ts
+import { HtmlSanitizerConfig, useHtmlSanitizerConfig } from '@navette-js/support';
+
+useHtmlSanitizerConfig((config) => config
+    .allowElement('mark')
+    .allowAttribute('class', ['span', 'p'])
+    .dropAttribute('style')
+    .withMaxInputLength(100_000));
+```
+
+Pass a configuration to start from scratch, or `null` to go back to the default:
+
+```ts
+useHtmlSanitizerConfig(HtmlSanitizerConfig.make().allowSafeElements().allowRelativeLinks());
+```
+
+| Method | Effect |
+|---|---|
+| `HtmlSanitizerConfig.make()` | An empty configuration: nothing is kept until you allow it. |
+| `HtmlSanitizerConfig.default()` | Navette's default configuration. |
+| `allowSafeElements()`, `allowStaticElements()` | Allow every element that cannot run code (formatting, lists, tables, images, quotes…), with their safe attributes. |
+| `allowElement(element, attributes)` | Allows an element, with these attributes (`'*'`: its safe attributes). |
+| `blockElement(element)` | Removes the element's tags, but keeps its content. |
+| `dropElement(element)` | Removes the element with its content. |
+| `allowAttribute(attribute, elements)` | Allows an attribute on some elements (`'*'`: every allowed element). |
+| `dropAttribute(attribute, elements)` | Removes an attribute, even when another rule allows it. |
+| `forceAttribute(element, attribute, value)` | Sets an attribute on every occurrence of an element. |
+| `allowLinkSchemes(schemes)`, `allowMediaSchemes(schemes)` | Replace the schemes allowed in links (`href`, `cite`) and media (`src`, `poster`). |
+| `allowLinkHosts(hosts)`, `allowMediaHosts(hosts)` | Only keep absolute URLs to these hosts (`null`: any host). |
+| `allowRelativeLinks()`, `allowRelativeMedias()` | Keep URLs without a scheme. |
+| `forceHttpsUrls()` | Rewrites `http:` URLs to `https:`. |
+| `withMaxInputLength(length)` | Truncates longer input before parsing it. |
+| `withLinkRel(rel)` | The `rel` attribute forced on links (`null`: none). |
+
+Whatever the configuration, event handler attributes (`on…`), `<script>`, `<style>`, frames, plugins and forms are never kept, and URL attributes always follow the scheme lists: `javascript:` URLs only survive if you add `javascript` to `allowLinkSchemes()` yourself, which you should never do.
+
+### Checking URLs
+
+To put a URL that comes from users into a link yourself, check it first. `isSafeUrl()` tells whether a URL can be put in a link: `http`, `https`, `mailto`, paths and anchors by default, never `javascript:` or `data:`. `sanitizeUrl()` returns the URL when it is relative or uses an allowed scheme (`http` and `https` by default), and `null` otherwise (Filament's `Str::sanitizeUrl()`):
+
+```ts
+import { e, isSafeUrl, sanitizeUrl } from '@navette-js/support';
+
+isSafeUrl(record.website);                                   // http, https, mailto and relative URLs
+isSafeUrl(record.website, { schemes: ['https'], allowRelative: false });
+
+const url = sanitizeUrl(record.website, ['https']);
+const html = url ? `<a href="${e(url)}">Website</a>` : '';
+```
+
+Both decode entities and control characters first, as the browser does. The returned URL still has to be escaped in HTML.
+
+## Content Security Policy
+
+The panel's pages contain inline scripts and styles (the configuration of Livewire, the color variables, the initial state of the sidebar). To serve them under a `Content-Security-Policy` without `'unsafe-inline'`, generate a nonce for each request in a middleware, send it in the header and give it to the panel with `useCspNonce()`: every inline `<script>` and `<style>` of the page, of its error pages and of its component updates then carries it.
+
+```ts
+import { randomBytes } from 'node:crypto';
+import { useCspNonce } from '@navette-js/support';
+
+panel.middleware([
+    (req, res, next) => {
+        const nonce = randomBytes(16).toString('base64');
+        useCspNonce(res, nonce);
+        res.setHeader('Content-Security-Policy', [
+            "default-src 'self'",
+            `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`,
+            `style-src-elem 'self' 'nonce-${nonce}' https://fonts.bunny.net`,
+            "style-src-attr 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self' https://fonts.bunny.net",
+        ].join('; '));
+        next();
+    },
+], true);
+```
+
+Register it as a persistent middleware (`true`), so that component updates get the nonce too. Alpine.js evaluates the expressions written in the markup, which needs `'unsafe-eval'`, and `style` attributes cannot carry a nonce, which needs `style-src-attr 'unsafe-inline'`: Filament has the same requirements. The nonce must be base64 text, and new for every request.
+
+In your own views and render hooks, `cspNonce()` returns the nonce of the request being rendered (Filament's `Vite::cspNonce()`), and `cspNonceAttribute()` the ` nonce="…"` attribute to write in an inline element:
+
+```ts
+import { cspNonceAttribute } from '@navette-js/support';
+
+panel.renderHook(PanelsRenderHook.BODY_END, () => `<script${cspNonceAttribute()}>console.log('ready')</script>`);
+```
+
+The demo application has a panel served under such a policy: `apps/demo/lab-navigation.ts`.
+
 ## Panel access
 
 The user provider of the panel decides who may log in, and its `find()` method runs on every request: return `null` to cut an account off immediately. See [users](/panels/users#authorizing-access-to-the-panel) for passwords, sessions, rate limits and the security of password reset and email verification.
@@ -144,7 +237,3 @@ query.where('status', value);                              // safe
 query.whereRaw('lower(name) like ?', [`%${search}%`]);     // safe
 query.whereRaw(`name like '%${search}%'`);                 // SQL injection
 ```
-
-<Aside variant="warning">
-A strict Content Security Policy is not supported yet: the pages use inline scripts and styles, Alpine.js evaluates expressions written in the markup, and there is no nonce option. A policy without `'unsafe-inline'` and `'unsafe-eval'` breaks the panel.
-</Aside>
