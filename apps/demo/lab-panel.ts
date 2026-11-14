@@ -12,6 +12,9 @@ import { Color, e } from '@navette-js/support';
 import { Component as WireComponent } from '@navette-js/wire';
 import { LabOrders } from './lab-orders.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
+import { labJsWidgets, LabJsWidgetsDashboard } from './widgets/lab-d11-js-widget.ts';
+import { LabTabsPage } from './lab-d11-tabs.ts';
+import { labPrivateFiles, LabUiPage } from './lab-d11.ts';
 import { LabFrameworkFields } from './lab-framework-fields.ts';
 import { labPluginExamples } from './lab-plugins.ts';
 import {
@@ -356,6 +359,8 @@ class LabCatalogProducts extends Resource {
 }
 
 export function labPanel(options: { key: string; login: typeof Login; auth: AuthProvider; canAccess: (user: any) => boolean }): Panel {
+    // The private storage of the UI lab signs its URLs with the panel key.
+    labPrivateFiles(options.key);
     return Panel.make()
         .id('lab')
         .path('lab')
@@ -368,8 +373,9 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         // Example plugins (`examples/`) and a configurable resource.
         .plugin(labPluginExamples())
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.
-        .pages([LabWidgetsDashboard])
-        .widgets(labWidgets)
+        // Tabs, JavaScript widgets, notification actions and private files labs (left out of the parity screenshots).
+        .pages([LabWidgetsDashboard, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabTabsPage, LabJsWidgetsDashboard, LabUiPage])])
+        .widgets([...labWidgets, ...(process.env.NAVETTE_NO_THEMES ? [] : labJsWidgets)])
         .renderHook('panels::scripts.before', () => '<script src="/js/lab-chart-plugins.js"></script>')
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
         // Collapsed to icons, the "Tables" group (it has an icon) opens a dropdown of its items.
