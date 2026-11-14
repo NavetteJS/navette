@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { camel, compileComponentTags, isHtmlAttribute } from './components.ts';
+import { cspNonceAttribute } from './csp.ts';
 // @navette-js/support — shared building blocks: escaping, attribute bags, JS serialization, lazy evaluation, colors, icons,
 // namespaced EJS views.
 import ejs from 'ejs';
@@ -355,10 +356,22 @@ export class ColorManager {
         this.cache.set(key, classes);
         return classes;
     }
-    /** `<style>` block defining the `--<color>-<shade>` variables, injected into `<head>`. */
+    /**
+     * `<style>` block defining the `--<color>-<shade>` variables, injected into `<head>`. A color registered under a new name
+     * (`brand`) also gets the rule mapping `fi-color-brand` to the component color variables (`--color-50: var(--brand-50)`…):
+     * the stylesheet only has these rules for the default colors.
+     */
     renderCssVariables(): string {
-        const vars = Object.entries(this.getColors()).map(([name, palette]) => Object.entries(palette).map(([shade, value]) => ` --${name}-${shade}:${value}; `).join('')).join('');
-        return `<style>\n    :root {\n        ${vars}}\n</style>`;
+        const colors = this.getColors();
+        const vars = Object.entries(colors).map(([name, palette]) => Object.entries(palette).map(([shade, value]) => ` --${name}-${shade}:${value}; `).join('')).join('');
+        return `<style${cspNonceAttribute()}>\n    :root {\n        ${vars}}\n${this.renderCustomColorRules(colors)}</style>`;
+    }
+    /** `.fi-color-<name> { --color-<shade>: var(--<name>-<shade>); … }` for each registered color that is not a default one. */
+    renderCustomColorRules(colors: Record<string, Palette> = this.getColors()): string {
+        return Object.entries(colors)
+            .filter(([name]) => !Object.hasOwn(ColorManager.DEFAULT_COLORS, name) && /^[a-zA-Z0-9_-]+$/.test(name))
+            .map(([name, palette]) => `    .fi-color-${name} { ${Object.keys(palette).filter((shade) => /^\d+$/.test(shade)).map((shade) => `--color-${shade}:var(--${name}-${shade});`).join(' ')} }\n`)
+            .join('');
     }
 }
 
@@ -684,6 +697,7 @@ export function renderHook(name: string, scopes: unknown | unknown[] | null = nu
 export function hasRenderHook(name: string, scopes: unknown | unknown[] | null = null): boolean {
     return activeRegistries().some((registry) => registry.has(name, scopes));
 }
-views.share({ renderHook, hasRenderHook });
-export { isSafeUrl, markdownToHtml, sanitizeHtml } from './html.ts';
+views.share({ renderHook, hasRenderHook, cspNonceAttribute });
+export { getHtmlSanitizerConfig, hasCustomHtmlSanitizerConfig, HtmlSanitizerConfig, isSafeUrl, markdownToHtml, sanitizeHtml, sanitizeUrl, useHtmlSanitizerConfig } from './html.ts';
+export { cspNonce, cspNonceAttribute, getResponseCspNonce, runWithCspNonce, useCspNonce } from './csp.ts';
 export * from './enums.ts';

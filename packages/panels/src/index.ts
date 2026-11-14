@@ -9,7 +9,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
-import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
+import { Action, ActionHalt, useColorManager, ActionGroup, useCsrfToken as useActionsCsrfToken } from '@navette-js/actions';
 import { Checkbox, Field, RawJs, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
 import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
@@ -44,8 +44,15 @@ import { findConfiguration, getActiveConfiguration, isClosestNavigationUrl, getP
 import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentResourceRegistration, parentChainOf, parentRegistrationOf, relatedResourceAdapter, relationManagerTabFromQuery, relationshipNameOf, resolveResourceReference, resourceUrl, scopeAdapterByForeignKey, withRelatedResource, type ResourceReference } from './nested-resources.ts';
 export { ParentResourceRegistration } from './nested-resources.ts';
 import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
+export { builtNavigationViews, NavigationBuilder, NavigationGroup, NavigationItem, navigationGroupKey, navigationLabelText, type NavigationContext, type NavigationGroupReference, type NavigationGroupView, type NavigationItemView, type NavigationLabel } from './navigation.ts';
+import { builtNavigationViews, contentWidth, cssLength, NavigationBuilder, NavigationGroup, NavigationItem, navigationGroupKey, navigationGroupView, navigationHierarchyBreadcrumbs, navigationItemView, navigationLabelText, type NavigationContext, type NavigationGroupReference, type NavigationGroupView, type NavigationItemView, type NavigationLabel } from './navigation.ts';
+export { MenuItemGroups, type MenuItem, type MenuItemInput } from './menus.ts';
+import { MenuItemGroups, type MenuItem, type MenuItemInput } from './menus.ts';
+export { applyPanelMiddleware, type PanelMiddleware, type PanelMiddlewareEntry } from './middleware.ts';
+import { applyPanelMiddleware, middlewareFor, type PanelMiddleware, type PanelMiddlewareEntry } from './middleware.ts';
+import { rewriteSpaLinks } from './spa.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
-import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type AttrValue, type Palette, type RenderHookCallback } from '@navette-js/support';
+import { Attributes, ColorManager, cspNonce, getResponseCspNonce, hasCustomHtmlSanitizerConfig, HtmlString, isEnum, isEnumCase, RenderHookRegistry, runWithCspNonce, sanitizeHtml, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type AttrValue, type Enum, type EnumCase, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
@@ -124,7 +131,7 @@ export interface TenantProvider<T = any> {
     find(key: string): MaybePromise<T | null>;
     canAccess(user: User, tenant: T): MaybePromise<boolean>;
     getKey(tenant: T): string;
-    getName(tenant: T): string;
+    getName(tenant: T): string | HtmlString;
     /** Text above the tenant name in the menu ("Current team"), or `null`. */
     getCurrentTenantLabel?(tenant: T): string | null;
     getAvatarUrl?(tenant: T): string | null;
@@ -155,46 +162,6 @@ export type Theme = {
     css?: string;
 };
 
-/** Navigation group: label, icon (then its items have none, as in Filament) and whether it can be collapsed. */
-export class NavigationGroup {
-    private _label: string;
-    private _icon: string | null = null;
-    private _collapsible = true;
-    constructor(label: string) { this._label = label; }
-    static make(label: string): NavigationGroup { return new NavigationGroup(label); }
-    icon(name: string | null): this { this._icon = name; return this; }
-    collapsible(condition = true): this { this._collapsible = condition; return this; }
-    getLabel(): string { return this._label; }
-    getIcon(): string | null { return this._icon; }
-    isCollapsible(): boolean { return this._collapsible; }
-}
-
-export class NavigationItem {
-    label: string;
-    _url = '#';
-    _icon: string | null = null;
-    _group: string | null = null;
-    _sort = 0;
-    _isActive: ((path: string) => boolean) | null = null;
-    _badge: string | number | null = null;
-    _badgeColor = 'primary';
-    _parentItem: string | null = null;
-    _childItems: NavigationItem[] = [];
-    constructor(label: string) { this.label = label; }
-    static make(label: string): NavigationItem { return new NavigationItem(label); }
-    /** Shows the item below another item of its group, by that item's label. */
-    parentItem(label: string | null): this { this._parentItem = label; return this; }
-    /** Items shown below this one, when it (or one of them) is active, or when it has no URL. */
-    childItems(items: NavigationItem[]): this { this._childItems = items; return this; }
-    url(url: string): this { this._url = url; return this; }
-    icon(icon: string | null): this { this._icon = icon; return this; }
-    group(group: string | null): this { this._group = group; return this; }
-    sort(sort: number): this { this._sort = sort; return this; }
-    badge(badge: string | number | null, color = 'primary'): this { this._badge = badge; this._badgeColor = color; return this; }
-    /** By default an item is active on its exact URL; this overrides the rule. */
-    isActiveWhen(fn: (path: string) => boolean): this { this._isActive = fn; return this; }
-    isActive(path: string): boolean { return this._isActive ? this._isActive(path) : path === this._url; }
-}
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 export class Panel {
@@ -228,8 +195,7 @@ export class Panel {
     private _pages: (typeof Page)[] = [];
     private _resources: (typeof Resource)[] = [];
     private _navigationItems: NavigationItem[] = [];
-    private _navigationGroups: string[] = [];
-    private _navigationGroupOptions = new Map<string, { icon: string | null; collapsible: boolean }>();
+    private _navigationGroups: NavigationGroup[] = [];
     private _maxContentWidth = '7xl';
     readonly colors = new ColorManager();
 
@@ -344,7 +310,7 @@ export class Panel {
         const items: (SubNavigationItem & { sort: number })[] = [];
         for (const component of components.sort((a, b) => a.navigationSort - b.navigationSort)) {
             const badge = typeof (component as any).getNavigationBadge === 'function' ? await (component as any).getNavigationBadge() : component.navigationBadge;
-            items.push({ label: component.getNavigationLabel(), icon: typeof (component as any).getNavigationIcon === 'function' ? (component as any).getNavigationIcon() : component.navigationIcon, url: this.getUrl(component.slug), active: current instanceof component, group: component.navigationGroup, badge: badge ?? null, badgeColor: component.navigationBadgeColor, sort: component.navigationSort });
+            items.push({ label: navigationLabelText(component.getNavigationLabel()), icon: typeof (component as any).getNavigationIcon === 'function' ? (component as any).getNavigationIcon() : component.navigationIcon, url: this.getUrl(component.slug), active: current instanceof component, group: navigationGroupKey(component.navigationGroup), badge: badge ?? null, badgeColor: component.navigationBadgeColor, sort: component.navigationSort });
         }
         return items.map(({ sort: _sort, ...item }) => item);
     }
@@ -359,13 +325,53 @@ export class Panel {
     /** Mode used until the user picks one in the switcher: `'system'` (default), `'light'` or `'dark'`. */
     defaultThemeMode(mode: 'light' | 'dark' | 'system'): this { if (!['light', 'dark', 'system'].includes(mode)) throw new Error(`Invalid theme mode: ${mode}`); this._defaultThemeMode = mode; return this; }
     hasDarkMode(): boolean { return this._darkMode; }
+    private _themeSwitcher = true;
+    /** `false` removes the light / dark / system switcher from the user menu (the default mode still applies). */
+    themeSwitcher(condition = true): this { this._themeSwitcher = condition; return this; }
+    hasThemeSwitcher(): boolean { return this._themeSwitcher && this._darkMode && !this._darkModeForced; }
     hasDarkModeForced(): boolean { return this._darkModeForced; }
     getDefaultThemeMode(): 'light' | 'dark' | 'system' { return this._defaultThemeMode; }
-    navigationGroups(groups: (string | NavigationGroup)[]): this {
-        this._navigationGroups = groups.map((group) => (typeof group === 'string' ? group : group.getLabel()));
-        this._navigationGroupOptions = new Map(groups.filter((group): group is NavigationGroup => typeof group !== 'string').map((group) => [group.getLabel(), { icon: group.getIcon(), collapsible: group.isCollapsible() }]));
+    /**
+     * Order and options of the navigation groups: labels, `NavigationGroup.make('Shop').icon('o-shopping-cart').collapsed()`,
+     * enum cases, or an enum (all its cases, through `NavigationGroup.fromEnum()`). Calls add to the groups already declared.
+     */
+    navigationGroups(groups: (string | HtmlString | NavigationGroup | EnumCase<string | number>)[] | Enum<string | number>): this {
+        const list = isEnum(groups) ? groups.cases() : groups;
+        for (const entry of list) {
+            const group = entry instanceof NavigationGroup ? entry : isEnumCase(entry) ? NavigationGroup.fromEnum(entry) : NavigationGroup.make(entry);
+            const key = navigationGroupKey(group);
+            this._navigationGroups = [...this._navigationGroups.filter((existing) => navigationGroupKey(existing) !== key), group];
+        }
         return this;
     }
+    getNavigationGroups(): NavigationGroup[] { return this._navigationGroups; }
+    getNavigationItems(): NavigationItem[] { return this._navigationItems; }
+    private _collapsibleNavigationGroups = true;
+    /** `false`: navigation groups cannot be collapsed, unless a group says otherwise (`NavigationGroup.collapsible()`). */
+    collapsibleNavigationGroups(condition = true): this { this._collapsibleNavigationGroups = condition; return this; }
+    hasCollapsibleNavigationGroups(): boolean { return this._collapsibleNavigationGroups; }
+    private _sidebarWidth = '20rem';
+    private _collapsedSidebarWidth = '4.5rem';
+    /** Width of the sidebar (`20rem` by default), a CSS length. */
+    sidebarWidth(width: string): this { this._sidebarWidth = cssLength(width, 'sidebarWidth'); return this; }
+    /** Width of the sidebar collapsed to icons (`4.5rem` by default). */
+    collapsedSidebarWidth(width: string): this { this._collapsedSidebarWidth = cssLength(width, 'collapsedSidebarWidth'); return this; }
+    getSidebarWidth(): string { return this._sidebarWidth; }
+    getCollapsedSidebarWidth(): string { return this._collapsedSidebarWidth; }
+    private _sidebarComponent: typeof Sidebar | null = null;
+    private _topbarComponent: typeof Topbar | null = null;
+    /** Replaces the sidebar component with a subclass of `Sidebar` (its own view, data or methods). */
+    sidebarLivewireComponent(component: typeof Sidebar | null): this { this._sidebarComponent = component; return this; }
+    /** Replaces the topbar component with a subclass of `Topbar`. */
+    topbarLivewireComponent(component: typeof Topbar | null): this { this._topbarComponent = component; return this; }
+    getSidebarLivewireComponent(): typeof Sidebar { return this._sidebarComponent ?? Sidebar; }
+    getTopbarLivewireComponent(): typeof Topbar { return this._topbarComponent ?? Topbar; }
+    private _breadcrumbs = true;
+    private _navigationHierarchyInBreadcrumbs = false;
+    /** `false` hides the breadcrumbs of every page. `hasNavigationHierarchy`: they start with the navigation group and parent items of the page. */
+    breadcrumbs(condition = true, hasNavigationHierarchy = false): this { this._breadcrumbs = condition; this._navigationHierarchyInBreadcrumbs = hasNavigationHierarchy; return this; }
+    hasBreadcrumbs(): boolean { return this._breadcrumbs; }
+    hasNavigationHierarchyInBreadcrumbs(): boolean { return this._breadcrumbs && this._navigationHierarchyInBreadcrumbs; }
     private _plugins: Plugin[] = [];
     /** Applies a plugin: an object that configures the panel (resources, pages, render hooks, themes…). */
     plugin(plugin: Plugin): this {
@@ -433,7 +439,54 @@ export class Panel {
     /** Panel widgets (dashboard, custom pages): registered as components, displayed through a page's `getHeaderWidgets()`. */
     widgets(widgets: (typeof Widget)[]): this { this._widgets.push(...widgets); return this; }
     getWidgets(): (typeof Widget)[] { return this._widgets; }
-    maxContentWidth(width: string): this { this._maxContentWidth = width; return this; }
+    maxContentWidth(width: string): this { this._maxContentWidth = contentWidth(width); return this; }
+    private _simplePageMaxContentWidth: string | null = null;
+    /** Width of simple pages (login, registration…): `lg` by default. A page's own `static maxContentWidth` wins. */
+    simplePageMaxContentWidth(width: string | null): this { this._simplePageMaxContentWidth = width === null ? null : contentWidth(width); return this; }
+    getSimplePageMaxContentWidth(): string | null { return this._simplePageMaxContentWidth; }
+
+    // -------------------------------------------------------------- middleware and error notifications
+    private _middleware: PanelMiddlewareEntry[] = [];
+    private _authMiddleware: PanelMiddlewareEntry[] = [];
+    private _tenantMiddleware: PanelMiddlewareEntry[] = [];
+    /**
+     * Express middleware run on every request of the panel (pages, authentication pages, downloads), before its routes.
+     * `isPersistent`: they also run on component updates (the requests a page sends while it is open).
+     */
+    middleware(middleware: PanelMiddleware[], isPersistent = false): this { this._middleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent }))); return this; }
+    /** Middleware run after authentication, on the pages that need a signed-in user; `res.locals.navette` holds `{ panel, user, tenant }`. */
+    authMiddleware(middleware: PanelMiddleware[], isPersistent = false): this { this._authMiddleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent }))); return this; }
+    /** Middleware run once the tenant of the request is known, on its pages. */
+    tenantMiddleware(middleware: PanelMiddleware[], isPersistent = false): this { this._tenantMiddleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent }))); return this; }
+    /** Middleware run on component updates only (Filament's `persistentMiddleware()`). */
+    persistentMiddleware(middleware: PanelMiddleware[]): this { this._middleware.push(...middleware.map((entry) => ({ middleware: entry, isPersistent: true, componentOnly: true }))); return this; }
+    getMiddleware(): PanelMiddlewareEntry[] { return this._middleware; }
+    getAuthMiddleware(): PanelMiddlewareEntry[] { return this._authMiddleware; }
+    getTenantMiddleware(): PanelMiddlewareEntry[] { return this._tenantMiddleware; }
+    private _errorNotifications = true;
+    private _errorNotificationList = new Map<string, { title: string | (() => string) | null; body: string | (() => string) | null; isHidden: boolean; isDisabled: boolean }>();
+    /**
+     * Failed component requests show a notification instead of the error dialog (on by default, except with
+     * `NODE_ENV=development`, where the dialog shows the error).
+     */
+    errorNotifications(condition = true): this { this._errorNotifications = condition; return this; }
+    hasErrorNotifications(): boolean { return this._errorNotifications; }
+    /** Title and body of the error notification for a status code (`null`: every status without its own). */
+    registerErrorNotification(title: string | (() => string), body: string | (() => string) | null = null, statusCode: number | null = null): this {
+        this._errorNotificationList.set(statusCode === null ? '' : String(statusCode), { title, body, isHidden: false, isDisabled: false });
+        return this;
+    }
+    /** Errors with this status show nothing at all. */
+    hiddenErrorNotification(statusCode: number): this { this._errorNotificationList.set(String(statusCode), { title: null, body: null, isHidden: true, isDisabled: false }); return this; }
+    /** Errors with this status keep the default error dialog. */
+    disabledErrorNotification(statusCode: number): this { this._errorNotificationList.set(String(statusCode), { title: null, body: null, isHidden: false, isDisabled: true }); return this; }
+    /** Notifications by status code (`''`: the default one), as the browser receives them. */
+    getErrorNotifications(): Record<string, { title: string | null; body: string | null; isHidden: boolean; isDisabled: boolean }> {
+        const read = (text: string | (() => string) | null) => (typeof text === 'function' ? text() : text);
+        const notifications = Object.fromEntries([...this._errorNotificationList].map(([status, entry]) => [status, { title: read(entry.title), body: read(entry.body), isHidden: entry.isHidden, isDisabled: entry.isDisabled }]));
+        notifications[''] ??= { title: t('filament-panels::error-notifications.title'), body: t('filament-panels::error-notifications.body'), isHidden: false, isDisabled: false };
+        return notifications;
+    }
 
     getId(): string { return this._id; }
     getBrandName(): string { return this._brandName; }
@@ -507,7 +560,7 @@ export class Panel {
     // -------------------------------------------------------------- layout: topbar, navigation, sidebar
     private _topbar = true;
     private _topNavigation = false;
-    private _navigation = true;
+    private _navigation: boolean | ((builder: NavigationBuilder, context: NavigationContext) => NavigationBuilder | boolean) = true;
     private _sidebarCollapsibleOnDesktop = false;
     private _sidebarFullyCollapsibleOnDesktop = false;
     private _positions: { userMenu: 'topbar' | 'sidebar' | null; globalSearch: 'topbar' | 'sidebar' | null; databaseNotifications: 'topbar' | 'sidebar' | null } = { userMenu: null, globalSearch: null, databaseNotifications: null };
@@ -517,9 +570,20 @@ export class Panel {
     /** Navigation in the topbar (one dropdown per group) instead of the sidebar. */
     topNavigation(condition = true): this { this._topNavigation = condition; return this; }
     hasTopNavigation(): boolean { return this._topNavigation; }
-    /** `navigation(false)` removes all navigation (no sidebar, no menus). */
-    navigation(condition = true): this { this._navigation = condition; return this; }
-    hasNavigation(): boolean { return this._navigation; }
+    /**
+     * `navigation(false)` removes all navigation (no sidebar, no menus). A function builds the navigation by hand: it
+     * receives a `NavigationBuilder` (and `{ user, panel }`) and returns it.
+     */
+    navigation(builder: boolean | ((builder: NavigationBuilder, context: NavigationContext) => NavigationBuilder | boolean) = true): this { this._navigation = builder; return this; }
+    hasNavigation(): boolean { return this._navigation !== false; }
+    hasNavigationBuilder(): boolean { return typeof this._navigation === 'function'; }
+    /** The groups of the navigation builder, `null` without one. */
+    buildNavigation(user: User | null = null): NavigationGroup[] | null {
+        if (typeof this._navigation !== 'function') return null;
+        const context: NavigationContext = { user, panel: this };
+        const built = this._navigation(new NavigationBuilder(), context);
+        return built instanceof NavigationBuilder ? built.getNavigation(context) : [];
+    }
     /** On desktop, the sidebar can collapse to a column of icons. */
     sidebarCollapsibleOnDesktop(condition = true): this { this._sidebarCollapsibleOnDesktop = condition; return this; }
     isSidebarCollapsibleOnDesktop(): boolean { return this._sidebarCollapsibleOnDesktop; }
@@ -533,13 +597,21 @@ export class Panel {
     getGlobalSearchPosition(): 'topbar' | 'sidebar' { return this._positions.globalSearch ?? (this._topbar ? 'topbar' : 'sidebar'); }
     databaseNotificationsPosition(position: 'topbar' | 'sidebar' | null): this { this._positions.databaseNotifications = position; return this; }
     getDatabaseNotificationsPosition(): 'topbar' | 'sidebar' { return this._positions.databaseNotifications ?? (this._topbar ? 'topbar' : 'sidebar'); }
-    private _userMenuItems: Record<string, Action> = {};
-    /** Items added to the user menu (URL or modal actions). A negative `sort()` places them above the theme switcher. Keys `profile` and `logout` replace the defaults. */
-    userMenuItems(items: Record<string, Action> | Action[]): this {
-        for (const [key, item] of Array.isArray(items) ? items.map((item) => [item.getName(), item] as const) : Object.entries(items)) this._userMenuItems[key] = item;
-        return this;
-    }
-    getUserMenuItems(): Record<string, Action> { return this._userMenuItems; }
+    private _userMenuItems = new MenuItemGroups();
+    private _userMenu = true;
+    /**
+     * Items added to the user menu: URL actions, `postToUrl()` actions, actions opening a modal, `ActionGroup`s. An array of
+     * arrays gives several groups, separated by dividers. A negative `sort()` places an item above the theme switcher.
+     * The `profile` and `logout` keys replace the default items, or customize them with a function: `logout: (action) => action.label('Sign out')`.
+     */
+    userMenuItems(items: MenuItemInput): this { this._userMenuItems.add(items); return this; }
+    /** The registered items, by key (all groups together). */
+    getUserMenuItems(): Record<string, MenuItem> { return this._userMenuItems.flat(); }
+    getUserMenuItemGroups(): MenuItemGroups { return this._userMenuItems; }
+    hasMultipleUserMenuItemGroups(): boolean { return this._userMenuItems.count() > 1; }
+    /** `false` removes the user menu (`position`: `'topbar'` or `'sidebar'`, as `userMenuPosition()`). */
+    userMenu(condition = true, position: 'topbar' | 'sidebar' | null = null): this { this._userMenu = condition; if (position !== null) this._positions.userMenu = position; return this; }
+    hasUserMenu(): boolean { return this._userMenu; }
 
     // -------------------------------------------------------------- registration, password reset, email verification, profile
     private _registration: typeof Register | null = null;
@@ -681,7 +753,8 @@ export class Panel {
     private _tenantRegistration: typeof RegisterTenant | null = null;
     private _tenantProfile: typeof EditTenantProfile | null = null;
     private _tenantMenu = true;
-    private _tenantMenuItems: Record<string, Action> = {};
+    private _tenantMenuItems = new MenuItemGroups();
+    private _tenantSwitcher = true;
     private _tenantScope = new AsyncLocalStorage<{ tenant: unknown }>();
     /**
      * Makes the panel multi-tenant. `ownershipColumn` is the column linking a record to its tenant (`team_id`);
@@ -760,11 +833,14 @@ export class Panel {
     private _sessionCookieDomain: string | null = null;
     /** Domain of the session cookie (`.example.com`): with `tenantDomain()`, a sign-in then holds on every tenant's host. */
     sessionCookieDomain(domain: string | null): this { this._sessionCookieDomain = domain; return this; }
-    tenantMenuItems(items: Record<string, Action> | Action[]): this {
-        for (const [key, item] of Array.isArray(items) ? items.map((item) => [item.getName(), item] as const) : Object.entries(items)) this._tenantMenuItems[key] = item;
-        return this;
-    }
-    getTenantMenuItems(): Record<string, Action> { return this._tenantMenuItems; }
+    /** Items of the tenant menu, as `userMenuItems()`; the `profile`, `billing` and `register` keys replace or customize the default items. */
+    tenantMenuItems(items: MenuItemInput): this { this._tenantMenuItems.add(items); return this; }
+    getTenantMenuItems(): Record<string, MenuItem> { return this._tenantMenuItems.flat(); }
+    getTenantMenuItemGroups(): MenuItemGroups { return this._tenantMenuItems; }
+    hasMultipleTenantMenuItemGroups(): boolean { return this._tenantMenuItems.count() > 1; }
+    /** `false`: the tenant menu does not list the other tenants of the user. */
+    tenantSwitcher(condition = true): this { this._tenantSwitcher = condition; return this; }
+    hasTenantSwitcher(): boolean { return this._tenantSwitcher; }
     /** Runs `fn` for a tenant: generated URLs (`getUrl`) and resource queries are scoped to it. */
     withTenant<T>(tenant: unknown, fn: () => T): T { return this._tenantScope.run({ tenant }, fn); }
     /** Tenant of the current request, or `null`. */
@@ -805,14 +881,21 @@ export class Panel {
     /** Default avatar: the name's initials from the external ui-avatars.com service. */
     getUserAvatarUrl(user: User): string { return this.getAvatarUrlFor(user.name); }
     /** Tenant avatar: from the tenant provider (`getAvatarUrl`), otherwise its initials. */
-    getTenantAvatarUrl(tenant: unknown): string { return this.getTenantProvider().getAvatarUrl?.(tenant) ?? this.getAvatarUrlFor(this.getTenantProvider().getName(tenant)); }
+    getTenantAvatarUrl(tenant: unknown): string { return this.getTenantProvider().getAvatarUrl?.(tenant) ?? this.getAvatarUrlFor(navigationLabelText(this.getTenantProvider().getName(tenant))); }
     private _spa = false;
     private _spaPrefetching = false;
     /**
      * SPA mode: navigate between panel pages without full reloads (`wire:navigate`). `{ prefetch: true }` loads a page as soon
      * as its link is hovered (`wire:navigate.hover`).
      */
-    spa(condition = true, options: { prefetch?: boolean } = {}): this { this._spa = condition; this._spaPrefetching = options.prefetch === true; return this; }
+    spa(condition = true, options: { prefetch?: boolean } | boolean = {}): this { this._spa = condition; this._spaPrefetching = typeof options === 'boolean' ? options : options.prefetch === true; return this; }
+    private _spaUrlExceptions: string[] | (() => string[]) = [];
+    /**
+     * URLs opened with a full page load even in SPA mode: paths or absolute URLs, `*` matching anything
+     * (`['/admin/reports/*', 'https://example.com/*']`). URLs of other sites never use SPA navigation.
+     */
+    spaUrlExceptions(exceptions: string[] | (() => string[])): this { this._spaUrlExceptions = exceptions; return this; }
+    getSpaUrlExceptions(): string[] { return typeof this._spaUrlExceptions === 'function' ? this._spaUrlExceptions() : this._spaUrlExceptions; }
     hasSpaMode(): boolean { return this._spa; }
     hasSpaPrefetching(): boolean { return this._spa && this._spaPrefetching; }
     private _domains: string[] = [];
@@ -859,31 +942,53 @@ export class Panel {
         for (const page of this._pages) if (page.shouldRegisterNavigation && !(await this.canAccessPage(page, user))) hidden.add(page.slug);
         return hidden;
     }
-    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[]; dropdownItems: NavigationItemView[] }[] {
-        const menuUrls = this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => this.getUrl(p.slug));
+    /** URLs of the menu items of the panel's pages (not those in a cluster), to know which item a nested URL belongs to. */
+    private navigationMenuUrls(hidden: Set<string> = new Set()): string[] {
+        return this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => this.getUrl(p.slug));
+    }
+    /** The navigation item of a registered page (or resource list page), as `Page.getNavigationItems()` returns it. */
+    getPageNavigationItem(page: typeof Page, menuUrls: string[] = this.navigationMenuUrls()): NavigationItem {
+        const p = page as any;
+        const base = this.getUrl(page.slug);
+        const badge = page.navigationBadge;
+        const item = NavigationItem.make(page.getNavigationLabel()).url(base)
+            .icon(typeof p.getNavigationIcon === 'function' ? p.getNavigationIcon() : page.navigationIcon)
+            .activeIcon(typeof p.getActiveNavigationIcon === 'function' ? p.getActiveNavigationIcon() : page.activeNavigationIcon)
+            .group(page.navigationGroup).sort(page.navigationSort).parentItem(page.navigationParentItem)
+            .badge(badge, typeof p.getNavigationBadgeColor === 'function' ? (value: string | number | null) => p.getNavigationBadgeColor(value) : page.navigationBadgeColor)
+            .badgeTooltip(typeof p.getNavigationBadgeTooltip === 'function' ? (value: string | number | null) => p.getNavigationBadgeTooltip(value) : page.navigationBadgeTooltip);
+        item._page = page.slug;
+        // Below another item's URL (`orders/archived` under `orders`), only that item is active.
+        return p.resource || page.prototype instanceof Cluster ? item.isActiveWhen((current) => isClosestNavigationUrl(base, current, menuUrls)) : item;
+    }
+    /**
+     * Navigation groups: registered pages plus custom items, sorted, grouped in the declared order; or the groups of the
+     * navigation builder. `hidden`: slugs of the pages this user cannot open.
+     */
+    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set(), user: User | null = null): NavigationGroupView[] {
+        const viewOptions = { path, badges, badgeColorClasses: (color: string) => this.colors.getComponentClasses('badge', color) };
+        const built = this.buildNavigation(user);
+        if (built) return builtNavigationViews(built, { ...viewOptions, hiddenPages: hidden, panelCollapsibleDefault: this._collapsibleNavigationGroups });
+        const context: NavigationContext = { user, panel: this };
+        const menuUrls = this.navigationMenuUrls(hidden);
         const items = [
             // The pages of a cluster are in its sub-navigation: the menu only shows the cluster.
-            ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => {
-                const item = NavigationItem.make(p.getNavigationLabel()).url(this.getUrl(p.slug)).icon(typeof (p as any).getNavigationIcon === 'function' ? (p as any).getNavigationIcon() : p.navigationIcon).group(p.navigationGroup).sort(p.navigationSort).badge(badges.has(p.slug) ? badges.get(p.slug)! : p.navigationBadge, p.navigationBadgeColor).parentItem(p.navigationParentItem);
-                const base = this.getUrl(p.slug);
-                // Below another item's URL (`orders/archived` under `orders`), only that item is active.
-                return (p as any).resource || p.prototype instanceof Cluster ? item.isActiveWhen((current) => isClosestNavigationUrl(base, current, menuUrls)) : item;
-            }),
+            ...this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => this.getPageNavigationItem(p, menuUrls)),
             ...this._navigationItems,
-        ].sort((a, b) => a._sort - b._sort);
-        const view = (item: NavigationItem, children: NavigationItem[]): NavigationItemView => {
-            const childItems = children.map((child) => view(child, child._childItems));
-            const activeChildItems = childItems.some((child) => child.isActive || child.activeChildItems);
-            return { label: item.label, url: item._url, icon: item._icon, isActive: !activeChildItems && item.isActive(path), badge: item._badge, badgeColorClasses: this.colors.getComponentClasses('badge', item._badgeColor), childItems, activeChildItems };
-        };
-        const order = [null, ...this._navigationGroups, ...items.map((i) => i._group).filter((g): g is string => g !== null && !this._navigationGroups.includes(g))];
-        return [...new Set(order)].map((label) => {
-            const inGroup = items.filter((i) => i._group === label);
+        ].filter((item) => item.isVisible(context)).sort((a, b) => a._sort - b._sort);
+        const keyOf = (item: NavigationItem) => navigationGroupKey(item._group);
+        const declared = this._navigationGroups.map((group) => navigationGroupKey(group) ?? '');
+        const order = [null, ...declared, ...items.map(keyOf).filter((key): key is string => key !== null && !declared.includes(key))];
+        return [...new Set(order)].map((key) => {
+            const inGroup = items.filter((item) => keyOf(item) === key);
             // An item with a parent item is shown below it (an unknown parent hides it, as in Filament).
-            const own = inGroup.filter((i) => i._parentItem === null).map((i) => view(i, [...i._childItems, ...inGroup.filter((child) => child._parentItem === i.label)]));
-            const options = label ? this._navigationGroupOptions.get(label) : undefined;
-            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive || i.activeChildItems), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, dropdownItems: own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
-        }).filter((g) => g.items.length);
+            const isChildOf = (child: NavigationItem, parent: NavigationItem) => child._parentItem !== null && (child._parentItem === parent.getKey() || child._parentItem === navigationLabelText(parent._label));
+            const own = inGroup.filter((item) => item._parentItem === null && (item._url || item._childItems.length || inGroup.some((child) => isChildOf(child, item))))
+                .map((item) => navigationItemView(item, [...item._childItems, ...inGroup.filter((child) => isChildOf(child, item))], viewOptions));
+            const reference = inGroup[0]?._group ?? null;
+            const group = key === null ? null : this._navigationGroups.find((candidate) => navigationGroupKey(candidate) === key) ?? (isEnumCase(reference) ? NavigationGroup.fromEnum(reference) : NavigationGroup.make(reference as NavigationLabel));
+            return navigationGroupView(group, own, this._collapsibleNavigationGroups);
+        }).filter((group) => group.items.length);
     }
 
     // --- session: an HMAC-signed cookie holding the user id
@@ -903,9 +1008,7 @@ export class Panel {
     }
 }
 
-/**
- * Render hook locations of a panel. A few are declared but not rendered anywhere yet: see `UNPLACED_RENDER_HOOKS`.
- */
+/** Render hook locations of a panel. */
 export const PanelsRenderHook = {
     AUTH_LOGIN_FORM_AFTER: 'panels::auth.login.form.after',
     AUTH_LOGIN_FORM_BEFORE: 'panels::auth.login.form.before',
@@ -997,13 +1100,8 @@ export const WidgetsRenderHook = {
     TABLE_WIDGET_END: 'widgets::table-widget.end',
     TABLE_WIDGET_START: 'widgets::table-widget.start',
 } as const;
-/**
- * Hook locations that are declared but not rendered anywhere yet, with the reason.
- */
-export const UNPLACED_RENDER_HOOKS: Record<string, string> = {
-    ...Object.fromEntries(['RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_AFTER', 'RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE'].map((k) => [(PanelsRenderHook as any)[k], 'ManageRelatedRecords page not implemented'])),
-    ...Object.fromEntries(['RESOURCE_PAGES_LIST_RECORDS_TABS_END', 'RESOURCE_PAGES_LIST_RECORDS_TABS_START', 'RESOURCE_TABS_END', 'RESOURCE_TABS_START'].map((k) => [(PanelsRenderHook as any)[k], 'reserved, no view renders it'])),
-};
+/** Hook locations that are declared but not rendered anywhere (none: every location of `PanelsRenderHook` is rendered). */
+export const UNPLACED_RENDER_HOOKS: Record<string, string> = {};
 
 /** Alpine scope of a schema component without a key (anonymous grid cell). */
 const ANONYMOUS_SCHEMA_COMPONENT = `x-data="filamentSchemaComponent(${e(js({ key: null, exposedMethods: [], path: '', containerPath: '' }))})"`;
@@ -1324,14 +1422,23 @@ export class Page extends BasePage {
     static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
     static slug = '';
     static title: string | null = null;
-    static navigationLabel: string | null = null;
+    static navigationLabel: NavigationLabel | null = null;
     static navigationIcon: string | null = null;
-    static navigationGroup: string | null = null;
+    static navigationGroup: NavigationGroupReference = null;
     static navigationSort = 0;
     static navigationBadge: string | number | null = null;
     static navigationBadgeColor = 'primary';
+    /** Tooltip of the navigation badge (Filament's `$navigationBadgeTooltip`). */
+    static navigationBadgeTooltip: string | null = null;
+    /** Icon of the navigation item while the page is open (Filament's `$activeNavigationIcon`). */
+    static activeNavigationIcon: string | null = null;
     /** Label of another menu item of the group, below which this page is shown. */
     static navigationParentItem: string | null = null;
+    /** The page's navigation items, for the navigation builder: `builder.items([...Dashboard.getNavigationItems()])`. */
+    static getNavigationItems(panel: Panel | null = getCurrentPanel() as Panel | null): NavigationItem[] {
+        if (!panel) throw new Error(`${this.name}.getNavigationItems() was called outside a panel request: pass the panel.`);
+        return [panel.getPageNavigationItem(this)];
+    }
     /** Cluster of the page: it is served under the cluster's URL and listed in its sub-navigation. */
     static cluster: typeof Cluster | null = null;
     static shouldRegisterNavigation = true;
@@ -1340,7 +1447,7 @@ export class Page extends BasePage {
     /** Whether the page needs the tenant's subscription (`panel.requiresTenantSubscription()`); `false` keeps it open. */
     static isTenantSubscriptionRequired(panel: Panel): boolean { return panel.isTenantSubscriptionRequired(); }
     static getTitle(): string { return this.title ?? this.name.replace(/([a-z])([A-Z])/g, '$1 $2'); }
-    static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
+    static getNavigationLabel(): NavigationLabel { return this.navigationLabel ?? this.getTitle(); }
     /** Class of the options of the page's registrations (`PageConfiguration` or a subclass): enables `make()`. */
     static configurationClass: typeof PageConfiguration | null = null;
     /** A registration of this page with its own options: `panel.pages([SettingsPage.make('advanced').slug('advanced-settings')])`. */
@@ -1381,6 +1488,22 @@ export class Page extends BasePage {
         if (!(await this.isAccessAuthorized(ctx))) throw new WireError(403, 'Forbidden.');
     }
     protected isAccessAuthorized(ctx: PanelContext): boolean | Promise<boolean> { return ctx.panel.canAccessPage(this.constructor as typeof Page, ctx.user); }
+    // --- error notifications of failed component requests (the panel's, changed by `setUpErrorNotifications()`)
+    private _errorNotifications: Record<string, { title: string | null; body: string | null; isHidden: boolean; isDisabled: boolean }> = {};
+    /** `false`: this page keeps the error dialog. `null`: the panel's setting. */
+    static hasErrorNotifications: boolean | null = null;
+    /** Override to change the page's error notifications with `registerErrorNotification()`, `hiddenErrorNotification()`… */
+    protected setUpErrorNotifications(): void {}
+    protected registerErrorNotification(title: string, body: string | null = null, statusCode: number | null = null): this { this._errorNotifications[statusCode === null ? '' : String(statusCode)] = { title, body, isHidden: false, isDisabled: false }; return this; }
+    protected hiddenErrorNotification(statusCode: number): this { this._errorNotifications[String(statusCode)] = { title: null, body: null, isHidden: true, isDisabled: false }; return this; }
+    protected disabledErrorNotification(statusCode: number): this { this._errorNotifications[String(statusCode)] = { title: null, body: null, isHidden: false, isDisabled: true }; return this; }
+    /** The notifications sent to the browser (`null`: none, the error dialog shows). */
+    getErrorNotifications(): Record<string, { title: string | null; body: string | null; isHidden: boolean; isDisabled: boolean }> | null {
+        if (!((this.constructor as typeof Page).hasErrorNotifications ?? this.panel.hasErrorNotifications())) return null;
+        this._errorNotifications = this.panel.getErrorNotifications();
+        this.setUpErrorNotifications();
+        return this._errorNotifications;
+    }
     getTitle(): string { return (this.constructor as typeof Page).getTitle(); }
     getHeading(): string { return this.getTitle(); }
     getBreadcrumbs(): { label: string; url: string | null }[] { return []; }
@@ -1398,6 +1521,23 @@ export class Page extends BasePage {
         if (!cluster || this instanceof Cluster) return breadcrumbs;
         const crumb = cluster.getClusterBreadcrumb();
         return breadcrumbs[0]?.label === crumb ? breadcrumbs : [{ label: crumb, url: this.panel.getUrl(cluster.slug) }, ...breadcrumbs];
+    }
+    /**
+     * Breadcrumbs shown in the header: none with `panel.breadcrumbs(false)`; with the navigation hierarchy
+     * (`panel.breadcrumbs(true, true)`), the navigation group and parent items of the page come first.
+     */
+    protected async getRenderedBreadcrumbs(): Promise<{ label: string; url: string | null }[]> {
+        const panel = this.panel;
+        if (!panel.hasBreadcrumbs()) return [];
+        const breadcrumbs = this.getBreadcrumbsWithCluster();
+        if (!panel.hasNavigationHierarchyInBreadcrumbs() || !panel.hasNavigation()) return breadcrumbs;
+        const PageClass = this.constructor as typeof Page;
+        const owner = clusterOf(PageClass) ?? ((PageClass as any).resource as typeof Resource | undefined) ?? null;
+        const url = owner ? (owner.prototype instanceof Cluster ? panel.getUrl((owner as typeof Cluster).slug) : panel.getUrl((owner as typeof Resource).getPages().index?.slug ?? owner.slug)) : panel.getUrl(PageClass.slug);
+        const user = (this._ctx as PanelContext).user;
+        const hierarchy = navigationHierarchyBreadcrumbs(panel.getNavigation(url, new Map(), await panel.resolveInaccessiblePages(user), user), url);
+        if (hierarchy === null) return breadcrumbs;
+        return [...hierarchy, ...(breadcrumbs.length ? breadcrumbs : [{ label: this.getTitle(), url: null }])];
     }
     /** Sub-navigation position: `start` (column before the content), `end` (after) or `top` (tabs). Defaults to the resource's, then the panel's. */
     static subNavigationPosition: 'start' | 'end' | 'top' | null = null;
@@ -1469,7 +1609,7 @@ export class Page extends BasePage {
         return views.render('filament-panels::pages.page', {
             heading: this.getHeading(), headerWidgets: await this.renderHeaderWidgets(), content: await this.renderContent(), footerWidgets: await this.renderFooterWidgets(), livewireId: this.id, renderHookScopes: this.getRenderHookScopes(),
             subNavigation: (await this.getSubNavigation()).map((item) => ({ ...item, badgeColorClasses: sharedColors.getComponentClasses('badge', item.badgeColor ?? 'primary') })), subNavigationPosition: this.getSubNavigationPosition(),
-            breadcrumbs: this.getBreadcrumbsWithCluster(), headerActions, pageClasses: this.getPageClasses(), actionModals: this.rendersActionModalsInPage() ? await this.renderActionModals() : '',
+            breadcrumbs: await this.getRenderedBreadcrumbs(), headerActions, pageClasses: this.getPageClasses(), actionModals: this.rendersActionModalsInPage() ? await this.renderActionModals() : '',
             headerActionsKey: createHash('md5').update(this.getHeaderActions().map((a) => a.getName()).join(',')).digest('hex'),
         });
     }
@@ -2145,11 +2285,20 @@ export abstract class Resource {
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
     static navigationIcon: string | null = null;
-    static navigationGroup: string | null = null;
+    /** Icon of the navigation item while one of the resource's pages is open. */
+    static activeNavigationIcon: string | null = null;
+    static navigationGroup: NavigationGroupReference = null;
     static navigationSort = 0;
     static navigationBadge: string | number | null = null;
+    static navigationBadgeColor = 'primary';
+    static navigationBadgeTooltip: string | null = null;
     /** Menu label; defaults to the plural model label in title case. */
-    static navigationLabel: string | null = null;
+    static navigationLabel: NavigationLabel | null = null;
+    /** The resource's navigation items, for the navigation builder: `builder.items([...OrderResource.getNavigationItems()])`. */
+    static getNavigationItems(panel: Panel | null = (getCurrentPanel() as Panel | null) ?? null): NavigationItem[] {
+        const list = this.getPages().index;
+        return list && list.shouldRegisterNavigation ? list.getNavigationItems(panel) : [];
+    }
     /** Label of another menu item of the group, below which the resource is shown. */
     static navigationParentItem: string | null = null;
     /** Cluster of the resource: its pages are served under the cluster's URL, and its list is in the cluster's sub-navigation. */
@@ -2254,7 +2403,7 @@ export abstract class Resource {
         return this.recordSubNavigation.filter((name) => name in pages).map((name) => {
             const related = this.relatedPages[name];
             return {
-                label: related ? related.getNavigationLabel() : name === 'view' ? t('filament-panels::resources/pages/view-record.navigation_label') : t('filament-panels::resources/pages/edit-record.navigation_label'),
+                label: related ? navigationLabelText(related.getNavigationLabel()) : name === 'view' ? t('filament-panels::resources/pages/view-record.navigation_label') : t('filament-panels::resources/pages/edit-record.navigation_label'),
                 icon: related ? (related.navigationIcon ?? icons.resolve('panels::resources.pages.manage-related-records.navigation-item') ?? 'o-rectangle-stack') : name === 'view' ? icons.resolve('panels::resources.pages.view-record.navigation-item') ?? 'o-eye' : icons.resolve('panels::resources.pages.edit-record.navigation-item') ?? 'o-pencil-square',
                 url: this.getUrl(name, key),
                 active: page instanceof (this.getRegisteredPage(name) as any),
@@ -2335,6 +2484,11 @@ export abstract class Resource {
             static slug = resource.slug;
             static title = resource.getTitleCasePluralModelLabel();
             static navigationIcon = resource.navigationIcon;
+            static activeNavigationIcon = resource.activeNavigationIcon;
+            static navigationBadgeColor = resource.navigationBadgeColor;
+            static navigationBadgeTooltip = resource.navigationBadgeTooltip;
+            static getNavigationBadgeColor = typeof (resource as any).getNavigationBadgeColor === 'function' ? (badge: unknown) => (resource as any).getNavigationBadgeColor(badge) : undefined;
+            static getNavigationBadgeTooltip = typeof (resource as any).getNavigationBadgeTooltip === 'function' ? (badge: unknown) => (resource as any).getNavigationBadgeTooltip(badge) : undefined;
             static navigationGroup = resource.navigationGroup;
             static navigationSort = resource.navigationSort;
             static navigationBadge = resource.navigationBadge;
@@ -2379,7 +2533,6 @@ export abstract class Resource {
 /** Sub-navigation tab of a page; items with a `group` are gathered under its label. */
 export type SubNavigationItem = { label: string; icon: string | null; url: string; active: boolean; group?: string | null; badge?: string | number | null; badgeColor?: string };
 /** A sidebar item, as rendered. */
-export type NavigationItemView = { label: string; url: string; icon: string | null; isActive: boolean; badge: string | number | null; badgeColorClasses: string[]; childItems: NavigationItemView[]; activeChildItems: boolean };
 /** The cluster a page belongs to: its own, or its resource's. */
 export const clusterOf = (page: unknown): typeof Cluster | null => (page as any)?.cluster ?? (page as any)?.resource?.cluster ?? (page as any)?.parentResource?.cluster ?? null;
 type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
@@ -3122,7 +3275,7 @@ class RelationManagerTabs extends SchemaComponent {
  livewireId: ${e(js(id))},
  livewireProperty: 'activeRelationManager',
  tab: '${active.key}',
- })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${active.key}" /><div x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${header.join('')}</div></div>${panels.join('')}</div>`;
+ })" x-load x-load-src="${e(page.panel.assetUrl('js/filament/schemas/components/tabs.js'))}" wire:ignore.self id="${key}" wire:key="${id}.${key}.container" class="fi-sc-tabs"><input type="hidden" x-ref="tabsData" data-active-tab="${active.key}" /><div x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(t('filament::components/tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeRelationManager" class="fi-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_TABS_START, page.getRenderHookScopes())}${header.join('')}${renderHook(PanelsRenderHook.RESOURCE_TABS_END, page.getRenderHookScopes())}</div></div>${panels.join('')}</div>`;
     }
 }
 /** List page tab: restricts the table query and can show a badge. */
@@ -3236,7 +3389,7 @@ class ResourceTabs extends SchemaComponent {
  this.isLoadingDeferredBadges = false
  }
  },
- }" x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="group" aria-label="${e(t('filament-panels::resources/pages/list-records.tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeTab" class="fi-sc-tabs-tablist">${buttons.join('')}</div></div></div>`;
+ }" x-ref="tabsHeader" class="fi-tabs"><div x-ref="tablist" role="group" aria-label="${e(t('filament-panels::resources/pages/list-records.tabs.label'))}" x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="activeTab" class="fi-sc-tabs-tablist">${renderHook(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_START, page.getRenderHookScopes())}${buttons.join('')}${renderHook(PanelsRenderHook.RESOURCE_PAGES_LIST_RECORDS_TABS_END, page.getRenderHookScopes())}</div></div></div>`;
     }
 }
 
@@ -3865,7 +4018,7 @@ export class ManageRelatedRecords extends ListRecords {
     static form(schema: Schema): Schema { return this.getRelatedResource()?.form(schema) ?? schema; }
     static infolist(schema: Schema): Schema { return this.getRelatedResource()?.infolist(schema) ?? schema; }
     static getTitle(): string { return this.title ?? (this.getRelatedResource()?.getTitleCasePluralModelLabel() ?? ucfirst(relationshipNameOf(this).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase())); }
-    static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
+    static getNavigationLabel(): NavigationLabel { return this.navigationLabel ?? this.getTitle(); }
 
     /** Owner record key: read from the URL on mount, never writable from the browser. */
     recordKey = '';
@@ -3906,7 +4059,7 @@ export class ManageRelatedRecords extends ListRecords {
     getHeaderActions(): Action[] { return []; }
     /** The page content is a group (tabs, if any, then the table). */
     contentSchema(schema: Schema): Schema {
-        return schema.components([Group.make([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_RELATION_MANAGER_AFTER)]), new RelationManagerTabs().key(null).hidden()]);
+        return schema.components([Group.make([new ResourceTabs(), RenderHook.make(PanelsRenderHook.RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_BEFORE), EmbeddedTable.make(), RenderHook.make(PanelsRenderHook.RESOURCE_PAGES_MANAGE_RELATED_RECORDS_TABLE_AFTER)]), new RelationManagerTabs().key(null).hidden()]);
     }
     getTitle(): string { return t('filament-panels::resources/pages/manage-related-records.title', { label: this.related.parentResource.getRecordTitle(this._owner), relationship: this.related.getTitle() }); }
     getSubNavigation(): SubNavigationItem[] { return this.related.parentResource.getRecordSubNavigation(this); }
@@ -3918,6 +4071,8 @@ export class ManageRelatedRecords extends ListRecords {
             { label: this.related.getTitle(), url: null },
         ];
     }
+    /** Render hook scopes: the page and the resource it belongs to (the parent record's). */
+    getRenderHookScopes(): unknown[] { return [this.constructor, (this.constructor as typeof ManageRelatedRecords).parentResource]; }
     getPageClasses(): string[] { return ['fi-resource-manage-related-records-page', `fi-resource-${this.related.parentResource.slug.replace(/\//g, '-')}`, `fi-resource-record-${this.recordKey}`]; }
 }
 
@@ -4672,28 +4827,76 @@ export class ViewRecord extends Page {
 
 /** Evaluation context for panel menu actions (no record). */
 const menuContext = (livewire: unknown) => ({ livewire: livewire as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined });
+type MenuEntry = { key: string; item: Action | ActionGroup; sort: number };
+/** Visible items of resolved menu groups, with their sort (an `ActionGroup` sorts as `0`). */
+async function visibleMenuGroups(groups: [string, Action | ActionGroup][][], ctx: ReturnType<typeof menuContext>): Promise<MenuEntry[][]> {
+    const out: MenuEntry[][] = [];
+    for (const group of groups) {
+        const visible: MenuEntry[] = [];
+        for (const [key, item] of group) if (await item.isVisible(ctx as any)) visible.push({ key, item, sort: item instanceof Action ? item.getSort() : 0 });
+        out.push(visible);
+    }
+    return out;
+}
+const bySort = (a: MenuEntry, b: MenuEntry) => a.sort - b.sort;
+/** HTML lists of menu entries: consecutive actions share a list, each `ActionGroup` is a list of its own. */
+async function menuLists(entries: MenuEntry[], ctx: ReturnType<typeof menuContext>, panel: Panel, wrap: (entry: MenuEntry, html: string) => string = (_entry, html) => html): Promise<string[][]> {
+    const lists: string[][] = [];
+    let current: string[] = [];
+    for (const entry of entries) {
+        if (entry.item instanceof ActionGroup) {
+            const items: string[] = [];
+            for (const action of flattenActions(entry.item.getActions())) if (await action.isVisible(ctx as any)) items.push(await action.toMenuItemHtml(ctx as any, { navigate: panel.hasSpaMode() }));
+            if (items.filter(Boolean).length) { if (current.length) lists.push(current); current = []; lists.push(items.filter(Boolean)); }
+            continue;
+        }
+        const html = await entry.item.toMenuItemHtml(ctx as any, { navigate: panel.hasSpaMode() });
+        if (html) current.push(wrap(entry, html));
+    }
+    if (current.length) lists.push(current);
+    return lists;
+}
+/** Default items of the user menu: the profile link (a header without a profile page) and the logout item, which posts to the logout URL. */
+function userMenuDefaults(panel: Panel, user: User): { key: string; action: Action | null; placement: 'start' | 'end' }[] {
+    const profileUrl = panel.getProfileUrl();
+    return [
+        { key: 'profile', placement: 'start', action: Action.make('profile').label(profileUrl ? panel.getProfile()!.page.getLabel() : user.name).icon(icons.resolve('panels::user-menu.profile-item') ?? 'm-user-circle').url(profileUrl).color('gray').sort(-1) },
+        { key: 'logout', placement: 'end', action: Action.make('logout').label(t('filament-panels::layout.actions.logout.label')).icon(icons.resolve('panels::user-menu.logout-button') ?? 'm-arrow-left-on-rectangle').url(panel.getLogoutUrl()).postToUrl().color('gray').sort(Number.MAX_SAFE_INTEGER) },
+    ];
+}
+/** User menu groups of the request's user (`[]` without a user or with `userMenu(false)`). */
+async function userMenuGroups(component: Component): Promise<MenuEntry[][]> {
+    const { panel, user } = component._ctx as PanelContext;
+    if (!user || !panel.hasUserMenu()) return [];
+    return visibleMenuGroups(panel.getUserMenuItemGroups().resolve(userMenuDefaults(panel, user)), menuContext(component));
+}
 /** User menu: profile, panel items, themes, logout. */
 async function renderUserMenu(component: Component, position: 'topbar' | 'sidebar'): Promise<string> {
-    const { req, res, panel, user } = component._ctx as PanelContext;
+    const { req, panel, user } = component._ctx as PanelContext;
+    if (!user || !panel.hasUserMenu()) return '';
     const ctx = menuContext(component);
-    const items: Action[] = [];
-    const profileUrl = panel.getProfileUrl();
-    const custom = panel.getUserMenuItems();
-    if (profileUrl && !custom.profile) items.push(Action.make('profile').label(panel.getProfile()!.page.getLabel()).icon(icons.resolve('panels::user-menu.profile-item') ?? 'm-user-circle').url(profileUrl).color('gray').sort(-1));
-    items.push(...Object.values(custom));
-    const visible: Action[] = [];
-    for (const item of items) if (await item.isVisible(ctx)) visible.push(item);
-    visible.sort((a, b) => a.getSort() - b.getSort());
-    const html = async (list: Action[]) => (await Promise.all(list.map((item) => item.toMenuItemHtml(ctx, { navigate: panel.hasSpaMode() })))).filter(Boolean);
+    const groups = await userMenuGroups(component);
+    const all = groups.flat().sort(bySort);
+    const before = all.filter((entry) => entry.sort < 0);
+    const profileIndex = before.findIndex((entry) => entry.key === 'profile');
+    if (profileIndex > 0) before.unshift(...before.splice(profileIndex, 1));
+    // A profile item without a URL or a handler is the menu's header (the user's name).
+    const profile = before[0]?.key === 'profile' && before[0].item instanceof Action ? before[0].item : null;
+    const hasProfileHeader = profile !== null && profile.resolveUrl(ctx as any) === null && !profile.isMountable();
+    if (hasProfileHeader) before.shift();
+    const profileHooks = (entry: MenuEntry, html: string) => (entry.key === 'profile' ? renderHook(PanelsRenderHook.USER_MENU_PROFILE_BEFORE) + html + renderHook(PanelsRenderHook.USER_MENU_PROFILE_AFTER) : html);
+    const after = panel.hasMultipleUserMenuItemGroups() ? groups.map((group) => group.filter((entry) => entry.sort >= 0).sort(bySort)).filter((group) => group.length) : [all.filter((entry) => entry.sort >= 0)];
+    const afterLists: string[][] = [];
+    for (const group of after) afterLists.push(...(await menuLists(group, ctx, panel, profileHooks)));
+    const profileIcon = profile ? await profile.getIcon(ctx as any) : null;
     return views.render('filament-panels::components.user-menu', {
-        position, isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), user: user!, avatarUrl: panel.getUserAvatarUrl(user!), logoutUrl: panel.getLogoutUrl(), csrf: csrfToken(req, res),
-        profileUrl: profileUrl && !custom.profile ? profileUrl : null,
-        itemsBefore: await html(visible.filter((item) => item.getSort() < 0)), itemsAfter: await html(visible.filter((item) => item.getSort() >= 0)),
+        position, isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), user, avatarUrl: panel.getUserAvatarUrl(user),
+        profileHeader: hasProfileHeader ? { label: await profile!.getLabel(ctx as any), icon: profileIcon } : null,
+        listsBefore: await menuLists(before, ctx, panel, profileHooks), listsAfter: afterLists,
         themes: panel.getThemes().map((theme) => ({ id: theme.id, label: theme.label, swatch: swatchOf(theme, panel) })), activeTheme: panel.resolveTheme(req)?.id ?? null,
-        hasThemeSwitcher: panel.hasDarkMode() && !panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
+        hasThemeSwitcher: panel.hasThemeSwitcher(), defaultThemeMode: panel.getDefaultThemeMode(),
     });
 }
-/** Tenant menu: current tenant, other tenants, registration, profile. */
 /** Options of an error page: a description replacing the status's own, and the error (its stack is shown in development). */
 export type ErrorPageOptions = { description?: string; error?: unknown };
 /**
@@ -4706,10 +4909,10 @@ export function renderErrorPage(panel: Panel, req: Request, res: Response, statu
     const scene = errorPageScene(status);
     const text = (name: string) => t(`filament-panels::errors.${scene}.${name}`);
     // Inside the request's theme: the buttons' color classes depend on its palette.
-    const html = panel.withTheme(req, () => {
+    const html = runWithCspNonce(getResponseCspNonce(res) ?? cspNonce(), () => panel.withTheme(req, () => {
         const home = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'primary' }, t('filament-panels::errors.actions.home'));
         const homeGray = uiButton({ tag: 'a', href: panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.home') ?? 'm-home', color: 'gray' }, t('filament-panels::errors.actions.home'));
-        const back = uiButton({ icon: icons.resolve('panels::error-page.actions.back') ?? 'm-arrow-left', color: 'gray', attributes: { onclick: 'history.back()' } }, t('filament-panels::errors.actions.back'));
+        const back = uiButton({ icon: icons.resolve('panels::error-page.actions.back') ?? 'm-arrow-left', color: 'gray', attributes: { 'data-history-back': '' } }, t('filament-panels::errors.actions.back'));
         const retry = uiButton({ tag: 'a', href: req.method === 'GET' ? req.originalUrl : panel.getBaseUrl(), icon: icons.resolve('panels::error-page.actions.retry') ?? 'm-arrow-path', color: 'primary' }, t('filament-panels::errors.actions.retry'));
         const login = panel.getLoginPage() ? uiButton({ tag: 'a', href: panel.getLoginUrl(), icon: icons.resolve('panels::error-page.actions.login') ?? 'm-arrow-right-end-on-rectangle', color: 'primary' }, t('filament-panels::errors.actions.login')) : home;
         const actions = scene === 401 ? (panel.getLoginPage() ? [login, homeGray] : [home]) : scene === 403 || scene === 404 ? [home, back] : scene === 503 ? [retry] : [retry, homeGray];
@@ -4726,68 +4929,106 @@ export function renderErrorPage(panel: Panel, req: Request, res: Response, statu
             font: theme?.font ? { ...panel.getFont(), ...fontOf(theme.font) } : panel.getFont(), themeCss: theme?.css ?? '', colorVariables: panel.colors.renderCssVariables(),
             darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
         });
-    });
+    }));
     res.type('html').send(html);
 }
 
+/** Default items of the tenant menu: profile, billing and registration (`null` when unavailable). */
+async function tenantMenuDefaults(panel: Panel, user: User, tenant: unknown): Promise<{ key: string; action: Action | null; placement: 'start' | 'end' }[]> {
+    const provider = panel.getTenantProvider();
+    const ProfilePage = panel.getTenantProfilePage();
+    const billingUrl = panel.getTenantBillingUrl(tenant);
+    const RegistrationPage = panel.getTenantRegistrationPage();
+    return [
+        { key: 'profile', placement: 'start', action: ProfilePage && provider.update ? Action.make('profile').label(ProfilePage.getLabel()).icon(icons.resolve('panels::tenant-menu.profile-button') ?? 'm-cog-6-tooth').url(panel.getUrl(ProfilePage.slug)).color('gray').sort(-1) : null },
+        { key: 'billing', placement: 'start', action: billingUrl ? Action.make('billing').label(t('filament-panels::layout.actions.billing.label')).icon(icons.resolve('panels::tenant-menu.billing-button') ?? 'm-credit-card').url(billingUrl).color('gray').sort(-1) : null },
+        { key: 'register', placement: 'end', action: RegistrationPage && (await RegistrationPage.canView(panel, user)) ? Action.make('register').label(RegistrationPage.getLabel()).icon(icons.resolve('panels::tenant-menu.registration-button') ?? 'm-plus').url(panel.getBaseUrl(RegistrationPage.slug)).color('gray').sort(Number.MAX_SAFE_INTEGER) : null },
+    ];
+}
+/** Tenant menu groups of the request (`[]` outside a tenant or with `tenantMenu(false)`). */
+async function tenantMenuGroups(component: Component): Promise<MenuEntry[][]> {
+    const { panel, user } = component._ctx as PanelContext;
+    const tenant = panel.getTenant();
+    if (!panel.hasTenancy() || !panel.hasTenantMenu() || !tenant || !user) return [];
+    return visibleMenuGroups(panel.getTenantMenuItemGroups().resolve(await tenantMenuDefaults(panel, user, tenant)), menuContext(component));
+}
+/** Name of a tenant as text and as HTML (a provider may return an `HtmlString`). */
+const tenantName = (name: string | HtmlString) => ({ name: navigationLabelText(name), nameHtml: name instanceof HtmlString ? name.html : e(name), isHtmlName: name instanceof HtmlString });
 async function renderTenantMenu(component: Component, options: { teleport: boolean }): Promise<string> {
     const { panel, user } = component._ctx as PanelContext;
     const tenant = panel.getTenant();
     if (!panel.hasTenancy() || !panel.hasTenantMenu() || !tenant || !user) return '';
     const provider = panel.getTenantProvider();
     const ctx = menuContext(component);
-    const items: Action[] = [];
-    const custom = panel.getTenantMenuItems();
-    const ProfilePage = panel.getTenantProfilePage();
-    if (ProfilePage && provider.update && !custom.profile) items.push(Action.make('profile').label(ProfilePage.getLabel()).icon(icons.resolve('panels::tenant-menu.profile-button') ?? 'm-cog-6-tooth').url(panel.getUrl(ProfilePage.slug)).color('gray').sort(-1));
-    const billingUrl = panel.getTenantBillingUrl(tenant);
-    if (billingUrl && !custom.billing) items.push(Action.make('billing').label(t('filament-panels::layout.actions.billing.label')).icon(icons.resolve('panels::tenant-menu.billing-button') ?? 'm-credit-card').url(billingUrl).color('gray').sort(-1));
-    const RegistrationPage = panel.getTenantRegistrationPage();
-    if (RegistrationPage && !custom.register && (await RegistrationPage.canView(panel, user))) items.push(Action.make('register').label(RegistrationPage.getLabel()).icon(icons.resolve('panels::tenant-menu.registration-button') ?? 'm-plus').url(panel.getBaseUrl(RegistrationPage.slug)).color('gray').sort(Number.MAX_SAFE_INTEGER));
-    items.push(...Object.values(custom));
-    const visible: Action[] = [];
-    for (const item of items) if (await item.isVisible(ctx)) visible.push(item);
-    visible.sort((a, b) => a.getSort() - b.getSort());
-    const others = (await provider.getTenants(user)).filter((candidate) => provider.getKey(candidate) !== provider.getKey(tenant));
+    const groups = await tenantMenuGroups(component);
+    const all = groups.flat().sort(bySort);
+    const others = panel.hasTenantSwitcher() ? (await provider.getTenants(user)).filter((candidate) => provider.getKey(candidate) !== provider.getKey(tenant)) : [];
     const canSwitch = others.length > 0;
-    const html = async (list: Action[]) => (await Promise.all(list.map((item) => item.toMenuItemHtml(ctx, { navigate: panel.hasSpaMode() })))).filter(Boolean);
+    // Without tenants to switch to, the identity items (negative sort) stay in their groups.
+    const after = panel.hasMultipleTenantMenuItemGroups()
+        ? groups.map((group) => group.filter((entry) => !canSwitch || entry.sort >= 0).sort(bySort)).filter((group) => group.length)
+        : [all.filter((entry) => !canSwitch || entry.sort >= 0)];
+    const listsAfter: string[][] = [];
+    for (const group of after) listsAfter.push(...(await menuLists(group, ctx, panel)));
     return views.render('filament-panels::components.tenant-menu', {
         teleport: options.teleport, isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(),
-        tenant: { name: provider.getName(tenant), label: provider.getCurrentTenantLabel?.(tenant) ?? null, avatarUrl: panel.getTenantAvatarUrl(tenant) },
-        itemsBefore: canSwitch ? await html(visible.filter((item) => item.getSort() < 0)) : [],
-        itemsAfter: await html(canSwitch ? visible.filter((item) => item.getSort() >= 0) : visible),
-        switchable: others.map((other) => ({ name: provider.getName(other), url: panel.getUrl('', other), avatarUrl: panel.getTenantAvatarUrl(other) })),
+        tenant: { ...tenantName(provider.getName(tenant)), label: provider.getCurrentTenantLabel?.(tenant) ?? null, avatarUrl: panel.getTenantAvatarUrl(tenant) },
+        listsBefore: canSwitch ? await menuLists(all.filter((entry) => entry.sort < 0), ctx, panel) : [],
+        listsAfter,
+        switchable: others.map((other) => ({ ...tenantName(provider.getName(other)), url: panel.getUrl('', other), avatarUrl: panel.getTenantAvatarUrl(other) })),
         isSearchable: canSwitch && (panel.isTenantMenuSearchable() ?? others.length >= 10),
     });
 }
 
-/** Sidebar: logo, tenant menu, search, navigation and, without a topbar, the bell and user menu. */
-export class Sidebar extends Component {
-    static callable = ['setTheme'];
+/** Actions of the user and tenant menus, which the menu components can mount (their modals open there). */
+async function menuActions(component: Component): Promise<Action[]> {
+    const entries = [...(await userMenuGroups(component)).flat(), ...(await tenantMenuGroups(component)).flat()];
+    return flattenActions(entries.map((entry) => entry.item));
+}
+/**
+ * Components rendering the user and tenant menus (sidebar, topbar, simple pages' user menu): they mount the actions of
+ * these menus, and re-render on their `refresh-*` event.
+ */
+abstract class MenuComponent extends BasePage {
+    static callable = ['setTheme', 'refresh', 'mountAction', 'unmountAction', 'callMountedAction'];
+    protected getMountableActions(): Promise<Action[]> { return menuActions(this); }
+    /** Theme choice by the user: only a theme declared by the panel is accepted; the page reloads to apply it. */
+    setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
+    /** Renders the component again (`refresh-sidebar`, `refresh-topbar` events). */
+    refresh(): void {}
+}
+
+/** Sidebar: logo, tenant menu, search, navigation and, without a topbar, the bell and user menu. Replace it with `panel.sidebarLivewireComponent()`. */
+export class Sidebar extends MenuComponent {
+    static listeners: Record<string, string> = { 'refresh-sidebar': 'refresh' };
     currentPath = '/';
     static locked = ['currentPath'];
+    /** View rendered (a subclass may use its own). */
+    static view = 'filament-panels::livewire.sidebar';
     mount(params: Record<string, unknown>): void { this.currentPath = String(params.path ?? '/'); }
-    /** A resource item stays active on its create and edit pages. */
-    async render(): Promise<string> {
+    /** Data passed to the view. A resource item stays active on its create and edit pages. */
+    async getViewData(): Promise<Record<string, unknown>> {
         const { panel, user } = this._ctx as PanelContext;
-        if (!user && !panel.allowsGuests()) return '<div></div>';
         const inSidebar = (position: 'topbar' | 'sidebar') => position === 'sidebar' && user !== null;
-        return views.render('filament-panels::livewire.sidebar', {
+        return {
             hasTopbar: panel.hasTopbar(), hasTopNavigation: panel.hasTopNavigation(), spa: panel.hasSpaMode(),
             isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), isSidebarFullyCollapsibleOnDesktop: panel.isSidebarFullyCollapsibleOnDesktop(),
             tenantMenu: (await renderTenantMenu(this, { teleport: false })) || null,
             globalSearch: panel.hasGlobalSearch() && inSidebar(panel.getGlobalSearchPosition()) ? await this.mountChild(`navette.${panel.getId()}.global-search`, {}, `${this.id}.global-search`) : null,
             databaseNotifications: panel.getDatabaseNotifications() && inSidebar(panel.getDatabaseNotificationsPosition()) ? await this.mountChild(`navette.${panel.getId()}.database-notifications`, {}, `${this.id}.database-notifications`, { lazy: true }) : null,
-            userMenu: inSidebar(panel.getUserMenuPosition()) ? await renderUserMenu(this, 'sidebar') : null,
+            userMenu: inSidebar(panel.getUserMenuPosition()) ? (await renderUserMenu(this, 'sidebar')) || null : null,
             homeUrl: panel.getUrl(), brand: panel.getBrand(),
             // With a sidebar collapsible to icons, a group with an icon and a label opens a dropdown of its items while collapsed.
-            groups: panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user))
+            groups: panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user), user)
                 .map((group) => ({ ...group, lists: panel.isSidebarCollapsibleOnDesktop() && group.label && group.icon ? navigationDropdownLists(group.dropdownItems) : null })),
-            livewireId: this.id,
-        });
+            livewireId: this.id, actionModals: await this.renderActionModals(),
+        };
     }
-    /** Theme choice by the user: only a theme declared by the panel is accepted; the page reloads to apply it. */
-    setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
+    async render(): Promise<string> {
+        const { panel, user } = this._ctx as PanelContext;
+        if (!user && !panel.allowsGuests()) return '<div></div>';
+        return views.render((this.constructor as typeof Sidebar).view, await this.getViewData());
+    }
 }
 /** Theme choice (sidebar or topbar): only a theme declared by the panel is accepted; the page reloads. */
 function applyTheme(component: Component, id?: unknown): void {
@@ -4800,21 +5041,23 @@ function applyTheme(component: Component, id?: unknown): void {
     component.redirect(referer.replace(/^https?:\/\/[^/]+/, '') || '/');
 }
 
-/** Topbar: logo, optional navigation, search, bell, user menu. */
-export class Topbar extends Component {
-    static callable = ['setTheme'];
+/** Topbar: logo, optional navigation, search, bell, user menu. Replace it with `panel.topbarLivewireComponent()`. */
+export class Topbar extends MenuComponent {
+    static listeners: Record<string, string> = { 'refresh-topbar': 'refresh' };
     currentPath = '/';
     static locked = ['currentPath'];
+    /** View rendered (a subclass may use its own). */
+    static view = 'filament-panels::livewire.topbar';
     mount(params: Record<string, unknown>): void { this.currentPath = String(params.path ?? '/'); }
-    async render(): Promise<string> {
+    /** Data passed to the view. */
+    async getViewData(): Promise<Record<string, unknown>> {
         const { panel, user } = this._ctx as PanelContext;
-        if (!user && !panel.allowsGuests()) return '<div></div>';
         const inTopbar = (position: 'topbar' | 'sidebar') => position === 'topbar' && user !== null;
         const hasNavigation = panel.hasNavigation();
         const showsNavigationHere = panel.hasTopNavigation() || !hasNavigation;
         const tenant = panel.getTenant();
-        const groups = showsNavigationHere && hasNavigation ? panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user)) : null;
-        return views.render('filament-panels::livewire.topbar', {
+        const groups = showsNavigationHere && hasNavigation ? panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user), user) : null;
+        return {
             hasNavigation, spa: panel.hasSpaMode(), isSidebarCollapsibleOnDesktop: panel.isSidebarCollapsibleOnDesktop(), isSidebarFullyCollapsibleOnDesktop: panel.isSidebarFullyCollapsibleOnDesktop(),
             homeUrl: panel.getUrl(), brand: panel.getBrand(), livewireId: this.id,
             tenantMenu: showsNavigationHere ? (await renderTenantMenu(this, { teleport: true })) || null : null,
@@ -4822,22 +5065,23 @@ export class Topbar extends Component {
             persistKey: panel.hasTenancy() ? `topbar.end.panel-${panel.getId()}.tenant-${tenant ? panel.getTenantUrlKey(tenant) : ''}` : `topbar.end.panel-${panel.getId()}`,
             globalSearch: panel.hasGlobalSearch() && inTopbar(panel.getGlobalSearchPosition()) ? await this.mountChild(`navette.${panel.getId()}.global-search`, {}, `${this.id}.global-search`) : null,
             databaseNotifications: panel.getDatabaseNotifications() && inTopbar(panel.getDatabaseNotificationsPosition()) ? await this.mountChild(`navette.${panel.getId()}.database-notifications`, {}, `${this.id}.database-notifications`, { lazy: true }) : null,
-            userMenu: inTopbar(panel.getUserMenuPosition()) ? await renderUserMenu(this, 'topbar') : null,
-        });
+            userMenu: inTopbar(panel.getUserMenuPosition()) ? (await renderUserMenu(this, 'topbar')) || null : null,
+            actionModals: await this.renderActionModals(),
+        };
     }
-    setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
+    async render(): Promise<string> {
+        const { panel, user } = this._ctx as PanelContext;
+        if (!user && !panel.allowsGuests()) return '<div></div>';
+        return views.render((this.constructor as typeof Topbar).view, await this.getViewData());
+    }
 }
 
 /** User menu on simple pages for a signed-in user. */
-export class SimpleUserMenu extends Component {
-    static callable = ['setTheme'];
+export class SimpleUserMenu extends MenuComponent {
     async render(): Promise<string> {
         if (!(this._ctx as PanelContext).user) return '<div></div>';
-        return `<div><div class="fi-simple-user-menu-ctn">${await renderUserMenu(this, 'topbar')}</div><div wire:partial="action-modals" x-data="filamentActionModals({
-                    livewireId: ${js(this.id)},
-                })" style="height: 0"></div></div>`;
+        return `<div><div class="fi-simple-user-menu-ctn">${await renderUserMenu(this, 'topbar')}</div>${await this.renderActionModals()}</div>`;
     }
-    setTheme(id: unknown): void { applyTheme(this, id); this.skipRender(); }
 }
 
 /** `.ts`, `.mts`, `.js`, `.mjs` modules of a folder and its subfolders, in alphabetical path order. */
@@ -4913,8 +5157,11 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     useInfolistsColorManager(sharedColors);
     // View components (<x-badge>, <x-button>…) use the same colors.
     useUiColorManager(sharedColors);
-    // HTML rendered by an infolist entry is sanitized through the rich editor schema, which only keeps its own tags.
-    useHtmlSanitizer((html) => richDocumentToHtml(richHtmlToDocument(html)) ?? '');
+    // HTML rendered by an infolist entry is sanitized through the rich editor schema, which only keeps its own tags, unless
+    // the application configured the sanitizer (`useHtmlSanitizerConfig()`).
+    useHtmlSanitizer((html) => (hasCustomHtmlSanitizerConfig() ? sanitizeHtml(html) : richDocumentToHtml(richHtmlToDocument(html)) ?? ''));
+    // `postToUrl()` actions post the CSRF token of the request.
+    useActionsCsrfToken((ctx) => { const request = (ctx.livewire as any)?._ctx as PanelContext | undefined; return request?.req && request.res ? csrfToken(request.req, request.res) : null; });
     views.share({ assetUrl: (file: string) => panel.assetUrl(file) });
     for (const plugin of panel.getPlugins()) plugin.boot?.(panel);
     for (const { assets, packageName } of panel.getAssets()) NavetteAsset.register(assets, packageName, { panel: panel.getId() });
@@ -4978,8 +5225,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     if (TenantRegistration) runtime.register(name('tenancy.registration'), TenantRegistration as any);
     const TenantProfile = panel.getTenantProfilePage();
     if (TenantProfile && !panel.getPages().includes(TenantProfile)) panel.pages([TenantProfile]);
-    runtime.register(name('sidebar'), Sidebar);
-    runtime.register(name('topbar'), Topbar);
+    runtime.register(name('sidebar'), panel.getSidebarLivewireComponent());
+    runtime.register(name('topbar'), panel.getTopbarLivewireComponent());
     runtime.register(name('simple-user-menu'), SimpleUserMenu);
     runtime.register(name('global-search'), GlobalSearch);
     runtime.register(name('database-notifications'), DatabaseNotifications);
@@ -5000,6 +5247,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // A panel on its own domains: other hosts go to the next routes (another panel, the application).
     const domains = panel.getDomains();
     if (domains.length) router.use((req, _res, next) => next(domains.includes(req.hostname) ? undefined : 'router'));
+    // CSP nonce set before the panel (`useCspNonce(res, nonce)`): every inline script and style of the panel carries it.
+    router.use((_req, res, next) => { let nonce: string | null; try { nonce = getResponseCspNonce(res); } catch (error) { return next(error); } runWithCspNonce(nonce, () => next()); });
     router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
     // Navette's own front-end files.
     router.use(express.static(dir('../dist/navette')));
@@ -5008,15 +5257,36 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // `bootUsing()`: before every request of the panel (its pages, their updates).
     const panelBase = panel.getBaseUrl();
     const belongsToPanel = (path: string) => panelBase === '/' || path === panelBase || path.startsWith(`${panelBase}/`) || path.startsWith(`${livewire}/`);
+    // `panel.middleware()`: every request of the panel but component updates (only the persistent ones run there). A
+    // nonce they set with `useCspNonce()` applies to the rest of the request.
+    router.use((req, res, next) => {
+        if (!belongsToPanel(req.path) || req.path.startsWith(`${livewire}/`)) return next();
+        applyPanelMiddleware(middlewareFor(panel.getMiddleware(), 'page'), req, res).then((carryOn) => {
+            if (!carryOn) return;
+            let nonce: string | null;
+            try { nonce = getResponseCspNonce(res) ?? cspNonce(); } catch (error) { return next(error); }
+            runWithCspNonce(nonce, () => next());
+        }, next);
+    });
     router.use((req, _res, next) => { if (!belongsToPanel(req.path)) return next(); panel.boot(req).then(() => next(), next); });
-    // SPA prefetching: links load their page as soon as they are hovered.
-    const prefetch = (html: string): string => (panel.hasSpaPrefetching() ? html.replace(/ wire:navigate(?=[\s>/])/g, ' wire:navigate.hover') : html);
+    // SPA mode: `wire:navigate` only on links to the application's pages outside `spaUrlExceptions()`; with prefetching, `wire:navigate.hover`.
+    const spaLinks = (html: string, req: Request): string => (panel.hasSpaMode() ? rewriteSpaLinks(html, { exceptions: panel.getSpaUrlExceptions(), prefetch: panel.hasSpaPrefetching(), origin: panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}` }) : html);
+    /** `authMiddleware()` and `tenantMiddleware()` of a request whose user (and tenant) are known; `false` once one answered. */
+    const runAccessMiddleware = async (req: Request, res: Response, ctx: PanelContext, kind: 'page' | 'component'): Promise<boolean> => {
+        res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };
+        if (ctx.user && !(await applyPanelMiddleware(middlewareFor(panel.getAuthMiddleware(), kind), req, res))) return false;
+        if (ctx.tenant && !(await applyPanelMiddleware(middlewareFor(panel.getTenantMiddleware(), kind), req, res))) return false;
+        return true;
+    };
     // An update's tenant is the one of the page sending it (from the signed snapshot URL), if the user is a member.
     const wireContext = async (req: Request, res: Response): Promise<PanelContext> => {
         const ctx = await context(req, res);
         let path = '';
         try { path = String(JSON.parse(req.body?.components?.[0]?.snapshot ?? '{}')?.memo?.path ?? ''); } catch { path = ''; }
         ctx.tenant = await tenantFromPath(path, ctx.user, req.hostname);
+        // Persistent middleware (`middleware([...], true)`, `authMiddleware([...], true)`…) run on component updates too.
+        res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };
+        if (!(await applyPanelMiddleware(middlewareFor(panel.getMiddleware(), 'component'), req, res)) || !(await runAccessMiddleware(req, res, ctx, 'component'))) throw new WireError(499, 'Answered by a panel middleware.');
         return ctx;
     };
     // Broadcast stream of the signed-in user (`panel.broadcasting()`): only their own channel, for a tenant they belong to.
@@ -5053,11 +5323,11 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         try { return pageComponents.get(String(JSON.parse(req.body?.components?.[0]?.snapshot ?? '{}')?.memo?.name ?? '')) ?? null; } catch { return null; }
     };
     router.use(wireRouter(runtime, livewire, wireContext, async (ctx: PanelContext, _req, res, handle) => {
-        const { result, pending } = await withRequestConfiguration(updatedPage(ctx.req), () => runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle))));
-        if (panel.hasSpaPrefetching()) {
+        const { result, pending } = await runWithCspNonce(getResponseCspNonce(res) ?? cspNonce(), () => withRequestConfiguration(updatedPage(ctx.req), () => runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle)))));
+        if (panel.hasSpaMode()) {
             for (const component of result.components as { effects: Record<string, any> }[]) {
-                if (typeof component.effects.html === 'string') component.effects.html = prefetch(component.effects.html);
-                for (const [key, html] of Object.entries(component.effects.partials ?? {})) if (typeof html === 'string') component.effects.partials[key] = prefetch(html);
+                if (typeof component.effects.html === 'string') component.effects.html = spaLinks(component.effects.html, ctx.req);
+                for (const [key, html] of Object.entries(component.effects.partials ?? {})) if (typeof html === 'string') component.effects.partials[key] = spaLinks(html, ctx.req);
             }
         }
         if (pending.length) {
@@ -5089,7 +5359,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         const hasNavigation = panel.hasNavigation();
         const body = options.layout === 'simple'
             ? views.render('filament-panels::layout.simple', {
-                slot, renderHookScopes,
+                slot, renderHookScopes, maxContentWidth: (mounted.component.constructor as any).maxContentWidth ?? panel.getSimplePageMaxContentWidth() ?? 'lg',
                 header: panel.hasTopbar() && ctx.user ? (await runtime.mount(name('simple-user-menu'), {}, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-0" ') : null,
             })
             : views.render('filament-panels::layout.index', {
@@ -5099,14 +5369,17 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
                 sidebar: hasNavigation ? (await runtime.mount(name('sidebar'), { path: req.path }, request)).replace(/^s*<div /, '<div wire:key="lw-1-1-1" ') : '',
             });
         const bodyClass = options.layout === 'index' ? cls([{ 'fi-body-has-navigation': hasNavigation, 'fi-body-has-sidebar-collapsible-on-desktop': panel.isSidebarCollapsibleOnDesktop(), 'fi-body-has-sidebar-fully-collapsible-on-desktop': panel.isSidebarFullyCollapsibleOnDesktop(), 'fi-body-has-topbar': panel.hasTopbar(), 'fi-body-has-top-navigation': panel.hasTopNavigation() }]) || null : null;
-        res.send(prefetch(views.render('filament-panels::layout.base', {
+        // Failed component requests show a notification (not in development, where the error dialog helps).
+        const errorNotifications = process.env.NODE_ENV === 'development' ? null : typeof (mounted.component as any).getErrorNotifications === 'function' ? (mounted.component as any).getErrorNotifications() : panel.hasErrorNotifications() ? panel.getErrorNotifications() : null;
+        res.send(spaLinks(views.render('filament-panels::layout.base', {
+            sidebarWidth: panel.getSidebarWidth(), collapsedSidebarWidth: panel.getCollapsedSidebarWidth(), errorNotifications,
             renderHookScopes, title: options.title, brandName: panel.getBrandName(), favicon: panel.getFavicon(), theme: panel.getTheme(), motion: panel.hasMotion(), securityKeys: panel.usesSecurityKeys(), panelId: panel.getId(), font: panel.resolveTheme(req)?.font ? { ...panel.getFont(), ...fontOf(panel.resolveTheme(req)!.font!) } : panel.getFont(), themeCss: panel.resolveTheme(req)?.css ?? '',
             bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
             assetStyles: NavetteAsset.renderStyles(null, { panel: panel.getId() }), assetScripts: NavetteAsset.renderScripts(null, { panel: panel.getId(), spa: panel.hasSpaMode() }), scriptData: NavetteAsset.renderScriptData(null, { panel: panel.getId() }),
             broadcasting: panel.hasBroadcasting() && ctx.user ? { url: panel.getBroadcastingUrl(ctx.tenant ?? null) } : null,
-        })));
+        }), req));
     };
     /** Page access errors: 404 and 403 are answered directly, anything else is rethrown. */
     const guarded = async (res: Response, render: () => Promise<void>) => {
@@ -5134,6 +5407,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             if (!options.beforeMultiFactorSetUp && (await panel.mustSetUpMultiFactorAuthentication(ctx.user))) return res.redirect(panel.getSetUpRequiredMultiFactorAuthenticationUrl());
             // Full layout in a multi-tenant panel: the navigation links to the user's first tenant.
             if (layout === 'index' && panel.hasTenancy()) ctx.tenant = (await panel.getTenantProvider().getTenants(ctx.user))[0] ?? null;
+            if (!(await runAccessMiddleware(req, res, { ...ctx, tenant: null }, 'page'))) return;
             await guarded(res, () => document(req, res, ctx, { title, component, layout }));
         });
     };
@@ -5142,6 +5416,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     router.get(panel.getBaseUrl('downloads/:token'), async (req, res) => {
         const ctx = await context(req, res);
         if (!ctx.user || ctx.denied) return forbidden(req, res);
+        if (!(await runAccessMiddleware(req, res, ctx, 'page'))) return;
         const file = panel.getDownloads().get(String(req.params.token), ctx.user.id);
         if (!file) return renderErrorPage(panel, req, res, 404);
         res.setHeader('Content-Type', file.type);
@@ -5232,6 +5507,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             ctx.tenant = await tenantFromPath(req.path, ctx.user, req.hostname);
             if (!ctx.tenant) { renderErrorPage(panel, req, res, 404); return null; }
         }
+        if (!(await runAccessMiddleware(req, res, ctx, 'page'))) return null;
         return ctx;
     };
     // The tenant's segment in page routes: none on tenant domains, `<prefix>/:tenant/` with a route prefix.

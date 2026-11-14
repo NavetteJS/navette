@@ -16,7 +16,7 @@
         </title>
 
         <%- renderHook('panels::styles.before', renderHookScopes) %>
-        <style>
+        <style<%- cspNonceAttribute() %>>
             [x-cloak=''],
             [x-cloak='x-cloak'],
             [x-cloak='1'] {
@@ -53,13 +53,13 @@
             <link href="<%= font.url %>" rel="stylesheet" />
         <% } %>
 
-        <style>
+        <style<%- cspNonceAttribute() %>>
             :root {
                 --font-family: '<%- font.family %>';
                 --font-family-mono: 'ui-monospace';
                 --font-family-serif: 'ui-serif';
-                --sidebar-width: 20rem;
-                --sidebar-collapsed-width: 4.5rem;
+                --sidebar-width: <%- locals.sidebarWidth ?? '20rem' %>;
+                --sidebar-collapsed-width: <%- locals.collapsedSidebarWidth ?? '4.5rem' %>;
                 --default-theme-mode: system;
             }
 
@@ -70,11 +70,11 @@
 
         <%- renderHook('panels::styles.after', renderHookScopes) %>
         <% if (locals.darkMode === false) { %><% } else if (locals.darkModeForced) { %>
-        <script>
+        <script<%- cspNonceAttribute() %>>
             document.documentElement.classList.add('dark')
         </script>
         <% } else { %>
-        <script>
+        <script<%- cspNonceAttribute() %>>
             const loadDarkMode = () => {
                 window.theme =
                     localStorage.getItem('filament:theme:mode') ?? <%- js(locals.defaultThemeMode ?? 'system') %>
@@ -95,7 +95,7 @@
         </script>
         <% } %>
 
-        <% if (locals.themeCss) { %><style data-navette-theme><%- themeCss %></style><% } %>
+        <% if (locals.themeCss) { %><style<%- cspNonceAttribute() %> data-navette-theme><%- themeCss %></style><% } %>
 
         <% if (locals.motion) { %><link rel="stylesheet" href="<%- assetUrl('navette/motion.css') %>" data-navigate-track /><% } %>
         <link rel="stylesheet" href="<%- assetUrl('navette/calendar.css') %>" data-navigate-track />
@@ -112,35 +112,40 @@
         <%- notifications %>
 
         <%- renderHook('panels::scripts.before', renderHookScopes) %>
-        <script>
+        <script<%- cspNonceAttribute() %>>
             <%- locals.scriptData ?? 'window.filamentData = []' %>
         </script>
+        <% if (locals.errorNotifications) { %>
+        <script<%- cspNonceAttribute() %>>
+            window.filamentErrorNotifications = <%- js(errorNotifications) %>
+        </script>
+        <% } %>
 
         <% if (locals.assetScripts) { %><%- assetScripts %><% } %>
         <% for (const src of ['js/filament/actions/actions.js', 'js/filament/notifications/notifications.js', 'js/filament/schemas/schemas.js', 'js/filament/support/support.js', 'js/filament/tables/tables.js', 'js/filament/filament/echo.js', 'js/filament/filament/app.js']) { %>
-            <script src="<%- assetUrl(src) %>"<% if (locals.spa !== false) { %> data-navigate-once data-navigate-track<% } %>></script>
+            <script<%- cspNonceAttribute() %> src="<%- assetUrl(src) %>"<% if (locals.spa !== false) { %> data-navigate-once data-navigate-track<% } %>></script>
         <% } %>
 
         <% if (locals.broadcasting) { %>
-        <script src="<%- assetUrl('navette/broadcasting.js') %>" data-navigate-once></script>
-        <script>
+        <script<%- cspNonceAttribute() %> src="<%- assetUrl('navette/broadcasting.js') %>" data-navigate-once></script>
+        <script<%- cspNonceAttribute() %>>
             window.navetteBroadcasting.configure(<%- js(broadcasting) %>)
         </script>
         <% } %>
 
-        <style>
+        <style<%- cspNonceAttribute() %>>
             :root {
             }
         </style>
 
-        <script>
+        <script<%- cspNonceAttribute() %>>
             loadDarkMode()
         </script>
 
-        <% if (locals.securityKeys) { %><script src="<%- assetUrl('navette/security-keys.js') %>" data-navigate-once></script><% } %>
+        <% if (locals.securityKeys) { %><script<%- cspNonceAttribute() %> src="<%- assetUrl('navette/security-keys.js') %>" data-navigate-once></script><% } %>
         <%- wireScripts %>
         <%- renderHook('panels::scripts.after', renderHookScopes) %>
         <%- renderHook('panels::body.end', renderHookScopes) %>
-        <% if (locals.motion) { %><script src="<%- assetUrl('navette/motion.js') %>" data-navigate-once defer></script><% } %>
+        <% if (locals.motion) { %><script<%- cspNonceAttribute() %> src="<%- assetUrl('navette/motion.js') %>" data-navigate-once defer></script><% } %>
     </body>
 </html>

@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import type { Request, Response, NextFunction } from 'express';
-import { e } from '@navette-js/support';
+import { cspNonce, cspNonceAttribute, e } from '@navette-js/support';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}(?:\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}){0,9}$/;
 const PACKAGE = /^@?[a-z0-9][a-z0-9._-]{0,99}(?:\/[a-z0-9][a-z0-9._-]{0,99})?$/;
@@ -112,6 +112,8 @@ export class Js extends Asset {
         if (this.htmlValue?.includes('<script')) return this.htmlValue;
         const attributes = [
             `src="${e(this.htmlValue ?? this.getSrc())}"`,
+            // A strict Content-Security-Policy: the request's nonce (`useCspNonce()`).
+            cspNonce() ? `nonce="${cspNonce()}"` : null,
             this.isAsyncFlag ? 'async' : null, this.isDeferredFlag ? 'defer' : null, this.isModuleFlag ? 'type="module"' : null,
             ...Object.entries(this.extraAttributesValue).map(([name, value]) => `${name}="${e(String(value))}"`),
             spa && this.isNavigateOnceFlag ? 'data-navigate-once' : null, spa ? 'data-navigate-track' : null,
@@ -203,7 +205,7 @@ export class AssetManager {
     renderStyles(packages: string[] | null = null, options: { panel?: string | null } = {}): string {
         const links = this.getStyles(packages, options.panel ?? null).filter((asset) => !asset.isLoadedOnRequest()).map((asset) => asset.getHtml());
         const variables = Object.entries(this.getCssVariables(packages, options.panel ?? null)).map(([name, value]) => cssVariable(name, value)).filter(Boolean);
-        return [...links, variables.length ? `<style>:root{${variables.join('')}}</style>` : ''].filter(Boolean).join('\n');
+        return [...links, variables.length ? `<style${cspNonceAttribute()}>:root{${variables.join('')}}</style>` : ''].filter(Boolean).join('\n');
     }
     /** Scripts loaded on every page (core scripts last with `withCore`). */
     renderScripts(packages: string[] | null = null, options: { withCore?: boolean; panel?: string | null; spa?: boolean } = {}): string {

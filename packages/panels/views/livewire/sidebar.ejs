@@ -5,8 +5,8 @@
 <% const sidebarTransition = isSidebarCollapsibleOnDesktop ? ` x-show="$store.sidebar.isOpen"${transition}` : ''; %>
 <%# One item, with its child items below it when it has no URL, is active, or one of them is. %>
 <% const sidebarItem = (item, { grouped, subGrouped = false, first, last }) => { %>
-                                <li class="<%- cls(['fi-sidebar-item', { 'fi-active': item.isActive, 'fi-sidebar-item-has-active-child-items': item.activeChildItems, 'fi-sidebar-item-has-url': Boolean(item.url) }]) %>">
-                                    <a<% if (item.url) { %> href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% } %><% if (item.isActive) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()"<% if (isSidebarCollapsibleOnDesktop) { %> x-bind:aria-label="$store.sidebar.isOpen ? null : <%= js(item.label) %>" x-data="filamentSidebarTooltip" x-tooltip="getTooltip({ content: <%= js(item.label) %>, allowHTML: false, })"<% } %> class="fi-sidebar-item-btn">
+                                <li<% if (item.extraAttributes) { %> <%- item.extraAttributes %><% } %> class="<%- cls(['fi-sidebar-item', { 'fi-active': item.isActive, 'fi-sidebar-item-has-active-child-items': item.activeChildItems, 'fi-sidebar-item-has-url': Boolean(item.url) }]) %>">
+                                    <a<% if (item.url) { %> href="<%= item.url %>"<% if (item.newTab) { %> target="_blank"<% } else if (spa) { %> wire:navigate<% } %><% } %><% if (item.isActive) { %> aria-current="page"<% } %> x-on:click="$store.sidebar.isMobile && $store.sidebar.close()"<% if (isSidebarCollapsibleOnDesktop) { %> x-bind:aria-label="$store.sidebar.isOpen ? null : <%= js(item.label) %>" x-data="filamentSidebarTooltip" x-tooltip="getTooltip({ content: <%= js(item.isHtmlLabel ? item.labelHtml : item.label) %>, allowHTML: <%= item.isHtmlLabel ? 'true' : 'false' %>, })"<% } %> class="fi-sidebar-item-btn">
                                         <% if (item.icon && (!subGrouped || isSidebarCollapsibleOnDesktop)) { %><%- icon(item.icon, { size: 'lg', attributes: attrs({ class: 'fi-sidebar-item-icon', 'x-show': subGrouped ? '! $store.sidebar.isOpen' : false }) }) %><% } %>
                                         <% if ((!item.icon && grouped) || subGrouped) { %>
                                             <div<% if (item.icon && subGrouped && isSidebarCollapsibleOnDesktop) { %> x-show="$store.sidebar.isOpen"<% } %> class="fi-sidebar-item-grouped-border">
@@ -16,11 +16,11 @@
                                             </div>
                                         <% } %>
                                         <span<%- sidebarTransition %> class="fi-sidebar-item-label">
-                                            <%= item.label %>
+                                            <%- item.labelHtml %>
                                         </span>
                                         <% if (item.badge !== null) { %>
                                             <span<%- sidebarTransition %> class="fi-sidebar-item-badge-ctn">
-                                                <%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %>
+                                                <%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses, tooltip: item.badgeTooltip }) %>
                                             </span>
                                         <% } %>
                                     </a>
@@ -73,12 +73,12 @@
             <%- renderHook('panels::sidebar.nav.start') %>
             <ul class="fi-sidebar-nav-groups">
                 <% for (const group of groups) { %>
-                    <li x-data="{ label: <%- js(group.label ?? '') %> }" data-group-label="<%= group.label ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }" class="<%- cls(['fi-sidebar-group', { 'fi-active': group.isActive, 'fi-collapsible': group.collapsible !== false }]) %>">
+                    <li x-data="{ label: <%- js(group.key ?? '') %> }" data-group-label="<%= group.key ?? '' %>" x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }"<% if (group.extraSidebarAttributes) { %> <%- group.extraSidebarAttributes %><% } %> class="<%- cls(['fi-sidebar-group', { 'fi-active': group.isActive, 'fi-collapsible': group.collapsible !== false }]) %>">
                         <% if (group.label) { %>
                             <div<% if (group.collapsible !== false) { %> x-on:click="$store.sidebar.toggleCollapsedGroup(label)"<% } %><%- sidebarTransition %> class="fi-sidebar-group-btn">
                                 <% if (group.icon) { %><%- icon(group.icon, { size: 'lg' }) %><% } %>
                                 <span class="fi-sidebar-group-label">
-                                    <%= group.label %>
+                                    <%- group.labelHtml %>
                                 </span>
                                 <% if (group.collapsible !== false) { %><%- view('filament::components.icon-button', {
                                     iconName: 'm-chevron-up', iconAlias: 'panels::sidebar.group.collapse-button', label: group.label, className: 'fi-sidebar-group-collapse-btn',
@@ -89,19 +89,19 @@
                         <% if (group.lists) { %>
                             <div x-data="filamentDropdown({ isMenu: true })" x-show="! $store.sidebar.isOpen" class="fi-dropdown">
                                 <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
-                                    <button aria-label="<%= group.label %>" x-data="filamentSidebarTooltip" x-tooltip="getTooltip({ content: <%= js(group.label) %>, allowHTML: false, })" class="fi-sidebar-group-dropdown-trigger-btn">
+                                    <button aria-label="<%= group.label %>" x-data="filamentSidebarTooltip" x-tooltip="getTooltip({ content: <%= js(group.isHtmlLabel ? group.labelHtml : group.label) %>, allowHTML: <%= group.isHtmlLabel ? 'true' : 'false' %>, })" class="fi-sidebar-group-dropdown-trigger-btn">
                                         <%- icon(group.icon, { size: 'lg' }) %>
                                     </button>
                                 </div>
                                 <div x-cloak x-float.placement.<%= t('filament-panels::layout.direction') === 'rtl' ? 'left-start' : 'right-start' %>.flip.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel " style="">
                                     <div class="fi-dropdown-header">
                                         <span>
-                                            <%= group.label %>
+                                            <%- group.labelHtml %>
                                         </span>
                                     </div>
                                     <% for (const list of group.lists) { %>
                                         <div class="fi-dropdown-list">
-                                            <% for (const item of list) { %><a href="<%= item.url %>"<% if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %> class="<%- cls(['fi-dropdown-list-item', ...item.colorClasses]) %>" role="menuitem" tabindex="-1"><% if (item.icon) { %><%- icon(item.icon, item.isActive ? { attributes: attrs({ class: 'fi-color fi-color-primary' }) } : {}) %><% } %><span class="fi-dropdown-list-item-label"><%= item.label %></span><% if (item.badge !== null) { %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses }) %><% } %></a><% } %>
+                                            <% for (const item of list) { %><a href="<%= item.url %>"<% if (item.newTab) { %> target="_blank"<% } else if (spa) { %> wire:navigate<% } %><% if (item.isActive) { %> aria-current="page"<% } %><% if (item.extraAttributes) { %> <%- item.extraAttributes %><% } %> class="<%- cls(['fi-dropdown-list-item', ...item.colorClasses]) %>" role="menuitem" tabindex="-1"><% if (item.icon) { %><%- icon(item.icon, item.isActive ? { attributes: attrs({ class: 'fi-color fi-color-primary' }) } : {}) %><% } %><span class="fi-dropdown-list-item-label"><%- item.labelHtml %></span><% if (item.badge !== null) { %><%- view('filament::components.badge', { label: item.badge, colorClasses: item.badgeColorClasses, tooltip: item.badgeTooltip }) %><% } %></a><% } %>
                                         </div>
                                     <% } %>
                                 </div>
@@ -114,14 +114,14 @@
                 <% } %>
             </ul>
 
-            <script>
+            <script<%- cspNonceAttribute() %>>
                 if (! window.Alpine?.store('sidebar')) {
                     let collapsedGroups = JSON.parse(
                         localStorage.getItem('filament:sidebar:collapsed_groups'),
                     )
 
                     if (collapsedGroups === null || collapsedGroups === 'null') {
-                        collapsedGroups = []
+                        collapsedGroups = <%- js(groups.filter((group) => group.collapsed && group.label).map((group) => group.key)) %>
 
                         localStorage.setItem(
                             'filament:sidebar:collapsed_groups',
@@ -156,7 +156,5 @@
         <%- renderHook('panels::sidebar.footer') %>
     </div>
 
-    <div wire:partial="action-modals" x-data="filamentActionModals({
-                    livewireId: <%- js(livewireId) %>,
-                })" style="height: 0"></div>
+    <%- actionModals %>
 </div>
