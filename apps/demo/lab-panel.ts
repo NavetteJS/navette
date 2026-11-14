@@ -220,6 +220,20 @@ class LabFields extends Resource {
                 FileUpload.make('logo').avatar().imageEditor().imageEditorAspectRatioOptions(['1:1', '4:3', null]).dehydrated(false),
                 FileUpload.make('gallery').multiple().image().panelLayout('grid').reorderable().imageDimensions({ minWidth: 200 }).dehydrated(false),
             ]).columnSpanFull().columns(2),
+            // File upload options. Left out of the parity screenshots.
+            ...(process.env.NAVETTE_NO_THEMES ? [] : [
+                Section.make('Upload options').schema([
+                    // Saved in the `seo_description` column: moved from the temporary folder, listed without reading the file.
+                    FileUpload.make('seo_description').label('Brand sheet').image()
+                        .directory(({ operation }) => `lab-brands/${operation}`).moveFiles().fetchFileInformation(false)
+                        .openable().downloadable()
+                        .getOpenableFileUrlUsing((file) => `/storage/${file}?view=open`)
+                        .getDownloadableFileUrlUsing((file) => `/storage/${file}?view=download`),
+                    // Validated but not saved (no column): a crop editor opens for images that are not 16:9.
+                    FileUpload.make('banner').image().imageAspectRatio('16:9').automaticallyOpenImageEditorForAspectRatio().saveRelationshipsUsing(() => {}),
+                    FileUpload.make('documents').multiple().minFiles(({ operation }) => (operation === 'create' ? 2 : null)).maxFiles(({ get }) => (get('name') === 'Many' ? 4 : 3)).image().saveRelationshipsUsing(() => {}),
+                ]).columnSpanFull().columns(2),
+            ]),
             Repeater.make('contacts').schema([TextInput.make('name').required(), TextInput.make('email').email()]).columns(2)
                 .itemLabel(({ state }) => (state.name as string) || null).collapsible().cloneable().reorderableWithButtons().defaultItems(1).columnSpanFull().dehydrated(false)
                 // Item actions: a confirmed delete, "Insert between", and an extra action that validates its item.
