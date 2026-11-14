@@ -176,6 +176,21 @@ The restrictions set with `addable(false)`, `deletable(false)`, `editableKeys(fa
 - With `editableKeys(false)`, the keys of that value are kept, in their order.
 - With `editableValues(false)`, the values of that value are kept, and a row with a new key gets a `null` value.
 
-<Aside variant="warning">
-Customizing the add, delete and reorder action objects (`addAction()`, `deleteAction()`, `reorderAction()`) is not available yet.
-</Aside>
+## Customizing the key-value action objects
+
+This field uses action objects for easy customization of buttons within it. You can customize these buttons by passing a function to an action registration method. The function receives the `Action` object, which you can use to [customize it](/actions/overview). The following methods are available to customize the actions:
+
+- `addAction()`
+- `deleteAction()`
+- `reorderAction()`
+
+Here is an example of how you might customize an action:
+
+```ts
+import { KeyValue } from '@navette-js/forms';
+
+KeyValue.make('meta')
+    .deleteAction((action) => action.icon('m-x-mark'))
+```
+
+Rows are added, deleted and moved in the browser, so these actions accept a label, an icon, a color and visibility, but no modal. Hiding the add or delete action removes the button only: use `addable(false)` or `deletable(false)` to have the server refuse the change too.

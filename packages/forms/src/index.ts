@@ -3,7 +3,9 @@ import { Attributes, HtmlString, cls, e, evaluate, icon, js, sanitizeHtml, views
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
 import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem } from '@navette-js/schemas';
-import { Action } from '@navette-js/actions';
+import { Action, ActionHalt } from '@navette-js/actions';
+import { colorClassesOf, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
+export { modifyAction, type ActionModifier } from './item-actions.ts';
 import { loadingIndicator } from '@navette-js/support';
 import { randomUUID } from 'node:crypto';
 import { generateHTML, generateJSON } from '@tiptap/html/server';
@@ -895,6 +897,7 @@ export class TableColumn {
 const ITEM_KEY = /^[A-Za-z0-9_-]{1,64}$/;
 const isItemKey = (key: string) => ITEM_KEY.test(key) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype';
 type ItemLink = { label: string; icon: string; url: string };
+type RepeaterActionName = 'add' | 'addBetween' | 'clone' | 'delete' | 'moveUp' | 'moveDown' | 'reorder' | 'collapse' | 'expand' | 'collapseAll' | 'expandAll';
 
 /**
  * List of repeated items sharing the same fields: stacked cards (default), a table (`table()`), or one field per item (`simple()`).
@@ -1086,7 +1089,62 @@ export class Repeater extends Field {
         if (removed.length) await related.query().whereIn(related.idColumn, removed.map((id) => existing.get(id)[related.idColumn])).delete();
     }
 
-    getActions(): Action[] {
+    // ---- actions
+    private _actionModifiers: Partial<Record<RepeaterActionName, ActionModifier>> = {};
+    private _extraItemActions: Action[] = [];
+    private _addBetweenLabel: string | null = null;
+    /** Customizes the "Add" button (label, icon, color, confirmation modal...). */
+    addAction(modify: ActionModifier): this { this._actionModifiers.add = modify; return this; }
+    /**
+     * "Insert between" button between two items, hidden by default: make it visible with `(action) => action.visible()`
+     * (or pass `true`). The new item is inserted after the item whose key is sent as `afterItem`.
+     */
+    addBetweenAction(modify: ActionModifier | boolean = true): this { this._actionModifiers.addBetween = typeof modify === 'boolean' ? (modify ? (action) => action.visible() : null) : modify; return this; }
+    addBetweenActionLabel(label: string | null): this { this._addBetweenLabel = label; return this; }
+    cloneAction(modify: ActionModifier): this { this._actionModifiers.clone = modify; return this; }
+    deleteAction(modify: ActionModifier): this { this._actionModifiers.delete = modify; return this; }
+    moveUpAction(modify: ActionModifier): this { this._actionModifiers.moveUp = modify; return this; }
+    moveDownAction(modify: ActionModifier): this { this._actionModifiers.moveDown = modify; return this; }
+    /** Drag and drop: the action runs when a drag changes the order (it may require a confirmation). */
+    reorderAction(modify: ActionModifier): this { this._actionModifiers.reorder = modify; return this; }
+    /** Collapse / expand buttons (handled in the browser: label, icon and color only, no modal). */
+    collapseAction(modify: ActionModifier): this { this._actionModifiers.collapse = modify; return this; }
+    expandAction(modify: ActionModifier): this { this._actionModifiers.expand = modify; return this; }
+    collapseAllAction(modify: ActionModifier): this { this._actionModifiers.collapseAll = modify; return this; }
+    expandAllAction(modify: ActionModifier): this { this._actionModifiers.expandAll = modify; return this; }
+    /**
+     * Actions added to each item's header. They receive the item key as `arguments.item`, checked on the server (an unknown
+     * key is refused), and the repeater as `component`: `component.getItemState(arguments.item)` validates the item.
+     */
+    extraItemActions(actions: Action[]): this { this._extraItemActions.push(...actions); return this; }
+    getExtraItemActions(): Action[] { return this._extraItemActions.map(prepareExtraItemAction); }
+    /** Raw state of an item (unvalidated), or `null` for an unknown key. */
+    getRawItemState(key: unknown): Record<string, unknown> | null { const items = this.getItems(); return typeof key === 'string' && Object.hasOwn(items, key) ? items[key] : null; }
+    private itemSchema(key: unknown): Schema | null { const keys = Object.keys(this.getItems()); const index = typeof key === 'string' ? keys.indexOf(key) : -1; return index < 0 ? null : this.getChildSchemas()[index]; }
+    /** State of an item as it would be saved, without validating it. */
+    async getItemStateSnapshot(key: unknown): Promise<Record<string, unknown> | null> { const schema = this.itemSchema(key); return schema ? getSchemaState(schema) : null; }
+    /**
+     * Validated state of an item. If the item is invalid, its errors are shown in the form and the running action is
+     * cancelled (its modal closes).
+     */
+    async getItemState(key: unknown): Promise<Record<string, unknown>> {
+        const schema = this.itemSchema(key);
+        if (!schema) throw new ActionHalt(true);
+        const errors = await validateSchema(schema);
+        if (Object.keys(errors).length) { Object.assign(((this.livewire as any)._errors ??= {}), errors); throw new ActionHalt(true); }
+        return getSchemaState(schema);
+    }
+    /** Item actions receive keys from the browser: an action about an item needs an existing item. */
+    authorizeActionArguments(name: string, args: Record<string, unknown>): boolean {
+        const items = this.getItems();
+        const has = (key: unknown) => typeof key === 'string' && Object.hasOwn(items, key);
+        if (name === 'addBetween') return has(args.afterItem);
+        if (['delete', 'clone', 'moveUp', 'moveDown'].includes(name) || this._extraItemActions.some((action) => action.getName() === name)) return has(args.item);
+        return true;
+    }
+    private repeaterAction(name: RepeaterActionName): Action {
+        const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.actions.${key}`, replace);
+        const insertAfter = (items: Record<string, Record<string, unknown>>, after: string, key: string, item: Record<string, unknown>) => Object.fromEntries(Object.entries(items).flatMap(([k, v]) => (k === after ? [[k, v], [key, item]] : [[k, v]])));
         const move = (offset: number) => ({ arguments: args }: { arguments: Record<string, unknown> }) => {
             if (!this.canMove()) return;
             const items = this.getItems();
@@ -1097,34 +1155,83 @@ export class Repeater extends Field {
             [keys[from], keys[to]] = [keys[to], keys[from]];
             this.setItems(Object.fromEntries(keys.map((key) => [key, items[key]])));
         };
-        const insertAfter = (items: Record<string, Record<string, unknown>>, after: string, key: string, item: Record<string, unknown>) => Object.fromEntries(Object.entries(items).flatMap(([k, v]) => (k === after ? [[k, v], [key, item]] : [[k, v]])));
+        let action: Action;
+        switch (name) {
+            case 'add': action = Action.make('add').label(async () => this._addActionLabel ?? tr('add.label', { label: String((await this.getLabel()) ?? '').toLowerCase() })).color('gray').size('sm')
+                .action(() => { const items = this.getItems(); if (!this._addable || Object.keys(items).length >= this._maxItems) return; items[randomUUID()] = this.itemDefaults(); this.setItems(items); }); break;
+            case 'addBetween': action = Action.make('addBetween').label(() => this._addBetweenLabel ?? tr('add_between.label')).color('gray').size('sm').visible(false)
+                .action(({ arguments: args }) => {
+                    const items = this.getItems();
+                    if (!this._addable || Object.keys(items).length >= this._maxItems || typeof args.afterItem !== 'string' || !Object.hasOwn(items, args.afterItem)) return;
+                    this.setItems(insertAfter(items, args.afterItem, randomUUID(), this.itemDefaults()));
+                }); break;
+            case 'delete': action = Action.make('delete').label(tr('delete.label')).icon('m-trash').color('danger').iconButton().size('sm')
+                .action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!this._deletable || !Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }); break;
+            case 'clone': action = Action.make('clone').label(tr('clone.label')).icon('m-square-2-stack').color('gray').iconButton().size('sm')
+                .action(({ arguments: args }) => {
+                    const items = this.getItems();
+                    const key = String(args.item);
+                    if (!this._cloneable || !Object.hasOwn(items, key) || Object.keys(items).length >= this._maxItems) return;
+                    this.setItems(insertAfter(items, key, randomUUID(), JSON.parse(JSON.stringify(items[key]))));
+                }); break;
+            case 'moveUp': action = Action.make('moveUp').label(tr('move_up.label')).icon('m-arrow-up').color('gray').iconButton().size('sm').action(move(-1)); break;
+            case 'moveDown': action = Action.make('moveDown').label(tr('move_down.label')).icon('m-arrow-down').color('gray').iconButton().size('sm').action(move(1)); break;
+            // Drag and drop: the browser sends the new order, only accepted if it is a permutation of the existing keys.
+            case 'reorder': action = Action.make('reorder').label(tr('reorder.label')).icon('m-arrows-up-down').color('gray').iconButton().size('sm')
+                .action(({ arguments: args }) => {
+                    if (!this.canDrag()) return;
+                    const items = this.getItems();
+                    const keys = Object.keys(items);
+                    const order = Array.isArray(args.items) ? args.items.map(String) : [];
+                    if (order.length !== keys.length || new Set(order).size !== keys.length || !order.every((key) => Object.hasOwn(items, key))) return;
+                    this.setItems(Object.fromEntries(order.map((key) => [key, items[key]])));
+                }); break;
+            case 'collapse': action = Action.make('collapse').label(tr('collapse.label')).icon('m-chevron-up').color('gray').iconButton().size('sm'); break;
+            case 'expand': action = Action.make('expand').label(tr('expand.label')).icon('m-chevron-down').color('gray').iconButton().size('sm'); break;
+            case 'collapseAll': action = Action.make('collapseAll').label(tr('collapse_all.label')).color('gray').link().size('sm'); break;
+            case 'expandAll': action = Action.make('expandAll').label(tr('expand_all.label')).color('gray').link().size('sm'); break;
+        }
+        return modifyAction(action, this._actionModifiers[name]);
+    }
+
+    getActions(): Action[] {
         return [
             ...this.getHintActions(),
-            Action.make('add').action(() => { const items = this.getItems(); if (!this._addable || Object.keys(items).length >= this._maxItems) return; items[randomUUID()] = this.itemDefaults(); this.setItems(items); }),
-            Action.make('delete').action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!this._deletable || !Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }),
-            Action.make('clone').action(({ arguments: args }) => {
-                const items = this.getItems();
-                const key = String(args.item);
-                if (!this._cloneable || !Object.hasOwn(items, key) || Object.keys(items).length >= this._maxItems) return;
-                this.setItems(insertAfter(items, key, randomUUID(), JSON.parse(JSON.stringify(items[key]))));
-            }),
-            Action.make('moveUp').action(move(-1)),
-            Action.make('moveDown').action(move(1)),
-            // Drag and drop: the browser sends the new order, only accepted if it is a permutation of the existing keys.
-            Action.make('reorder').action(({ arguments: args }) => {
-                if (!this.canDrag()) return;
-                const items = this.getItems();
-                const keys = Object.keys(items);
-                const order = Array.isArray(args.items) ? args.items.map(String) : [];
-                if (order.length !== keys.length || new Set(order).size !== keys.length || !order.every((key) => Object.hasOwn(items, key))) return;
-                this.setItems(Object.fromEntries(order.map((key) => [key, items[key]])));
-            }),
+            ...(['add', 'addBetween', 'delete', 'clone', 'moveUp', 'moveDown', 'reorder'] as const).map((name) => this.repeaterAction(name)),
+            ...this.getExtraItemActions(),
         ];
     }
 
     private async itemLabelOf(key: string, index: number, item: Record<string, unknown>): Promise<string | null> {
         const label = typeof this._itemLabel === 'function' ? await this._itemLabel({ state: item, key, index }) : this._itemLabel;
         return label === null || label === undefined || label === '' ? null : String(label);
+    }
+
+    /** The actions resolved for rendering, and the markup helpers shared by the three layouts. */
+    private async renderKit() {
+        const key = this.getKey()!;
+        const ctx = this.context();
+        const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: key };
+        const expression = (action: string, args: Record<string, unknown> | null) => `mountAction(${js(action)}, ${args ? js(args) : '{}'}, ${js(context)})`;
+        const actions = Object.fromEntries((['add', 'addBetween', 'delete', 'clone', 'moveUp', 'moveDown', 'reorder', 'collapse', 'expand', 'collapseAll', 'expandAll'] as const).map((name) => [name, this.repeaterAction(name)])) as Record<RepeaterActionName, Action>;
+        const resolve = (name: RepeaterActionName, args: Record<string, unknown> = {}) => resolveAction(actions[name], ctx, args);
+        const extraItemActions = this.getExtraItemActions();
+        /** Extra item actions of an item, each in its `<li>` (or `wrap`). */
+        const extraHtml = async (itemKey: string, wrap: (html: string) => string = (html) => `<li x-on:click.stop>${html}</li>`) => {
+            const html: string[] = [];
+            for (const action of extraItemActions) {
+                const args = { item: itemKey };
+                action.arguments(args);
+                if (await action.isVisible(itemContext(ctx, args))) html.push(wrap(await action.toHtml(itemContext(ctx, args), context)));
+            }
+            return html;
+        };
+        /** "Add" (and "Insert between") button: Filament's small gray button, with the action's icon and color if changed. */
+        const addButton = (resolved: ResolvedAction, expr: string) => {
+            const iconHtml = resolved.icon ? icon(resolved.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': expr }) }) : '';
+            return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-action', 'fi-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'button', resolved.color, 'gray', [])])}" wire:click="${e(expr)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': expr }), 'sm')}${e(resolved.label)}</button>`;
+        };
+        return { key, ctx, context, expression, actions, resolve, extraHtml, addButton, hasCustomReorderAction: Boolean(this._actionModifiers.reorder) };
     }
 
     async toHtml(): Promise<string> {
@@ -1136,8 +1243,8 @@ export class Repeater extends Field {
         const keys = Object.keys(items);
         const schemas = this.getChildSchemas();
         const tr = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.${name}`, replace);
-        const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: key };
-        const expression = (action: string, args: Record<string, unknown> | null) => `mountAction(${js(action)}, ${args ? js(args) : '{}'}, ${js(context)})`;
+        const kit = await this.renderKit();
+        const { expression, resolve } = kit;
         const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
         const danger = colorManager.getComponentClasses('icon-button', 'danger');
         const gray = colorManager.getComponentClasses('icon-button', 'gray');
@@ -1145,61 +1252,77 @@ export class Repeater extends Field {
             const loading = options.expression ? `${icon(options.icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': options.expression }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': options.expression }))}` : icon(options.icon);
             return `<button title="${e(options.label)}"${options.disabled ? ' aria-disabled="true"' : ''} aria-label="${e(options.label)}"${options.disabled ? ' disabled="disabled"' : ''} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', { 'fi-disabled': options.disabled === true }, 'fi-size-sm', ...(options.colors ?? [])])}"${options.extra ?? ''}${options.expression ? ` wire:click="${e(options.expression)}"` : ''}>${loading}</button>`;
         };
+        const colorsOf = (resolved: ResolvedAction, defaultColor: string, defaultClasses: string[]) => colorClassesOf(colorManager, 'icon-button', resolved.color, defaultColor, defaultClasses);
+        const reorder = await resolve('reorder');
+        const showReorder = this.canDrag() && keys.length > 1 && reorder.visible;
+        const reorderHandle = showReorder ? `<li x-on:click.stop>${button({ label: reorder.label, icon: reorder.icon ?? 'm-arrows-up-down', expression: null, colors: colorsOf(reorder, 'gray', []), extra: ' x-sortable-handle="x-sortable-handle"' })}</li>` : '';
+        const collapse = await resolve('collapse'), expand = await resolve('expand');
         const rows: string[] = [];
         for (const [index, itemKey] of keys.entries()) {
             const isFirst = index === 0, isLast = index === keys.length - 1;
-            const moveButton = (action: 'moveUp' | 'moveDown', label: string, iconName: string, direction: string, disabled: boolean) => {
-                const expr = expression(action, { item: itemKey });
-                return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="fi-sr-only"'}>${button({ label, icon: iconName, expression: expr, disabled, extra: `${this._reorderableWithButtons ? '' : ' tabindex="-1"'} data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}"` })}</li>`;
+            const args = { item: itemKey };
+            const moveButton = async (action: 'moveUp' | 'moveDown', fallbackIcon: string, direction: string, disabled: boolean) => {
+                const resolved = await resolve(action, args);
+                if (!resolved.visible) return '';
+                const expr = expression(action, args);
+                return `<li x-on:click.stop${this._reorderableWithButtons ? '' : ' class="fi-sr-only"'}>${button({ label: resolved.label, icon: resolved.icon ?? fallbackIcon, expression: expr, disabled: disabled || resolved.disabled, colors: colorsOf(resolved, 'gray', []), extra: `${this._reorderableWithButtons ? '' : ' tabindex="-1"'} data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}"` })}</li>`;
             };
+            const moves = this.canMove() && keys.length > 1 ? [await moveButton('moveUp', 'm-arrow-up', 'up', isFirst), await moveButton('moveDown', 'm-arrow-down', 'down', isLast)].filter(Boolean) : [];
+            const clone = await resolve('clone', args), del = await resolve('delete', args);
+            const cloneButton = this._cloneable && clone.visible ? [`<li x-on:click.stop>${button({ label: clone.label, icon: clone.icon ?? 'm-square-2-stack', expression: expression('clone', args), colors: colorsOf(clone, 'gray', gray), disabled: clone.disabled })}</li>`] : [];
+            const deleteButton = this._deletable && del.visible ? [`<li x-on:click.stop>${button({ label: del.label, icon: del.icon ?? 'm-trash', expression: expression('delete', args), colors: colorsOf(del, 'danger', danger), disabled: del.disabled })}</li>`] : [];
+            const extra = await kit.extraHtml(itemKey);
             const content = await schemas[index].toHtml();
             if (this._simple) {
-                const actions = [
-                    ...(this.canDrag() && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
-                    ...(this.canMove() && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
-                    ...(this._cloneable ? [`<li x-on:click.stop>${button({ label: tr('actions.clone.label'), icon: 'm-square-2-stack', expression: expression('clone', { item: itemKey }), colors: gray })}</li>`] : []),
-                    ...(this._deletable ? [`<li x-on:click.stop>${button({ label: tr('actions.delete.label'), icon: 'm-trash', expression: expression('delete', { item: itemKey }), colors: danger })}</li>`] : []),
-                ];
+                const actions = [...(showReorder ? [reorderHandle] : []), ...moves, ...extra, ...cloneButton, ...deleteButton];
                 rows.push(`<li wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}" class="fi-fo-simple-repeater-item"><div class="fi-fo-simple-repeater-item-content">${content}</div>${actions.length ? `<ul class="fi-fo-simple-repeater-item-actions">${actions.join('')}</ul>` : ''}</li>`);
-                continue;
+            } else {
+                const label = await this.itemLabelOf(itemKey, index, items[itemKey]);
+                const start = [...(showReorder ? [reorderHandle] : []), ...moves];
+                const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
+                    .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
+                const end = [
+                    ...links,
+                    ...extra,
+                    ...cloneButton,
+                    ...deleteButton,
+                    ...(this._collapsible ? [`<li class="fi-fo-repeater-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-repeater-item-header-collapse-action">${button({ label: collapse.label, icon: collapse.icon ?? 'm-chevron-up', expression: null, colors: colorsOf(collapse, 'gray', gray) })}</div><div class="fi-fo-repeater-item-header-expand-action">${button({ label: expand.label, icon: expand.icon ?? 'm-chevron-down', expression: null, colors: colorsOf(expand, 'gray', gray) })}</div></li>`] : []),
+                ];
+                const hasHeader = this._itemHeaders && (start.length > 0 || label !== null || end.length > 0);
+                const header = hasHeader ? `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="fi-fo-repeater-item-header">${start.length ? `<ul class="fi-fo-repeater-item-header-start-actions">${start.join('')}</ul>` : ''}${label !== null ? `<${this._headingTag} class="${cls(['fi-fo-repeater-item-header-label', { 'fi-truncated': this._truncateItemLabel }])}">${e(label)}${this._itemNumbers ? ` ${index + 1}` : ''}</${this._headingTag}>` : ''}${end.length ? `<ul class="fi-fo-repeater-item-header-end-actions">${end.join('')}</ul>` : ''}</div>` : '';
+                const itemConfig = { isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `filament:repeater:collapsed:${key}-${itemKey}` : null };
+                rows.push(`<li wire:ignore.self wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-data="item(${e(js(itemConfig))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['fi-fo-repeater-item', { 'fi-fo-repeater-item-has-header': hasHeader }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="fi-fo-repeater-item-content">${content}</div></li>`);
             }
-            const label = await this.itemLabelOf(itemKey, index, items[itemKey]);
-            const start = [
-                ...(this.canDrag() && keys.length > 1 ? [`<li x-on:click.stop>${button({ label: tr('actions.reorder.label'), icon: 'm-arrows-up-down', expression: null, extra: ' x-sortable-handle="x-sortable-handle"' })}</li>`] : []),
-                ...(this.canMove() && keys.length > 1 ? [moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', isFirst), moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', isLast)] : []),
-            ];
-            const links = this._itemLinks.map((resolve) => resolve({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
-                .map((link) => `<li x-on:click.stop><a href="${e(link.url)}" target="_blank" rel="noopener" aria-label="${e(link.label)}" title="${e(link.label)}" class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...gray])}">${icon(link.icon)}</a></li>`);
-            const end = [
-                ...links,
-                ...(this._cloneable ? [`<li x-on:click.stop>${button({ label: tr('actions.clone.label'), icon: 'm-square-2-stack', expression: expression('clone', { item: itemKey }), colors: gray })}</li>`] : []),
-                ...(this._deletable ? [`<li x-on:click.stop>${button({ label: tr('actions.delete.label'), icon: 'm-trash', expression: expression('delete', { item: itemKey }), colors: danger })}</li>`] : []),
-                ...(this._collapsible ? [`<li class="fi-fo-repeater-item-header-collapsible-actions" x-on:click.stop="toggleCollapsed"><div class="fi-fo-repeater-item-header-collapse-action">${button({ label: tr('actions.collapse.label'), icon: 'm-chevron-up', expression: null, colors: gray })}</div><div class="fi-fo-repeater-item-header-expand-action">${button({ label: tr('actions.expand.label'), icon: 'm-chevron-down', expression: null, colors: gray })}</div></li>`] : []),
-            ];
-            const hasHeader = this._itemHeaders && (start.length > 0 || label !== null || end.length > 0);
-            const header = hasHeader ? `<div${this._collapsible ? ' x-on:click.stop="toggleCollapsed"' : ''} class="fi-fo-repeater-item-header">${start.length ? `<ul class="fi-fo-repeater-item-header-start-actions">${start.join('')}</ul>` : ''}${label !== null ? `<${this._headingTag} class="${cls(['fi-fo-repeater-item-header-label', { 'fi-truncated': this._truncateItemLabel }])}">${e(label)}${this._itemNumbers ? ` ${index + 1}` : ''}</${this._headingTag}>` : ''}${end.length ? `<ul class="fi-fo-repeater-item-header-end-actions">${end.join('')}</ul>` : ''}</div>` : '';
-            const itemConfig = { isCollapsed: this._collapsed, collapseKey: this._persistCollapsed ? `filament:repeater:collapsed:${key}-${itemKey}` : null };
-            rows.push(`<li wire:ignore.self wire:key="${e(this.getLivewireKey() ?? '')}.${e(itemKey)}.item" x-data="item(${e(js(itemConfig))})" x-on:repeater-expand.window="expandFromEvent" x-on:repeater-collapse.window="collapseFromEvent" x-on:expand="expand" x-sortable-item="${e(itemKey)}" class="${cls(['fi-fo-repeater-item', { 'fi-fo-repeater-item-has-header': hasHeader }])}" x-bind:class="itemClasses">${header}<div x-show="! isCollapsed" class="fi-fo-repeater-item-content">${content}</div></li>`);
-            if (!isLast && this._labelBetweenItems) rows.push(`<li class="fi-fo-repeater-label-between-items-ctn"><div class="fi-fo-repeater-label-between-items-divider-before"></div><span class="fi-fo-repeater-label-between-items">${e(this._labelBetweenItems)}</span><div class="fi-fo-repeater-label-between-items-divider-after"></div></li>`);
+            if (!isLast) rows.push(await this.betweenItemsHtml(itemKey, kit, this._simple ? 'fi-fo-simple-repeater' : 'fi-fo-repeater'));
         }
         const prefix = this._simple ? 'fi-fo-simple-repeater' : 'fi-fo-repeater';
         const gridAttributes = this._grid !== null ? new Attributes().grid(this._grid as any).toHtml() : '';
         const gridClass = /class="([^"]*)"/.exec(gridAttributes)?.[1] ?? '';
         const gridStyle = /style="([^"]*)"/.exec(gridAttributes)?.[1] ?? null;
         const list = keys.length ? `<ul x-sortable${gridStyle ? ` style="${gridStyle}"` : ''} data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems" class="${cls([gridClass, `${prefix}-items`])}">${rows.join('')}</ul>` : '';
-        const label = await this.getLabel();
-        const addExpr = expression('add', null);
-        const add = this._addable && keys.length < this._maxItems ? `<div class="${cls([`${prefix}-add`, this._addActionAlignment ? `fi-align-${this._addActionAlignment}` : null])}"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(this._addActionLabel ?? tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : '';
-        const collapseAll = this._collapsible && !this._simple ? `<div class="${cls(['fi-fo-repeater-actions', { 'fi-hidden': keys.length < 2 }])}"><span x-on:click="collapseAll"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...colorManager.getComponentClasses('link', 'gray')])}"><span class="fi-link-label">${e(tr('actions.collapse_all.label'))}</span></button></span><span x-on:click="expandAll"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...colorManager.getComponentClasses('link', 'gray')])}"><span class="fi-link-label">${e(tr('actions.expand_all.label'))}</span></button></span></div>` : '';
+        const add = await resolve('add');
+        const addHtml = this._addable && add.visible && keys.length < this._maxItems ? `<div class="${cls([`${prefix}-add`, this._addActionAlignment ? `fi-align-${this._addActionAlignment}` : null])}">${kit.addButton(add, expression('add', null))}</div>` : '';
+        const collapseAll = await resolve('collapseAll'), expandAll = await resolve('expandAll');
+        const link = (resolved: ResolvedAction, click: string) => (resolved.visible ? `<span x-on:click="${click}"><button type="button" class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...colorManager!.getComponentClasses('link', resolved.color)])}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(resolved.label)}</span></button></span>` : '');
+        const collapseLinks = this._collapsible && !this._simple ? link(collapseAll, 'collapseAll') + link(expandAll, 'expandAll') : '';
+        const collapseAllHtml = collapseLinks ? `<div class="${cls(['fi-fo-repeater-actions', { 'fi-hidden': keys.length < 2 }])}">${collapseLinks}</div>` : '';
         const itemLabel = tr('reordering.item');
         const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
-        const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: false };
-        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls([prefix, { 'fi-collapsible': this._collapsible && !this._simple }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAll}${list}${add}${descriptions}</div>`;
+        const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: kit.hasCustomReorderAction };
+        const html = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls([prefix, { 'fi-collapsible': this._collapsible && !this._simple }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${collapseAllHtml}${list}${addHtml}${descriptions}</div>`;
         return this.wrap(html, { labelAsDiv: true });
     }
 
+    /** Between two items: the "Insert between" button when it is visible, else the label between items, if any. */
+    private async betweenItemsHtml(afterItem: string, kit: Awaited<ReturnType<Repeater['renderKit']>>, prefix: string): Promise<string> {
+        const args = { afterItem };
+        const addBetween = await kit.resolve('addBetween', args);
+        if (this._addable && addBetween.visible && Object.keys(this.getItems()).length < this._maxItems) return `<li class="fi-fo-repeater-add-between-items-ctn"><div class="fi-fo-repeater-add-between-items">${kit.addButton(addBetween, kit.expression('addBetween', args))}</div></li>`;
+        if (this._labelBetweenItems && prefix === 'fi-fo-repeater') return `<li class="fi-fo-repeater-label-between-items-ctn"><div class="fi-fo-repeater-label-between-items-divider-before"></div><span class="fi-fo-repeater-label-between-items">${e(this._labelBetweenItems)}</span><div class="fi-fo-repeater-label-between-items-divider-after"></div></li>`;
+        return '';
+    }
+
     private async toTableHtml(): Promise<string> {
-        const colors = colorManager!;
         const id = this.getId();
         const key = this.getKey()!;
         const livewireKey = this.getLivewireKey() ?? '';
@@ -1207,39 +1330,47 @@ export class Repeater extends Field {
         const keys = Object.keys(items);
         const schemas = this.getChildSchemas();
         const tr = (name: string, replace: Record<string, string> = {}) => t(`filament-forms::components.repeater.${name}`, replace);
-        const context = { ...((this.livewire as any).getActionMountContext?.() ?? {}), schemaComponent: key };
-        const expression = (action: string, args: Record<string, unknown> | null) => `mountAction(${js(action)}, ${args ? js(args) : '{}'}, ${js(context)})`;
+        const kit = await this.renderKit();
+        const { expression, resolve } = kit;
         const button = 'fi-ac-icon-btn-action fi-icon-btn';
         const loading = (target: string) => `${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': target }))}`;
         const actionIcon = (name: string, target: string) => icon(name, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': target }) });
         const itemLabel = tr('reordering.item');
         const descriptionId = (itemKey: string) => `${id}-item-${createHash('md5').update(itemKey).digest('hex')}`;
         const rows: string[] = [];
+        const reorder = await resolve('reorder');
         // No reorder column while there is only one row.
-        const hasReorderColumn = this.canDrag() && keys.length > 1;
+        const hasReorderColumn = this.canDrag() && keys.length > 1 && reorder.visible;
         for (const [index, itemKey] of keys.entries()) {
-            const moveButton = (action: 'moveUp' | 'moveDown', label: string, iconName: string, direction: string, disabled: boolean) => {
-                const expr = expression(action, { item: itemKey });
-                return `<div x-on:click.stop class="fi-sr-only"><button title="${e(label)}" ${disabled ? 'aria-disabled="true" ' : ''}aria-label="${e(label)}" ${disabled ? 'disabled="disabled" ' : ''}tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button}${disabled ? ' fi-disabled' : ''} fi-size-sm" data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}" wire:click="${e(expr)}">${actionIcon(iconName, expr)}${loading(expr)}</button></div>`;
+            const args = { item: itemKey };
+            const moveButton = async (action: 'moveUp' | 'moveDown', fallbackIcon: string, direction: string, disabled: boolean) => {
+                const resolved = await resolve(action, args);
+                if (!resolved.visible) return '';
+                disabled = disabled || resolved.disabled;
+                const expr = expression(action, args);
+                return `<div x-on:click.stop class="fi-sr-only"><button title="${e(resolved.label)}" ${disabled ? 'aria-disabled="true" ' : ''}aria-label="${e(resolved.label)}" ${disabled ? 'disabled="disabled" ' : ''}tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button}${disabled ? ' fi-disabled' : ''} fi-size-sm" data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}" wire:click="${e(expr)}">${actionIcon(resolved.icon ?? fallbackIcon, expr)}${loading(expr)}</button></div>`;
             };
             const cells: string[] = [];
             for (const field of schemas[index].getComponents()) cells.push(`<td>${await field.toSchemaHtml(await field.isVisible())}</td>`);
             // Only local or http(s) URLs: a link built from item data cannot become a `javascript:` URL.
-            const links = this._itemLinks.map((resolve) => resolve({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
+            const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && /^(\/(?!\/)|https?:\/\/)/.test(link.url))
                 .map((link) => `<div x-on:click.stop><a href="${e(link.url)}" target="_blank" x-tooltip="{
  content: ${e(js(link.label))},
  theme: $store.theme,
  allowHTML: false,
  }" aria-label="${e(link.label)}" class="${button} fi-size-sm">${icon(link.icon)}</a></div>`);
-            const deleteExpr = expression('delete', { item: itemKey });
-            rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${hasReorderColumn ? `<td><div class="fi-fo-table-repeater-actions"><div x-on:click.stop><button title="${e(tr('actions.reorder.label'))}" aria-label="${e(tr('actions.reorder.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button} fi-size-sm" x-sortable-handle="x-sortable-handle">${icon('m-arrows-up-down')}</button></div>${moveButton('moveUp', tr('actions.move_up.label'), 'm-arrow-up', 'up', index === 0)}${moveButton('moveDown', tr('actions.move_down.label'), 'm-arrow-down', 'down', index === keys.length - 1)}</div></td>` : ''}${cells.join('')}<td><div class="fi-fo-table-repeater-actions">${links.join('')}${this._deletable ? `<div x-on:click.stop><button title="${e(tr('actions.delete.label'))}" aria-label="${e(tr('actions.delete.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${[button, 'fi-size-sm', ...colorManager.getComponentClasses('icon-button', 'danger')].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon('m-trash', deleteExpr)}${loading(deleteExpr)}</button></div>` : ''}</div></td></tr>`);
+            const extra = await kit.extraHtml(itemKey, (html) => `<div x-on:click.stop>${html}</div>`);
+            const del = await resolve('delete', args);
+            const deleteExpr = expression('delete', args);
+            const reorderCell = hasReorderColumn ? `<td><div class="fi-fo-table-repeater-actions"><div x-on:click.stop><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button} fi-size-sm" x-sortable-handle="x-sortable-handle">${icon(reorder.icon ?? 'm-arrows-up-down')}</button></div>${await moveButton('moveUp', 'm-arrow-up', 'up', index === 0)}${await moveButton('moveDown', 'm-arrow-down', 'down', index === keys.length - 1)}</div></td>` : '';
+            const deleteButton = this._deletable && del.visible ? `<div x-on:click.stop><button title="${e(del.label)}" aria-label="${e(del.label)}" ${del.disabled ? 'disabled="disabled" ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${[button, 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager!.getComponentClasses('icon-button', 'danger'))].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon(del.icon ?? 'm-trash', deleteExpr)}${loading(deleteExpr)}</button></div>` : '';
+            rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${reorderCell}${cells.join('')}<td><div class="fi-fo-table-repeater-actions">${links.join('')}${extra.join('')}${deleteButton}</div></td></tr>`);
         }
         const head = this._columns.map((column) => `<th scope="col"${column.getWidth() ? ` style="width: ${e(column.getWidth()!)};"` : ''}>${e(column.label)}</th>`).join('');
-        const addExpr = expression('add', null);
-        const label = await this.getLabel();
-        const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: false };
+        const add = await resolve('add');
+        const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: kit.hasCustomReorderAction };
         const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
-        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add"><button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-sm" wire:click="${e(addExpr)}">${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': addExpr }), 'sm')}${e(this._addActionLabel ?? tr('actions.add.label', { label: label.toLowerCase() }))}</button></div>` : ''}${descriptions}</div>`;
+        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && add.visible && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add">${kit.addButton(add, expression('add', null))}</div>` : ''}${descriptions}</div>`;
         return this.wrap(table, { labelAsDiv: true });
     }
 }
@@ -2197,7 +2328,7 @@ export class Checkbox extends Field {
     }
 }
 
-/** Checkboxes for a list of values (no search or "select all" yet). */
+/** Checkboxes for a list of values: static options or a many-to-many relationship, with search and bulk toggling. */
 export class CheckboxList extends Field {
     private _options: [string, string][] = [];
     private _optionColumns: number | null = null;
@@ -2209,6 +2340,14 @@ export class CheckboxList extends Field {
     private _searchable = false;
     private _bulkToggleable = false;
     private _disableOptionWhen: ((value: string, label: string) => boolean) | null = null;
+    private _allowHtml = false;
+    private _searchDebounce = 1000;
+    private _relationship: { name: string; title: string | null; modify: ((query: any) => unknown) | null; model: any } | null = null;
+    private _optionLabelFromRecord: ((record: any) => string) | null = null;
+    private _optionDescriptionFromRecord: ((record: any) => string | null) | null = null;
+    private _pivotData: Record<string, unknown> | (() => Record<string, unknown>) | null = null;
+    private _modifySelectAll: ActionModifier = null;
+    private _modifyDeselectAll: ActionModifier = null;
     /** Helper text per value, under the option label. */
     descriptions(descriptions: Record<string, string>): this { this._descriptions = descriptions; return this; }
     /** A search field filters the options in the browser. */
@@ -2217,11 +2356,88 @@ export class CheckboxList extends Field {
     private _noSearchResultsMessage = 'No search results.';
     searchPrompt(prompt: string): this { this._searchPrompt = prompt; return this; }
     noSearchResultsMessage(message: string): this { this._noSearchResultsMessage = message; return this; }
+    /** Milliseconds to wait after typing before filtering the options (1000 by default). */
+    searchDebounce(milliseconds: number): this { this._searchDebounce = Math.max(0, Math.floor(milliseconds)); return this; }
     /** "Select all" / "Deselect all" links. */
     bulkToggleable(condition = true): this { this._bulkToggleable = condition; return this; }
+    /** Customizes the "Select all" link (label, icon, color; it is handled in the browser, so it has no modal). */
+    selectAllAction(modify: ActionModifier): this { this._modifySelectAll = modify; return this; }
+    /** Customizes the "Deselect all" link. */
+    deselectAllAction(modify: ActionModifier): this { this._modifyDeselectAll = modify; return this; }
+    getSelectAllAction(): Action { return modifyAction(Action.make('selectAll').label(t('filament-forms::components.checkbox_list.actions.select_all.label')).link().size('sm'), this._modifySelectAll); }
+    getDeselectAllAction(): Action { return modifyAction(Action.make('deselectAll').label(t('filament-forms::components.checkbox_list.actions.deselect_all.label')).link().size('sm'), this._modifyDeselectAll); }
+    /** Option labels are HTML, cleaned with the HTML sanitizer (as rich content). Leave it off for labels that come from users. */
+    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
     /** Options that cannot be checked; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
+    /**
+     * Options from a many-to-many relationship of the form's model (Objection `relationMappings`): the related records
+     * (`titleAttribute` is the label column), checked when linked to the record. The links are saved once the record is
+     * saved; only records allowed by `modifyQueryUsing(query)` can be linked. The name defaults to the field's name.
+     */
+    relationship(name: string | null = null, titleAttribute: string | null = null, modifyQueryUsing: ((query: any) => unknown) | null = null, options: { model?: any } = {}): this {
+        this._relationship = { name: name ?? this._name!, title: titleAttribute, modify: modifyQueryUsing, model: options.model ?? null };
+        return this;
+    }
+    /** Label of a related record, computed from the whole record (instead of the title column). Escaped unless `allowHtml()`. */
+    getOptionLabelFromRecordUsing(callback: ((record: any) => string) | null): this { this._optionLabelFromRecord = callback; return this; }
+    /** Description of a related record, under its label. */
+    getOptionDescriptionFromRecordUsing(callback: ((record: any) => string | null) | null): this { this._optionDescriptionFromRecord = callback; return this; }
+    /** Extra pivot columns written when a record is linked (declare them in the relation's `join.through.extra`). */
+    pivotData(data: Record<string, unknown> | (() => Record<string, unknown>) | null): this { this._pivotData = data; return this; }
+    private relationInfo() {
+        const model = modelOfForm(this.context(), this._relationship!.model);
+        const relation = model.getRelation(this._relationship!.name);
+        const related = relation.relatedModelClass;
+        return { model, related, id: `${related.tableName}.${related.idColumn}`, title: this._relationship!.title ? `${related.tableName}.${this._relationship!.title}` : null };
+    }
+    /** Related records offered as options (at most 1000), with their labels and descriptions. */
+    private async relationshipOptions(): Promise<{ options: [string, string][]; descriptions: Record<string, string> }> {
+        const { related, id, title } = this.relationInfo();
+        const query = related.query();
+        this._relationship!.modify?.(query);
+        const rows = await query.orderBy(title ?? id).limit(1000);
+        const descriptions: Record<string, string> = {};
+        const options = rows.map((row: any): [string, string] => {
+            const value = String(row[related.idColumn]);
+            const description = this._optionDescriptionFromRecord?.(row);
+            if (description !== null && description !== undefined && description !== '') descriptions[value] = String(description);
+            const label = this._optionLabelFromRecord ? this._optionLabelFromRecord(row) : this._relationship!.title ? row[this._relationship!.title] : value;
+            return [value, String(label ?? value)];
+        });
+        return { options, descriptions };
+    }
+    private _resolved: { options: [string, string][]; descriptions: Record<string, string> } | null = null;
+    /** Options and descriptions: the static ones, or the relationship's (queried once per instance). */
+    async getResolvedOptions(): Promise<{ options: [string, string][]; descriptions: Record<string, string> }> {
+        if (!this._relationship) return { options: this._options, descriptions: this._descriptions };
+        return (this._resolved ??= { ...(await this.relationshipOptions()) });
+    }
+    async savesRelationships(): Promise<boolean> { return (await super.savesRelationships()) || this._relationship !== null; }
+    async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> {
+        if (!this._relationship) return super.loadStateFromRelationships(record);
+        const { model, related } = this.relationInfo();
+        const rows = await model.relatedQuery(this._relationship.name).for(record[model.idColumn]).clearSelect().select(`${related.tableName}.${related.idColumn} as __key`);
+        return { state: rows.map((row: any) => String(row.__key)) };
+    }
+    /** Links the checked records and unlinks the others; only enabled options of the relationship's query can be linked. */
+    async saveRelationships(record: any): Promise<void> {
+        if (!this._relationship) return super.saveRelationships(record);
+        const { model, related } = this.relationInfo();
+        const key = record[model.idColumn];
+        const desired = (await this.dehydrateState(this.context().state)) as string[];
+        const current = (await this.loadStateFromRelationships(record))!.state as string[];
+        const removed = current.filter((value) => !desired.includes(value));
+        if (removed.length) await model.relatedQuery(this._relationship.name).for(key).unrelate().whereIn(`${related.tableName}.${related.idColumn}`, removed);
+        const pivot = typeof this._pivotData === 'function' ? this._pivotData() : this._pivotData;
+        for (const value of desired) {
+            if (current.includes(value)) continue;
+            const id = related.idColumn === 'id' && /^\d+$/.test(value) ? Number(value) : value;
+            await model.relatedQuery(this._relationship.name).for(key).relate(pivot ? { [related.idColumn]: id, ...pivot } : id);
+        }
+        await super.saveRelationships(record);
+    }
     getDefaultState(): unknown { return this._default ?? []; }
     hydrateState(value: unknown): unknown {
         let list = value;
@@ -2229,29 +2445,35 @@ export class CheckboxList extends Field {
         return (Array.isArray(list) ? list : []).map(String);
     }
     /** Only offered values are kept, without duplicates, in option order. */
-    dehydrateState(state: unknown): unknown {
+    async dehydrateState(state: unknown): Promise<unknown> {
         const chosen = new Set((Array.isArray(state) ? state : []).map(String));
-        return this._options.map(([value]) => value).filter((value) => chosen.has(value));
+        const { options } = await this.getResolvedOptions();
+        return options.filter(([value, label]) => chosen.has(value) && !(this._relationship && this.isOptionDisabled(value, label))).map(([value]) => value);
     }
     async getValidationRules(): Promise<Rule[]> {
         // A disabled option cannot be checked, even by a forged request.
-        const known = new Set(this._options.filter(([value, label]) => !this.isOptionDisabled(value, label)).map(([value]) => value));
+        const { options } = await this.getResolvedOptions();
+        const known = new Set(options.filter(([value, label]) => !this.isOptionDisabled(value, label)).map(([value]) => value));
         return [...(await super.getValidationRules()), { name: 'in', passes: (v) => Array.isArray(v) && v.every((value) => known.has(String(value))), message: (a) => `The selected ${a} is invalid.` }];
     }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         const key = this.getLivewireKey() ?? '';
-        const options = this._options.map(([value, label]) => {
+        const { options: resolvedOptions, descriptions } = await this.getResolvedOptions();
+        const options = resolvedOptions.map(([value, label]) => {
             const input = new Attributes().merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
-            const description = this._descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(this._descriptions[value])}</p>` : '';
-            return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${e(label)}</span>${description}</div></label></div>`;
+            const description = descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(descriptions[value])}</p>` : '';
+            return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${this._allowHtml ? sanitizeHtml(label) : e(label)}</span>${description}</div></label></div>`;
         });
         const columns = this._optionColumns ?? 1;
         const grid = columns > 1 ? `class="fi-grid fi-grid-direction-col lg:fi-grid-cols fi-fo-checkbox-list-options" style="--cols-lg: ${Math.floor(columns)}; --cols-default: 1;"` : 'class="fi-grid fi-grid-direction-col fi-fo-checkbox-list-options" style="--cols-default: 1;"';
         const searchPrompt = this._searchPrompt;
-        const search = this._searchable ? `<div class="fi-input-wrp fi-fo-checkbox-list-search-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass')}</div><div class="fi-input-wrp-content-ctn"><input aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" type="search" x-model.debounce.1000="search" class="fi-input fi-input-has-inline-prefix" /></div></div>` : '';
-        const link = (label: string) => `<button type="button" class="fi-ac-link-action fi-link fi-size-sm ${colorManager ? colorManager.getComponentClasses('link', 'primary').join(' ') : ''}"><span class="fi-link-label">${e(label)}</span></button>`;
-        const bulk = this._bulkToggleable && !isDisabled && this._options.length ? `<div x-cloak class="fi-fo-checkbox-list-actions" wire:key="${e(key)}.actions"><span x-show="! areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.select-all">${link(t('filament-forms::components.checkbox_list.actions.select_all.label'))}</span><span x-show="areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.deselect-all">${link(t('filament-forms::components.checkbox_list.actions.deselect_all.label'))}</span></div>` : '';
+        const search = this._searchable ? `<div class="fi-input-wrp fi-fo-checkbox-list-search-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass')}</div><div class="fi-input-wrp-content-ctn"><input aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" type="search" x-model.debounce.${this._searchDebounce}="search" class="fi-input fi-input-has-inline-prefix" /></div></div>` : '';
+        const ctx = this.context();
+        const link = (resolved: ResolvedAction) => `<button type="button" class="fi-ac-link-action fi-link fi-size-sm ${colorClassesOf(colorManager, 'link', resolved.color, 'primary', colorManager ? colorManager.getComponentClasses('link', 'primary') : []).join(' ')}">${resolved.icon ? icon(resolved.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(resolved.label)}</span></button>`;
+        const selectAll = await resolveAction(this.getSelectAllAction(), ctx), deselectAll = await resolveAction(this.getDeselectAllAction(), ctx);
+        const bulkLinks = (selectAll.visible ? `<span x-show="! areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.select-all">${link(selectAll)}</span>` : '') + (deselectAll.visible ? `<span x-show="areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.deselect-all">${link(deselectAll)}</span>` : '');
+        const bulk = this._bulkToggleable && !isDisabled && resolvedOptions.length && bulkLinks ? `<div x-cloak class="fi-fo-checkbox-list-actions" wire:key="${e(key)}.actions">${bulkLinks}</div>` : '';
         const noResults = this._searchable ? `<div x-cloak x-show="search && ! visibleCheckboxListOptions.length" role="status" aria-live="polite" class="fi-fo-checkbox-list-no-search-results-message">${e(this._noSearchResultsMessage)}</div>` : '';
         return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}" x-data="checkboxListFormComponent({
  livewireId: ${e(js(this.livewire.id))},
@@ -2288,6 +2510,20 @@ export class KeyValue extends Field {
     valuePlaceholder(text: string | null): this { this._valuePlaceholder = text; return this; }
     addActionLabel(label: string | null): this { this._addLabel = label; return this; }
     deleteActionLabel(label: string | null): this { this._deleteLabel = label; return this; }
+    private _reorderLabel: string | null = null;
+    reorderActionLabel(label: string | null): this { this._reorderLabel = label; return this; }
+    private _modifyAdd: ActionModifier = null;
+    private _modifyDelete: ActionModifier = null;
+    private _modifyReorder: ActionModifier = null;
+    /** Customizes the "Add row" link (label, icon, color). Rows are added in the browser: the action has no modal. */
+    addAction(modify: ActionModifier): this { this._modifyAdd = modify; return this; }
+    /** Customizes each row's delete button (handled in the browser: no modal). */
+    deleteAction(modify: ActionModifier): this { this._modifyDelete = modify; return this; }
+    /** Customizes each row's drag handle. */
+    reorderAction(modify: ActionModifier): this { this._modifyReorder = modify; return this; }
+    getAddAction(): Action { return modifyAction(Action.make('add').label(this._addLabel ?? t('filament-forms::components.key_value.actions.add.label')).color('gray').link(), this._modifyAdd); }
+    getDeleteAction(): Action { return modifyAction(Action.make('delete').label(this._deleteLabel ?? t('filament-forms::components.key_value.actions.delete.label')).icon('m-trash').color('danger').iconButton().size('sm'), this._modifyDelete); }
+    getReorderAction(): Action { return modifyAction(Action.make('reorder').label(this._reorderLabel ?? t('filament-forms::components.key_value.actions.reorder.label')).icon('m-arrows-up-down').color('gray').iconButton().size('sm'), this._modifyReorder); }
     // In the form, the state is a list of `{ key, value }` pairs (what the browser component expects, and it keeps order);
     // it becomes an object again when saved.
     getDefaultState(): unknown { return KeyValue.toPairs(this._default); }
@@ -2331,12 +2567,15 @@ export class KeyValue extends Field {
         const reordering = { row: tr('reordering.row'), position: tr('reordering.position'), moved: tr('reordering.moved') };
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([keyLabel, valueLabel, this._reorderable])).digest('hex')}`;
         const iconButton = 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"';
-        const dangerClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...(colorManager?.getComponentClasses('icon-button', 'danger') ?? [])].join(' ');
-        const reorderCell = this._reorderable ? `<td class="fi-has-action"><span class="fi-sr-only" data-reorder-description x-bind:id="$id('key-value-row') + '-' + row.id" x-text="rowDescription(row, index)"></span><div x-sortable-handle class="fi-fo-key-value-table-row-sortable-handle"><button title="${e(tr('actions.reorder.label'))}" aria-label="${e(tr('actions.reorder.label'))}" ${iconButton} class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-bind:tabindex="rows.length &gt; 1 ? -1 : 0" x-bind:aria-hidden="rows.length &gt; 1 ? 'true' : null">${icon('m-arrows-up-down')}</button></div><div class="fi-sr-only"><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="up" x-on:click.stop="moveRow(row.id, index - 1)" x-bind:disabled="index === 0" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_up.label'))}</button><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="down" x-on:click.stop="moveRow(row.id, index + 1)" x-bind:disabled="index === rows.length - 1" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_down.label'))}</button></div></td>` : '';
+        const ctx = this.context();
+        const add = await resolveAction(this.getAddAction(), ctx), del = await resolveAction(this.getDeleteAction(), ctx), reorder = await resolveAction(this.getReorderAction(), ctx);
+        const deletable = this._deletable && del.visible, addable = this._addable && add.visible, reorderable = this._reorderable && reorder.visible;
+        const dangerClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager?.getComponentClasses('icon-button', 'danger') ?? [])].join(' ');
+        const reorderCell = reorderable ? `<td class="fi-has-action"><span class="fi-sr-only" data-reorder-description x-bind:id="$id('key-value-row') + '-' + row.id" x-text="rowDescription(row, index)"></span><div x-sortable-handle class="fi-fo-key-value-table-row-sortable-handle"><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" ${iconButton} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', reorder.color, 'gray', [])])}" x-bind:tabindex="rows.length &gt; 1 ? -1 : 0" x-bind:aria-hidden="rows.length &gt; 1 ? 'true' : null">${icon(reorder.icon ?? 'm-arrows-up-down')}</button></div><div class="fi-sr-only"><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="up" x-on:click.stop="moveRow(row.id, index - 1)" x-bind:disabled="index === 0" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_up.label'))}</button><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="down" x-on:click.stop="moveRow(row.id, index + 1)" x-bind:disabled="index === rows.length - 1" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_down.label'))}</button></div></td>` : '';
         return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}" x-id="['key-value-row']" x-data="keyValueFormComponent({
  state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
  reordering: ${e(js(reordering))},
- })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${this._reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${this._deletable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${this._reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${this._reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td>${this._deletable ? `<td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(this._deleteLabel ?? tr('actions.delete.label'))}" aria-label="${e(this._deleteLabel ?? tr('actions.delete.label'))}" ${iconButton} class="${dangerClasses}">${icon('m-trash')}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${this._addable ? `<div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="fi-ac-link-action fi-link fi-size-md"><span class="fi-link-label">${e(this._addLabel ?? tr('actions.add.label'))}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
+ })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${deletable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td>${deletable ? `<td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(del.label)}" aria-label="${e(del.label)}" ${iconButton} class="${dangerClasses}">${icon(del.icon ?? 'm-trash')}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${addable ? `<div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...colorClassesOf(colorManager, 'link', add.color, 'gray', [])])}">${add.icon ? icon(add.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(add.label)}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
     }
 }
 

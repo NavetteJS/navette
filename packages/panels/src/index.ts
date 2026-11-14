@@ -1071,11 +1071,14 @@ abstract class BasePage extends Component implements SchemaHost {
         let fieldAccess: Record<string, unknown> = {};
         if (typeof mounted.context.schemaComponent === 'string') {
             const component = await this.findSchemaComponent(mounted.context.schemaComponent);
+            // Item actions of a layout or list component (Repeater, Builder) get it as `component` too.
+            if (component) fieldAccess = { component };
             const path = typeof component?.getStatePath === 'function' && component.hasStatePath() ? String(component.getStatePath()) : null;
             if (path) {
                 const container = path.split('.').slice(0, -1);
                 const nodeOf = () => container.reduce((node: any, segment) => (node && typeof node === 'object' ? node[segment] : undefined), this as any);
                 fieldAccess = {
+                    component,
                     state: path.split('.').reduce((node: any, segment) => (node && typeof node === 'object' ? node[segment] : undefined), this as any),
                     get: (name: string) => nodeOf()?.[name],
                     set: (name: string, value: unknown) => { const node = nodeOf(); if (node && typeof node === 'object' && /^[A-Za-z0-9_]+$/.test(name)) node[name] = value; },
@@ -1089,7 +1092,7 @@ abstract class BasePage extends Component implements SchemaHost {
         const mounted = this.mountedActions[index];
         if (!mounted) return null;
         const action = await this.findMountableAction(mounted.name, mounted.context);
-        return action.applySchema(Schema.make(this).key(`mountedActionSchema${index}`).statePath(`mountedActions.${index}.data`).operation(mounted.name).record(await this.resolveActionRecord(mounted.context)));
+        return action.applySchema(Schema.make(this).key(`mountedActionSchema${index}`).statePath(`mountedActions.${index}.data`).operation(mounted.name).record(await this.resolveActionRecord(mounted.context)), mounted.arguments ?? {});
     }
     private async renderActionModal(index: number): Promise<string> {
         const mounted = this.mountedActions[index];
@@ -1127,10 +1130,13 @@ abstract class BasePage extends Component implements SchemaHost {
         return component[method](...(Array.isArray(args) ? args : args && typeof args === 'object' ? Object.values(args) : []));
     }
     /** A hidden action can be neither mounted nor run, even through a call forged by the browser. */
-    private async assertActionVisible(action: Action, context: Record<string, unknown> = {}): Promise<void> {
+    private async assertActionVisible(action: Action, context: Record<string, unknown> = {}, args: Record<string, unknown> = {}): Promise<void> {
         const record = await this.resolveActionRecord(context);
         if (context.recordKey !== undefined && record === null) throw new WireError(404, 'Record not found.');
-        const ctx = { livewire: this as any, component: null as any, operation: null, record, get: () => undefined, state: undefined };
+        // An item action of a schema component (Repeater, Builder): the component checks the arguments (the item key exists).
+        const component = typeof context.schemaComponent === 'string' && typeof context.parentAction !== 'number' ? await this.findSchemaComponent(context.schemaComponent) : null;
+        if (component && typeof component.authorizeActionArguments === 'function' && !(await component.authorizeActionArguments(action.getName(), args))) throw new WireError(404, `Action not found: ${action.getName()}`);
+        const ctx = { livewire: this as any, component: component ?? (null as any), operation: null, record, get: () => undefined, state: undefined, arguments: args };
         if (!(await action.isVisible(ctx)) || (await action.isDisabled(ctx))) throw new WireError(403, `Action unavailable: ${action.getName()}`);
         // An action with a URL for this record is a link: it cannot be mounted.
         if (action.resolveUrl(ctx) !== null) throw new WireError(404, `Action not found: ${action.getName()}`);
@@ -1156,8 +1162,9 @@ abstract class BasePage extends Component implements SchemaHost {
             ? { ...this.mountedActions[parentIndex].context, parentAction: parentIndex as number }
             : this.resolveMountContext(_context);
         const action = await this.findMountableAction(name, context);
-        await this.assertActionVisible(action, context);
-        const mounted = { name: String(name), arguments: args && typeof args === 'object' ? (args as Record<string, unknown>) : {}, context };
+        const mountArguments = args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
+        await this.assertActionVisible(action, context, mountArguments);
+        const mounted = { name: String(name), arguments: mountArguments, context };
         if (!action.hasModal() || (await action.isModalHidden(await this.actionContext(mounted)))) {
             // Without a modal, `halt()` and `cancel()` simply stop the action.
             try { await action.call(await this.actionContext(mounted)); } catch (error) { if (!(error instanceof ActionHalt)) throw error; }
@@ -1207,7 +1214,7 @@ abstract class BasePage extends Component implements SchemaHost {
         const mounted = this.mountedActions[this.mountedActions.length - 1];
         if (!mounted) return;
         const action = await this.findMountableAction(mounted.name, mounted.context);
-        await this.assertActionVisible(action, mounted.context);
+        await this.assertActionVisible(action, mounted.context, mounted.arguments ?? {});
         const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
         if (schema) {
             this._errors = await validateSchema(schema);

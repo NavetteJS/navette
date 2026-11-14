@@ -19,7 +19,7 @@ let colorManager: ColorManager | null = null;
 export const useColorManager = (manager: ColorManager) => { colorManager = manager; };
 
 /** Execution context of a mounted action. */
-export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action; /** Form data of the parent action, for an action of its modal footer (changes are kept). */ parentData?: Record<string, unknown>; /** For an action of a form component (affix action...): the component's state. */ state?: unknown; /** For an action of a form component: changes a field of the same form (`set('slug', value)`). */ set?: (name: string, value: unknown) => void; get?: (name: string) => unknown; /** The modal's form, once validated (to save its relationships). */ schema?: any };
+export type ActionCallContext = { livewire: any; record: any; arguments: Record<string, unknown>; data: Record<string, unknown>; /** The action being run. */ action?: Action; /** Form data of the parent action, for an action of its modal footer (changes are kept). */ parentData?: Record<string, unknown>; /** For an action of a form component (affix action...): the component's state. */ state?: unknown; /** For an action of a form component: changes a field of the same form (`set('slug', value)`). */ set?: (name: string, value: unknown) => void; get?: (name: string) => unknown; /** The modal's form, once validated (to save its relationships). */ schema?: any; /** For an action of a schema component: the component (a Repeater for its item actions...). */ component?: any };
 /** Message of a bulk notification, from the number of records concerned and the number of selected records. */
 export type BulkMessage = string | ((count: number, total: number) => string);
 
@@ -55,7 +55,7 @@ export class Action implements Renderable {
     private _icon: string | null = null;
     private _alpineClick: string | null = null;
     private _keyBindings: string[] = [];
-    private _schema: ((schema: any) => any) | null = null;
+    private _schema: ((schema: any, ctx: { arguments: Record<string, unknown> }) => any) | null = null;
     private _extraModalFooterActions: Action[] = [];
     private _schemaColumns: Record<string, number> | number | null = {};
     private _fillForm: ((ctx: ActionCallContext) => Record<string, unknown> | Promise<Record<string, unknown>>) | null = null;
@@ -70,8 +70,30 @@ export class Action implements Renderable {
     static make(name: string): Action { return configured(new Action(name)); }
     label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     /** Pass a function to make the color depend on the record (row actions). */
-    color(color: string | ((ctx: ComponentContext) => string | Promise<string>)): this { if (typeof color === 'function') this._lazyColor = color; else { this._color = color; this._lazyColor = null; } return this; }
-    size(size: string): this { this._size = size; return this; }
+    color(color: string | ((ctx: ComponentContext) => string | Promise<string>)): this { this._colorSet = true; if (typeof color === 'function') this._lazyColor = color; else { this._color = color; this._lazyColor = null; } return this; }
+    size(size: string): this { this._sizeSet = true; this._size = size; return this; }
+    private _colorSet = false;
+    private _sizeSet = false;
+    /** Color used unless `color()` was called (set by the component that renders the action). */
+    defaultColor(color: string): this { if (!this._colorSet) this._color = color; return this; }
+    /** Size used unless `size()` was called. */
+    defaultSize(size: string): this { if (!this._sizeSet) this._size = size; return this; }
+    /** Color in this context (a color function is evaluated). */
+    async getResolvedColor(ctx: ComponentContext): Promise<string> { return this._lazyColor ? this._lazyColor(ctx) : this._color; }
+    private _arguments: Record<string, unknown> = {};
+    /**
+     * Arguments sent with the click (`mountAction(name, arguments)`), received by the handler as `arguments`. A component
+     * sets them when it renders the action for one of its items (`{ item: key }`); they come back from the browser, so the
+     * handler checks them again.
+     */
+    arguments(args: Record<string, unknown>): this { this._arguments = args; return this; }
+    getArguments(): Record<string, unknown> { return this._arguments; }
+    /** `mountAction(...)` expression of this action, with its arguments and a mount context. */
+    private mountExpressionFor(mountContext: Record<string, unknown>): string {
+        const hasArguments = Object.keys(this._arguments).length > 0;
+        if (Object.keys(mountContext).length) return `mountAction(${js(this.name)}, ${hasArguments ? js(this._arguments) : '{}'}, ${js(mountContext)})`;
+        return hasArguments ? `mountAction(${js(this.name)}, ${js(this._arguments)})` : `mountAction(${js(this.name)})`;
+    }
     /** Renders a `type="submit"` button that triggers the form's submit method, e.g. `.submit('authenticate')`. */
     submit(form: string | null): this { this._submit = form; return this; }
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
@@ -152,12 +174,15 @@ export class Action implements Renderable {
     /** URL of the action in this context; an action with a URL is a link, never a mounted action. */
     resolveUrl(ctx: ComponentContext): string | null { return this._lazyUrl ? this._lazyUrl(ctx) : this._url; }
     hasModal(): boolean { return this._requiresConfirmation || this._schema !== null; }
-    /** Form shown in the modal. With a function, the components are rebuilt on every request. */
-    schema(components: any[] | ((schema: any) => any), columns: Record<string, number> | number | null = {}): this { this._schema = typeof components === 'function' ? components : () => components; this._schemaColumns = columns; return this; }
+    /**
+     * Form shown in the modal. With a function, the components are rebuilt on every request; it receives the schema and
+     * the mounted action's `arguments` (as sent by the browser: check them).
+     */
+    schema(components: any[] | ((schema: any, ctx: { arguments: Record<string, unknown> }) => any), columns: Record<string, number> | number | null = {}): this { this._schema = typeof components === 'function' ? components : () => components; this._schemaColumns = columns; return this; }
     /** Applies the action's form to the host's schema; the function returns either components or the configured schema. */
-    applySchema(schema: any): any | null {
+    applySchema(schema: any, args: Record<string, unknown> = {}): any | null {
         if (!this._schema) return null;
-        const result = this._schema(schema);
+        const result = this._schema(schema, { arguments: args });
         return Array.isArray(result) ? schema.columns(this._schemaColumns).components(result) : result;
     }
     /**
@@ -464,7 +489,7 @@ export class Action implements Renderable {
         if (this._submit === null && (this._view === 'link' || this._view === 'icon-button' || this._view === 'badge' || this._labeledFrom)) {
             const safeUrl = linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl) ? linkUrl : null;
             const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
-            const mountExpression = this._handler ? (Object.keys(mountContext).length ? `mountAction(${js(this.name)}, {}, ${js(mountContext)})` : `mountAction(${js(this.name)})`) : null;
+            const mountExpression = this._handler ? this.mountExpressionFor(mountContext) : null;
             const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${this._alpineClick ? `x-on:click="${e(this._alpineClick)}" ` : ''}${(mountExpression ?? this._action) ? `wire:click="${e(mountExpression ?? this._action!)}" ` : ''}`;
             const tag = safeUrl ? 'a' : 'button';
             const target = this._livewireTarget ?? mountExpression ?? this._action;
@@ -490,7 +515,7 @@ export class Action implements Renderable {
         // Handler action: the click mounts the action on the server, with the host's context (e.g. the record).
         const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
         // Without context, the short form `mountAction('name')` is emitted.
-        const mountExpression = this._handler ? (Object.keys(mountContext).length ? `mountAction(${js(this.name)}, {}, ${js(mountContext)})` : `mountAction(${js(this.name)})`) : null;
+        const mountExpression = this._handler ? this.mountExpressionFor(mountContext) : null;
         const attributes = new Attributes()
             .merge({
                 type: isSubmit ? 'submit' : 'button',
