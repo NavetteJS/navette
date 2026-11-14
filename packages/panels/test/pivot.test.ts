@@ -21,6 +21,7 @@ class MembersRelationManager extends RelationManager {
     static form(schema: Schema): Schema { return schema.components([TextInput.make('name').required()]); }
     static pivotForm(): any[] { return [TextInput.make('role').required()]; }
     static async attach(ownerKey: string, recordKey: string, pivot: Record<string, unknown> = {}) { calls.push(['attach', ownerKey, recordKey, pivot]); }
+    static async attachableLabel(_ownerKey: string, recordKey: string) { return recordKey === '9' ? 'Grace' : null; }
     static async updatePivot(ownerKey: string, recordKey: string, pivot: Record<string, unknown>) { calls.push(['updatePivot', ownerKey, recordKey, pivot]); }
 }
 const host = () => {

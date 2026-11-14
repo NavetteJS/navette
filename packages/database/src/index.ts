@@ -63,6 +63,9 @@ export interface DataAdapter<T = any> {
     /** Keys of every record matching the query (unpaginated), for "select all". */
     listKeys(query: Omit<ListQuery, 'page' | 'perPage'>): Promise<string[]>;
     deleteMany(keys: (string | number)[]): Promise<number>;
+    /** Restores (and permanently deletes) several soft-deleted records in one query, within the adapter's scope; optional. */
+    restoreMany?(keys: (string | number)[]): Promise<number>;
+    forceDeleteMany?(keys: (string | number)[]): Promise<number>;
     /** True if another record already has this value (`unique` rule). */
     exists(column: string, value: unknown, exceptKey?: string | number | null): Promise<boolean>;
     /** Runs `fn` in a database transaction (`panel.databaseTransactions()`); without it, `fn` runs as is. */
@@ -267,6 +270,20 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         keys = await this.keysInScope(keys);
         if (!keys.length) return 0;
         if (this.softDeletes) return this.query().whereIn(this.keyColumn, keys).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any);
+        return this.query().delete().whereIn(this.keyColumn, keys);
+    }
+
+    /** Restores the soft-deleted records among `keys`, within the adapter's scope, in one query. */
+    async restoreMany(keys: (string | number)[]): Promise<number> {
+        if (!this.softDeletes) return 0;
+        keys = await this.keysInScope(keys);
+        if (!keys.length) return 0;
+        return this.query().whereIn(this.keyColumn, keys).whereNotNull(this.softDeletes).patch({ [this.softDeletes]: null } as any);
+    }
+    /** Permanently deletes the records among `keys`, within the adapter's scope, in one query. */
+    async forceDeleteMany(keys: (string | number)[]): Promise<number> {
+        keys = await this.keysInScope(keys);
+        if (!keys.length) return 0;
         return this.query().delete().whereIn(this.keyColumn, keys);
     }
 

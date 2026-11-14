@@ -13,6 +13,7 @@ import { Component as WireComponent } from '@navette-js/wire';
 import { LabOrders } from './lab-orders.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
 import { LabFrameworkFields } from './lab-framework-fields.ts';
+import { LabRelationBrands, LabRelationProducts } from './lab-prebuilt-actions.ts';
 import { labPluginExamples } from './lab-plugins.ts';
 import {
     BulkActionGroup, Count, Filter, Group, IconColumn, Indicator, NumberConstraint, Panel as TablePanel, QueryBuilder, SelectColumn, SelectFilter, Split, Stack, Sum,
@@ -364,7 +365,7 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .setColors({ primary: Color.Violet })
         .login(options.login)
         // The framework-rendered field and singular settings examples are left out of the parity screenshots.
-        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields]), LabCatalogBrands, LabCatalogProducts, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabSiteSettings])])
+        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields]), LabCatalogBrands, LabCatalogProducts, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabSiteSettings, LabRelationProducts, LabRelationBrands])])
         // Example plugins (`examples/`) and a configurable resource.
         .plugin(labPluginExamples())
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.

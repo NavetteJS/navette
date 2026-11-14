@@ -2035,6 +2035,13 @@ export class Table<R = any> {
     /** Maximum number of records the user may select at once (also enforced on the server). */
     maxSelectableRecords(count: number | null): this { this._maxSelectableRecords = count !== null && count > 0 ? Math.floor(count) : null; return this; }
     getMaxSelectableRecords(): number | null { return this._maxSelectableRecords; }
+    private _allowsDuplicates = false;
+    /**
+     * Relation manager of a many-to-many relationship: a record can be attached more than once (each pivot row is a table row,
+     * keyed by the pivot key). The attach action then offers the records already attached.
+     */
+    allowDuplicates(condition = true): this { this._allowsDuplicates = condition; return this; }
+    allowsDuplicates(): boolean { return this._allowsDuplicates; }
     private _queryModifiers: ((query: any) => unknown)[] = [];
     /**
      * Changes the table's query (an Objection query builder): only the records it keeps are shown, and, in a `TableSelect`,
