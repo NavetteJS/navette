@@ -2240,6 +2240,14 @@ export function sanitizeColumnState<R>(table: Table<R>, state: unknown): ColumnS
 }
 
 /**
+ * Search term of a column's individual search field: `author.name` is bound as `tableColumnSearches.author.name`, which the
+ * browser state may hold nested (`{ author: { name } }`), like Filament's `data_get()`. Only text is accepted.
+ */
+function columnSearchOf(host: TableHost, name: string): string {
+    const value = readRecordPath(host.tableColumnSearches ?? {}, name);
+    return typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
+}
+/**
  * List query (search, column searches, filters, sort) for the host's state, without pagination.
  * Only what the table declares is accepted, whatever state the browser sends.
  */
@@ -2249,7 +2257,7 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
     const query: Omit<ListQuery, 'page' | 'perPage'> = {
         search: host.tableSearch,
         searchColumns: table.getColumns().filter((c) => c.isGloballySearchable()).map((c) => c.getSearchColumn()),
-        columnSearches: Object.fromEntries(table.getColumns().filter((c) => c.isIndividuallySearchable() && String(host.tableColumnSearches?.[c.name] ?? '').trim() !== '').map((c) => [c.getSearchColumn(), String(host.tableColumnSearches[c.name])])),
+        columnSearches: Object.fromEntries(table.getColumns().filter((c) => c.isIndividuallySearchable() && columnSearchOf(host, c.name) !== '').map((c) => [c.getSearchColumn(), columnSearchOf(host, c.name)])),
         sort: sortColumn?.isSortable() ? { column: sortColumn.getSortColumn(), direction: ((direction === 'desc') !== sortColumn.isSortInverted() ? 'desc' : 'asc') as SortDirection } : table.getDefaultSort(),
     };
     const grouping = getTableGrouping(table, host);

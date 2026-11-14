@@ -91,6 +91,9 @@ test('sorting and searching through relationships from the browser state', async
     assert.deepEqual(await titles(host({ tableSearch: 'amy' })), ['Second']);
     assert.deepEqual(await titles(host({ tableSearch: 'news' })), ['First']);
     assert.deepEqual(await titles(host({ tableColumnSearches: { 'author.name': 'ze' } })), ['First']);
+    // The browser binds `tableColumnSearches.author.name`: the state arrives nested; only text is accepted.
+    assert.deepEqual(await titles(host({ tableColumnSearches: { author: { name: 'amy' } } as any })), ['Second']);
+    assert.deepEqual(await titles(host({ tableColumnSearches: { author: { name: { toString: 'x' } } } as any })), ['First', 'Second', 'Third']);
 });
 
 test('SQL injection attempts through the browser state of relationship columns', async () => {

@@ -45,7 +45,7 @@ import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentRe
 export { ParentResourceRegistration } from './nested-resources.ts';
 import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
-import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Palette, type RenderHookCallback } from '@navette-js/support';
+import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, readRecordPath, relationshipPathOf, renderHook, runWithRenderHooks, views, type AttrValue, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
@@ -3313,7 +3313,19 @@ export class ListRecords extends Page implements TableHost {
         if (table.persistsSearchInSession()) { const saved = await store.get(session, this.tableSessionKey('search')); if (typeof saved === 'string') this.tableSearch = saved.slice(0, 1000); }
         if (table.persistsColumnSearchesInSession()) {
             const saved = await store.get(session, this.tableSessionKey('column-searches'));
-            if (saved && typeof saved === 'object') this.tableColumnSearches = Object.fromEntries(Object.entries(saved as Record<string, unknown>).filter(([name, value]) => typeof value === 'string' && table.getColumn(name)?.isIndividuallySearchable()).map(([name, value]) => [name, (value as string).slice(0, 1000)]));
+            if (saved && typeof saved === 'object') {
+                // Only the searches of individually searchable columns are restored; `author.name` is kept nested, as the browser binds it.
+                const restored: Record<string, any> = {};
+                for (const column of table.getColumns().filter((candidate) => candidate.isIndividuallySearchable())) {
+                    const value = readRecordPath(saved, column.name);
+                    if (typeof value !== 'string') continue;
+                    const segments = column.name.split('.');
+                    let node = restored;
+                    for (const segment of segments.slice(0, -1)) node = (node[segment] = node[segment] && typeof node[segment] === 'object' ? node[segment] : {});
+                    node[segments[segments.length - 1]] = value.slice(0, 1000);
+                }
+                this.tableColumnSearches = restored;
+            }
         }
         if (table.persistsSortInSession()) { const saved = await store.get(session, this.tableSessionKey('sort')); if (typeof saved === 'string' || saved === null) this.tableSort = saved as string | null; }
         // Only a group the table declares is kept: `getTableGrouping()` ignores anything else.
