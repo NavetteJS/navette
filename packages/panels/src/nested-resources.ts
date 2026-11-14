@@ -382,13 +382,3 @@ export function linkRelatedRecords(table: Table, facade: { getRelatedResourceUrl
     const name = ['view', 'edit'].find((candidate) => names.has(candidate) && facade.getRelatedResourceUrl!(candidate, '0') !== null);
     return name ? table.recordUrl((record: unknown) => facade.getRelatedResourceUrl!(name, facade.adapter.getKey(record))) : table;
 }
-
-/** `?relation=tasks` (or `?relation=0`) opens that relation manager's tab on a view or edit page. */
-export function relationManagerTabFromQuery(page: { _ctx: unknown; getRelationManagers(): unknown[] }): string | null {
-    const value = (page._ctx as PanelContext | null)?.req?.query?.relation;
-    if (typeof value !== 'string' || value.length > 100) return null;
-    const entries = page.getRelationManagers();
-    if (/^\d+$/.test(value)) return Number(value) < entries.length ? String(Number(value)) : null;
-    const index = entries.findIndex((entry: any) => (typeof entry?.getManagers === 'function' ? entry.getManagers() : [entry]).some((manager: typeof RelationManager) => relationshipNameOf(manager as any) === value));
-    return index >= 0 ? String(index) : null;
-}
