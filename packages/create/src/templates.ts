@@ -31,7 +31,7 @@ export function projectFiles(o: ProjectOptions): Record<string, string> {
     // ------------------------------------------------------------------ root
     files['package.json'] = json({
         name: o.name, private: true, type: 'module',
-        scripts: { dev: 'node --env-file=.env --watch src/server.ts', start: 'node --env-file=.env src/server.ts', navette: 'navette' },
+        scripts: { dev: 'node --env-file=.env --watch src/server.ts', start: 'node --env-file=.env src/server.ts', test: 'node --test "tests/**/*.test.ts"', navette: 'navette' },
         engines: { node: '>=24' },
         dependencies: Object.fromEntries([
             ...['actions', 'database', 'forms', 'infolists', 'panels', 'schemas', 'support', 'tables', 'wire'].map(navette),
@@ -43,7 +43,7 @@ export function projectFiles(o: ProjectOptions): Record<string, string> {
     files['tsconfig.json'] = json({
         // For your editor and `npx tsc`: Node runs the TypeScript sources directly, nothing is compiled.
         compilerOptions: { target: 'es2023', module: 'nodenext', moduleResolution: 'nodenext', allowImportingTsExtensions: true, noEmit: true, strict: false, skipLibCheck: true, types: ['node'] },
-        include: ['src'],
+        include: ['src', 'tests'],
     });
     const env = (key: string) => [
         `APP_NAME="${o.appName.replace(/"/g, '')}"`,
@@ -538,6 +538,151 @@ app.listen(port, '127.0.0.1', () => {
 ${o.userPanel ? "    console.log(`  User panel   http://127.0.0.1:${port}/app`);\n" : ''}});
 `;
 
+    // ------------------------------------------------------------------ tests
+    files['tests/setup.ts'] = `// Imported first by every test file: test settings, set before the application modules read them.
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const directory = mkdtempSync(join(tmpdir(), 'navette-test-'));
+// A throwaway SQLite database, created by the migrations (each test file gets its own).
+process.env.DB_CONNECTION = 'sqlite';
+process.env.DB_DATABASE = join(directory, 'database.sqlite');
+process.env.APP_KEY ??= 'test-key-not-a-secret';
+process.env.MAIL_LOG = join(directory, 'mail.log');
+`;
+    files['tests/UserResource.test.ts'] = `// Tests of the users resource, without a browser: run them with \`npm test\`.
+import './setup.ts';
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import { actingAs, livewire, setCurrentPanel } from '@navette-js/panels/testing';
+import { db, migrate } from '../src/database.ts';
+import admin from '../src/panels/admin.ts';
+import { UserResource } from '../src/admin/resources/UserResource.ts';
+
+const pages = UserResource.getPages();
+let adminId: number;
+
+before(async () => {
+    await migrate();
+    [adminId] = await db('users').insert({ name: 'Ada Admin', email: 'ada@example.test', password: '-', role: 'admin' });
+    // Pages are mounted in this panel, as this user.
+    setCurrentPanel(admin);
+    actingAs({ id: adminId, name: 'Ada Admin', email: 'ada@example.test' });
+});
+after(() => db.destroy());
+
+test('the users list shows the users, and searches them', async () => {
+    const [grace] = await db('users').insert({ name: 'Grace', email: 'grace@example.test', password: '-' });
+    await livewire(pages.index)
+        .assertOk()
+        .assertCanSeeTableRecords([adminId, grace])
+        .searchTable('Grace')
+        .assertCanSeeTableRecords([grace])
+        .assertCanNotSeeTableRecords([adminId])
+        // The resource's policy forbids creating users here.
+        .assertActionHidden('create');
+});
+
+test('a user\\'s role can be changed', async () => {
+    const [linus] = await db('users').insert({ name: 'Linus', email: 'linus@example.test', password: '-' });
+    await livewire(pages.edit, { record: linus })
+        .assertSchemaStateSet({ name: 'Linus', role: 'user' })
+        .fillForm({ role: 'admin' })
+        .call('save')
+        .assertHasNoFormErrors()
+        .assertNotified();
+    assert.equal((await db('users').where('id', linus).first()).role, 'admin');
+});
+
+test('another user\\'s email address is refused', async () => {
+    const [margaret] = await db('users').insert({ name: 'Margaret', email: 'margaret@example.test', password: '-' });
+    await livewire(pages.edit, { record: margaret })
+        .fillForm({ email: 'ada@example.test' })
+        .call('save')
+        .assertHasFormErrors({ email: 'unique' })
+        .assertNotNotified();
+});
+
+test('only admins can open the admin panel', async () => {
+    const [reader] = await db('users').insert({ name: 'Reader', email: 'reader@example.test', password: '-' });
+    await livewire(pages.index, {}, { user: { id: reader, name: 'Reader', email: 'reader@example.test' } }).assertForbidden();
+});
+`;
+    if (starter) files['tests/TaskResource.test.ts'] = `// Tests of the tasks resource, without a browser: run them with \`npm test\`.
+import './setup.ts';
+import assert from 'node:assert/strict';
+import { after, before, test } from 'node:test';
+import { actingAs, livewire, setCurrentPanel } from '@navette-js/panels/testing';
+import { db, migrate } from '../src/database.ts';
+import admin from '../src/panels/admin.ts';
+import { TaskResource } from '../src/admin/resources/TaskResource.ts';
+
+const pages = TaskResource.getPages();
+
+before(async () => {
+    await migrate();
+    const [id] = await db('users').insert({ name: 'Ada Admin', email: 'ada@example.test', password: '-', role: 'admin' });
+    setCurrentPanel(admin);
+    actingAs({ id, name: 'Ada Admin', email: 'ada@example.test' });
+});
+after(() => db.destroy());
+
+test('the task list shows the tasks, and searches and filters them', async () => {
+    const [write] = await db('tasks').insert({ title: 'Write the tests', priority: 'high' });
+    const [ship] = await db('tasks').insert({ title: 'Ship the release', priority: 'normal' });
+    await livewire(pages.index)
+        .assertOk()
+        .assertCanSeeTableRecords([write, ship])
+        .searchTable('Write')
+        .assertCanSeeTableRecords([write])
+        .assertCanNotSeeTableRecords([ship])
+        .searchTable()
+        .filterTable('priority', 'normal')
+        .assertCanSeeTableRecords([ship])
+        .assertCanNotSeeTableRecords([write]);
+});
+
+test('a task can be created', async () => {
+    await livewire(pages.create)
+        .fillForm({ title: 'Buy milk', priority: 'low' })
+        .call('create')
+        .assertHasNoFormErrors()
+        .assertNotified()
+        .assertRedirect();
+    const task = await db('tasks').where('title', 'Buy milk').first();
+    assert.equal(task.priority, 'low');
+});
+
+test('the title is required', async () => {
+    await livewire(pages.create)
+        .fillForm({ title: '' })
+        .call('create')
+        .assertHasFormErrors({ title: 'required' })
+        .assertNotNotified()
+        .assertNoRedirect();
+});
+
+test('the "Complete" row action marks a task as done', async () => {
+    const [id] = await db('tasks').insert({ title: 'Water the plants' });
+    await livewire(pages.index)
+        .assertTableActionVisible('toggle', id)
+        .callTableAction('toggle', id)
+        .assertNotified('Task updated');
+    assert.equal(Boolean((await db('tasks').where('id', id).first()).is_done), true);
+});
+
+test('the selected tasks can be deleted', async () => {
+    const [first] = await db('tasks').insert({ title: 'Old task' });
+    const [second] = await db('tasks').insert({ title: 'Older task' });
+    await livewire(pages.index)
+        .callTableBulkAction('delete', [first, second])
+        .assertNotified()
+        .assertCanNotSeeTableRecords([first, second]);
+    assert.equal(await db('tasks').whereIn('id', [first, second]).first(), undefined);
+});
+`;
+
     // ------------------------------------------------------------------ README
     files['README.md'] = `# ${o.appName}
 
@@ -559,6 +704,14 @@ npx navette make:user --admin
 
 In development, e-mails (password reset${o.userPanel ? ', email verification' : ''}) are written to \`storage/mail.log\`.
 
+## Testing
+
+\`\`\`bash
+npm test
+\`\`\`
+
+The tests in \`tests/\` mount the panel pages without a browser (\`@navette-js/panels/testing\`), on a throwaway SQLite database: fill forms, call actions, check tables and notifications.
+
 ## Project structure
 
 | Path | |
@@ -568,6 +721,7 @@ In development, e-mails (password reset${o.userPanel ? ', email verification' : 
 | \`src/admin/resources\`, \`pages\`, \`widgets\` | Discovered automatically by the admin panel |
 ${o.userPanel ? '| `src/app/…` | The same for the user panel |\n' : ''}| \`src/models/\` | Objection models |
 | \`src/migrations/\` | Database migrations, run at start-up |
+| \`tests/\` | Tests, run with \`npm test\` |
 | \`.env\` | Settings (\`APP_KEY\` is secret: never commit it) |
 
 ## Generating code

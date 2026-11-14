@@ -88,6 +88,19 @@ export class UploadStore {
         });
     }
 
+    /**
+     * Stores a file given as content (testing helpers, server-side imports) as a temporary upload, with the same type detection
+     * as a browser upload; returns its temporary id.
+     */
+    async storeContent(name: string, content: string | Buffer): Promise<string> {
+        this.sweep();
+        const id = randomBytes(16).toString('hex');
+        const target = path.join(this.dir, id);
+        writeFileSync(target, content, { flag: 'wx' });
+        const detected = await detect(target, name);
+        writeFileSync(`${target}.json`, JSON.stringify({ name: path.basename(String(name || 'file')).slice(0, 255), type: detected.type, extension: detected.extension }));
+        return id;
+    }
     /** Temporary file referenced by a state value (`livewire-file:<id>`) or a bare id, if it still exists. */
     resolve(value: unknown): TemporaryFile | null {
         const id = typeof value === 'string' ? (value.startsWith(PREFIX) ? value.slice(PREFIX.length) : value) : '';
