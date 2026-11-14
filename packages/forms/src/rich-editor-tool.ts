@@ -88,10 +88,24 @@ export class RichEditorTool {
     activeStyling(condition = true): this { this._activeStyling = condition; return this; }
     disabledWhenNotActive(condition = true): this { this._disabledWhenNotActive = condition; return this; }
     extraAttributes(attributes: Record<string, string>): this { Object.assign(this._extraAttributes, attributes); return this; }
-    toHtml(): string {
-        const active = this._activeJsExpression
+    getExtraAttributes(): Record<string, string> { return { ...this._extraAttributes }; }
+    getIcon(): string | null { return this._icon; }
+    getIconAlias(): string | null { return this._iconAlias; }
+    getJsHandler(): string | null { return this._jsHandler; }
+    isToggle(): boolean { return this._toggle; }
+    hasActiveStyling(): boolean { return this._activeStyling; }
+    isDisabledWhenNotActive(): boolean { return this._disabledWhenNotActive; }
+    getActiveKey(): string { return this._activeKey ?? this._name; }
+    getActiveOptions(): Record<string, unknown> { return { ...this._activeOptions }; }
+    /** JavaScript expression, true while the tool is active (re-evaluated on each editor update). */
+    getActiveExpression(): string {
+        return this._activeJsExpression
             ? `editorUpdatedAt && (${this._activeJsExpression})`
             : `editorUpdatedAt && $getEditor()?.isActive(${js(this._activeKey ?? this._name)}, ${Object.keys(this._activeOptions).length ? js(this._activeOptions) : '[]'})`;
+    }
+    getIconHtml(): string { return this._icon ? icon(this._icon, { alias: this._iconAlias ?? undefined }) : ''; }
+    toHtml(): string {
+        const active = this.getActiveExpression();
         const label = this.getLabel();
         const attributes = new Attributes(this._extraAttributes).merge({
             'data-rich-editor-tool': this._name,
@@ -105,6 +119,6 @@ export class RichEditorTool {
             'x-on:click': this._jsHandler,
             'x-tooltip': label && this._hiddenLabel ? `{ content: ${js(label)}, theme: $store.theme }` : null,
         }).class(['fi-fo-rich-editor-tool', { 'fi-fo-rich-editor-tool-with-label': !this._hiddenLabel }]);
-        return `<button ${attributes.toHtml()}>${this._icon ? icon(this._icon, { alias: this._iconAlias ?? undefined }) : ''}${this._hiddenLabel ? '' : `<span class="fi-fo-rich-editor-tool-label">${e(label)}</span>`}</button>`;
+        return `<button ${attributes.toHtml()}>${this.getIconHtml()}${this._hiddenLabel ? '' : `<span class="fi-fo-rich-editor-tool-label">${e(label)}</span>`}</button>`;
     }
 }

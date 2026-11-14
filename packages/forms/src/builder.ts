@@ -4,8 +4,9 @@ import { Attributes, HtmlString, cls, e, icon, js, loadingIndicator, views, type
 import { t } from '@navette-js/support/i18n';
 import { Action, ActionHalt } from '@navette-js/actions';
 import { Schema, type Component } from '@navette-js/schemas';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { Field, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, type Rule } from './index.ts';
+import { createHash, randomBytes } from 'node:crypto';
+import { cloneComponentTree, Field, fillSchema, fillSchemaFromRecord, getSchemaState, validateSchema, type Rule } from './index.ts';
+import { applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
 import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 
 const asset = (name: string) => views.render('filament-forms::asset', { path: name }).trim();
@@ -52,6 +53,7 @@ export class Block {
     private _label: string | ((ctx: BlockLabelContext) => string | null) | null = null;
     private _icon: string | null = null;
     private _schema: (ctx: BlockContext) => Component[] = () => [];
+    private _schemaTemplate: Schema | null = null;
     private _defaults: ((builder: Builder) => Record<string, unknown>) | null = null;
     private _pickerGroup: string | null = null;
     private _maxItems: number | null = null;
@@ -70,8 +72,18 @@ export class Block {
     pickerGroup(label: string | null): this { this._pickerGroup = label; return this; }
     getPickerGroup(): string | null { return this._pickerGroup; }
     icon(name: string | null): this { this._icon = name; return this; }
-    /** Item components: a function called for each item (with its current data). */
-    schema(factory: (ctx: BlockContext) => Component[]): this { this._schema = factory; return this; }
+    /**
+     * Item components: a function called for each item (with its current data), a list (copied for each item), or a `Schema`
+     * holding them; a schema with `lazyLoaded()` renders each item's content when the item enters the viewport.
+     */
+    schema(factory: ((ctx: BlockContext) => Component[]) | Component[] | Schema): this {
+        this._schemaTemplate = factory instanceof Schema ? factory : null;
+        const components = factory instanceof Schema ? () => factory.getComponents() : Array.isArray(factory) ? () => factory : null;
+        this._schema = components ? () => components().map(cloneComponentTree) : factory as (ctx: BlockContext) => Component[];
+        return this;
+    }
+    /** The `Schema` given to `schema()`, if any (its `lazyLoaded()` applies to the items of this block). */
+    getSchemaTemplate(): Schema | null { return this._schemaTemplate; }
     /** Data of a new item when it cannot be derived from the fields' defaults (fields depending on another). */
     defaultData(factory: (builder: Builder) => Record<string, unknown>): this { this._defaults = factory; return this; }
     /** Read-only preview shown instead of the form when the builder has `blockPreviews()`. */
@@ -130,7 +142,8 @@ export class Builder extends Field {
     private _blockPreviews = false;
     private _interactivePreviews = false;
     private _extraClass: string | null = null;
-    private _uuid: () => string = randomUUID;
+    private _itemKeyGenerator: ItemKeyGenerator = null;
+    private _maxItemsForProcessing: number | null = null;
     private _actionModifiers: Partial<Record<BuilderActionName, ActionModifier>> = {};
     private _extraItemActions: Action[] = [];
     static make(name: string): Builder { return configured(new Builder(name)); }
@@ -230,9 +243,34 @@ export class Builder extends Field {
         for (const block of this.getBlocks()) if (block.getMaxItems() !== null) rules.push({ name: 'max', implicit: true, passes: () => items().filter((item) => item.type === block.name).length <= block.getMaxItems()!, message: (a) => `The ${a} field must not have more than ${block.getMaxItems()} ${block.getLabel()} items.` });
         return [...rules, ...this._rules];
     }
-    /** Class added to the root (e.g. `fi-fo-builder-not-contained`). */
+    /** Class added to the builder's root element, before `fi-fo-builder` (e.g. `fi-fo-builder-not-contained`, without the container border). */
     extraClass(name: string | null): this { this._extraClass = name; return this; }
-    generateUuidUsing(generator: () => string): this { this._uuid = generator; return this; }
+    /**
+     * Key of new items: `null` (default) a random UUID, `false` numeric keys (`0`, `1`…), or a function returning the key
+     * (a falsy result falls back to the next numeric key).
+     */
+    generateUuidUsing(generator: ItemKeyGenerator): this { this._itemKeyGenerator = generator; return this; }
+    /** A new item key (see `generateUuidUsing()`), different from the keys already used. */
+    generateUuid(existingKeys: Iterable<string> = Object.keys(this.getItems())): string { return generateItemKey(this._itemKeyGenerator, existingKeys); }
+    /**
+     * Tests: every builder made afterwards uses numeric item keys (`0`, `1`, `2`…) instead of UUIDs, so its state can be
+     * asserted. Returns a function that restores UUIDs.
+     */
+    private static activeFakes = 0;
+    static fake(): () => void {
+        const undo = Builder.configureUsing((builder: Builder) => { builder.generateUuidUsing(false); });
+        Builder.activeFakes++;
+        let undone = false;
+        return () => { if (undone) return; undone = true; Builder.activeFakes--; undo(); };
+    }
+    /** Whether `fake()` is active (item keys are sequential numbers). */
+    static isFake(): boolean { return Builder.activeFakes > 0; }
+    /**
+     * Refuses (HTTP 413) a state holding more items than this, before building their schemas. Nothing is truncated; `null`
+     * (default) turns it off. `maxItems()` stays the validation limit.
+     */
+    maxItemsForProcessing(count: number | null): this { this._maxItemsForProcessing = count; return this; }
+    getMaxItemsForProcessing(): number | null { return this._maxItemsForProcessing; }
 
     getBlocks(): Block[] { return (this._resolvedBlocks ??= typeof this._blocks === 'function' ? this._blocks() : this._blocks); }
     getBlock(name: unknown): Block | undefined { return typeof name === 'string' ? this.getBlocks().find((block) => block.name === name) : undefined; }
@@ -243,6 +281,7 @@ export class Builder extends Field {
     getItems(): Record<string, Item> {
         const state = this.context().state;
         if (!state || typeof state !== 'object' || Array.isArray(state)) return {};
+        ensureItemsCanBeProcessed(rawItemCount(state), this._maxItemsForProcessing);
         const items: Record<string, Item> = {};
         for (const [key, raw] of Object.entries(state as Record<string, any>).slice(0, this._maxItems)) {
             if (!isItemKey(key) || !raw || typeof raw !== 'object' || !this.getBlock(raw.type)) continue;
@@ -259,7 +298,9 @@ export class Builder extends Field {
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = null; } }
         if (!value || typeof value !== 'object') return {};
-        const entries: [string, any][] = Array.isArray(value) ? value.map((raw) => [this._uuid(), raw]) : Object.entries(value);
+        ensureItemsCanBeProcessed(rawItemCount(value), this._maxItemsForProcessing);
+        const keys: string[] = [];
+        const entries: [string, any][] = Array.isArray(value) ? value.map((raw) => { const key = this.generateUuid(keys); keys.push(key); return [key, raw]; }) : Object.entries(value);
         const items: Record<string, Item> = {};
         for (const [key, raw] of entries.slice(0, this._maxItems)) {
             const block = raw && typeof raw === 'object' ? this.getBlock(raw.type) : undefined;
@@ -284,8 +325,10 @@ export class Builder extends Field {
     /** Item schema: key `<builder>.<item>.data`, state at the same path. */
     protected itemSchema(itemKey: string, item: Item): Schema {
         const container = this.container;
-        return new Schema(container.livewire).key(`${this.getKey()}.${itemKey}.data`).statePath(`${this.getStatePath()}.${itemKey}.data`).operation(container.getOperation()).record(container.getRecord()).root(false).parentComponent(this)
-            .components(this.getBlock(item.type)!.getComponents({ builder: this, itemKey, data: item.data }));
+        const block = this.getBlock(item.type)!;
+        const schema = new Schema(container.livewire).key(`${this.getKey()}.${itemKey}.data`).statePath(`${this.getStatePath()}.${itemKey}.data`).operation(container.getOperation()).record(container.getRecord()).root(false).parentComponent(this)
+            .components(block.getComponents({ builder: this, itemKey, data: item.data }));
+        return applyLazyItemSchema(schema, this, block.getSchemaTemplate());
     }
     getChildSchemas(): Schema[] { return Object.entries(this.getItems()).map(([key, item]) => this.itemSchema(key, item)); }
     protected newItem(block: Block): Item {
@@ -357,7 +400,7 @@ export class Builder extends Field {
             const items = this.getItems();
             if (!block || !this.canAdd(block)) return;
             if (between && (typeof args.afterItem !== 'string' || !Object.hasOwn(items, args.afterItem))) return;
-            const key = this._uuid();
+            const key = this.generateUuid(Object.keys(items));
             const item = this._blockPreviews && block.getComponents({ builder: this, itemKey: key, data: {} }).length ? this.itemFromData(block, key, data ?? {}) : this.newItem(block);
             this.setItems(this.insert(items, typeof args.afterItem === 'string' ? args.afterItem : null, key, item));
         };
@@ -375,7 +418,7 @@ export class Builder extends Field {
                     const items = this.getItems();
                     const key = String(args.item);
                     if (!this._cloneable || !Object.hasOwn(items, key) || !this.canAdd(this.getBlock(items[key].type)!)) return;
-                    this.setItems(this.insert(items, key, this._uuid(), this.cloneItem(items[key])));
+                    this.setItems(this.insert(items, key, this.generateUuid(Object.keys(items)), this.cloneItem(items[key])));
                 }); break;
             // Block previews: the item's form, in a modal.
             case 'edit': action = Action.make('edit').label(tr('edit.label')).icon(fieldActionIcon('builder', 'edit')).color('gray').iconButton().size('sm')

@@ -37,6 +37,8 @@ Each field has a fixed format, which is also the format of its value in the form
 
 An empty field is saved as `null`.
 
+A picker can also drop its date or its time part: `DateTimePicker.make('starts_at').time(false)` behaves as a `DatePicker`, and `DateTimePicker.make('opens_at').date(false)` as a `TimePicker` (input type, saved format and validation). Likewise, `DatePicker.make('due_at').time()` adds a time.
+
 ### Customizing the storage format
 
 `format()` changes the format of the saved value, written with PHP's date tokens (`Y`, `m`, `d`, `H`, `i`, `s`, `j`, `n`, `g`, `A`, `U`…):
@@ -227,6 +229,109 @@ The date-time picker and the time picker also accept `live()` and `live({ onBlur
 ## Setting a placeholder
 
 All three pickers accept `placeholder()`. With the JavaScript picker, it is shown in the empty field; most browsers don't display it on native date inputs.
+
+## Autocompleting dates with a datalist
+
+Unless you're using the [JavaScript date picker](#enabling-the-javascript-date-picker), you may specify [datalist](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/datalist) options for a date picker using the `datalist()` method:
+
+```ts
+import { TimePicker } from '@navette-js/forms';
+
+TimePicker.make('appointment_at')
+    .seconds(false)
+    .datalist([
+        '09:00',
+        '09:30',
+        '10:00',
+        '10:30',
+        '11:00',
+        '11:30',
+        '12:00',
+    ])
+```
+
+Datalists provide autocomplete options to users when they use the picker. However, these are purely recommendations, and the user is still able to type any value into the input. If you're looking to strictly limit users to a set of predefined options, check out the [select field](/forms/select). As well as allowing a static value, the `datalist()` method also accepts a function of the [field context](/forms/overview#using-the-field-context). The datalist is left out when the field is disabled or read-only.
+
+## Adding affix text aside the field
+
+You may place text before and after the input using the `prefix()` and `suffix()` methods:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date')
+    .prefix('Starts')
+    .suffix('at midnight')
+```
+
+```preview
+// state: {"date": "2025-03-14"}
+DatePicker.make('date')
+    .prefix('Starts')
+    .suffix('at midnight')
+```
+
+As well as allowing static values, the `prefix()` and `suffix()` methods also accept a function of the [field context](/forms/overview#using-the-field-context). Pass `true` as the second argument to display the affix inside the input, as with the [text input](/forms/text-input#displaying-affixes-inside-the-input). Affix actions are also available, with `prefixAction()` and `suffixAction()`, as on the [text input](/forms/text-input#using-actions-as-affixes).
+
+### Using icons as affixes
+
+You may place an [icon](/styling/icons) before and after the input using the `prefixIcon()` and `suffixIcon()` methods:
+
+```ts
+import { TimePicker } from '@navette-js/forms';
+
+TimePicker.make('at')
+    .prefixIcon('m-play')
+```
+
+```preview
+// state: {"at": "07:30:00"}
+TimePicker.make('at')
+    .prefixIcon('m-play')
+```
+
+As well as allowing static values, the `prefixIcon()` and `suffixIcon()` methods also accept a function of the field context.
+
+#### Setting the affix icon's color
+
+Affix icons are gray by default, but you may set a different color using the `prefixIconColor()` and `suffixIconColor()` methods:
+
+```ts
+import { TimePicker } from '@navette-js/forms';
+
+TimePicker.make('at')
+    .prefixIcon('m-check-circle')
+    .prefixIconColor('success')
+```
+
+```preview
+// state: {"at": "07:30:00"}
+TimePicker.make('at')
+    .prefixIcon('m-check-circle')
+    .prefixIconColor('success')
+```
+
+## Making the field read-only
+
+Not to be confused with [disabling the field](/forms/overview#disabling-a-field), you may make the field "read-only" using the `readOnly()` method:
+
+```ts
+import { DatePicker } from '@navette-js/forms';
+
+DatePicker.make('date_of_birth')
+    .readOnly()
+```
+
+This setting applies to both native and [JavaScript date pickers](#enabling-the-javascript-date-picker). Read-only JavaScript date pickers remain focusable, but cannot open the picker or clear the value.
+
+There are a few differences, compared to `disabled()`:
+
+- When using `readOnly()`, the field will still be sent to the server when the form is submitted. It can be mutated with the browser console, or via JavaScript. You can use [`dehydrated(false)`](/forms/overview#preventing-a-field-from-being-saved) to prevent this.
+- There are no styling changes, such as less opacity, when using `readOnly()`.
+- The field is still focusable when using `readOnly()`.
+- The field is still validated on the server, but the browser's `required` check is dropped.
+
+Optionally, you may pass a boolean, or a function of the field context, to control if the field should be read-only or not: `readOnly(({ operation }) => operation === 'edit')`.
 
 ## Date-time picker validation
 

@@ -233,6 +233,40 @@ ToggleButtons.make('technologies')
     .columns(2)
 ```
 
+### Setting the grid direction
+
+By default, when you arrange buttons into columns, they are listed in order vertically: the first column is filled, then the next one. If you'd like to list them horizontally, row by row, use the `gridDirection('row')` method:
+
+```ts
+import { ToggleButtons } from '@navette-js/forms';
+
+ToggleButtons.make('technologies')
+    .options({
+        tailwind: 'Tailwind CSS',
+        alpine: 'Alpine.js',
+        laravel: 'Laravel',
+        livewire: 'Laravel Livewire',
+    })
+    .columns(2)
+    .gridDirection('row')
+```
+
+```preview
+// state: {"technologies": "laravel"}
+// viewport: 1100
+ToggleButtons.make('technologies')
+    .options({
+        tailwind: 'Tailwind CSS',
+        alpine: 'Alpine.js',
+        laravel: 'Laravel',
+        livewire: 'Laravel Livewire',
+    })
+    .columns(2)
+    .gridDirection('row')
+```
+
+`gridDirection()` takes `'row'` or `'column'` (the default), or a function of the [field context](/forms/overview#using-the-field-context) returning one of them.
+
 ## Making the buttons fill the width
 
 You may stretch the buttons to the full width of the field using the `fullWidth()` method:

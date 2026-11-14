@@ -325,6 +325,45 @@ TextInput.make('phone')
 
 The mask only guides typing in the browser. It is not a validation rule: always add the rules your data needs, as `tel()` does here.
 
+To use a [dynamic mask](https://alpinejs.dev/plugins/mask#mask-functions), wrap the JavaScript in a `RawJs` object. The expression is evaluated in the browser on every keystroke, with the typed value in `$input`:
+
+```ts
+import { RawJs, TextInput } from '@navette-js/forms';
+
+TextInput.make('cardNumber')
+    .mask(RawJs.make(`$input.startsWith('34') || $input.startsWith('37') ? '9999 999999 99999' : '9999 9999 9999 9999'`))
+```
+
+As well as allowing a static value, the `mask()` method also accepts a function to dynamically calculate it. The function receives the [field context](/forms/overview#using-the-field-context), and is evaluated each time the field is rendered:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('code')
+    .mask(({ get }) => (get('type') === 'voucher' ? 'aaa-9999' : '9999 9999'))
+```
+
+The mask sends the whole masked value to the server, so you may need to strip some characters from the state before it is validated and saved. You can do this with the `stripCharacters()` method, passing in a character or an array of characters to remove from the masked value:
+
+```ts
+import { RawJs, TextInput } from '@navette-js/forms';
+
+TextInput.make('amount')
+    .mask(RawJs.make('$money($input)'))
+    .stripCharacters(',')
+    .numeric()
+```
+
+```preview
+// state: {"amount": "1,234,567.89"}
+TextInput.make('amount')
+    .mask(RawJs.make('$money($input)'))
+    .stripCharacters(',')
+    .numeric()
+```
+
+Here, the user types `1,234,567.89` and `1234567.89` is validated and saved. The characters are also removed from a value loaded from the record. As well as allowing a static value, the `stripCharacters()` method also accepts a function of the [field context](/forms/overview#using-the-field-context) returning the characters.
+
 ## Trimming whitespace
 
 You can automatically trim whitespace from the beginning and end of the value using the `trim()` method. The value is trimmed before it is validated and saved:
@@ -394,5 +433,27 @@ TextInput.make('number')
 
 When using `tel()`, the value is validated against this regular expression on the server: `/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/`.
 
-To accept another format, use `type('tel')` instead, which sets the input type without adding a rule, and add your own [custom rule](/forms/validation#custom-rules).
+If you wish to change that, use the `telRegex()` method, with a regular expression or a `/pattern/flags` string:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.make('phone')
+    .tel()
+    .telRegex('/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/')
+```
+
+Alternatively, to customize the `telRegex()` across all fields, use `configureUsing()` when your application starts:
+
+```ts
+import { TextInput } from '@navette-js/forms';
+
+TextInput.configureUsing((input) => {
+    input.telRegex(/^\+[0-9]{6,15}$/);
+});
+```
+
+As well as allowing a static value, the `telRegex()` method also accepts a function of the [field context](/forms/overview#using-the-field-context) returning the pattern. `tel(false)` leaves the field as it is: no `tel` input type and no rule.
+
+To accept any format, use `type('tel')` instead, which sets the input type without adding a rule, and add your own [custom rule](/forms/validation#custom-rules).
 

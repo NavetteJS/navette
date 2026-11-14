@@ -409,6 +409,28 @@ Register it like the built-in methods:
 panel.multiFactorAuthentication([AppAuthentication.make(), new SmsAuthentication()]);
 ```
 
+### The one-time code field
+
+`OneTimeCodeInput` shows one box per digit, with the browser's one-time code autocompletion on the first box. Its state is a string of digits, validated on the server: it must have exactly `length()` digits (6 by default; leading zeros are kept). `submitOnCompletion()` submits the form as soon as the last digit is typed, and `readOnly()` shows the code without letting the user change it:
+
+```ts
+import { OneTimeCodeInput } from '@navette-js/forms';
+
+OneTimeCodeInput.make('code')
+    .label('Code sent by SMS')
+    .length(8)
+    .submitOnCompletion()
+    .required()
+```
+
+```preview
+// state: {"code": "1234"}
+OneTimeCodeInput.make('code')
+    .label('Code sent by SMS')
+    .length(8)
+    .submitOnCompletion()
+```
+
 ### Extending the built-in methods
 
 `AppAuthentication` and `SecurityKeyAuthentication` are classes: extend them to change one part, such as the actions of the profile section or the fields of the challenge.

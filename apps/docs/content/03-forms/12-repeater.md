@@ -325,6 +325,130 @@ Repeater.make('approvedComments')
     ])
 ```
 
+### Mutating related item data before filling the field
+
+You may change the data of a related record before it fills its item using the `mutateRelationshipDataBeforeFillUsing()` method. The function receives the record's attributes as `data` (with the other utilities of the field), and returns the data to fill:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('qualifications')
+    .relationship()
+    .schema([
+        // ...
+    ])
+    .mutateRelationshipDataBeforeFillUsing(({ data }) => ({
+        ...data,
+        title: String(data.title).toUpperCase(),
+    }))
+```
+
+### Mutating related item data before creating
+
+You may change the data of a new item before its related record is created using the `mutateRelationshipDataBeforeCreateUsing()` method. The function receives the item's data as `data`, and returns either the data to save, or `null` to skip creating the record:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('qualifications')
+    .relationship()
+    .schema([
+        // ...
+    ])
+    .mutateRelationshipDataBeforeCreateUsing(({ data }) => ({
+        ...data,
+        user_id: currentUserId(),
+    }))
+```
+
+### Mutating related item data before saving
+
+You may change the data of an existing item before its related record is updated using the `mutateRelationshipDataBeforeSaveUsing()` method. The function receives the item's data as `data` and the related record as `record`, and returns either the data to save, or `null` to leave the record unchanged:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('qualifications')
+    .relationship()
+    .schema([
+        // ...
+    ])
+    .mutateRelationshipDataBeforeSaveUsing(({ data, record }) => ({
+        ...data,
+        updated_by: currentUserId(),
+    }))
+```
+
+### Running code after creating a related item
+
+You may run code after a new item's record is created using the `afterCreate()` method. The function receives the item's data as `data` and the new record (an Objection model instance, with its id) as `record`. This is useful when you need the record's id, for instance to link other records to it:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('variants')
+    .relationship()
+    .schema([
+        // ...
+    ])
+    .afterCreate(async ({ data, record }) => {
+        await Variant.relatedQuery('attributes').for(record.id).relate(data.attribute_ids);
+    })
+```
+
+### Running code after updating a related item
+
+You may run code after an existing item's record is updated using the `afterUpdate()` method. The function receives the saved data as `data` and the updated record as `record`:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('variants')
+    .relationship()
+    .schema([
+        // ...
+    ])
+    .afterUpdate(async ({ data, record }) => {
+        await auditLog('variant updated', record.id);
+    })
+```
+
+### Running code after deleting a related item
+
+You may run code after the record of a removed item is deleted using the `afterDelete()` method. The function receives the deleted record as `record`: it no longer exists in the database, but you can still read its attributes, such as its id:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('attachments')
+    .relationship()
+    .schema([
+        // ...
+    ])
+    .afterDelete(async ({ record }) => {
+        await storage.delete(record.file_path);
+    })
+```
+
+The records of removed items are deleted first, then the remaining items are updated and the new ones created, in the order of the items.
+
+### Modifying related records after retrieval
+
+You may filter or change the related records after they are retrieved from the database using the `modifyRecordsUsing` option of `relationship()`. The function receives the list of records and returns the list to use. Only these records are filled into the repeater, and only these records are updated or deleted when saving, so two repeaters can share a relationship:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('startItems')
+    .relationship('items', null, { modifyRecordsUsing: (records) => records.filter((record) => record.group === 'start') })
+    .mutateRelationshipDataBeforeCreateUsing(({ data }) => ({ ...data, group: 'start' })),
+Repeater.make('endItems')
+    .relationship('items', null, { modifyRecordsUsing: (records) => records.filter((record) => record.group === 'end') })
+    .mutateRelationshipDataBeforeCreateUsing(({ data }) => ({ ...data, group: 'end' })),
+```
+
+The function receives the records after the query and the [order column](#reordering-items-in-a-relationship) are applied. Filtering in the query (`relationship('items', (query) => query.where('group', 'start'))`) is usually cheaper; `modifyRecordsUsing` is for conditions that are easier to write in JavaScript.
+
 ### Saving related rows yourself
 
 Without `relationship()`, the repeater does not save related records itself: the saved value is the object of items, and your data adapter decides what to do with it.
@@ -578,6 +702,83 @@ Repeater.make('members')
     ])
 ```
 
+The labels displayed in the header of the table are passed to the `TableColumn.make()` method. If you want to provide an accessible label for a column but do not wish to display it, you can use the `hiddenHeaderLabel()` method:
+
+```ts
+import { TableColumn } from '@navette-js/forms';
+
+TableColumn.make('Name')
+    .hiddenHeaderLabel()
+```
+
+If you would like to mark a column as "required" with a red asterisk, you can use the `markAsRequired()` method:
+
+```ts
+import { TableColumn } from '@navette-js/forms';
+
+TableColumn.make('Name')
+    .markAsRequired()
+```
+
+You can enable wrapping of the column header using the `wrapHeader()` method:
+
+```ts
+import { TableColumn } from '@navette-js/forms';
+
+TableColumn.make('Name')
+    .wrapHeader()
+```
+
+You can also adjust the alignment of the column header using the `alignment()` method, passing `'start'`, `'center'` or `'end'`, and the vertical alignment of the column's cells with `verticalAlignment()`:
+
+```ts
+import { TableColumn } from '@navette-js/forms';
+
+TableColumn.make('Name')
+    .alignment('center')
+    .verticalAlignment('start')
+```
+
+### Compact table repeaters
+
+You can make table repeaters more compact by using the `compact()` method, to fit more data in a smaller space:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('members')
+    .table([
+        // ...
+    ])
+    .compact()
+    .schema([
+        // ...
+    ])
+```
+
+Optionally, you may pass a boolean value, or a function of the field's context, to control if the table repeater should be compact or not.
+
+```preview
+// state: {"members": {"a1": {"name": "Dan Harrin", "role": "owner"}, "b2": {"name": "Ryan Chandler", "role": "administrator"}}}
+// viewport: 900
+Repeater.make('members')
+    .table([
+        TableColumn.make('Name').markAsRequired(),
+        TableColumn.make('Role').width(160),
+    ])
+    .compact()
+    .schema([
+        TextInput.make('name').required(),
+        Select.make('role')
+            .options({
+                member: 'Member',
+                administrator: 'Administrator',
+                owner: 'Owner',
+            })
+            .required(),
+    ])
+```
+
 The table layout supports adding, deleting and reordering items by drag and drop, `addable(false)`, `deletable(false)`, `reorderable(false)`, `addActionLabel()` and [item links](#adding-links-to-items). The other options of this page (labels, collapsing, cloning, grid, add button alignment, buttons to reorder) only apply to the stacked layout.
 
 ## Adding links to items
@@ -634,6 +835,175 @@ Repeater.make('members')
 ```
 
 Both are checked on the server when the form is validated. Once `maxItems()` is reached, the add button disappears and the server ignores further additions and clones. Without `maxItems()`, a repeater is limited to 500 items.
+
+### Distinct state validation
+
+In many cases, you will want to ensure some sort of uniqueness between repeater items. A couple of common examples could be:
+
+- Ensuring that only one [checkbox](/forms/checkbox) or [toggle](/forms/toggle) is activated at once across items in the repeater.
+- Ensuring that an option may only be selected once across [select](/forms/select), [radio](/forms/radio), [checkbox list](/forms/checkbox-list), or [toggle buttons](/forms/toggle-buttons) fields in a repeater.
+
+`siblingDistinctRules()` returns the rules that validate that the state of a field is unique across all items of its repeater (or [builder](/forms/builder)). Add them with `rules()`:
+
+```ts
+import { Checkbox, Repeater, siblingDistinctRules } from '@navette-js/forms';
+
+Repeater.make('answers')
+    .schema([
+        // ...
+        Checkbox.make('is_correct')
+            .rules(siblingDistinctRules()),
+    ])
+```
+
+The behavior of the validation depends on the data type that the field handles:
+
+- If the field holds a boolean, like a [checkbox](/forms/checkbox) or [toggle](/forms/toggle), only one item may have a value of `true`. There may be many fields in the repeater that have a value of `false`.
+- Otherwise, for fields like a [select](/forms/select), [radio](/forms/radio), [checkbox list](/forms/checkbox-list), or [toggle buttons](/forms/toggle-buttons), each option may only be selected once across all items in the repeater.
+
+`siblingDistinctRules()` accepts a boolean, or a function of the field's context, to turn the validation on or off. Outside a repeater, the rules always pass. The field's own `distinct()` rule is different: it checks that a list value (tags, multiple select) holds no duplicates.
+
+#### Automatically fixing indistinct state
+
+If you'd like to automatically fix indistinct state, you can use the `fixIndistinctState()` method, available on `Checkbox`, `Toggle`, `Select`, `Radio`, `CheckboxList` and `ToggleButtons`:
+
+```ts
+import { Checkbox, Repeater } from '@navette-js/forms';
+
+Repeater.make('answers')
+    .schema([
+        // ...
+        Checkbox.make('is_correct')
+            .fixIndistinctState(),
+    ])
+```
+
+This method adds the distinct validation above and makes the field [`live()`](/forms/overview#the-basics-of-reactivity). Depending on the data type that the field handles, the behavior of `fixIndistinctState()` adapts:
+
+- If the field holds a boolean, like a checkbox or a toggle, and one of the fields is enabled, the other enabled fields are disabled on behalf of the user.
+- Otherwise, for fields like a select, radio, checkbox list, or toggle buttons, when a user selects an option, the other usages of that option are deselected on behalf of the user.
+
+The fix runs on the server after the field's state changes, after the field's own `afterStateUpdated()`. Optionally, you may pass a boolean value, or a function of the field's context, to control if the field should fix indistinct state or not.
+
+#### Disabling options when they are already selected in another item
+
+If you'd like to disable options in a select, radio, checkbox list, or toggle buttons when they are already selected in another item, you can use the `disableOptionsWhenSelectedInSiblingRepeaterItems()` method:
+
+```ts
+import { Repeater, Select } from '@navette-js/forms';
+
+Repeater.make('members')
+    .schema([
+        Select.make('role')
+            .options({
+                // ...
+            })
+            .disableOptionsWhenSelectedInSiblingRepeaterItems(),
+    ])
+```
+
+This method adds the distinct validation above and makes the field `live()`, so the options of the other items are updated as soon as an option is picked. A disabled option cannot be picked by a forged request either: the distinct rule refuses it on the server.
+
+<Aside variant="warning">
+`disableOptionsWhenSelectedInSiblingRepeaterItems()` sets the field's `disableOptionWhen()` function. Calling `disableOptionWhen()` afterwards replaces it.
+</Aside>
+
+## Limiting item processing
+
+If your application's JavaScript accidentally creates a large state, building and rendering an item schema for every entry can cause a long wait. You can opt in to a processing limit using `maxItemsForProcessing()` to stop processing rather than build an unexpectedly large schema:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+Repeater.make('members')
+    .schema([
+        // ...
+    ])
+    .maxItems(5)
+    .maxItemsForProcessing(100)
+```
+
+In this example, up to 100 items can be processed, but the form will only pass validation with at most 5 items. If the state contains more than 100 items, the request is refused with an HTTP 413 response (an `ItemsProcessingLimitError`) before the repeater's item schemas are built. It does not truncate the data. This limit is disabled by default and accepts a number, or `null` to disable it.
+
+<Aside variant="danger">
+The processing limit also applies to existing data loaded from your database. A record above the limit cannot be opened through that form until you raise the limit or correct its data elsewhere. Choose a limit that accommodates existing records you need to edit, including records above your validation limit.
+</Aside>
+
+### Applying processing limits globally
+
+To enable processing limits for all repeaters and builders, use `configureUsing()` when your application starts. Configure each component class separately:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+import { Builder } from '@navette-js/forms/builder';
+
+Repeater.configureUsing((repeater) => {
+    repeater.maxItemsForProcessing(100);
+});
+
+Builder.configureUsing((builder) => {
+    builder.maxItemsForProcessing(100);
+});
+```
+
+You can override the global limit on each component to increase or decrease it, or pass `null` to turn it off for that component.
+
+## Lazy loading repeater item schemas
+
+If a repeater's item schema is expensive to render, you can pass a `Schema` object to `schema()` and use `lazyLoaded()`, or call `lazyLoaded()` on the repeater itself. This is particularly useful when items are [collapsed](#collapsing-items) by default. Each item schema is loaded independently when its item is expanded and enters the viewport:
+
+```ts
+import { Repeater, TextInput } from '@navette-js/forms';
+import { Schema } from '@navette-js/schemas';
+
+Repeater.make('members')
+    .schema(
+        Schema.make()
+            .components([
+                TextInput.make('name'),
+                TextInput.make('email')
+                    .email(),
+            ])
+            .lazyLoaded(),
+    )
+    .collapsed()
+```
+
+Repeater item schemas automatically receive unique keys from their item state paths. Lazy items are still part of the form: their fields are validated and saved even if they were never rendered, and an item holding a validation error is rendered. Table repeaters render their cells directly, so their items are not lazy loaded. You can learn more about lazy schemas in the [schema overview](/schemas/overview#lazy-loading-a-child-schema).
+
+## Item keys
+
+Each item is keyed by a random UUID (related records by `record-<id>`). You may generate the keys of new items yourself with `generateUuidUsing()`, passing a function that returns the key, or `false` to use numeric keys (`0`, `1`, `2`…) as a list would:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+import { randomBytes } from 'node:crypto';
+
+Repeater.make('members')
+    .generateUuidUsing(() => randomBytes(4).toString('hex'))
+```
+
+Keys come back from the browser: only keys of letters, digits, `-` and `_` (at most 64 characters) are accepted.
+
+<Aside variant="warning">
+Item order is the order of the keys of the state object, and JavaScript orders numeric keys in ascending order. With numeric keys, moving an item, or inserting an item between two others, is not reflected in the order of the items. Use them in tests, or for repeaters that cannot be reordered.
+</Aside>
+
+### Testing repeaters
+
+Use `Repeater.fake()` to give repeater items predictable numeric keys instead of UUIDs when asserting their state. Call the returned function after the test to restore normal key generation:
+
+```ts
+import { Repeater } from '@navette-js/forms';
+
+const undoRepeaterFake = Repeater.fake();
+
+// Mount the form: `quotes` is { 0: { content: 'First quote' }, 1: { content: 'Second quote' } }.
+
+undoRepeaterFake();
+```
+
+`fake()` applies to the repeaters made after it is called (it uses `configureUsing()`), and `Repeater.isFake()` tells whether it is active. To call an action on a particular item, pass the item key as the `item` argument: `'0'`, `'1'`… with `fake()`, or `record-<id>` for the items of a [relationship](#integrating-with-a-relationship).
 
 ## Customizing the repeater item actions
 

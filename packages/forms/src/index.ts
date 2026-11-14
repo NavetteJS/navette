@@ -17,19 +17,28 @@ import TextAlign from '@tiptap/extension-text-align';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import Highlight from '@tiptap/extension-highlight';
-import { RICH_CONTENT_EXTENSIONS, SizedImage, customRichContentExtensions, registerTextColors, sanitizeCssColor, TextColor, textColorsForJs, MentionProvider, type CustomBlockClass } from './rich-content.ts';
+import { RICH_CONTENT_EXTENSIONS, SizedImage, customRichContentExtensions, registerTextColors, RichContentRenderer, sanitizeCssColor, TextColor, textColorsForJs, MentionProvider, type CustomBlockClass } from './rich-content.ts';
 export { CustomBlockNode, GridColumnNode, GridNode, LeadNode, MentionNode, MentionProvider, MergeTagNode, registerRichContentExtensions, RichContentCustomBlock, RichContentRenderer, sanitizeCssColor, SizedImage, SmallMark, TextColor, TextColorMark, type CustomBlockClass } from './rich-content.ts';
 import { RichEditorTool } from './rich-editor-tool.ts';
 import { getTableSelectDataAdapter, isTableSelectKey, registerTableSelectDefinition, requireTableSelectDriver, writeTableSelectState, type TableConfiguration, type TableSelectDefinition, type TableSelectOptions, type TableSelectRelationship } from './table-select.ts';
 export { RichEditorTool, type RichEditorToolDefinition } from './rich-editor-tool.ts';
+import { applyToolbarModifications, toolbarButtonNames, type RichContentPlugin, type ToolbarItem, type ToolbarItems, type ToolbarModification } from './rich-editor-toolbar.ts';
+export { ToolbarButtonGroup, type RichContentPlugin, type ToolbarItem, type ToolbarItems } from './rich-editor-toolbar.ts';
+import { attachmentIdsOf, attachmentUrl, eachImage, type AttachmentsVisibility } from './rich-editor-attachments.ts';
+export type { AttachmentsVisibility } from './rich-editor-attachments.ts';
+import { MarkdownFaker, RichContentFaker, type ContentFakerOptions, type RichContentFakerOptions } from './content-faker.ts';
+export { ContentFaker, FakeValues, MarkdownFaker, RichContentFaker, type ContentFakerOptions, type RichContentFakerOptions, type CanGenerateFakeConfiguration } from './content-faker.ts';
 import { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
 export { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
 import { TableKit } from '@tiptap/extension-table';
+import { generateText, type Extensions } from '@tiptap/core';
 import { fileURLToPath } from 'node:url';
 import nodePath from 'node:path';
 import { constants as fsConstants, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { mapLazy, safeFileUrl } from './file-upload-support.ts';
 export { safeFileUrl } from './file-upload-support.ts';
+import { applyDisableOptionsWhenSelectedInSiblingRepeaterItems, applyFixIndistinctState, applyLazyItemSchema, ensureItemsCanBeProcessed, generateItemKey, rawItemCount, type ItemKeyGenerator } from './repeater-items.ts';
+export { generateItemKey, getParentRepeaterItem, ItemsProcessingLimitError, siblingDistinctRules, type ItemKeyGenerator } from './repeater-items.ts';
 
 views.namespace('filament-forms', fileURLToPath(new URL('../views', import.meta.url)));
 let colorManager: ColorManager | null = null;
@@ -641,6 +650,19 @@ export class ModalTableSelect extends TableSelectField {
     }
 }
 
+/** Characters to strip from a state: one string, several, or a function of the field context. */
+export type StripCharacters = string | string[] | ((ctx: ComponentContext) => string | string[] | null) | null;
+const stripCharactersOf = (field: Field, characters: StripCharacters): string[] => {
+    const value = typeof characters === 'function' ? characters(field.context()) : characters;
+    return (Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]).map(String).filter((character) => character !== '');
+};
+/** Removes the characters from a string state (or from each string of a list), as Filament's `StripCharactersStateCast`. */
+const stripFromState = (state: unknown, characters: string[]): unknown => {
+    if (!characters.length) return state;
+    const strip = (value: unknown) => (typeof value === 'string' ? characters.reduce((text, character) => text.split(character).join(''), value) : value);
+    return Array.isArray(state) ? state.map(strip) : strip(state);
+};
+
 export class TextInput extends Field {
     private _type: string | null = null;
     private _isPassword = false;
@@ -708,10 +730,14 @@ export class TextInput extends Field {
     private _trim = false;
     /** Removes the spaces around the value before it is validated and saved. */
     trim(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_trim', condition); }
-    hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
+    private _stripCharacters: StripCharacters = null;
+    /** Characters removed from the value before it is validated and saved (e.g. the `,` of a `$money` mask). */
+    stripCharacters(characters: StripCharacters): this { this._stripCharacters = characters; return this; }
+    getStripCharacters(): string[] { return stripCharactersOf(this, this._stripCharacters); }
+    hydrateState(value: unknown): unknown { value = stripFromState(value, this.getStripCharacters()); return this._trim && typeof value === 'string' ? value.trim() : value; }
     /** `trim()`: the submitted value is trimmed before it is validated and saved. */
-    protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
-    dehydrateState(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
+    protected stateForValidation(state: unknown): unknown { state = stripFromState(state, this.getStripCharacters()); return this._trim && typeof state === 'string' ? state.trim() : state; }
+    dehydrateState(state: unknown): unknown { state = stripFromState(state, this.getStripCharacters()); return this._trim && typeof state === 'string' ? state.trim() : state; }
     private _inputMode: string | null = null;
     private _autocapitalize: string | null = null;
     /** Virtual keyboard: `none`, `text`, `decimal`, `numeric`, `tel`, `search`, `email` or `url`. */
@@ -724,11 +750,26 @@ export class TextInput extends Field {
     /** `true` → "on", `false` → "off", a string as is. */
     autocomplete(value: Lazy<string | boolean | null, ComponentContext> = true): this { return this.setLazy('_autocomplete', value, (item) => (item === true ? 'on' : item === false ? 'off' : item)); }
     placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', text); }
-    private _mask: string | null = null;
-    /** Alpine input mask (`(999) 999-9999`): guides typing in the browser, with no validation value. A function may return it. */
-    mask(pattern: Lazy<string | null, ComponentContext>): this { return this.setLazy('_mask', pattern); }
-    /** Phone number: digits, spaces and common punctuation. */
-    tel(): this { this._type = 'tel'; return this.rule({ name: 'tel', passes: (v) => /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/.test(String(v)), message: (a) => `The ${a} field format is invalid.` }); }
+    private _mask: Lazy<string | RawJs | null, ComponentContext> = null;
+    /**
+     * Alpine input mask: a pattern (`(999) 999-9999`), or a `RawJs` expression evaluated in the browser on every keystroke
+     * (`RawJs.make('$money($input)')`, rendered as `x-mask:dynamic`). It guides typing only, with no validation value.
+     */
+    mask(pattern: Lazy<string | RawJs | null, ComponentContext>): this { this._mask = pattern; return this; }
+    async getMask(): Promise<string | RawJs | null> { const mask = await evaluate(this._mask, this.context()); return mask === '' || mask === undefined ? null : mask; }
+    private _telRegex: Lazy<string | RegExp | null, ComponentContext> = null;
+    /** Pattern a `tel()` value must match on the server (a RegExp, or a `/pattern/flags` string). */
+    telRegex(regex: Lazy<string | RegExp | null, ComponentContext>): this { this._telRegex = regex; return this; }
+    async getTelRegex(): Promise<RegExp> {
+        const regex = await evaluate(this._telRegex, this.context());
+        return regex instanceof RegExp ? regex : regex ? parseRegex(regex) : /^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/;
+    }
+    /** Phone number: `tel` input type, validated against `telRegex()` (digits, spaces and common punctuation by default). */
+    tel(condition = true): this {
+        if (!condition) return this;
+        this._type = 'tel';
+        return this.rule({ name: 'tel', passes: async (v) => { const regex = await this.getTelRegex(); regex.lastIndex = 0; return regex.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` });
+    }
     email(condition = true): this {
         if (!condition) { if (this._type === 'email') this._type = null; this._rules = this._rules.filter((rule) => rule.name !== 'email'); return this; }
         this._type = 'email'; return this.rule({ name: 'email', passes: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v)), message: (a) => `The ${a} field must be a valid email address.` }); }
@@ -752,7 +793,8 @@ export class TextInput extends Field {
         const suffixActions = [...(await visibleActions(this._suffixActions)), ...(this._copyable ? [`<button title="${e(copyLabel)}" aria-label="${e(copyLabel)}" type="button" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" x-on:click="${e(`window.navigator.clipboard.writeText($el.closest('.fi-input-wrp').querySelector('input').value)\n$tooltip(${js(copyMessage)}, { theme: $store.theme, timeout: ${this._copyable.duration} })`)}">${icon('m-clipboard-document-list', { alias: 'forms::components.text-input.actions.copy' })}</button>`] : [])];
         const hasPrefix = this._prefix !== null || this._prefixIcon !== null || prefixActions.length > 0;
         const hasSuffix = this._suffix !== null || this._suffixIcon !== null || suffixActions.length > 0;
-        const type = revealable ? 'password' : this._mask !== null ? 'text' : (this._type ?? (this._isPassword ? 'password' : this._numeric ? 'number' : 'text'));
+        const mask = await this.getMask();
+        const type = revealable ? 'password' : mask !== null ? 'text' : (this._type ?? (this._isPassword ? 'password' : this._numeric ? 'number' : 'text'));
         const model = this.wireModel();
         const alpineAttributes = this.getExtraAlpineAttributes();
         const input = new Attributes(this.getExtraControlAttributes())
@@ -770,12 +812,12 @@ export class TextInput extends Field {
                 // Modifiers (`.live`, `.blur`) also apply to `wire:model.fill`.
                 [revealable ? model.replace('wire:model', 'wire:model.fill') : model]: this.getStatePath(),
                 'x-bind:type': revealable ? "isPasswordRevealed ? 'text' : 'password'" : null,
-                'x-mask': this._mask,
+                [mask instanceof RawJs ? 'x-mask:dynamic' : 'x-mask']: mask === null ? null : String(mask),
             })
             .class(['fi-input', { 'fi-input-has-inline-prefix': this._prefixInline && hasPrefix, 'fi-input-has-inline-suffix': this._suffixInline && hasSuffix, 'fi-revealable': revealable }]);
         const wrapper = new Attributes()
             .merge({
-                'x-data': revealable ? 'passwordRevealFormComponent()' : this._mask !== null || Object.keys(alpineAttributes).length ? '{}' : null,
+                'x-data': revealable ? 'passwordRevealFormComponent()' : mask !== null || Object.keys(alpineAttributes).length ? '{}' : null,
                 'x-load': revealable ? '' : null,
                 'x-load-src': revealable ? views.render('filament-forms::asset', { path: 'text-input/password-reveal' }).trim() : null,
                 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()",
@@ -864,7 +906,14 @@ export class Select extends Field {
     private _optionsLimit = 50;
     private _searchDebounce = 1000;
     private _messages: { loading?: string; noSearchResults?: string; searchPrompt?: string; searching?: string; noOptions?: string } = {};
-    private _relationship: { name: string; title: string | null; modify: ((query: any, search?: string) => unknown) | null; model: any } | null = null;
+    private _relationship: { name: string; title: string | null; modify: ((query: any, search?: string) => unknown) | null; model: any; ignoreRecord: boolean } | null = null;
+    private _searchColumns: string[] | null = null;
+    private _optionLabelFromRecord: ((record: any, ctx: ComponentContext) => string | null) | null = null;
+    private _selectedRecordUsing: ((ctx: ComponentContext) => unknown) | null = null;
+    private _pivotData: Lazy<Record<string, unknown> | null, ComponentContext> = null;
+    private _reorderable: Lazy<boolean, ComponentContext> = false;
+    private _wrapOptionLabels: Lazy<boolean, ComponentContext> = true;
+    private _modifyManageOptionActions: ((action: Action) => Action | void) | null = null;
     private _affixes: { prefix: string | null; suffix: string | null; prefixIcon: string | null; suffixIcon: string | null; prefixIconColor: string | null; suffixIconColor: string | null; prefixActions: Action[]; suffixActions: Action[]; prefixInline: boolean; suffixInline: boolean } = { prefix: null, suffix: null, prefixIcon: null, suffixIcon: null, prefixIconColor: null, suffixIconColor: null, prefixActions: [], suffixActions: [], prefixInline: false, suffixInline: false };
     private _dynamic: boolean | null = null;
     private _searchOnServer: boolean | null = null;
@@ -875,6 +924,10 @@ export class Select extends Field {
     private _searchResultsUsing: ((search: string, ctx: ComponentContext) => Options | Promise<Options>) | null = null;
     private _optionLabelUsing: ((value: string, ctx: ComponentContext) => string | null | Promise<string | null>) | null = null;
     static make(name: string): Select { return configured(new Select(name)); }
+    /** Inside a Repeater or Builder: `distinct()` across the items, `live()`, and the same value is removed from the other items when it changes. */
+    fixIndistinctState(condition: Lazy<boolean, ComponentContext> = true): this { return applyFixIndistinctState(this, condition); }
+    /** Inside a Repeater or Builder: options picked in another item are disabled (with `distinct()` validation and `live()`). */
+    disableOptionsWhenSelectedInSiblingRepeaterItems(): this { return applyDisableOptionsWhenSelectedInSiblingRepeaterItems(this); }
     /** Search results computed by the server on every keystroke (no preloaded option list). */
     getSearchResultsUsing(resolver: (search: string, ctx: ComponentContext) => Options | Promise<Options>): this { this._searchResultsUsing = resolver; this._searchable = true; return this; }
     /** Label of a value; also used to validate that a searched value exists. */
@@ -922,10 +975,43 @@ export class Select extends Field {
      * named after the relationship, and saves the links once the record is saved). `modifyQueryUsing(query, search)` scopes the
      * options; picked keys outside that scope are rejected. With `searchable()`, the options are searched on the server.
      */
-    relationship(name: string, titleAttribute: string | null = null, modifyQueryUsing: ((query: any, search?: string) => unknown) | null = null, options: { model?: any } = {}): this {
-        this._relationship = { name, title: titleAttribute, modify: modifyQueryUsing, model: options.model ?? null };
+    relationship(name: string, titleAttribute: string | null = null, modifyQueryUsing: ((query: any, search?: string) => unknown) | null = null, options: { model?: any; ignoreRecord?: boolean } = {}): this {
+        this._relationship = { name, title: titleAttribute, modify: modifyQueryUsing, model: options.model ?? null, ignoreRecord: options.ignoreRecord === true };
         return this;
     }
+    /** Label of a related record computed from the whole record (`(record) => record.first_name + ' ' + record.last_name`). Escaped unless `allowHtml()`. */
+    getOptionLabelFromRecordUsing(callback: ((record: any, ctx: ComponentContext) => string | null) | null): this { this._optionLabelFromRecord = callback; return this; }
+    hasOptionLabelFromRecordUsingCallback(): boolean { return this._optionLabelFromRecord !== null; }
+    /** Columns of the related table searched by `searchable([...])` (the title column by default). */
+    getSearchColumns(): string[] | null { return this._searchColumns ?? (this._relationship?.title ? [this._relationship.title] : null); }
+    /**
+     * Extra pivot columns written when a record is linked by a many-to-many relationship (`multiple()`), e.g.
+     * `{ primary: true }` or a function of the field context. Declare them in the relation's `join.through.extra`.
+     */
+    pivotData(data: Lazy<Record<string, unknown> | null, ComponentContext>): this { this._pivotData = data; return this; }
+    async getPivotData(): Promise<Record<string, unknown>> { return (await evaluate(this._pivotData, this.context())) ?? {}; }
+    /** Multiple selection: the selected options can be reordered by drag and drop (the state keeps their order). */
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { this._reorderable = condition; return this; }
+    async isReorderable(): Promise<boolean> { return Boolean(await evaluate(this._reorderable, this.context())); }
+    /** `false`: long option labels are truncated on one line instead of wrapping (JavaScript select). */
+    wrapOptionLabels(condition: Lazy<boolean, ComponentContext> = true): this { this._wrapOptionLabels = condition; return this; }
+    async canOptionLabelsWrap(): Promise<boolean> { return Boolean(await evaluate(this._wrapOptionLabels, this.context())); }
+    /** Record of the selected option (single selection); set by `relationship()`, or by `getSelectedRecordUsing()`. */
+    getSelectedRecordUsing(callback: ((ctx: ComponentContext) => unknown) | null): this { this._selectedRecordUsing = callback; return this; }
+    /** The related record of the current state (single selection), or `null`. Only records allowed by the relationship's query are returned. */
+    async getSelectedRecord(): Promise<any> {
+        const ctx = this.context();
+        if (this._selectedRecordUsing) return (await this._selectedRecordUsing(ctx)) ?? null;
+        if (!this._relationship || this._multiple) return null;
+        const state = ctx.state;
+        if (state === null || state === undefined || state === '' || typeof state === 'object') return null;
+        const { related, id } = this.relationInfo();
+        const query = related.query();
+        this._relationship.modify?.(query, undefined);
+        return (await query.where(id, String(state)).first()) ?? null;
+    }
+    /** Customizes both the "Create" and "Edit" option actions (before `createOptionAction()` / `editOptionAction()`). */
+    manageOptionActions(modify: ((action: Action) => Action | void) | null): this { this._modifyManageOptionActions = modify; return this; }
     private relationInfo() {
         const ctx = this.context();
         const model = modelOfForm(ctx, this._relationship!.model);
@@ -936,12 +1022,28 @@ export class Select extends Field {
         const isMany = /ManyToMany/.test(relation.constructor?.name ?? '') || typeof relation.joinTable === 'string';
         return { model, relation, related, id, title, isMany };
     }
-    private async relationshipOptions(search: string | null, keys: string[] | null, limit = 1000): Promise<[string, string][]> {
+    /**
+     * Options of the relationship: all of them, a search, or the given keys. With `relationship(…, { ignoreRecord: true })`, the
+     * record being edited is left out, except when only labelling keys (`forLabels`).
+     */
+    private async relationshipOptions(search: string | null, keys: string[] | null, limit = 1000, forLabels = false): Promise<[string, string][]> {
         const { related, id, title } = this.relationInfo();
         const query = related.query();
         this._relationship!.modify?.(query, search ?? undefined);
         if (keys !== null) { if (!keys.length) return []; query.whereIn(id, keys.slice(0, 1000)); }
-        if (search) query.where(title, 'like', `%${search.slice(0, 255)}%`);
+        const record = this.container.getRecord() as any;
+        if (this._relationship!.ignoreRecord && !forLabels && record && record[related.idColumn] !== undefined && record[related.idColumn] !== null) query.whereNot(id, record[related.idColumn]);
+        if (search) {
+            // Several columns are searched with OR (`searchable(['name', 'email'])`); only plain column names are used.
+            const columns = (this.getSearchColumns() ?? [related.idColumn]).filter((column) => /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(column));
+            const term = `%${search.slice(0, 255)}%`;
+            query.where((builder: any) => { for (const column of columns) builder.orWhere(column.includes('.') ? column : `${related.tableName}.${column}`, 'like', term); });
+        }
+        if (this._optionLabelFromRecord) {
+            const rows = await query.limit(limit);
+            const ctx = this.context();
+            return rows.map((row: any): [string, string] => [String(row[related.idColumn]), String(this._optionLabelFromRecord!(row, ctx) ?? row[related.idColumn])]);
+        }
         const rows = await query.clearSelect().select({ __key: id, __title: title }).orderBy(title).limit(limit);
         return rows.map((row: any): [string, string] => [String(row.__key), String(row.__title ?? row.__key)]);
     }
@@ -962,7 +1064,12 @@ export class Select extends Field {
         const current = ((await this.loadStateFromRelationships(record))!.state as string[]);
         const removed = current.filter((value) => !desired.has(value));
         if (removed.length) await model.relatedQuery(this._relationship!.name).for(key).unrelate().whereIn(`${related.tableName}.${related.idColumn}`, removed);
-        for (const value of desired) if (!current.includes(value)) await model.relatedQuery(this._relationship!.name).for(key).relate(related.idColumn === 'id' && /^\d+$/.test(value) ? Number(value) : value);
+        const pivot = await this.getPivotData();
+        for (const value of desired) {
+            if (current.includes(value)) continue;
+            const id = related.idColumn === 'id' && /^\d+$/.test(value) ? Number(value) : value;
+            await model.relatedQuery(this._relationship!.name).for(key).relate(Object.keys(pivot).length ? { [related.idColumn]: id, ...pivot } : id);
+        }
         await super.saveRelationships(record);
     }
     /** Disables an option depending on the context (e.g. already picked in another row). */
@@ -972,7 +1079,8 @@ export class Select extends Field {
     private _selectablePlaceholder = true;
     /** `false`: the native select has no empty option. */
     selectablePlaceholder(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_selectablePlaceholder', condition); }
-    searchable(condition = true): this { this._searchable = condition; return this; }
+    /** Search field in the JavaScript select; a list of columns (`['name', 'email']`) searches those columns of a relationship. */
+    searchable(condition: boolean | string[] = true): this { this._searchColumns = Array.isArray(condition) ? condition : null; this._searchable = Array.isArray(condition) || condition; return this; }
     /** Multiple selection: the state is a list of values; always uses the JavaScript select. */
     multiple(condition = true): this { this._multiple = condition; if (condition) this._searchable = true; return this; }
     isMultiple(): boolean { return this._multiple; }
@@ -981,9 +1089,9 @@ export class Select extends Field {
     getDefaultState(): unknown { return this.resolvedDefault() ?? (this._multiple ? [] : null); }
     /** Sanitized selected values: unique strings. */
     private selectedValues(): string[] { const state = this.context().state; return [...new Set((Array.isArray(state) ? state : []).filter((v) => typeof v === 'string' || typeof v === 'number').map(String))]; }
-    private async labelsOf(values: string[]): Promise<[string, string][]> {
+    private async labelsOf(values: string[], forLabels = false): Promise<[string, string][]> {
         if (!values.length) return [];
-        const known = this._relationship ? await this.relationshipOptions(null, values) : this._optionLabelsUsing ? await this._optionLabelsUsing(values, this.context()) : await this.resolveOptions();
+        const known = this._relationship ? await this.relationshipOptions(null, values, 1000, forLabels) : this._optionLabelsUsing ? await this._optionLabelsUsing(values, this.context()) : await this.resolveOptions();
         const map = new Map((Array.isArray(known) ? known : Object.entries(known)).map(([value, label]): [string, string] => [String(value), String(label)]));
         return values.filter((value) => map.has(value)).map((value): [string, string] => [value, map.get(value)!]);
     }
@@ -1043,11 +1151,11 @@ export class Select extends Field {
     async getOptionLabel(): Promise<string | null> {
         const state = this.context().state;
         if (state === null || state === undefined || state === '') return null;
-        if (this._relationship) return (await this.relationshipOptions(null, [String(state)]))[0]?.[1] ?? null;
+        if (this._relationship) return (await this.relationshipOptions(null, [String(state)], 1000, true))[0]?.[1] ?? null;
         if (this._optionLabelUsing) return this._optionLabelUsing(String(state), this.context());
         return (await this.resolveOptions()).find(([value]) => value === String(state))?.[1] ?? null;
     }
-    async getOptionLabelsForJs(): Promise<unknown[]> { return this._multiple ? (await this.labelsOf(this.selectedValues())).map(([value, label]) => ({ label, value })) : []; }
+    async getOptionLabelsForJs(): Promise<unknown[]> { return this._multiple ? (await this.labelsOf(this.selectedValues(), true)).map(([value, label]) => ({ label, value })) : []; }
 
     private _createOptionForm: Component[] | ((schema: Schema) => Component[] | Schema) | null = null;
     private _createOptionUsing: ((data: Record<string, unknown>, ctx: ComponentContext) => string | number | null | Promise<string | number | null>) | null = null;
@@ -1102,7 +1210,8 @@ export class Select extends Field {
             });
         // Multiple selection: "Create & create another" keeps the modal open on an empty form.
         if (this._multiple) action.extraModalFooterActions([Action.make('createAnother').label(tr('modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)]);
-        return this._modifyCreateOptionAction?.(action) ?? action;
+        const managed = this._modifyManageOptionActions?.(action) ?? action;
+        return this._modifyCreateOptionAction?.(managed) ?? managed;
     }
     private getEditOptionAction(): Action | null {
         if (!this._editOptionForm || this._multiple) return null;
@@ -1113,12 +1222,18 @@ export class Select extends Field {
             .modalHeading(this._editOptionModalHeading ?? tr('modal.heading'))
             .modalSubmitActionLabel(tr('modal.actions.save.label'))
             .schema(this._editOptionForm as any)
-            .fillForm(async () => (await this._fillEditOptionForm?.(this.context())) ?? {})
+            // With a relationship, the selected record (found through the relationship's query) fills the form and is updated.
+            .fillForm(async () => (this._fillEditOptionForm ? await this._fillEditOptionForm(this.context()) : this._relationship ? { ...((await this.getSelectedRecord()) ?? {}) } : null) ?? {})
             .action(async ({ data }) => {
-                if (!this._updateOptionUsing) throw new Error(`Select [${this.getStatePath()}]: updateOptionUsing() is required with editOptionForm().`);
-                await this._updateOptionUsing(data, this.context());
+                if (this._updateOptionUsing) { await this._updateOptionUsing(data, this.context()); return; }
+                if (!this._relationship) throw new Error(`Select [${this.getStatePath()}]: updateOptionUsing() is required with editOptionForm().`);
+                const record = await this.getSelectedRecord();
+                if (!record) throw new ActionHalt(true);
+                const { related } = this.relationInfo();
+                await related.query().findById(record[related.idColumn]).patch(data);
             });
-        return this._modifyEditOptionAction?.(action) ?? action;
+        const managed = this._modifyManageOptionActions?.(action) ?? action;
+        return this._modifyEditOptionAction?.(managed) ?? managed;
     }
     /** Actions mounted on the field: hint, create option and edit option. */
     getActions(): Action[] { return [...this.getHintActions(), ...this._affixes.prefixActions, ...this._affixes.suffixActions, ...[this.getCreateOptionAction(), this.getEditOptionAction()].filter((action): action is Action => action !== null)]; }
@@ -1169,7 +1284,7 @@ export class Select extends Field {
     private async toJsHtml(grouped: (OptionGroup | [string, string])[], isDisabled: boolean, suffix = '', prefix = ''): Promise<string> {
         const state = this.context().state;
         const hasState = !this._multiple && state !== null && state !== undefined && state !== '';
-        const selected = this._multiple ? await this.labelsOf(this.selectedValues()) : [];
+        const selected = this._multiple ? await this.labelsOf(this.selectedValues(), true) : [];
         const isRequired = (await this.isRequired()) && !isDisabled;
         // Required field: a screen-reader instruction ("Select an option.") is linked to the select.
         const describedBy = [isRequired ? `${this.getId()}-required` : null, this.hasError() ? `${this.getId()}-error` : null].filter(Boolean).join(' ') || null;
@@ -1179,7 +1294,7 @@ export class Select extends Field {
         const hasDynamicOptions = this._dynamic ?? typeof this._options === 'function';
         const tr = (key: string, replace: Record<string, string> = {}) => t(`filament-forms::components.select.${key}`, replace);
         const config = `selectFormComponent({
- canOptionLabelsWrap: true,
+ canOptionLabelsWrap: ${(await this.canOptionLabelsWrap()) ? 'true' : 'false'},
  canSelectPlaceholder: true,
  clearButtonLabel: ${js(tr('actions.clear.label'))},
  errorMessage: ${js(tr('error_message'))},
@@ -1194,7 +1309,7 @@ export class Select extends Field {
  isDisabled: ${isDisabled ? 'true' : 'false'},
  isHtmlAllowed: ${this._allowHtml ? 'true' : 'false'},
  isMultiple: ${this._multiple ? 'true' : 'false'},
- isReorderable: false,
+ isReorderable: ${this._multiple && (await this.isReorderable()) ? 'true' : 'false'},
  isSearchable: ${this._searchable ? 'true' : 'false'},
  key: ${js(this.getKey())},
  livewireId: ${js(this.livewire.id)},
@@ -1232,14 +1347,35 @@ export class Select extends Field {
     }
 }
 
-/** Column of a table Repeater: label and width. */
+/** Column of a table Repeater: header label, width, alignment. */
 export class TableColumn {
     label: string;
     private _width: string | null = null;
+    private _hiddenHeaderLabel = false;
+    private _markedAsRequired = false;
+    private _wrapHeader = false;
+    private _alignment: 'start' | 'center' | 'end' | 'left' | 'right' | 'justify' | 'between' | null = null;
+    private _verticalAlignment: 'start' | 'center' | 'end' | null = null;
     constructor(label: string) { this.label = label; }
     static make(label: string): TableColumn { return configured(new TableColumn(label)); }
-    width(width: number | string): this { this._width = typeof width === 'number' ? `${width}px` : width; return this; }
+    getLabel(): string { return this.label; }
+    width(width: number | string | null): this { this._width = typeof width === 'number' ? `${width}px` : width; return this; }
     getWidth(): string | null { return this._width; }
+    /** Keeps the header label for screen readers only. */
+    hiddenHeaderLabel(condition = true): this { this._hiddenHeaderLabel = condition; return this; }
+    isHeaderLabelHidden(): boolean { return this._hiddenHeaderLabel; }
+    /** Red asterisk after the header label. */
+    markAsRequired(condition = true): this { this._markedAsRequired = condition; return this; }
+    isMarkedAsRequired(): boolean { return this._markedAsRequired; }
+    /** Lets the header label wrap on several lines. */
+    wrapHeader(condition = true): this { this._wrapHeader = condition; return this; }
+    canHeaderWrap(): boolean { return this._wrapHeader; }
+    /** Horizontal alignment of the header label. */
+    alignment(alignment: 'start' | 'center' | 'end' | 'left' | 'right' | 'justify' | 'between' | null): this { this._alignment = alignment; return this; }
+    getAlignment(): string | null { return this._alignment; }
+    /** Vertical alignment of the column's cells. */
+    verticalAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._verticalAlignment = alignment; return this; }
+    getVerticalAlignment(): string | null { return this._verticalAlignment; }
 }
 
 const ITEM_KEY = /^[A-Za-z0-9_-]{1,64}$/;
@@ -1276,10 +1412,59 @@ export class Repeater extends Field {
     private _addActionAlignment: 'start' | 'center' | 'end' | null = null;
     private _labelBetweenItems: string | null = null;
     private _itemHeaders = true;
-    private _relationship: { name: string; modify: ((query: any) => unknown) | null; orderColumn: string | null; model: any } | null = null;
+    private _relationship: { name: string; modify: ((query: any) => unknown) | null; modifyRecords: ((records: any[], ctx: ComponentContext) => any[] | null | undefined | Promise<any[] | null | undefined>) | null; orderColumn: string | null; model: any } | null = null;
+    private _itemKeyGenerator: ItemKeyGenerator = null;
+    private _maxItemsForProcessing: number | null = null;
+    private _compact: Lazy<boolean, ComponentContext> = false;
+    private _schemaTemplate: Schema | null = null;
+    private _relationshipHooks: {
+        beforeFill?: ((ctx: ComponentContext & { data: Record<string, unknown> }) => Record<string, unknown> | Promise<Record<string, unknown>>) | null;
+        beforeCreate?: ((ctx: ComponentContext & { data: Record<string, unknown> }) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null;
+        beforeSave?: ((ctx: ComponentContext & { data: Record<string, unknown>; record: any }) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null;
+        afterCreate?: ((ctx: ComponentContext & { data: Record<string, unknown>; record: any }) => unknown) | null;
+        afterUpdate?: ((ctx: ComponentContext & { data: Record<string, unknown>; record: any }) => unknown) | null;
+        afterDelete?: ((ctx: ComponentContext & { record: any }) => unknown) | null;
+    } = {};
     static make(name: string): Repeater { return configured(new Repeater(name)); }
-    /** Item components: a function called for each item. */
-    schema(factory: (() => Component[]) | Component[]): this { this._schema = typeof factory === 'function' ? factory : () => factory.map(cloneComponentTree); return this; }
+    /**
+     * Item components: a function called for each item, a list (copied for each item), or a `Schema` holding them; a schema
+     * with `lazyLoaded()` renders each item's content when the item enters the viewport.
+     */
+    schema(factory: (() => Component[]) | Component[] | Schema): this {
+        this._schemaTemplate = factory instanceof Schema ? factory : null;
+        const components = factory instanceof Schema ? () => factory.getComponents() : Array.isArray(factory) ? () => factory : null;
+        this._schema = components ? () => components().map(cloneComponentTree) : factory as () => Component[];
+        return this;
+    }
+    /**
+     * Key of new items: `null` (default) a random UUID, `false` numeric keys (`0`, `1`…), or a function returning the key.
+     * Keys of related records (`record-<id>`) are not affected.
+     */
+    generateUuidUsing(generator: ItemKeyGenerator): this { this._itemKeyGenerator = generator; return this; }
+    /** A new item key (see `generateUuidUsing()`), different from the keys already used. */
+    generateUuid(existingKeys: Iterable<string> = Object.keys(this.getItems())): string { return generateItemKey(this._itemKeyGenerator, existingKeys); }
+    /**
+     * Tests: every repeater made afterwards uses numeric item keys (`0`, `1`, `2`…) instead of UUIDs, so its state can be
+     * asserted. Returns a function that restores UUIDs.
+     */
+    private static activeFakes = 0;
+    static fake(): () => void {
+        const undo = Repeater.configureUsing((repeater: Repeater) => { repeater.generateUuidUsing(false); });
+        Repeater.activeFakes++;
+        let undone = false;
+        return () => { if (undone) return; undone = true; Repeater.activeFakes--; undo(); };
+    }
+    /** Whether `fake()` is active (item keys are sequential numbers). */
+    static isFake(): boolean { return Repeater.activeFakes > 0; }
+    /**
+     * Refuses (HTTP 413) a state holding more items than this, before building their schemas: a safety net against a browser
+     * sending a huge list. Nothing is truncated; `null` (default) turns it off. `maxItems()` stays the validation limit.
+     */
+    maxItemsForProcessing(count: number | null): this { this._maxItemsForProcessing = count; return this; }
+    getMaxItemsForProcessing(): number | null { return this._maxItemsForProcessing; }
+    /** Table repeater: tighter cells, to fit more data. */
+    compact(condition: Lazy<boolean, ComponentContext> = true): this { this._compact = condition; return this; }
+    async isCompact(): Promise<boolean> { return Boolean(await evaluate(this._compact, this.context())); }
     /** Table display, one column per field. */
     table(columns: TableColumn[]): this { this._columns = columns; return this; }
     isTable(): boolean { return this._columns.length > 0; }
@@ -1332,10 +1517,22 @@ export class Repeater extends Field {
      * Items are the records of a has-many relationship of the form's model (Objection `relationMappings`): loaded when the form is
      * filled, then created, updated and deleted once the record is saved. `orderColumn()` saves the items' order.
      */
-    relationship(name: string | null = null, modifyQueryUsing: ((query: any) => unknown) | null = null, options: { model?: any } = {}): this {
-        this._relationship = { name: name ?? this._name!, modify: modifyQueryUsing, orderColumn: this._relationship?.orderColumn ?? null, model: options.model ?? null };
+    relationship(name: string | null = null, modifyQueryUsing: ((query: any) => unknown) | null = null, options: { model?: any; modifyRecordsUsing?: ((records: any[], ctx: ComponentContext) => any[] | null | undefined | Promise<any[] | null | undefined>) | null } = {}): this {
+        this._relationship = { name: name ?? this._name!, modify: modifyQueryUsing, modifyRecords: options.modifyRecordsUsing ?? null, orderColumn: this._relationship?.orderColumn ?? null, model: options.model ?? null };
         return this;
     }
+    /** Changes a related record's data before it fills an item: `({ data }) => data`. */
+    mutateRelationshipDataBeforeFillUsing(callback: ((ctx: ComponentContext & { data: Record<string, unknown> }) => Record<string, unknown> | Promise<Record<string, unknown>>) | null): this { this._relationshipHooks.beforeFill = callback; return this; }
+    /** Changes a new item's data before its record is created: `({ data }) => data`, or `null` to skip creating it. */
+    mutateRelationshipDataBeforeCreateUsing(callback: ((ctx: ComponentContext & { data: Record<string, unknown> }) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null): this { this._relationshipHooks.beforeCreate = callback; return this; }
+    /** Changes an existing item's data before its record is saved: `({ data, record }) => data`, or `null` to leave it as is. */
+    mutateRelationshipDataBeforeSaveUsing(callback: ((ctx: ComponentContext & { data: Record<string, unknown>; record: any }) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | null): this { this._relationshipHooks.beforeSave = callback; return this; }
+    /** Runs after a related record is created for a new item: `({ data, record }) => …`. */
+    afterCreate(callback: ((ctx: ComponentContext & { data: Record<string, unknown>; record: any }) => unknown) | null): this { this._relationshipHooks.afterCreate = callback; return this; }
+    /** Runs after an item's related record is updated: `({ data, record }) => …`. */
+    afterUpdate(callback: ((ctx: ComponentContext & { data: Record<string, unknown>; record: any }) => unknown) | null): this { this._relationshipHooks.afterUpdate = callback; return this; }
+    /** Runs after the record of a removed item is deleted (the `record` object still holds its attributes): `({ record }) => …`. */
+    afterDelete(callback: ((ctx: ComponentContext & { record: any }) => unknown) | null): this { this._relationshipHooks.afterDelete = callback; return this; }
     orderColumn(column: string | null = 'sort'): this { if (this._relationship) this._relationship.orderColumn = column; else this._orderColumnPending = column; return this; }
     private _orderColumnPending: string | null = null;
 
@@ -1348,6 +1545,7 @@ export class Repeater extends Field {
     getItems(): Record<string, Record<string, unknown>> {
         const state = this.context().state;
         if (!state || typeof state !== 'object' || Array.isArray(state)) return {};
+        ensureItemsCanBeProcessed(rawItemCount(state), this._maxItemsForProcessing);
         return Object.fromEntries(Object.entries(state as Record<string, unknown>).filter(([key, item]) => isItemKey(key) && item !== null && typeof item === 'object' && !Array.isArray(item)).slice(0, this._maxItems)) as Record<string, Record<string, unknown>>;
     }
     private setItems(items: Record<string, Record<string, unknown>>): void { writePath(this.livewire as any, this.getStatePath().split('.'), items); }
@@ -1356,17 +1554,24 @@ export class Repeater extends Field {
         fillSchema(new Schema(this.container.livewire).statePath('').components(this.itemComponents()), data);
         return data;
     }
-    getDefaultState(): unknown { return Object.fromEntries(Array.from({ length: this._defaultItems }, () => [randomUUID(), this.itemDefaults()])); }
+    getDefaultState(): unknown {
+        const items: Record<string, Record<string, unknown>> = {};
+        for (let index = 0; index < this._defaultItems; index++) items[this.generateUuid(Object.keys(items))] = this.itemDefaults();
+        return items;
+    }
     /** A list (records → `record-<id>` items; simple values → one-field items) or a keyed map, limited to the declared fields. */
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = null; } }
+        ensureItemsCanBeProcessed(rawItemCount(value), this._maxItemsForProcessing);
         if (!Array.isArray(value)) return value && typeof value === 'object' ? value : {};
         const fields = this.itemFields();
-        return Object.fromEntries(value.slice(0, this._maxItems).map((row: any) => {
-            if (this._simple) return [randomUUID(), { [this._simple.getName()!]: this._simple.hydrateState(row) }];
-            const key = row && typeof row === 'object' && row.id !== undefined && row.id !== null ? `record-${row.id}` : randomUUID();
-            return [key, Object.fromEntries(fields.map((field) => [field.getName(), field.hydrateState(row?.[field.getName()!] ?? field.getDefaultState())]))];
-        }));
+        const items: Record<string, Record<string, unknown>> = {};
+        for (const row of value.slice(0, this._maxItems) as any[]) {
+            if (this._simple) { items[this.generateUuid(Object.keys(items))] = { [this._simple.getName()!]: this._simple.hydrateState(row) }; continue; }
+            const key = row && typeof row === 'object' && row.id !== undefined && row.id !== null ? `record-${row.id}` : this.generateUuid(Object.keys(items));
+            items[key] = Object.fromEntries(fields.map((field) => [field.getName(), field.hydrateState(row?.[field.getName()!] ?? field.getDefaultState())]));
+        }
+        return items;
     }
     dehydrateState(): unknown { return Object.fromEntries(Object.keys(this.getItems()).map((key) => [key, {}])); }
     /** Simple repeater: saved as a list of values. */
@@ -1377,7 +1582,10 @@ export class Repeater extends Field {
     }
     getChildSchemas(): Schema[] {
         const container = this.container;
-        return Object.keys(this.getItems()).map((key) => new Schema(container.livewire).key(`${this.getKey()}.${key}`).statePath(`${this.getStatePath()}.${key}`).operation(container.getOperation()).record(container.getRecord()).root(false).parentComponent(this).columns((this as any)._childColumns ?? 1).components(this.itemComponents()));
+        return Object.keys(this.getItems()).map((key) => {
+            const schema = new Schema(container.livewire).key(`${this.getKey()}.${key}`).statePath(`${this.getStatePath()}.${key}`).operation(container.getOperation()).record(container.getRecord()).root(false).parentComponent(this).columns((this as any)._childColumns ?? 1).components(this.itemComponents());
+            return this.isTable() ? schema : applyLazyItemSchema(schema, this, this._schemaTemplate);
+        });
     }
     private _childColumns: Record<string, number> | number | null = null;
     /** Grid columns inside each item. */
@@ -1404,37 +1612,62 @@ export class Repeater extends Field {
         this._relationship!.modify?.(query);
         return query;
     }
+    /** Related records of the owner, ordered, then filtered by `modifyRecordsUsing` (only these items are updated or deleted). */
+    private async existingRecords(record: any): Promise<any[]> {
+        const { related } = this.relationInfo();
+        const query = this.relatedQuery(record);
+        if (this._relationship!.orderColumn) query.orderBy(`${related.tableName}.${this._relationship!.orderColumn}`);
+        const rows: any[] = await query;
+        return this._relationship!.modifyRecords ? ((await this._relationship!.modifyRecords(rows, this.context())) ?? rows) : rows;
+    }
     async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> {
         if (!this._relationship) return super.loadStateFromRelationships(record);
         if (this._orderColumnPending !== null) { this._relationship.orderColumn = this._orderColumnPending; this._orderColumnPending = null; }
         const { related } = this.relationInfo();
-        const query = this.relatedQuery(record);
-        if (this._relationship.orderColumn) query.orderBy(`${related.tableName}.${this._relationship.orderColumn}`);
-        const rows = await query.limit(this._maxItems);
-        return { state: rows.map((row: any) => ({ ...row, id: row[related.idColumn] })) };
+        const rows = (await this.existingRecords(record)).slice(0, this._maxItems);
+        const fill = this._relationshipHooks.beforeFill;
+        const state: Record<string, unknown>[] = [];
+        for (const row of rows) {
+            const data = fill ? await fill({ ...this.context(), data: { ...row } }) : { ...row };
+            state.push({ ...data, id: row[related.idColumn] });
+        }
+        return { state };
     }
     /** Creates, updates and deletes the related records; only records of this owner (and query) are touched. */
     async saveRelationships(record: any): Promise<void> {
         if (!this._relationship) return super.saveRelationships(record);
         if (this._orderColumnPending !== null) { this._relationship.orderColumn = this._orderColumnPending; this._orderColumnPending = null; }
         const { related } = this.relationInfo();
-        const existing = new Map((await this.relatedQuery(record)).map((row: any) => [String(row[related.idColumn]), row]));
-        const kept = new Set<string>();
+        const hooks = this._relationshipHooks;
+        const existing = new Map((await this.existingRecords(record)).map((row: any) => [String(row[related.idColumn]), row]));
         const keys = Object.keys(this.getItems());
+        // Like Filament: the records of removed items are deleted first (one by one, for `afterDelete()`).
+        const kept = new Set(keys.filter((key) => key.startsWith('record-')).map((key) => key.slice('record-'.length)).filter((id) => existing.has(id)));
+        const removed = [...existing.keys()].filter((id) => !kept.has(id));
+        if (removed.length) {
+            if (hooks.afterDelete) {
+                for (const id of removed) { const row = existing.get(id); await related.query().deleteById(row[related.idColumn]); await hooks.afterDelete({ ...this.context(), record: row }); }
+            } else await related.query().whereIn(related.idColumn, removed.map((id) => existing.get(id)[related.idColumn])).delete();
+        }
         const schemas = this.getChildSchemas();
+        let order = 1;
         for (const [index, key] of keys.entries()) {
-            const data = await getSchemaState(schemas[index]);
-            if (this._relationship.orderColumn) data[this._relationship.orderColumn] = index + 1;
+            let data: Record<string, unknown> | null = await getSchemaState(schemas[index]);
+            if (this._relationship.orderColumn) data[this._relationship.orderColumn] = order++;
             const id = key.startsWith('record-') ? key.slice('record-'.length) : null;
-            if (id !== null && existing.has(id)) {
-                kept.add(id);
-                await related.query().findById(existing.get(id)[related.idColumn]).patch(data);
+            if (id !== null && kept.has(id)) {
+                const row = existing.get(id);
+                if (hooks.beforeSave) data = await hooks.beforeSave({ ...this.context(), data, record: row });
+                if (data === null || data === undefined) continue;
+                await related.query().findById(row[related.idColumn]).patch(data);
+                await hooks.afterUpdate?.({ ...this.context(), data, record: Object.assign(row, data) });
             } else {
-                await this.relatedQuery(record).insert(data);
+                if (hooks.beforeCreate) data = await hooks.beforeCreate({ ...this.context(), data });
+                if (data === null || data === undefined) continue;
+                const created = await this.relatedQuery(record).insert(data);
+                await hooks.afterCreate?.({ ...this.context(), data, record: created });
             }
         }
-        const removed = [...existing.keys()].filter((id) => !kept.has(id));
-        if (removed.length) await related.query().whereIn(related.idColumn, removed.map((id) => existing.get(id)[related.idColumn])).delete();
     }
 
     // ---- actions
@@ -1506,12 +1739,12 @@ export class Repeater extends Field {
         let action: Action;
         switch (name) {
             case 'add': action = Action.make('add').label(async () => this._addActionLabel ?? tr('add.label', { label: String((await this.getLabel()) ?? '').toLowerCase() })).color('gray').size('sm')
-                .action(() => { const items = this.getItems(); if (!this._addable || Object.keys(items).length >= this._maxItems) return; items[randomUUID()] = this.itemDefaults(); this.setItems(items); }); break;
+                .action(() => { const items = this.getItems(); if (!this._addable || Object.keys(items).length >= this._maxItems) return; items[this.generateUuid(Object.keys(items))] = this.itemDefaults(); this.setItems(items); }); break;
             case 'addBetween': action = Action.make('addBetween').label(() => this._addBetweenLabel ?? tr('add_between.label')).color('gray').size('sm').visible(false)
                 .action(({ arguments: args }) => {
                     const items = this.getItems();
                     if (!this._addable || Object.keys(items).length >= this._maxItems || typeof args.afterItem !== 'string' || !Object.hasOwn(items, args.afterItem)) return;
-                    this.setItems(insertAfter(items, args.afterItem, randomUUID(), this.itemDefaults()));
+                    this.setItems(insertAfter(items, args.afterItem, this.generateUuid(Object.keys(items)), this.itemDefaults()));
                 }); break;
             case 'delete': action = Action.make('delete').label(tr('delete.label')).icon(fieldActionIcon('repeater', 'delete')).color('danger').iconButton().size('sm')
                 .action(({ arguments: args }) => { const items = this.getItems(); const key = String(args.item); if (!this._deletable || !Object.hasOwn(items, key)) return; delete items[key]; this.setItems(items); }); break;
@@ -1520,7 +1753,7 @@ export class Repeater extends Field {
                     const items = this.getItems();
                     const key = String(args.item);
                     if (!this._cloneable || !Object.hasOwn(items, key) || Object.keys(items).length >= this._maxItems) return;
-                    this.setItems(insertAfter(items, key, randomUUID(), JSON.parse(JSON.stringify(items[key]))));
+                    this.setItems(insertAfter(items, key, this.generateUuid(Object.keys(items)), JSON.parse(JSON.stringify(items[key]))));
                 }); break;
             case 'moveUp': action = Action.make('moveUp').label(tr('move_up.label')).icon(fieldActionIcon('repeater', 'move-up')).color('gray').iconButton().size('sm').action(move(-1)); break;
             case 'moveDown': action = Action.make('moveDown').label(tr('move_down.label')).icon(fieldActionIcon('repeater', 'move-down')).color('gray').iconButton().size('sm').action(move(1)); break;
@@ -1702,7 +1935,10 @@ export class Repeater extends Field {
                 return `<div x-on:click.stop class="fi-sr-only"><button title="${e(resolved.label)}" ${disabled ? 'aria-disabled="true" ' : ''}aria-label="${e(resolved.label)}" ${disabled ? 'disabled="disabled" ' : ''}tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${button}${disabled ? ' fi-disabled' : ''} fi-size-sm" data-reorder-hidden="data-reorder-hidden" data-reorder-direction="${direction}" data-reorder-action="${e(expr)}" aria-describedby="${e(descriptionId(itemKey))}" wire:click="${e(expr)}">${actionIcon(resolved.icon ?? fallbackIcon, expr)}${loading(expr)}</button></div>`;
             };
             const cells: string[] = [];
-            for (const field of schemas[index].getComponents()) cells.push(`<td>${await field.toSchemaHtml(await field.isVisible())}</td>`);
+            for (const [column, field] of schemas[index].getComponents().entries()) {
+                const verticalAlignment = this._columns[column]?.getVerticalAlignment();
+                cells.push(`<td${verticalAlignment ? ` class="fi-vertical-align-${verticalAlignment}"` : ''}>${await field.toSchemaHtml(await field.isVisible())}</td>`);
+            }
             // Only local or http(s) URLs: a link built from item data cannot become a `javascript:` URL.
             const links = this._itemLinks.map((resolveLink) => resolveLink({ item: items[itemKey], key: itemKey })).filter((link): link is ItemLink => link !== null && safeFileUrl(link.url) !== null)
                 .map((link) => `<div x-on:click.stop><a href="${e(link.url)}" target="_blank" x-tooltip="{
@@ -1717,11 +1953,15 @@ export class Repeater extends Field {
             const deleteButton = this._deletable && del.visible ? `<div x-on:click.stop><button title="${e(del.label)}" aria-label="${e(del.label)}" ${del.disabled ? 'disabled="disabled" ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${[button, 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager!.getComponentClasses('icon-button', 'danger'))].join(' ')}" wire:click="${e(deleteExpr)}">${actionIcon(del.icon ?? fieldActionIcon('repeater', 'delete'), deleteExpr)}${loading(deleteExpr)}</button></div>` : '';
             rows.push(`<tr wire:key="${e(livewireKey)}.${e(itemKey)}.item" x-sortable-item="${e(itemKey)}">${reorderCell}${cells.join('')}<td><div class="fi-fo-table-repeater-actions">${links.join('')}${extra.join('')}${deleteButton}</div></td></tr>`);
         }
-        const head = this._columns.map((column) => `<th scope="col"${column.getWidth() ? ` style="width: ${e(column.getWidth()!)};"` : ''}>${e(column.label)}</th>`).join('');
+        const head = this._columns.map((column) => {
+            const classes = cls([{ 'fi-wrapped': column.canHeaderWrap() }, column.getAlignment() ? `fi-align-${column.getAlignment()}` : null]);
+            const label = column.isHeaderLabelHidden() ? `<span class="fi-sr-only">${e(column.getLabel())}</span>` : `${e(column.getLabel())}${column.isMarkedAsRequired() ? '<sup class="fi-fo-table-repeater-header-required-mark">*</sup>' : ''}`;
+            return `<th scope="col"${classes ? ` class="${classes}"` : ''}${column.getWidth() ? ` style="width: ${e(column.getWidth()!)};"` : ''}>${label}</th>`;
+        }).join('');
         const add = await resolve('add');
         const config = { statePath: this.getStatePath(), schemaComponent: key, moveUpAction: 'moveUp', moveDownAction: 'moveDown', reorderAction: 'reorder', message: tr('reordering.moved'), hasCustomReorderAction: kit.hasCustomReorderAction };
         const descriptions = keys.map((itemKey, index) => `<span class="fi-sr-only" data-reorder-description="${e(itemKey)}" data-reorder-label="${e(itemLabel)}" id="${e(descriptionId(itemKey))}">${e(tr('reordering.position', { label: itemLabel, position: String(index + 1), count: String(keys.length) }))}</span>`).join('');
-        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="fi-fo-table-repeater"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && add.visible && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add">${kit.addButton(add, expression('add', null))}</div>` : ''}${descriptions}</div>`;
+        const table = `<div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" data-reorder-owner="data-reorder-owner" data-reorder-items="${e(JSON.stringify(keys))}" x-load="x-load" x-load-src="${e(asset('repeater'))}" x-data="repeaterFormComponent(${e(js(config))})" class="${cls(['fi-fo-table-repeater', { 'fi-compact': await this.isCompact() }])}"><span wire:ignore x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span><table><thead><tr>${hasReorderColumn ? `<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}${head}<th scope="col" class="fi-fo-table-repeater-empty-header-cell"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th></tr></thead><tbody x-sortable data-sortable-animation-duration="300" x-on:end.stop="reorder" x-ref="reorderItems">${rows.join('')}</tbody></table>${this._addable && add.visible && keys.length < this._maxItems ? `<div class="fi-fo-table-repeater-add">${kit.addButton(add, expression('add', null))}</div>` : ''}${descriptions}</div>`;
         return this.wrap(table, { labelAsDiv: true });
     }
 }
@@ -1813,6 +2053,48 @@ abstract class TemporalField extends Field {
     /** Date focused when the JavaScript picker opens on an empty field. */
     defaultFocusedDate(date: Lazy<string | null, ComponentContext>): this { return this.setLazy('_defaultFocusedDate', date); }
     placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_temporalPlaceholder', text); }
+    protected _dateOverride: boolean | null = null;
+    protected _timeOverride: boolean | null = null;
+    /** `false`: no date part (a date-time picker becomes a time picker). Only plain booleans change the picker's shape. */
+    date(condition = true): this { this._dateOverride = condition; return this; }
+    /** `false`: no time part (a date-time picker becomes a date picker). */
+    time(condition = true): this { this._timeOverride = condition; return this; }
+    protected _readOnly: Lazy<boolean, ComponentContext> = false;
+    /** The value is shown and sent, but cannot be changed (`readonly`; the JavaScript picker does not open). */
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { this._readOnly = condition; return this; }
+    async isReadOnly(): Promise<boolean> { return Boolean(await evaluate(this._readOnly, this.context())); }
+    protected _datalist: Lazy<string[], ComponentContext> = [];
+    /** Suggestions offered by the browser (`<datalist>`, native picker only), e.g. `['09:00', '12:00']` for a time picker. */
+    datalist(options: Lazy<string[], ComponentContext>): this { this._datalist = options; return this; }
+    protected _affixes: { prefix: Lazy<string | null, ComponentContext>; suffix: Lazy<string | null, ComponentContext>; prefixIcon: Lazy<string | null, ComponentContext>; suffixIcon: Lazy<string | null, ComponentContext>; prefixIconColor: string | null; suffixIconColor: string | null; prefixActions: Action[]; suffixActions: Action[]; prefixInline: boolean; suffixInline: boolean } = { prefix: null, suffix: null, prefixIcon: null, suffixIcon: null, prefixIconColor: null, suffixIconColor: null, prefixActions: [], suffixActions: [], prefixInline: false, suffixInline: false };
+    /** Label shown before the input; `isInline`: inside the input instead of a separate box. */
+    prefix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.prefix = label; this._affixes.prefixInline = isInline; return this; }
+    suffix(label: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.suffix = label; this._affixes.suffixInline = isInline; return this; }
+    prefixIcon(name: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.prefixIcon = name; this._affixes.prefixInline = isInline; return this; }
+    suffixIcon(name: Lazy<string | null, ComponentContext>, isInline = false): this { this._affixes.suffixIcon = name; this._affixes.suffixInline = isInline; return this; }
+    prefixIconColor(color: string | null): this { this._affixes.prefixIconColor = color; return this; }
+    suffixIconColor(color: string | null): this { this._affixes.suffixIconColor = color; return this; }
+    /** Icon button before the input, running an action (mounted on the field). */
+    prefixAction(action: Action, isInline = false): this { this._affixes.prefixActions = [...this._affixes.prefixActions, action]; this._affixes.prefixInline = isInline; return this; }
+    suffixAction(action: Action, isInline = false): this { this._affixes.suffixActions = [...this._affixes.suffixActions, action]; this._affixes.suffixInline = isInline; return this; }
+    prefixActions(actions: Action[]): this { this._affixes.prefixActions = actions; return this; }
+    suffixActions(actions: Action[]): this { this._affixes.suffixActions = actions; return this; }
+    getActions(): Action[] { return [...this.getHintActions(), ...this._affixes.prefixActions, ...this._affixes.suffixActions]; }
+    /** Prefix and suffix markup, and whether the input has an inline prefix / suffix. */
+    protected async affixesHtml(): Promise<{ prefix: string; suffix: string; inlinePrefix: boolean; inlineSuffix: boolean }> {
+        const ctx = this.context();
+        const a = this._affixes;
+        const actionsHtml = async (actions: Action[]) => { const html: string[] = []; for (const action of actions) if (await action.isVisible(ctx)) html.push(await action.iconButton().size('sm').toHtml(ctx, { schemaComponent: this.getKey() })); return html; };
+        const iconHtml = (name: string | null, color: string | null) => (name ? icon(name, { attributes: new Attributes().class(color && color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : '');
+        const prefixLabel = await evaluate(a.prefix, ctx), suffixLabel = await evaluate(a.suffix, ctx);
+        const prefixIconName = await evaluate(a.prefixIcon, ctx), suffixIconName = await evaluate(a.suffixIcon, ctx);
+        const prefix = inputAffixHtml('prefix', { label: prefixLabel ?? null, icon: iconHtml(prefixIconName ?? null, a.prefixIconColor), actions: await actionsHtml(a.prefixActions), inline: a.prefixInline });
+        const suffix = inputAffixHtml('suffix', { label: suffixLabel ?? null, icon: iconHtml(suffixIconName ?? null, a.suffixIconColor), actions: await actionsHtml(a.suffixActions), inline: a.suffixInline });
+        // As Filament, the input's inline classes count every declared affix action, visible or not.
+        const inlinePrefix = a.prefixInline && (a.prefixActions.length > 0 || Boolean(prefixIconName) || (prefixLabel !== null && prefixLabel !== undefined && prefixLabel !== ''));
+        const inlineSuffix = a.suffixInline && (a.suffixActions.length > 0 || Boolean(suffixIconName) || (suffixLabel !== null && suffixLabel !== undefined && suffixLabel !== ''));
+        return { prefix, suffix, inlinePrefix, inlineSuffix };
+    }
 
     private static resolveLimit(date: string): string {
         const day = (offset: number) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
@@ -1888,16 +2170,21 @@ abstract class TemporalField extends Field {
             .merge({ 'x-on:focus-input.stop': "$el.querySelector('input:not([type=hidden])')?.focus()" })
             .class(['fi-fo-date-time-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
         const model = this.wireModel();
+        const isReadOnly = await this.isReadOnly();
+        const affixes = await this.affixesHtml();
         if (this._native) {
             const limit = (value: string | null) => (value === null ? null : !this.hasTime() ? value.slice(0, 10) : !this.hasDate() ? (value.length > 8 ? value.slice(11) : value) : value.replace(' ', 'T'));
+            const datalist = !isDisabled && !isReadOnly ? ((await evaluate(this._datalist, this.context())) ?? []).map(String) : [];
             const input = new Attributes(this.getExtraControlAttributes())
                 .merge({
                     'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
-                    max: limit(max), min: limit(min), placeholder: this._temporalPlaceholder,
-                    required: (await this.isRequired()) && !isDisabled, step: this.hasTime() && this._seconds ? 1 : null, type: this.nativeType(), [model]: this.getStatePath(),
+                    list: datalist.length ? `${this.getId()}-list` : null,
+                    max: limit(max), min: limit(min), placeholder: this._temporalPlaceholder, readonly: isReadOnly,
+                    required: (await this.isRequired()) && !isDisabled && !isReadOnly, step: this.hasTime() && this._seconds ? 1 : null, type: this.nativeType(), [model]: this.getStatePath(),
                 })
-                .class(['fi-input']);
-            return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} /></div></div>`);
+                .class(['fi-input', { 'fi-input-has-inline-prefix': affixes.inlinePrefix, 'fi-input-has-inline-suffix': affixes.inlineSuffix }]);
+            const datalistHtml = datalist.length ? `<datalist id="${e(this.getId())}-list">${datalist.map((option) => `<option value="${e(option)}" />`).join('')}</datalist>` : '';
+            return this.wrap(`<div ${wrapper.toHtml()}>${affixes.prefix}<div class="fi-input-wrp-content-ctn"><input ${input.toHtml()} />${datalistHtml}</div>${affixes.suffix}</div>`);
         }
         const id = this.getId();
         const hasDate = this.hasDate(), hasTime = this.hasTime(), hasSeconds = this.hasSeconds();
@@ -1913,16 +2200,16 @@ abstract class TemporalField extends Field {
  displayFormat: ${js(phpDateFormatToDayjs(this._displayFormat ?? this.defaultDisplayFormat()))},
  firstDayOfWeek: ${this._firstDayOfWeek},
  hasDate: ${hasDate ? 'true' : 'false'},
- isAutofocused: ${(await this.isAutofocused()) && !isDisabled ? 'true' : 'false'},
+ isAutofocused: ${(await this.isAutofocused()) && !isDisabled && !isReadOnly ? 'true' : 'false'},
  locale: ${js(this._locale ?? 'en')},
  shouldCloseOnDateSelection: ${this._closeOnDateSelection ? 'true' : 'false'},
  state: $wire.$entangle(${js(this.getStatePath())}${this.entangleLive() ? ', true' : ''}),
  })`;
-        const keyHash = createHash('md5').update(JSON.stringify([disabledDates, isDisabled, max, min, hasDate, hasTime, hasSeconds])).digest('hex');
+        const keyHash = createHash('md5').update(JSON.stringify([disabledDates, isDisabled, max, min, hasDate, hasTime, hasSeconds, ...(isReadOnly ? ['readOnly'] : [])])).digest('hex');
         const events = hasDate
             ? ` x-on:dropdown-escape="if (isOpen()) { closePanel(true); $event.preventDefault() }" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="if (isOpen()) { $event.preventDefault(); $event.stopPropagation(); closePanel(true) }" x-on:click.outside="isOpen() &amp;&amp; closePanel()" x-on:livewire:navigating.window="closePanel()"`
             : ` x-on:dropdown-escape="if (isOpen()) { $refs.panel.close(); $refs.button.focus(); $event.preventDefault() }" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()"`;
-        const buttonEvents = isDisabled ? (!hasDate ? ' x-on:keydown.enter.prevent.stop="if (false) { isOpen() ? selectDate() : togglePanelVisibility() }"' : '') : [
+        const buttonEvents = isDisabled || isReadOnly ? (!hasDate ? ' x-on:keydown.enter.prevent.stop="if (false) { isOpen() ? selectDate() : togglePanelVisibility() }"' : '') : [
             !hasDate ? ' x-on:keydown.enter.prevent.stop="if (true) { isOpen() ? selectDate() : togglePanelVisibility() }"' : '',
             ' x-on:click="togglePanelVisibility()"',
             hasDate ? ' x-on:keydown="handleTriggerKeydown($event)" x-bind:aria-expanded="isPanelOpen.toString()"' : ' x-on:keydown.arrow-left.prevent.stop="focusPreviousDay()" x-on:keydown.arrow-right.prevent.stop="focusNextDay()" x-on:keydown.arrow-up.prevent.stop="focusPreviousWeek()" x-on:keydown.arrow-down.prevent.stop="focusNextWeek()"',
@@ -1932,7 +2219,7 @@ abstract class TemporalField extends Field {
         const timeInput = (max: number, step: number, label: string, model: string) => `<input max="${max}" min="0" step="${step}" type="number" inputmode="numeric" aria-label="${e(label)}" x-on:blur="checkTimeInputValidity" x-on:invalid="timeInputInvalid" x-model.debounce="${model}" />`;
         const time = hasTime ? `<div class="fi-fo-date-time-picker-time-inputs">${timeInput(23, this._hoursStep, tr('hour_input.label'), 'hour')}<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._minutesStep, tr('minute_input.label'), 'minute')}${hasSeconds ? `<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._secondsStep, tr('second_input.label'), 'second')}` : ''}</div>` : '';
         const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn">${picker}</div></div>`);
+        return this.wrap(`<div ${wrapper.toHtml()}>${affixes.prefix}<div class="fi-input-wrp-content-ctn">${picker}</div>${affixes.suffix}</div>`);
     }
 }
 
@@ -1958,22 +2245,22 @@ function formatPhpDate(value: string, format: string): string {
 /** Date picker: native `<input type="date">` by default; the saved state is `YYYY-MM-DD`. */
 export class DatePicker extends TemporalField {
     static make(name: string): DatePicker { return configured(new DatePicker(name)); }
-    protected hasDate(): boolean { return true; }
-    protected hasTime(): boolean { return false; }
+    protected hasDate(): boolean { return this._dateOverride !== false; }
+    protected hasTime(): boolean { return this._timeOverride === true; }
 }
 
 /** Time picker: native `<input type="time">` by default; the state is `HH:MM:SS` (`HH:MM` with `seconds(false)`). */
 export class TimePicker extends TemporalField {
     static make(name: string): TimePicker { return configured(new TimePicker(name)); }
-    protected hasDate(): boolean { return false; }
-    protected hasTime(): boolean { return true; }
+    protected hasDate(): boolean { return this._dateOverride === true; }
+    protected hasTime(): boolean { return this._timeOverride !== false; }
 }
 
 /** Date-time picker: native `datetime-local` input by default; the saved state is `YYYY-MM-DD HH:MM:SS`. */
 export class DateTimePicker extends TemporalField {
     static make(name: string): DateTimePicker { return configured(new DateTimePicker(name)); }
-    protected hasDate(): boolean { return true; }
-    protected hasTime(): boolean { return true; }
+    protected hasDate(): boolean { return this._dateOverride !== false; }
+    protected hasTime(): boolean { return this._timeOverride !== false; }
 }
 
 /** Single choice as radio buttons. */
@@ -1982,6 +2269,10 @@ export class Radio extends Field {
     private _descriptions: Record<string, string> = {};
     private _inline = false;
     static make(name: string): Radio { return configured(new Radio(name)); }
+    /** Inside a Repeater or Builder: `distinct()` across the items, `live()`, and the same value is removed from the other items when it changes. */
+    fixIndistinctState(condition: Lazy<boolean, ComponentContext> = true): this { return applyFixIndistinctState(this, condition); }
+    /** Inside a Repeater or Builder: options picked in another item are disabled (with `distinct()` validation and `live()`). */
+    disableOptionsWhenSelectedInSiblingRepeaterItems(): this { return applyDisableOptionsWhenSelectedInSiblingRepeaterItems(this); }
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Helper text per value, under the option label. */
@@ -2040,17 +2331,25 @@ export class Textarea extends Field {
     disableGrammarly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_grammarly', condition, (value) => !value); }
     /** Removes the spaces around the value before it is validated and saved. */
     trim(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_trim', condition); }
-    hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
+    private _stripCharacters: StripCharacters = null;
+    /** Characters removed from the value before it is validated and saved. */
+    stripCharacters(characters: StripCharacters): this { this._stripCharacters = characters; return this; }
+    getStripCharacters(): string[] { return stripCharactersOf(this, this._stripCharacters); }
+    hydrateState(value: unknown): unknown { value = stripFromState(value, this.getStripCharacters()); return this._trim && typeof value === 'string' ? value.trim() : value; }
     /** `trim()`: the submitted value is trimmed before it is validated and saved. */
-    protected stateForValidation(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
-    dehydrateState(state: unknown): unknown { return this._trim && typeof state === 'string' ? state.trim() : state; }
+    protected stateForValidation(state: unknown): unknown { state = stripFromState(state, this.getStripCharacters()); return this._trim && typeof state === 'string' ? state.trim() : state; }
+    dehydrateState(state: unknown): unknown { state = stripFromState(state, this.getStripCharacters()); return this._trim && typeof state === 'string' ? state.trim() : state; }
+    private _cols: Lazy<number | null, ComponentContext> = null;
+    /** Width of the textarea, in characters (`cols` attribute). */
+    cols(cols: Lazy<number | null, ComponentContext>): this { this._cols = cols; return this; }
+    async getCols(): Promise<number | null> { const cols = await evaluate(this._cols, this.context()); return cols === null || cols === undefined || !Number.isFinite(Number(cols)) ? null : Math.floor(Number(cols)); }
     async toHtml(): Promise<string> {
         const isDisabled = await this.isDisabled();
         // Initial height: 1.5rem per row plus padding.
         const height = (this._rows ?? 2) * 1.5 + 0.75;
         const textarea = new Attributes(this.getExtraControlAttributes()).merge({
             'aria-invalid': this.hasError() ? 'true' : null, 'data-gramm': this._grammarly ? null : 'false', 'data-gramm_editor': this._grammarly ? null : 'false', 'data-enable-grammarly': this._grammarly ? null : 'false',
-            disabled: isDisabled, id: this.getId(), maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder, readonly: this._readOnly,
+            cols: await this.getCols(), disabled: isDisabled, id: this.getId(), maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder, readonly: this._readOnly,
             required: (await this.isRequired()) && !isDisabled && !this._readOnly, rows: this._rows, [this.wireModel()]: this.getStatePath(),
         });
         const wrapper = new Attributes().class(['fi-fo-textarea', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
@@ -2094,11 +2393,16 @@ export class TagsInput extends Field {
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && this._separator !== null) value = value === '' ? [] : value.split(this._separator);
         else if (typeof value === 'string') { try { value = JSON.parse(value); } catch { value = value === '' ? [] : [value]; } }
-        return Array.isArray(value) ? value.filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()).filter((tag) => tag !== '') : [];
+        return Array.isArray(value) ? (stripFromState(value.filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()), this.getStripCharacters()) as string[]).filter((tag) => tag !== '') : [];
     }
+    private _stripCharacters: StripCharacters = null;
+    /** Characters removed from each tag before it is validated and saved. */
+    stripCharacters(characters: StripCharacters): this { this._stripCharacters = characters; return this; }
+    getStripCharacters(): string[] { return stripCharactersOf(this, this._stripCharacters); }
+    protected stateForValidation(state: unknown): unknown { return stripFromState(state, this.getStripCharacters()); }
     /** Only non-empty strings are saved, whatever shape the browser sends (joined with the separator, if any). */
     dehydrateState(state: unknown): unknown {
-        const tags = (Array.isArray(state) ? state : []).filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()).filter((tag) => tag !== '').slice(0, 1000);
+        const tags = (stripFromState((Array.isArray(state) ? state : []).filter((tag) => typeof tag === 'string' || typeof tag === 'number').map((tag) => String(tag).trim()), this.getStripCharacters()) as string[]).filter((tag) => tag !== '').slice(0, 1000);
         return this._separator !== null ? tags.join(this._separator) : tags;
     }
     async getValidationRules(): Promise<Rule[]> {
@@ -2134,6 +2438,8 @@ export class TagsInput extends Field {
 /** On/off switch. */
 export class Toggle extends Field {
     static make(name: string): Toggle { return configured(new Toggle(name)); }
+    /** Inside a Repeater or Builder: `distinct()` across the items, `live()`, and the same value is removed from the other items when it changes. */
+    fixIndistinctState(condition: Lazy<boolean, ComponentContext> = true): this { return applyFixIndistinctState(this, condition); }
     getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     hydrateState(value: unknown): unknown { return value === true || value === 1 || value === '1'; }
     private _onIcon: string | null = null;
@@ -2172,6 +2478,10 @@ export class ToggleButtons extends Field {
     private _colors: Record<string, string> = {};
     private _icons: Record<string, string> = {};
     static make(name: string): ToggleButtons { return configured(new ToggleButtons(name)); }
+    /** Inside a Repeater or Builder: `distinct()` across the items, `live()`, and the same value is removed from the other items when it changes. */
+    fixIndistinctState(condition: Lazy<boolean, ComponentContext> = true): this { return applyFixIndistinctState(this, condition); }
+    /** Inside a Repeater or Builder: options picked in another item are disabled (with `distinct()` validation and `live()`). */
+    disableOptionsWhenSelectedInSiblingRepeaterItems(): this { return applyDisableOptionsWhenSelectedInSiblingRepeaterItems(this); }
     /** Sends the state to the server as soon as it changes. */
     /** Color per value (e.g. from an enum). */
     colors(colors: Lazy<Record<string, string>, ComponentContext>): this { return this.setLazy('_colors', colors, (value) => value ?? {}); }
@@ -2209,6 +2519,9 @@ export class ToggleButtons extends Field {
     fullWidth(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_fullWidth', condition, Boolean); }
     /** Number of columns the buttons are spread over (from `lg`), when not inline. */
     columns(columns: Lazy<number | null, ComponentContext>): this { return this.setLazy('_columns', columns); }
+    private _gridDirection: Lazy<GridDirection | null, ComponentContext> = null;
+    /** `'row'`: buttons fill the grid row by row (left to right), instead of column by column (top to bottom, the default). */
+    gridDirection(direction: Lazy<GridDirection | null, ComponentContext>): this { this._gridDirection = direction; return this; }
     /** Options that cannot be selected; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
@@ -2245,7 +2558,7 @@ export class ToggleButtons extends Field {
             .merge({ 'aria-describedby': describedBy, 'aria-labelledby': `${id}-label`, 'aria-required': isRequired ? 'true' : null, role: 'radiogroup', 'wire:key': `${this.getLivewireKey()}.inputs` })
             .class(['fi-fo-toggle-buttons', this._grouped ? 'fi-btn-group' : null, !this._grouped && this._inline ? 'fi-inline' : null, { 'fi-width-full': this._fullWidth }]);
         if (this._multiple) container.merge({ role: 'group', 'aria-required': null });
-        const grid = !this._grouped && !this._inline && this._columns && this._columns > 1 ? ` class="fi-grid fi-grid-direction-col lg:fi-grid-cols" style="--cols-lg: ${Math.floor(this._columns)}; --cols-default: 1;"` : '';
+        const grid = !this._grouped && !this._inline && this._columns && this._columns > 1 ? ` ${optionsGridAttributes(this._columns, await evaluate(this._gridDirection, this.context()), null)}` : '';
         const manager = colorManager;
         const button = (value: string, disabled: boolean) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, `fi-size-${this._size ?? 'md'}`, disabled ? 'fi-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
         const items = this._options.map(([value, label]) => {
@@ -2262,24 +2575,40 @@ export class ToggleButtons extends Field {
 }
 
 // Server-side TipTap schema: the nodes and marks the rich editor can produce, and the extensions your application registers.
-const richExtensions = () => [StarterKit, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'start' }), Subscript, Superscript, Highlight, SizedImage, TableKit, ...RICH_CONTENT_EXTENSIONS, ...customRichContentExtensions];
+/** Options of the server schema of one editor or renderer: allowed link protocols, extensions of its plugins. */
+export type RichSchemaOptions = { linkProtocols?: string[] | null; extensions?: Extensions };
+/** Link protocols allowed by default (as Filament and TipTap). */
+export const DEFAULT_LINK_PROTOCOLS = ['http', 'https', 'ftp', 'ftps', 'mailto', 'tel', 'callto', 'sms', 'cid', 'xmpp'];
+/** A link is kept if it has no scheme (`/page`, `#anchor`) or one of the allowed protocols. */
+export function isAllowedLinkUrl(url: unknown, protocols: string[] = DEFAULT_LINK_PROTOCOLS): boolean {
+    if (typeof url !== 'string') return false;
+    const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url.replace(/[\s\u0000-\u001f]/g, ''));
+    return !scheme || protocols.some((protocol) => protocol.toLowerCase() === scheme[1].toLowerCase());
+}
+const richExtensions = (options: RichSchemaOptions = {}) => [
+    options.linkProtocols ? StarterKit.configure({ link: { protocols: options.linkProtocols, isAllowedUri: (url: string) => isAllowedLinkUrl(url, options.linkProtocols!) } }) : StarterKit,
+    TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'start' }), Subscript, Superscript, Highlight, SizedImage, TableKit, ...RICH_CONTENT_EXTENSIONS, ...customRichContentExtensions, ...(options.extensions ?? []),
+];
 type RichDocument = { type: 'doc'; content?: unknown[] };
 const isRichDocument = (value: unknown): value is RichDocument => !!value && typeof value === 'object' && (value as any).type === 'doc';
 const richText = (node: any): string => (typeof node?.text === 'string' ? node.text : '') + (Array.isArray(node?.content) ? node.content.map(richText).join('') : '');
-const hasRichContent = (node: any): boolean => ['image', 'horizontalRule', 'mergeTag', 'mention', 'customBlock'].includes(node?.type) || (Array.isArray(node?.content) && node.content.some(hasRichContent));
+const hasRichContent = (node: any): boolean => ['image', 'horizontalRule', 'mergeTag', 'mention', 'customBlock', 'details'].includes(node?.type) || (Array.isArray(node?.content) && node.content.some(hasRichContent));
 /** Stored HTML → TipTap document. Parsing drops anything the schema does not know (scripts, event attributes, `javascript:` links). */
-export function richHtmlToDocument(html: string | null | undefined): RichDocument { return generateJSON(html ?? '', richExtensions()) as RichDocument; }
+export function richHtmlToDocument(html: string | null | undefined, options: RichSchemaOptions = {}): RichDocument { return generateJSON(html ?? '', richExtensions(options)) as RichDocument; }
 /**
  * TipTap document → HTML to save, or null if empty or invalid. The document comes from the browser,
  * so it is rendered then re-parsed to keep only what the schema accepts.
  */
 /** HTML of a document already sanitized (`RichContentRenderer`): no re-parsing. */
-export function renderRichDocument(document: unknown): string { return generateHTML(document as any, richExtensions()); }
-export function richDocumentToHtml(document: unknown): string | null {
+export function renderRichDocument(document: unknown, options: RichSchemaOptions = {}): string { return generateHTML(document as any, richExtensions(options)); }
+/** Plain text of a document: blocks separated by blank lines. */
+export function richDocumentToText(document: unknown, options: RichSchemaOptions = {}): string { return isRichDocument(document) ? generateText(document as any, richExtensions(options), { blockSeparator: '\n\n' }).trim() : ''; }
+export function richDocumentToHtml(document: unknown, options: RichSchemaOptions = {}): string | null {
     if (!isRichDocument(document)) return null;
     try {
-        const clean = generateJSON(generateHTML(document as any, richExtensions()), richExtensions());
-        return richText(clean).trim() === '' && !hasRichContent(clean) ? null : generateHTML(clean, richExtensions());
+        const extensions = richExtensions(options);
+        const clean = generateJSON(generateHTML(document as any, extensions), extensions);
+        return richText(clean).trim() === '' && !hasRichContent(clean) ? null : generateHTML(clean, extensions);
     } catch { return null; }
 }
 
@@ -2310,8 +2639,7 @@ async function storeEditorAttachment(field: Field, id: string | null, options: {
 export const RICH_EDITOR_TOOLS = [['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'link'], ['h2', 'h3'], ['alignStart', 'alignCenter', 'alignEnd'], ['blockquote', 'codeBlock', 'bulletList', 'orderedList'], ['table', 'attachFiles'], ['undo', 'redo']];
 /** The editor selection sent by the browser with a toolbar action. */
 const selectionOf = (args: Record<string, unknown>) => (args.editorSelection ?? null) as { head?: unknown; anchor?: unknown; type?: string } | null;
-// `details` needs a TipTap extension the server schema does not have: its content would be lost on save.
-const BUILT_IN_TOOLS = new Map(RICH_EDITOR_TOOL_DEFINITIONS.filter((definition) => definition.name !== 'details').map((definition) => [definition.name, definition]));
+const BUILT_IN_TOOLS = new Map(RICH_EDITOR_TOOL_DEFINITIONS.map((definition) => [definition.name, definition]));
 /** Custom blocks of an editor: a list, or groups of blocks by label. */
 export type CustomBlocks = CustomBlockClass[] | Record<string, CustomBlockClass[]>;
 
@@ -2321,8 +2649,21 @@ export type CustomBlocks = CustomBlockClass[] | Record<string, CustomBlockClass[
  * tools and TipTap extensions.
  */
 export class RichEditor extends Field {
-    private _toolbar: string[][] | null = null;
-    private _disabledTools: string[] = [];
+    private _toolbar: ToolbarItems | null = null;
+    private _toolbarModifications: ToolbarModification[] = [];
+    private _floatingToolbars: Record<string, ToolbarItem[]> | null = null;
+    private _plugins: RichContentPlugin[] = [];
+    private _linkProtocols: string[] | null = null;
+    private _minHeight: Lazy<string | null, ComponentContext> = '10rem';
+    private _maxHeight: Lazy<string | null, ComponentContext> = null;
+    private _stickyPanels: Lazy<boolean, ComponentContext> = false;
+    private _stickyOffset: Lazy<string | null, ComponentContext> = null;
+    private _uploadingFileMessage: string | null = null;
+    private _attachmentsVisibility: Lazy<AttachmentsVisibility, ComponentContext> = 'public';
+    private _getFileAttachmentUrlUsing: ((file: string, ctx: ComponentContext) => string | null | Promise<string | null>) | null = null;
+    private _saveUploadedFileAttachmentUsing: ((file: TemporaryUpload, ctx: ComponentContext) => string | null | Promise<string | null>) | null = null;
+    private _preventAttachmentTampering: Lazy<boolean, ComponentContext> = true;
+    private _allowFileAttachmentPathUsing: ((file: string, ctx: ComponentContext) => boolean | Promise<boolean>) | null = null;
     private _json = false;
     private _richPlaceholder: string | null = null;
     private _attachmentsStorage: FileStorage | null = null;
@@ -2345,23 +2686,87 @@ export class RichEditor extends Field {
     private _jsExtensions: string[] = [];
     private _editorActions: Action[] = [];
     static make(name: string): RichEditor { return configured(new RichEditor(name)); }
-    /** Toolbar tools, by group (`[['bold', 'italic', 'link'], ['h2', 'h3'], ['undo', 'redo']]`); see `RICH_EDITOR_TOOLS` and `RICH_EDITOR_TOOL_DEFINITIONS`. */
-    toolbarButtons(groups: string[][] | string[]): this {
-        const list = (groups.length && typeof groups[0] === 'string' ? [groups as string[]] : groups as string[][]);
-        this._toolbar = list;
-        this.assertKnownTools();
+    /**
+     * Fake rich content for seeders and tests (Filament's `fake()->filamentRichContent()`): chain blocks, then `toHtml()`,
+     * `toArray()` or `toValue()`. With `editor`, its merge tags, mentions, custom blocks, text colors, plugins, link protocols and
+     * JSON mode are used; `seed` makes the output reproducible.
+     */
+    static fake(options: RichContentFakerOptions = {}): RichContentFaker { return RichContentFaker.make(options); }
+    /**
+     * Toolbar tools, by group (`[['bold', 'italic', 'link'], ['h2', 'h3'], ['undo', 'redo']]`); see `RICH_EDITOR_TOOLS` and
+     * `RICH_EDITOR_TOOL_DEFINITIONS`. A group may hold dropdowns: `[ToolbarButtonGroup.make('Alignment', ['alignStart', 'alignEnd'])]`.
+     */
+    toolbarButtons(groups: ToolbarItems | null): this {
+        this._toolbar = groups;
+        this._toolbarModifications = [];
+        this.assertKnownTools(groups ?? []);
         return this;
     }
-    private assertKnownTools(): void {
-        if (!this._toolbar) return;
-        const unknown = this._toolbar.flat().filter((tool) => !this.findTool(tool));
+    private assertKnownTools(items: ToolbarItems): void {
+        const unknown = toolbarButtonNames(items).filter((tool) => !this.findTool(tool));
         if (unknown.length) throw new Error(`RichEditor: unknown toolbar buttons ${unknown.join(', ')} (available: ${[...BUILT_IN_TOOLS.keys(), ...this._customTools.map((tool) => tool.getName())].join(', ')}).`);
     }
-    /** Removes buttons; with no argument, removes them all. */
-    disableToolbarButtons(tools: string[] = []): this { if (!tools.length) this._toolbar = []; this._disabledTools = [...this._disabledTools, ...tools]; return this; }
-    disableAllToolbarButtons(condition = true): this { if (condition) this._toolbar = []; return this; }
+    /** Removes buttons (also inside dropdown groups); with no argument, removes them all. */
+    disableToolbarButtons(tools: string[] = []): this { this._toolbarModifications.push(tools.length ? { type: 'disable', buttons: tools } : { type: 'disableAll' }); return this; }
+    disableAllToolbarButtons(condition = true): this { if (condition) this._toolbarModifications.push({ type: 'disableAll' }); return this; }
+    /** Adds buttons (or groups, as arrays) after the current ones; buttons already in the toolbar are skipped. */
+    enableToolbarButtons(tools: ToolbarItems = []): this { this.assertKnownTools(tools); this._toolbarModifications.push({ type: 'enable', buttons: tools }); return this; }
+    /** Whether the toolbar holds a tool (or every tool of a list). */
+    hasToolbarButton(button: string | string[]): boolean { const names = toolbarButtonNames(this.getToolbarButtons()); return [button].flat().every((name) => names.includes(name)); }
+    /**
+     * Toolbars shown next to the cursor while it is inside a node: `{ paragraph: ['bold', 'italic'], table: ['tableAddRowAfter'] }`.
+     * The default shows the table and grid tools inside tables and grids. `null` restores it, `{}` removes them.
+     */
+    floatingToolbars(toolbars: Record<string, ToolbarItem[]> | null): this {
+        this._floatingToolbars = toolbars;
+        this.assertKnownTools(Object.values(toolbars ?? {}).flat());
+        return this;
+    }
+    getFloatingToolbars(): Record<string, ToolbarItem[]> {
+        return this._floatingToolbars ?? {
+            grid: ['gridAddColumnBefore', 'gridAddColumnAfter', 'gridDeleteColumn', 'gridDelete'],
+            table: ['tableAddColumnBefore', 'tableAddColumnAfter', 'tableDeleteColumn', 'tableAddRowBefore', 'tableAddRowAfter', 'tableDeleteRow', 'tableMergeCells', 'tableSplitCell', 'tableToggleHeaderRow', 'tableToggleHeaderCell', 'tableDelete'],
+        };
+    }
+    /** Minimum height of the content (a CSS length, `10rem` by default; `null`: the intrinsic `3rem`). */
+    minHeight(height: Lazy<string | null, ComponentContext>): this { this._minHeight = height; return this; }
+    /** Maximum height of the content: beyond it, the content scrolls (`null`: no limit). */
+    maxHeight(height: Lazy<string | null, ComponentContext>): this { this._maxHeight = height; return this; }
+    getMinHeight(): Promise<string | null> { return evaluate(this._minHeight, this.context()); }
+    getMaxHeight(): Promise<string | null> { return evaluate(this._maxHeight, this.context()); }
+    /** Keeps the custom blocks and merge tags panels visible while scrolling (when they are beside the content). */
+    stickyPanels(condition: Lazy<boolean, ComponentContext> = true): this { this._stickyPanels = condition; return this; }
+    hasStickyPanels(): Promise<boolean> { return evaluate(this._stickyPanels, this.context()).then(Boolean); }
+    /** Distance from the top of the viewport of the sticky toolbar and panels (a CSS length; `null`: automatic). */
+    stickyOffset(offset: Lazy<string | null, ComponentContext>): this { this._stickyOffset = offset; return this; }
+    getStickyOffset(): Promise<string | null> { return evaluate(this._stickyOffset, this.context()); }
+    /** Protocols allowed in links (`http`, `https`, `ftp`, `ftps`, `mailto`, `tel`, `callto`, `sms`, `cid`, `xmpp` by default). Checked on the server. */
+    linkProtocols(protocols: string[] | null): this { this._linkProtocols = protocols === null ? null : protocols.map((protocol) => protocol.toLowerCase().replace(/:$/, '')).filter((protocol) => /^[a-z][a-z0-9+.-]*$/.test(protocol)); return this; }
+    getLinkProtocols(): string[] { return this._linkProtocols ?? DEFAULT_LINK_PROTOCOLS; }
+    /** Plugins: TipTap extensions (server and browser), toolbar tools and their actions. */
+    plugins(plugins: RichContentPlugin[]): this { this._plugins = [...this._plugins, ...plugins]; return this; }
+    getPlugins(): RichContentPlugin[] { return this._plugins; }
+    isJson(): boolean { return this._json; }
+    getMergeTags(): Record<string, string> { return { ...this._mergeTags }; }
+    getMentionProviders(): MentionProvider[] { return [...this._mentions]; }
+    /** Custom blocks of the editor, ungrouped. */
+    getCustomBlocks(): CustomBlockClass[] { return this.blockGroups().flatMap(([, blocks]) => blocks); }
+    /** Storage HTML of a document, sanitized by this editor's schema (used by `RichEditor.fake({ editor })`). */
+    async dehydrateRichDocument(document: unknown): Promise<string | null> { return richDocumentToHtml(document, this.schemaOptions()); }
+    /** A renderer configured like this editor: custom blocks, mentions, plugins, link protocols and attachments. */
+    getRenderer(content: unknown): RichContentRenderer {
+        return RichContentRenderer.make(content).customBlocks(this.getCustomBlocks()).mentions(this._mentions).plugins(this._plugins).linkProtocols(this._linkProtocols)
+            .fileAttachmentsStorage(this.attachmentsStorage()).fileAttachmentsVisibility(typeof this._attachmentsVisibility === 'function' ? 'public' : this._attachmentsVisibility).getFileAttachmentUrlUsing(this._getFileAttachmentUrlUsing ? (file) => this._getFileAttachmentUrlUsing!(file, this.context()) : null);
+    }
+    /** Rendered HTML of a document, as `getRenderer()` renders it. */
+    async renderRichDocument(document: unknown): Promise<string> { return this.getRenderer(document).toHtml(); }
+    /** Server schema of this editor: link protocols and plugin extensions. */
+    private schemaOptions(): RichSchemaOptions { return { linkProtocols: this._linkProtocols, extensions: this._plugins.flatMap((plugin) => plugin.getTipTapServerExtensions()) }; }
+    /** Message shown while an image uploads. */
+    uploadingFileMessage(message: string | null): this { this._uploadingFileMessage = message; return this; }
+    getUploadingFileMessage(): string { return this._uploadingFileMessage ?? t('filament-forms::components.rich_editor.uploading_file_message'); }
     /** Your own toolbar buttons (or replacements of built-in ones, by name); place them with `toolbarButtons()`. */
-    tools(tools: RichEditorTool[]): this { this._customTools = [...this._customTools.filter((tool) => !tools.some((other) => other.getName() === tool.getName())), ...tools]; this.assertKnownTools(); return this; }
+    tools(tools: RichEditorTool[]): this { this._customTools = [...this._customTools.filter((tool) => !tools.some((other) => other.getName() === tool.getName())), ...tools]; return this; }
     /** Actions mounted by your tools (`RichEditorTool.make('x').action()`), run with the editor selection in `arguments.editorSelection`. */
     editorActions(actions: Action[]): this { this._editorActions = [...this._editorActions, ...actions]; return this; }
     /** Browser TipTap extensions: URLs of ES modules exporting an extension (or an array of them). Register their server side with `registerRichContentExtensions()`. */
@@ -2400,29 +2805,172 @@ export class RichEditor extends Field {
     /** Lets users resize images with handles; the size is saved on the image. */
     resizableImages(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_resizableImages', condition); }
     private attachmentsStorage(): FileStorage | null { return this._attachmentsStorage ?? FileUpload.storage; }
+    /** A tool by name: plugin tools first (the last plugin wins), then `tools()`, then the built-in ones. */
     private findTool(name: string): RichEditorTool | null {
+        const plugin = this._plugins.flatMap((item) => item.getEditorTools()).reverse().find((tool) => tool.getName() === name);
+        if (plugin) return plugin;
         const custom = this._customTools.find((tool) => tool.getName() === name);
         if (custom) return custom;
         const definition = BUILT_IN_TOOLS.get(name);
         return definition ? RichEditorTool.fromDefinition(definition) : null;
     }
-    private toolGroups(): string[][] { return (this._toolbar ?? RICH_EDITOR_TOOLS).map((group) => group.filter((tool) => !this._disabledTools.includes(tool) && (tool !== 'attachFiles' || this.attachmentsStorage() !== null))).filter((group) => group.length); }
+    /** Default toolbar, as Filament's: `customBlocks` and `mergeTags` join the table group when they are used. */
+    getDefaultToolbarButtons(): ToolbarItems {
+        return [...RICH_EDITOR_TOOLS.slice(0, 4), ['table', 'attachFiles', ...(this.blockGroups().some(([, blocks]) => blocks.length) ? ['customBlocks'] : []), ...(Object.keys(this._mergeTags).length ? ['mergeTags'] : [])], ...RICH_EDITOR_TOOLS.slice(5)];
+    }
+    /** Toolbar groups after the plugins' and the field's modifications; `attachFiles` needs a storage. */
+    getToolbarButtons(): ToolbarItem[][] {
+        const pluginModifications: ToolbarModification[] = this._plugins.flatMap((plugin): ToolbarModification[] => [
+            ...(plugin.getEnabledToolbarButtons?.()?.length ? [{ type: 'enable' as const, buttons: plugin.getEnabledToolbarButtons!() }] : []),
+            ...(plugin.getDisabledToolbarButtons?.()?.length ? [{ type: 'disable' as const, buttons: plugin.getDisabledToolbarButtons!() }] : []),
+        ]);
+        const disabled: ToolbarModification[] = this.attachmentsStorage() === null ? [{ type: 'disable', buttons: ['attachFiles'] }] : [];
+        return applyToolbarModifications(this._toolbar ?? this.getDefaultToolbarButtons(), [...pluginModifications, ...this._toolbarModifications, ...disabled]);
+    }
+    private toolGroups(): string[][] { return this.getToolbarButtons().map((group) => toolbarButtonNames(group)); }
+    /** HTML of a toolbar entry: a tool, or a dropdown group of tools. */
+    private toolbarItemHtml(item: ToolbarItem): string {
+        if (typeof item !== 'string') return item.resolve((name) => this.findTool(name)).toHtml();
+        const tool = this.findTool(item);
+        if (!tool) throw new Error(`RichEditor: toolbar button [${item}] cannot be found.`);
+        return tool.toHtml();
+    }
     private blockGroups(): [string, CustomBlockClass[]][] { return Array.isArray(this._customBlocks) ? [['', this._customBlocks]] : Object.entries(this._customBlocks); }
     getCustomBlock(id: unknown): CustomBlockClass | null { return this.blockGroups().flatMap(([, blocks]) => blocks).find((block) => block.getId() === id) ?? null; }
     hydrateState(value: unknown): unknown {
         if (typeof value === 'string' && value.trim().startsWith('{')) { try { const parsed = JSON.parse(value); if (isRichDocument(parsed)) return parsed; } catch { /* HTML */ } }
-        return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : '');
+        return isRichDocument(value) ? value : richHtmlToDocument(typeof value === 'string' ? value : '', this.schemaOptions());
     }
-    getDefaultState(): unknown { return richHtmlToDocument(typeof this.resolvedDefault() === 'string' ? this.resolvedDefault() as string : ''); }
-    /** HTML (sanitized by the editor's schema), or the JSON document with `json()` (normalized through the same schema). */
-    dehydrateState(state: unknown): unknown {
-        const html = richDocumentToHtml(state);
-        return this._json ? (html === null ? null : richHtmlToDocument(html)) : html;
+    getDefaultState(): unknown { const value = this.resolvedDefault(); return richHtmlToDocument(typeof value === 'string' ? value : '', this.schemaOptions()); }
+    /**
+     * HTML (sanitized by the editor's schema), or the JSON document with `json()` (normalized through the same schema).
+     * Images uploaded in the editor are stored first (their `data-id` becomes the stored key); private images keep no URL.
+     */
+    async dehydrateState(state: unknown): Promise<unknown> {
+        const document = await this.saveFileAttachments(state);
+        const html = richDocumentToHtml(document, this.schemaOptions());
+        if (html === null) return null;
+        const isPrivate = (await this.getFileAttachmentsVisibility()) === 'private';
+        if (!isPrivate && !this._json) return html;
+        const clean = richHtmlToDocument(html, this.schemaOptions());
+        if (isPrivate) await eachImage(clean, (node) => { if (node.attrs?.id) node.attrs.src = null; });
+        return this._json ? clean : renderRichDocument(clean, this.schemaOptions());
     }
     async getValidationRules(): Promise<Rule[]> {
         const rules: Rule[] = [];
-        if (await this.isRequired()) rules.push({ name: 'required', passes: (value) => richDocumentToHtml(value) !== null, message: (a) => `The ${a} field is required.` });
+        if (await this.isRequired()) rules.push({ name: 'required', passes: (value) => richDocumentToHtml(value, this.schemaOptions()) !== null, message: (a) => `The ${a} field is required.` });
+        // A `data-id` the record does not hold (and that is not a new upload) would point to someone else's file.
+        if (await evaluate(this._preventAttachmentTampering, this.context())) rules.push({
+            name: 'tampered', implicit: false,
+            passes: async (value) => {
+                const original = await this.getOriginalFileAttachmentPaths();
+                for (const id of await attachmentIdsOf(value)) if (!this.getUploadedFileAttachment(id) && !(await this.isFileAttachmentPathAuthorized(id, original))) return false;
+                return true;
+            },
+            message: (a) => t('filament-forms::validation.tampered_file_path', { attribute: a }),
+        });
         return [...rules, ...this._rules];
+    }
+
+    // ---- file attachments
+    /** `private`: images get a temporary signed URL when the content is loaded or rendered, and none is saved (only `data-id`). */
+    fileAttachmentsVisibility(visibility: Lazy<AttachmentsVisibility, ComponentContext>): this { this._attachmentsVisibility = visibility; return this; }
+    async getFileAttachmentsVisibility(): Promise<AttachmentsVisibility> { return (await evaluate(this._attachmentsVisibility, this.context())) === 'private' ? 'private' : 'public'; }
+    /** URL of a stored attachment (its `data-id`), instead of the storage's (temporary) URL. */
+    getFileAttachmentUrlUsing(callback: ((file: string, ctx: ComponentContext) => string | null | Promise<string | null>) | null): this { this._getFileAttachmentUrlUsing = callback; return this; }
+    /** Stores an uploaded image yourself, returning its key (saved in `data-id`). */
+    saveUploadedFileAttachmentUsing(callback: ((file: TemporaryUpload, ctx: ComponentContext) => string | null | Promise<string | null>) | null): this { this._saveUploadedFileAttachmentUsing = callback; return this; }
+    /**
+     * Rejects content whose images reference a `data-id` the record does not already hold (new uploads always pass), so that a
+     * forged request cannot reference another record's file. On by default in Navette; `allowFilePathUsing` approves other ids.
+     */
+    preventFileAttachmentPathTampering(condition: Lazy<boolean, ComponentContext> = true, allowFilePathUsing: ((file: string, ctx: ComponentContext) => boolean | Promise<boolean>) | null = null): this {
+        this._preventAttachmentTampering = condition;
+        this._allowFileAttachmentPathUsing = allowFilePathUsing;
+        return this;
+    }
+    shouldPreventFileAttachmentPathTampering(): Promise<boolean> { return evaluate(this._preventAttachmentTampering, this.context()).then(Boolean); }
+    /** `data-id` values of the images of the record's saved content. */
+    async getOriginalFileAttachmentPaths(): Promise<string[]> {
+        const record = this.container.getRecord() as Record<string, unknown> | null;
+        const original = record && typeof record === 'object' ? record[this.getName()] : null;
+        if (original === null || original === undefined || original === '') return [];
+        return attachmentIdsOf(this.hydrateState(original));
+    }
+    async isFileAttachmentPathAuthorized(file: string, original?: string[]): Promise<boolean> {
+        if ((original ?? (await this.getOriginalFileAttachmentPaths())).includes(file)) return true;
+        return this._allowFileAttachmentPathUsing !== null && (await this._allowFileAttachmentPathUsing(file, this.context())) === true;
+    }
+    /** URL of a stored attachment: `getFileAttachmentUrlUsing()`, else the storage's URL (a temporary one for private images). */
+    async getFileAttachmentUrl(file: string): Promise<string | null> {
+        if (this._getFileAttachmentUrlUsing) return safeFileUrl(await this._getFileAttachmentUrlUsing(file, this.context()));
+        return attachmentUrl(this.attachmentsStorage(), await this.getFileAttachmentsVisibility(), file);
+    }
+    /** Holder of the editor's uploads: `componentFileAttachments.<state path>`. */
+    private attachmentsHolder(): Record<string, unknown> | null {
+        const holder = readPath((this.livewire as any).componentFileAttachments ?? {}, this.getStatePath().split('.'));
+        return holder && typeof holder === 'object' && !Array.isArray(holder) ? holder as Record<string, unknown> : null;
+    }
+    /** The temporary file uploaded under this id, if it is valid (type read from its content, size); not consumed. */
+    getUploadedFileAttachment(id: unknown): TemporaryUpload | null {
+        if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) return null;
+        const holder = this.attachmentsHolder();
+        if (!holder || !Object.hasOwn(holder, id)) return null;
+        const file = ((this.livewire as any)._runtime?.uploads?.resolve(holder[id]) ?? null) as TemporaryUpload | null;
+        return file && this._attachmentTypes.includes(file.type) && file.size <= this._attachmentMaxSize * 1024 ? file : null;
+    }
+    /** Stores an uploaded image (`saveUploadedFileAttachmentUsing()`, else the storage) and returns its key. */
+    async saveUploadedFileAttachment(file: TemporaryUpload): Promise<string | null> {
+        if (this._saveUploadedFileAttachmentUsing) return (await this._saveUploadedFileAttachmentUsing(file, this.context())) ?? null;
+        const storage = this.attachmentsStorage();
+        if (!storage) return null;
+        const key = await storage.store(file, this._attachmentsDirectory);
+        (this.livewire as any)._runtime?.uploads?.remove(file.id);
+        return key;
+    }
+    /**
+     * Stores the images uploaded in the document (Filament's `saveFileAttachments()`): each `data-id` naming an upload becomes the
+     * stored key, with its URL. The field state is updated, so saving twice stores once.
+     */
+    async saveFileAttachments(state: unknown = this.context().state): Promise<unknown> {
+        if (!isRichDocument(state)) return state;
+        const holder = this.attachmentsHolder();
+        if (!holder) return state;
+        const document = JSON.parse(JSON.stringify(state));
+        let changed = false;
+        await eachImage(document, async (node) => {
+            const id = node.attrs?.id;
+            const upload = this.getUploadedFileAttachment(id);
+            if (!upload) return;
+            const key = await this.saveUploadedFileAttachment(upload);
+            delete holder[id];
+            if (key === null) return;
+            node.attrs = { ...node.attrs, id: key, src: await this.getFileAttachmentUrl(key) };
+            changed = true;
+        });
+        if (!changed) return state;
+        writePath(this.livewire as any, this.getStatePath().split('.'), document);
+        return document;
+    }
+    /**
+     * Gives the images of the state their URL when they have none (content loaded from the record: private images are saved
+     * without one). Only ids the record holds, or that `allowFilePathUsing` approves, get a URL.
+     */
+    private async loadFileAttachmentUrls(): Promise<void> {
+        const state = this.context().state;
+        if (!isRichDocument(state)) return;
+        const prevent = await this.shouldPreventFileAttachmentPathTampering();
+        const original = prevent ? await this.getOriginalFileAttachmentPaths() : [];
+        let changed = false;
+        const document = JSON.parse(JSON.stringify(state));
+        await eachImage(document, async (node) => {
+            const id = node.attrs?.id;
+            if (typeof id !== 'string' || id === '' || node.attrs?.src) return;
+            if (prevent && !(await this.isFileAttachmentPathAuthorized(id, original))) return;
+            const url = await this.getFileAttachmentUrl(id);
+            if (url) { node.attrs = { ...node.attrs, src: url }; changed = true; }
+        });
+        if (changed) writePath(this.livewire as any, this.getStatePath().split('.'), document);
     }
     getExposedMethods(): string[] { return ['getMentionSearchResultsForJs', 'getMentionLabelsForJs', 'getCustomBlockPreviewsForJs', 'getUploadedFileAttachmentTemporaryUrl', 'saveUploadedFileAttachmentAndGetUrl']; }
     private mentionProvider(char: unknown): MentionProvider | null { return this._mentions.find((provider) => provider.getTriggerCharacter() === char) ?? this._mentions[0] ?? null; }
@@ -2456,16 +3004,25 @@ export class RichEditor extends Field {
         return previews;
     }
     /**
-     * URL of a file the editor just uploaded: the file is checked (type from its content, size), stored, and its public URL returned.
-     * It stays stored even if the form is not saved.
+     * Temporary URL of a file the editor just uploaded, shown until the form is saved: the file is checked (type from its content,
+     * size) but not stored yet. It is stored when the form is saved (and left in the temporary store otherwise).
      */
     async getUploadedFileAttachmentTemporaryUrl(args: unknown = {}): Promise<string | null> {
-        const id = String((args as any)?.attachment ?? '');
+        // The editor's JavaScript sends `{ attachment }`, passed as a positional argument by `callSchemaComponentMethod()`.
+        const id = typeof args === 'string' ? args : (args as any)?.attachment;
+        if (!this.attachmentsStorage() && !this._saveUploadedFileAttachmentUsing) return null;
+        if (!this.toolGroups().flat().includes('attachFiles') || (await this.isDisabled())) return null;
+        const file = this.getUploadedFileAttachment(id);
+        const runtime = (this.livewire as any)._runtime;
+        return file ? (runtime?.uploads?.temporaryUrl?.(file.id, runtime.uploadPrefix ?? '/livewire') ?? null) : null;
+    }
+    /** Stores the file just uploaded to `componentFileAttachments.<state path>` and returns its URL (no `data-id` flow). */
+    async saveUploadedFileAttachmentAndGetUrl(args: unknown = {}): Promise<string | null> {
+        const id = String((typeof args === 'string' ? args : (args as any)?.attachment) ?? '');
         const storage = this.attachmentsStorage();
         if (!storage || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !this.toolGroups().flat().includes('attachFiles') || (await this.isDisabled())) return null;
         return storeEditorAttachment(this, id, { storage, directory: this._attachmentsDirectory, types: this._attachmentTypes, maxSize: this._attachmentMaxSize });
     }
-    async saveUploadedFileAttachmentAndGetUrl(args: unknown = {}): Promise<string | null> { return this.getUploadedFileAttachmentTemporaryUrl(args); }
 
     /** Sends commands to the editor in the browser (after an action), on the given selection. */
     runCommands(livewire: any, commands: { name: string; arguments?: unknown[] }[], editorSelection: unknown = null): void {
@@ -2481,8 +3038,8 @@ export class RichEditor extends Field {
                 .fillForm(({ arguments: args }) => ({ url: typeof args.url === 'string' ? args.url : null, shouldOpenInNewTab: args.shouldOpenInNewTab === true }))
                 .schema(() => [
                     TextInput.make('url').label(tr('modal.form.url.label'))
-                        // Only URLs that cannot execute code are accepted.
-                        .rule({ name: 'url', passes: (value) => /^(https?:\/\/|mailto:|tel:|\/|#)/i.test(String(value)), message: (a) => `The ${a} field must be a valid URL.` }),
+                        // Only the allowed protocols (`linkProtocols()`), or a local path or anchor: a URL cannot execute code.
+                        .rule({ name: 'url', passes: (value) => /^([a-z][a-z0-9+.-]*:|\/|#|\?)/i.test(String(value)) && isAllowedLinkUrl(String(value), this.getLinkProtocols()) && (!/^https?:/i.test(String(value)) || /^https?:\/\/[^/?#\s]/i.test(String(value))), message: (a) => `The ${a} field must be a valid URL.` }),
                     Checkbox.make('shouldOpenInNewTab').label(tr('modal.form.should_open_in_new_tab.label')),
                 ])
                 .action(({ livewire, arguments: args, data }) => {
@@ -2497,6 +3054,7 @@ export class RichEditor extends Field {
             this.textColorAction(),
             this.customBlockAction(),
             ...this._editorActions,
+            ...this._plugins.flatMap((plugin) => plugin.getEditorActions()),
         ];
     }
     private textColorAction(): Action {
@@ -2574,8 +3132,9 @@ export class RichEditor extends Field {
 
     async toHtml(): Promise<string> {
         const key = this.getKey()!;
+        await this.loadFileAttachmentUrls();
         let html = views.render('filament-forms::components.rich-editor', { livewireId: this.livewire.id, key, statePath: this.getStatePath(), label: await this.getLabel(), js });
-        // Toolbar: the configured groups, each tool rendered from its definition.
+        // Toolbar: the configured groups, each tool (or dropdown of tools) rendered from its definition.
         const toolbarStart = html.indexOf('data-rich-editor-toolbar="main"');
         if (toolbarStart >= 0) {
             const open = html.indexOf('>', toolbarStart) + 1;
@@ -2584,11 +3143,32 @@ export class RichEditor extends Field {
             const close = message < 0 ? -1 : html.lastIndexOf('<div', message);
             if (close < 0) throw new Error('RichEditor: unexpected view markup (toolbar end not found).');
             const body = html.slice(open, close);
-            const groups = this.toolGroups().map((group) => `<div class="fi-fo-rich-editor-toolbar-group">${group.map((tool) => this.findTool(tool)?.toHtml() ?? '').join('')}</div>`).join('');
+            const groups = this.getToolbarButtons().map((group) => `<div class="fi-fo-rich-editor-toolbar-group">${group.map((item) => this.toolbarItemHtml(item)).join('')}</div>`).join('');
             const endOfToolbar = body.lastIndexOf('</div>');
             html = html.slice(0, open) + groups + body.slice(endOfToolbar) + html.slice(close);
             if (this._stickyToolbar) html = html.replace('class="fi-fo-rich-editor-toolbar "', 'class="fi-fo-rich-editor-toolbar fi-fo-rich-editor-sticky-toolbar"');
         }
+        // Floating toolbars: one per node name, inside the content (none when disabled).
+        const floatingToolbars = (await this.isDisabled()) ? {} : this.getFloatingToolbars();
+        const contentStart = html.indexOf('<div x-ref="editor" class="fi-fo-rich-editor-content fi-prose">');
+        const panelsStart = html.indexOf('x-show="isPanelActive()"');
+        if (contentStart >= 0 && panelsStart >= 0) {
+            const open = html.indexOf('>', contentStart) + 1;
+            const close = html.lastIndexOf('</div>', html.lastIndexOf('<div', panelsStart));
+            const toolbarLabel = e(t('filament-forms::components.rich_editor.toolbar.label'));
+            const toolbars = Object.entries(floatingToolbars).map(([node, items]) => `<div x-ref="floatingToolbar::${e(node)}" class="fi-fo-rich-editor-floating-toolbar fi-not-prose" data-rich-editor-toolbar role="toolbar" aria-label="${toolbarLabel}">${items.map((item) => this.toolbarItemHtml(item)).join('')}</div>`).join('');
+            html = html.slice(0, open) + toolbars + html.slice(close);
+        }
+        if (await this.hasStickyPanels()) html = html.replace('class="fi-fo-rich-editor-panels "', 'class="fi-fo-rich-editor-panels fi-fo-rich-editor-sticky-panels"');
+        // Height and sticky offset: CSS variables of the wrapper.
+        const [minHeight, maxHeight, stickyOffset] = [await this.getMinHeight(), await this.getMaxHeight(), await this.getStickyOffset()];
+        const style = [minHeight ? `--min-height: ${minHeight}` : null, maxHeight ? `--max-height: ${maxHeight}` : null, stickyOffset ? `--rich-editor-sticky-offset: ${stickyOffset}` : null].filter(Boolean).join('; ');
+        html = html.replace('style="--min-height: 10rem;" ', () => (style ? `style="${e(style)};" ` : ''));
+        const uploadingMessage = this.getUploadingFileMessage();
+        html = html.replace('<span>Uploading file...</span>', () => `<span>${e(uploadingMessage)}</span>`)
+            .replace(/uploadingFileMessage: '[^']*',/, () => `uploadingFileMessage: ${js(uploadingMessage)},`)
+            .replace(/floatingToolbars: JSON\.parse\('[^']*'\),/, () => `floatingToolbars: ${js(Object.keys(floatingToolbars).length ? Object.fromEntries(Object.entries(floatingToolbars).map(([node, items]) => [node, toolbarButtonNames(items)])) : [])},`)
+            .replace(/linkProtocols: JSON\.parse\('[^']*'\),/, () => `linkProtocols: ${js(this.getLinkProtocols())},`);
         // Panels: custom blocks and merge tags.
         const blocksStart = html.indexOf('<div class="fi-fo-rich-editor-custom-blocks-ctn">');
         if (blocksStart >= 0) {
@@ -2608,7 +3188,7 @@ export class RichEditor extends Field {
             .replace(/acceptedFileTypes: JSON\.parse\('[^']*'\),/, () => `acceptedFileTypes: ${js(this._attachmentTypes)},`)
             .replace(/acceptedFileTypesValidationMessage: '[^']*',/, () => `acceptedFileTypesValidationMessage: ${js(`Uploaded files must be of type: ${this._attachmentTypes.join(', ')}.`)},`)
             .replace('activePanel: null,', () => `activePanel: ${js(this._activePanel)},`)
-            .replace('extensions: [],', () => `extensions: ${js(this._jsExtensions)},`)
+            .replace('extensions: [],', () => `extensions: ${js([...this._jsExtensions, ...this._plugins.flatMap((plugin) => plugin.getTipTapJsExtensions())])},`)
             .replace('hasResizableImages: false,', `hasResizableImages: ${this._resizableImages ? 'true' : 'false'},`)
             .replace('hasMinimalCustomBlockControls: false,', `hasMinimalCustomBlockControls: ${this._minimalCustomBlockControls ? 'true' : 'false'},`)
             .replace('hasStickyToolbar: false,', `hasStickyToolbar: ${this._stickyToolbar ? 'true' : 'false'},`)
@@ -2675,6 +3255,8 @@ export class ColorPicker extends Field {
 export class Checkbox extends Field {
     private _inline = true;
     static make(name: string): Checkbox { return configured(new Checkbox(name)); }
+    /** Inside a Repeater or Builder: `distinct()` across the items, `live()`, and the same value is removed from the other items when it changes. */
+    fixIndistinctState(condition: Lazy<boolean, ComponentContext> = true): this { return applyFixIndistinctState(this, condition); }
     getDefaultState(): unknown { return this.resolvedDefault() ?? false; }
     /** `false`: the label goes above the checkbox instead of beside it. */
     inline(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_inline', condition, Boolean); }
@@ -2687,14 +3269,32 @@ export class Checkbox extends Field {
 }
 
 /** Checkboxes for a list of values: static options or a many-to-many relationship, with search and bulk toggling. */
+/** Order in which options fill a grid: `'column'` (top to bottom, then the next column) or `'row'` (left to right). */
+export type GridDirection = 'row' | 'column';
+/** `class` and `style` of an options grid with `columns` columns from `lg`, as Filament's `grid()` attribute macro. */
+function optionsGridAttributes(columns: number | null, direction: GridDirection | null, extraClass: string | null): string {
+    const count = columns && columns > 1 ? Math.floor(columns) : null;
+    const isColumn = direction !== 'row';
+    const value = (n: number) => (isColumn ? String(n) : `repeat(${n}, minmax(0, 1fr))`);
+    const classes = cls(['fi-grid', { 'fi-grid-direction-col': isColumn, 'lg:fi-grid-cols': count !== null }, extraClass]);
+    return `class="${classes}" style="${count !== null ? `--cols-lg: ${value(count)}; ` : ''}--cols-default: ${value(1)};"`;
+}
+
 export class CheckboxList extends Field {
     private _options: [string, string][] = [];
     private _optionColumns: number | null = null;
     static make(name: string): CheckboxList { return configured(new CheckboxList(name)); }
+    /** Inside a Repeater or Builder: `distinct()` across the items, `live()`, and the same value is removed from the other items when it changes. */
+    fixIndistinctState(condition: Lazy<boolean, ComponentContext> = true): this { return applyFixIndistinctState(this, condition); }
+    /** Inside a Repeater or Builder: options picked in another item are disabled (with `distinct()` validation and `live()`). */
+    disableOptionsWhenSelectedInSiblingRepeaterItems(): this { return applyDisableOptionsWhenSelectedInSiblingRepeaterItems(this); }
     /** Options as pairs, `{ value: label }`, or an enum (its descriptions are used unless `descriptions()` sets others). */
     options(options: Options | Enum<string | number>): this { this._options = optionPairs(options); if (isEnum(options) && !Object.keys(this._descriptions).length) this._descriptions = options.descriptions(); return this; }
     /** Number of columns the options are spread over (from `lg`). */
     columns(columns: Lazy<number | null, ComponentContext>): this { return this.setLazy('_optionColumns', columns); }
+    private _gridDirection: Lazy<GridDirection | null, ComponentContext> = null;
+    /** `'row'`: options fill the grid row by row (left to right), instead of column by column (top to bottom, the default). */
+    gridDirection(direction: Lazy<GridDirection | null, ComponentContext>): this { this._gridDirection = direction; return this; }
     private _descriptions: Record<string, string> = {};
     private _searchable = false;
     private _bulkToggleable = false;
@@ -2824,8 +3424,7 @@ export class CheckboxList extends Field {
             const description = descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(descriptions[value])}</p>` : '';
             return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${this._allowHtml ? sanitizeHtml(label) : e(label)}</span>${description}</div></label></div>`;
         });
-        const columns = this._optionColumns ?? 1;
-        const grid = columns > 1 ? `class="fi-grid fi-grid-direction-col lg:fi-grid-cols fi-fo-checkbox-list-options" style="--cols-lg: ${Math.floor(columns)}; --cols-default: 1;"` : 'class="fi-grid fi-grid-direction-col fi-fo-checkbox-list-options" style="--cols-default: 1;"';
+        const grid = optionsGridAttributes(this._optionColumns, await evaluate(this._gridDirection, this.context()), 'fi-fo-checkbox-list-options');
         const searchPrompt = this._searchPrompt;
         const search = this._searchable ? `<div class="fi-input-wrp fi-fo-checkbox-list-search-input-wrp"><div class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass', { alias: 'forms::components.checkbox-list.search-field' })}</div><div class="fi-input-wrp-content-ctn"><input aria-label="${e(searchPrompt)}" placeholder="${e(searchPrompt)}" type="search" x-model.debounce.${this._searchDebounce}="search" class="fi-input fi-input-has-inline-prefix" /></div></div>` : '';
         const ctx = this.context();
@@ -2965,6 +3564,8 @@ export class MarkdownEditor extends Field {
     private _maxHeight: string | null = null;
     private _placeholder: string | null = null;
     static make(name: string): MarkdownEditor { return configured(new MarkdownEditor(name)); }
+    /** Fake Markdown for seeders and tests (Filament's `fake()->filamentMarkdown()`): chain blocks, then `toString()`; `seed` makes it reproducible. */
+    static fake(options: ContentFakerOptions = {}): MarkdownFaker { return MarkdownFaker.make(options); }
     /** Toolbar buttons, grouped (`[['bold', 'italic'], ['undo', 'redo']]`) or flat. */
     toolbarButtons(buttons: (string | string[])[]): this { this._toolbarButtons = buttons; return this; }
     /** Removes buttons; with no argument, removes them all. */
@@ -3895,6 +4496,7 @@ export class FileUpload extends Field {
     imageResizeMode(mode: FieldLazy<'cover' | 'contain' | 'force' | null>): this { return this.automaticallyResizeImagesMode(mode); }
     imageResizeTargetWidth(width: FieldLazy<string | number | null>): this { return this.automaticallyResizeImagesToWidth(width); }
     imageResizeTargetHeight(height: FieldLazy<string | number | null>): this { return this.automaticallyResizeImagesToHeight(height); }
+    imageResizeUpscale(condition: FieldLazy<boolean> = true): this { return this.automaticallyUpscaleImagesWhenResizing(condition); }
     /** Accepted aspect ratio(s) of uploaded images (`'16:9'` or a list), checked on the server. */
     imageAspectRatio(ratio: FieldLazy<string | string[] | null>): this { this._imageAspectRatios = ratio; return this; }
     /** Width, height and ratio bounds of uploaded images (`{ minWidth: 800, maxHeight: 1080 }`), checked on the server. */

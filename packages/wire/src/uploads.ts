@@ -21,6 +21,8 @@ const SIGNATURES: { type: string; extension: string; test: (b: Buffer) => boolea
     { type: 'application/pdf', extension: 'pdf', test: (b) => b.subarray(0, 5).toString('latin1') === '%PDF-' },
     { type: 'application/zip', extension: 'zip', test: (b) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04 },
 ];
+/** Types a signed preview URL may serve (detected types only, never SVG). */
+const PREVIEWABLE = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 /** Plain text: only for these extensions, and only if the start of the file contains no null byte. */
 const TEXT: Record<string, string> = { txt: 'text/plain', csv: 'text/csv', json: 'application/json', md: 'text/markdown' };
 
@@ -52,6 +54,27 @@ export class UploadStore {
         if (!Number.isFinite(at) || at < Date.now()) return false;
         const expected = Buffer.from(this.sign(at)), given = Buffer.from(String(signature ?? ''));
         return expected.length === given.length && timingSafeEqual(expected, given);
+    }
+
+    private signPreview(id: string, expires: number): string { return createHmac('sha256', this.key).update(`preview:${id}:${expires}`).digest('hex'); }
+    /**
+     * Signed URL showing a temporary image (as Livewire's `temporaryUrl()`), valid for `ttl` milliseconds (30 minutes by default).
+     * Only images are previewable; `null` for any other file, or an unknown id.
+     */
+    temporaryUrl(id: string, prefix = '/livewire', ttl = 30 * 60 * 1000): string | null {
+        const file = this.resolve(id);
+        if (!file || !PREVIEWABLE.has(file.type)) return null;
+        const expires = Date.now() + ttl;
+        return `${prefix}/preview-file/${file.id}?expires=${expires}&signature=${this.signPreview(file.id, expires)}`;
+    }
+    /** The previewable temporary file of a URL signed by `temporaryUrl()`, or `null` (bad or expired signature, not an image). */
+    resolvePreview(id: unknown, expires: unknown, signature: unknown): TemporaryFile | null {
+        const at = Number(expires);
+        if (typeof id !== 'string' || !ID.test(id) || !Number.isFinite(at) || at < Date.now()) return null;
+        const expected = Buffer.from(this.signPreview(id, at)), given = Buffer.from(String(signature ?? ''));
+        if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+        const file = this.resolve(id);
+        return file && PREVIEWABLE.has(file.type) ? file : null;
     }
 
     /** Receives a `multipart/form-data` upload (`files[]` field) and returns the temporary ids, in order. */

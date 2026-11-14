@@ -105,6 +105,19 @@ TagsInput.make('tags')
 
 The tags are reordered by dragging them. Reordering is turned off when the field is disabled.
 
+## Stripping characters from tags
+
+The `stripCharacters()` method removes a character, or each of an array of characters, from every tag before the tags are validated and saved. A tag left empty is dropped:
+
+```ts
+import { TagsInput } from '@navette-js/forms';
+
+TagsInput.make('hashtags')
+    .stripCharacters('#')
+```
+
+As well as allowing a static value, `stripCharacters()` also accepts a function of the [field context](/forms/overview#using-the-field-context) returning the characters.
+
 ## Changing the color of tags
 
 You can change the color of the tags by passing a color registered on the panel to the `color()` method. Tags use `primary` by default:

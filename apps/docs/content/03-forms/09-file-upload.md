@@ -315,7 +315,7 @@ FileUpload.make('image')
     ])
 ```
 
-The buttons are only shown when there are at least two options.
+The buttons are only shown when there are at least two options. `imageEditorAspectRatios()` is an alias of `imageEditorAspectRatioOptions()`.
 
 ### Setting the image editor's mode
 
@@ -420,7 +420,17 @@ FileUpload.make('image')
     .automaticallyResizeImagesToHeight(1080)
 ```
 
-`imageCropAspectRatio()` is an alias of `automaticallyCropImagesToAspectRatio()`. By default, smaller images are enlarged to the target size; to keep them as they are, use `automaticallyUpscaleImagesWhenResizing(false)`.
+By default, smaller images are enlarged to the target size; to keep them as they are, use `automaticallyUpscaleImagesWhenResizing(false)`.
+
+These methods also have shorter names, which behave the same:
+
+| Method | Alias |
+|---|---|
+| `automaticallyCropImagesToAspectRatio()` | `imageCropAspectRatio()` |
+| `automaticallyResizeImagesMode()` | `imageResizeMode()` |
+| `automaticallyResizeImagesToWidth()` | `imageResizeTargetWidth()` |
+| `automaticallyResizeImagesToHeight()` | `imageResizeTargetHeight()` |
+| `automaticallyUpscaleImagesWhenResizing()` | `imageResizeUpscale()` |
 
 <Aside variant="warning">
 Cropping and resizing happen in the browser, before the upload. They are not a security control: a forged request can upload any image. To guarantee a ratio or a size, also use [`imageAspectRatio()`](#image-aspect-ratio-validation) or [`imageDimensions()`](#image-dimension-validation), which are checked on the server.

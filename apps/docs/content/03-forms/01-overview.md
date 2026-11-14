@@ -76,7 +76,7 @@ Form field classes are exported by `@navette-js/forms` (the builder is exported 
 - [Code editor](/forms/code-editor)
 - [Hidden](/forms/hidden)
 
-`@navette-js/forms` also exports `OneTimeCodeInput`, a code entered one digit per box. You may also [create your own custom fields](/forms/custom-fields) to edit data however you wish.
+`@navette-js/forms` also exports [`OneTimeCodeInput`](/panels/multi-factor-authentication#the-one-time-code-field), a code entered one digit per box. You may also [create your own custom fields](/forms/custom-fields) to edit data however you wish.
 
 Fields are created using the static `make()` method, passing their unique name. Usually, the name of a field corresponds to the name of a column of the record:
 

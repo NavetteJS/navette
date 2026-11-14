@@ -110,6 +110,44 @@ CheckboxList.make('labels')
     .columns(3)
 ```
 
+### Setting the grid direction
+
+By default, when you arrange checkboxes into columns, they are listed in order vertically: the first column is filled, then the next one. If you'd like to list them horizontally, row by row, use the `gridDirection('row')` method:
+
+```ts
+import { CheckboxList } from '@navette-js/forms';
+
+CheckboxList.make('labels')
+    .options({
+        bug: 'Bug',
+        feature: 'Feature',
+        enhancement: 'Enhancement',
+        documentation: 'Documentation',
+        design: 'Design',
+        testing: 'Testing',
+    })
+    .columns(3)
+    .gridDirection('row')
+```
+
+```preview
+// state: {"labels": ["bug", "documentation", "testing"]}
+// viewport: 1100
+CheckboxList.make('labels')
+    .options({
+        bug: 'Bug',
+        feature: 'Feature',
+        enhancement: 'Enhancement',
+        documentation: 'Documentation',
+        design: 'Design',
+        testing: 'Testing',
+    })
+    .columns(3)
+    .gridDirection('row')
+```
+
+`gridDirection()` takes `'row'` or `'column'` (the default), or a function of the [field context](/forms/overview#using-the-field-context) returning one of them.
+
 ## Disabling specific options
 
 You can disable specific options using the `disableOptionWhen()` method. It accepts a function, which receives the option's `value` and `label`, and returns whether the option should be disabled:

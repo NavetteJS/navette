@@ -671,6 +671,94 @@ Builder.make('content')
 
 `minItems()` is checked on the server when the form is validated. `maxItems()` (100 by default) is a limit rather than a validation rule: the add buttons disappear once it is reached, the server ignores further additions and clones, and items beyond it are dropped.
 
+## Limiting item processing
+
+If your application's JavaScript accidentally creates a large state, building and rendering a block schema for every entry can cause a long wait. You can opt in to a processing limit using `maxItemsForProcessing()` to stop processing rather than build an unexpectedly large schema:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .blocks([
+        // ...
+    ])
+    .maxItems(5)
+    .maxItemsForProcessing(100)
+```
+
+In this example, up to 100 items can be processed, but the form will only pass validation with at most 5 items. If the state contains more than 100 items, the request is refused with an HTTP 413 response before the builder's item schemas are built. It does not truncate the data. This limit is disabled by default and accepts a number, or `null` to disable it. To apply a limit to every builder, see [applying processing limits globally](/forms/repeater#applying-processing-limits-globally).
+
+<Aside variant="danger">
+The processing limit also applies to existing data loaded from your database. A record above the limit cannot be opened through that form until you raise the limit or correct its data elsewhere.
+</Aside>
+
+## Lazy loading block schemas
+
+If a block's schema is expensive to render, you can pass a `Schema` object to the block's `schema()` and use `lazyLoaded()`, or call `lazyLoaded()` on the builder itself for every block. This is particularly useful when items are [collapsed](#collapsing-items) by default. Each block item schema is loaded independently when its item is expanded and enters the viewport:
+
+```ts
+import { Textarea } from '@navette-js/forms';
+import { Block, Builder } from '@navette-js/forms/builder';
+import { Schema } from '@navette-js/schemas';
+
+Builder.make('content')
+    .blocks([
+        Block.make('paragraph')
+            .schema(
+                Schema.make()
+                    .components([
+                        Textarea.make('content')
+                            .required(),
+                    ])
+                    .lazyLoaded(),
+            ),
+    ])
+    .collapsed()
+```
+
+Block's `schema()` also accepts a list of components (copied for each item), besides a function called for each item. Builder block item schemas automatically receive unique keys from their item state paths. Lazy items are still validated and saved. You can learn more about lazy schemas in the [schema overview](/schemas/overview#lazy-loading-a-child-schema).
+
+## Item keys
+
+Each item is keyed by a random UUID. You may generate the keys of new items yourself with `generateUuidUsing()`, passing a function that returns the key, or `false` to use numeric keys (`0`, `1`, `2`…):
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+import { randomBytes } from 'node:crypto';
+
+Builder.make('content')
+    .generateUuidUsing(() => randomBytes(4).toString('hex'))
+```
+
+As with the [repeater](/forms/repeater#item-keys), JavaScript orders numeric keys in ascending order, so with numeric keys moving or inserting items between others is not reflected in their order.
+
+### Testing builders
+
+Use `Builder.fake()` to give builder items predictable numeric keys instead of UUIDs when asserting their state. Call the returned function after the test to restore normal key generation:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+const undoBuilderFake = Builder.fake();
+
+// Mount the form: `content` is { 0: { type: 'heading', data: { … } }, 1: { type: 'paragraph', data: { … } } }.
+
+undoBuilderFake();
+```
+
+`Builder.isFake()` tells whether `fake()` is active.
+
+## Removing the builder's container
+
+`extraClass()` adds a class to the builder's root element. Navette's [query builder](/tables/filters/query-builder) uses `extraClass('fi-fo-builder-not-contained')`, the class of a builder without its container border and padding:
+
+```ts
+import { Builder } from '@navette-js/forms/builder';
+
+Builder.make('content')
+    .extraClass('fi-fo-builder-not-contained')
+```
+
 ## Customizing the builder item actions
 
 This field uses action objects for easy customization of buttons within it. You can customize these buttons by passing a function to an action registration method. The function receives the `Action` object, which you can use to [customize it](/actions/overview). The following methods are available to customize the actions:
