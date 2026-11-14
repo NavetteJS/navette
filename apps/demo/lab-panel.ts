@@ -14,6 +14,7 @@ import { LabOrders } from './lab-orders.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
 import { LabFrameworkFields } from './lab-framework-fields.ts';
 import { labPluginExamples } from './lab-plugins.ts';
+import { LabActionsPage } from './lab-actions.ts';
 import {
     BulkActionGroup, Count, Filter, Group, IconColumn, Indicator, NumberConstraint, Panel as TablePanel, QueryBuilder, SelectColumn, SelectFilter, Split, Stack, Sum,
     TernaryFilter, TextColumn, TextConstraint, ToggleColumn, type Table,
@@ -373,7 +374,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         // Example plugins (`examples/`) and a configurable resource.
         .plugin(labPluginExamples())
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.
-        .pages([LabWidgetsDashboard])
+        // Action features (policy messages, rate limits, links, modal options): left out of the parity screenshots.
+        .pages([LabWidgetsDashboard, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabActionsPage])])
         .widgets(labWidgets)
         .renderHook('panels::scripts.before', () => '<script src="/js/lab-chart-plugins.js"></script>')
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])

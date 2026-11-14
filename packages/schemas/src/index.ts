@@ -782,6 +782,10 @@ export class Actions extends Component {
     static make(actions: Renderable[]): Actions { return configured(new Actions(actions)); }
     fullWidth(condition = true): this { this._fullWidth = condition; return this; }
     alignment(alignment: string | null): this { this._alignment = alignment; return this; }
+    private _verticalAlignment: string | null = null;
+    /** In a grid, aligns the actions with the other components of the row: `start`, `center` or `end`. */
+    verticalAlignment(alignment: 'start' | 'center' | 'end' | string | null): this { this._verticalAlignment = alignment; return this; }
+    getVerticalAlignment(): string | null { return this._verticalAlignment; }
     /** Label shown above the actions, like a field label. */
     label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     /** Text, components or actions before the label. */
@@ -806,7 +810,7 @@ export class Actions extends Component {
         const above = await slot(this._aboveContent), below = await slot(this._belowContent);
         if (!visible.length && !labelHtml && !above && !below) return '';
         const inner = cls(['fi-ac', { 'fi-width-full': this._fullWidth }, this._alignment ? `fi-align-${this._alignment}` : null]);
-        return `<div ${new Attributes().merge({ id: key, ...this._extraAttributes }).class(['fi-sc-actions']).toHtml()}>${labelHtml}${above}${visible.length ? `<div class="${inner}">${visible.join('')}</div>` : ''}${below}</div>`;
+        return `<div ${new Attributes().merge({ id: key, ...this._extraAttributes }).class(['fi-sc-actions', this._verticalAlignment ? (['start', 'center', 'end'].includes(this._verticalAlignment) ? `fi-vertical-align-${this._verticalAlignment}` : this._verticalAlignment) : null]).toHtml()}>${labelHtml}${above}${visible.length ? `<div class="${inner}">${visible.join('')}</div>` : ''}${below}</div>`;
     }
 }
 /** Renders a slot of a component as an inline row: strings become `Text` components. */

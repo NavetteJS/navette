@@ -66,6 +66,7 @@ The rules:
 - The second argument is the record when there is one (`view`, `update`, `delete`…), otherwise `null`.
 - Without a logged-in user, every check fails.
 - A denied ability hides the element **and** fails the request: the page answers 403, and the action is not found by the server.
+- A rule may return `AuthorizationResponse.deny('This task is closed.')` (from `@navette-js/actions`) instead of `false`, to explain the denial: actions show the message with [`authorizationTooltip()` or `authorizationNotification()`](/actions/overview#authorization-using-a-policy). `AuthorizationResponse.allow()` allows. The panel's `authorizeUsing()` hook may return one too, and `panel.inspect()` / `Resource.inspect()` return the response with its message.
 
 A [relation manager](/resources/managing-relationships#authorizing-relation-managers) and a relation page have their own `policy`, with the same abilities.
 
@@ -85,13 +86,17 @@ if (await TaskResource.can('update', user, task)) {
 
 ## Authorizing custom actions
 
-An action that you write does not know which ability it requires. Declare it with `authorize()` and the `can()` helper, which checks an ability of the resource (or relation manager) of the component hosting the action:
+An action that you write does not know which ability it requires. Declare it with `authorize('ability')`, or with a condition using the `can()` helper; both check an ability of the resource (or relation manager) of the component hosting the action:
 
 ```ts
 import { Action } from '@navette-js/actions';
 import { can } from '@navette-js/panels';
 
 Action.make('publish')
+    .authorize('update')
+    .action(async ({ record }) => { /* ... */ }),
+
+Action.make('archive')
     .authorize(({ livewire, record }) => can(livewire, 'update', record))
     .action(async ({ record }) => { /* ... */ }),
 

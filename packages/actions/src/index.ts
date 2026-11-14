@@ -1,8 +1,16 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, type HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
+import { AuthorizationResponse } from './authorization.ts';
+import { addAttributeSet, mergeAttributeSets, mergeIntoRootTag, attributesToHtml, type ExtraAttributes } from './extra-attributes.ts';
+export { AuthorizationResponse, isAllowed } from './authorization.ts';
+export { mergeIntoRootTag, mergeAttributeSets, attributesToHtml, type ExtraAttributes } from './extra-attributes.ts';
+
+/** Policy abilities required by `authorize('update')` (all) or `authorizeAny([...])` (one). */
+type ActionAuthorization = { type: 'all' | 'any'; abilities: string[]; arguments: unknown[] };
+const isAbilityAuthorization = (value: unknown): value is ActionAuthorization => typeof value === 'object' && value !== null && !(value instanceof AuthorizationResponse) && Array.isArray((value as ActionAuthorization).abilities);
 
 views.namespace('filament-actions', fileURLToPath(new URL('../views', import.meta.url)));
 
@@ -29,7 +37,9 @@ export type BulkMessage = string | ((count: number, total: number) => string);
  */
 export class ActionHalt extends Error {
     readonly closesModal: boolean;
-    constructor(closesModal: boolean) { super(closesModal ? 'Action cancelled.' : 'Action halted.'); this.closesModal = closesModal; }
+    /** The database transaction of the action (`databaseTransaction()`) is rolled back instead of committed. */
+    readonly rollsBackDatabaseTransaction: boolean;
+    constructor(closesModal: boolean, rollsBackDatabaseTransaction = false) { super(closesModal ? 'Action cancelled.' : 'Action halted.'); this.closesModal = closesModal; this.rollsBackDatabaseTransaction = rollsBackDatabaseTransaction; }
 }
 
 export class Action implements Renderable {
@@ -56,7 +66,7 @@ export class Action implements Renderable {
     private _alpineClick: string | null = null;
     private _keyBindings: string[] = [];
     private _schema: ((schema: any, ctx: { arguments: Record<string, unknown> }) => any) | null = null;
-    private _extraModalFooterActions: Action[] = [];
+    private _extraModalFooterActions: Action[] | ((action: Action) => Action[]) = [];
     private _schemaColumns: Record<string, number> | number | null = {};
     private _fillForm: ((ctx: ActionCallContext) => Record<string, unknown> | Promise<Record<string, unknown>>) | null = null;
     private _modalWidth: string | null = null;
@@ -127,8 +137,11 @@ export class Action implements Renderable {
     private _hasSubmit = true;
     /** Opens the modal as a slide-over panel. */
     slideOver(condition = true): this { this._slideOver = condition; return this; }
-    /** `false`: read-only modal, without a submit button. */
-    modalSubmitAction(condition: boolean): this { this._hasSubmit = condition; return this; }
+    /** `false`: read-only modal, without a submit button. A function changes the submit button (`(action) => action.label('Send')`). */
+    modalSubmitAction(action: boolean | ((action: Action) => Action | false | void)): this {
+        if (typeof action === 'function') { this._modalSubmitCustomizer = action; this._hasSubmit = true; } else { this._hasSubmit = action; this._modalSubmitCustomizer = null; }
+        return this;
+    }
     private _cancelLabel: string | null = null;
     /** Label of the modal's close button ("Cancel" by default). */
     modalCancelActionLabel(label: string | null): this { this._cancelLabel = label; return this; }
@@ -139,7 +152,7 @@ export class Action implements Renderable {
     /** Opens the action's URL in a new tab. */
     openUrlInNewTab(condition = true): this { this._newTab = condition; return this; }
     private async tooltipAttribute(ctx: ComponentContext): Promise<string> {
-        const text = await evaluate(this._tooltip, ctx);
+        const text = await this.getTooltip(ctx);
         return text ? `x-tooltip="${e(`{
  content: ${js(text)},
  theme: $store.theme,
@@ -160,7 +173,8 @@ export class Action implements Renderable {
      * Item of a panel menu (user menu, tenant menu). Only URL actions are rendered: these menus are not components
      * that can mount actions.
      */
-    async toMenuItemHtml(ctx: ComponentContext, options: { navigate?: boolean } = {}): Promise<string> {
+    async toMenuItemHtml(ctx: ComponentContext, options: { navigate?: boolean } = {}): Promise<string> { return this.withExtraAttributes(await this.renderMenuItemHtml(ctx, options), ctx); }
+    private async renderMenuItemHtml(ctx: ComponentContext, options: { navigate?: boolean }): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const href = this.resolveUrl(ctx);
         if (!href || !/^(\/(?!\/)|https?:\/\/)/.test(href)) return '';
@@ -170,10 +184,16 @@ export class Action implements Renderable {
         return `<a href="${e(href)}"${this._newTab ? ' target="_blank"' : options.navigate ? ' wire:navigate' : ''} class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')} " role="menuitem" tabindex="-1">${glyph}<span class="fi-dropdown-list-item-label">${e(await this.getLabel(ctx))}</span></a>`;
     }
     /** A computed URL depends on the record, so the host checks it again on mount (`resolveUrl`). */
-    isMountable(): boolean { return (this._handler !== null || this._schema !== null) && this._url === null; }
+    isMountable(): boolean { return (this._handler !== null || this._schema !== null || this.hasModalContentOnly()) && this._url === null; }
+    /** A modal without handler nor form (custom content, a heading or description: a help modal…). */
+    private hasModalContentOnly(): boolean { return this._handler === null && this._action === null && this._alpineClick === null && this._lazyAlpineClick === null && this._submit === null && this.hasModal(); }
     /** URL of the action in this context; an action with a URL is a link, never a mounted action. */
     resolveUrl(ctx: ComponentContext): string | null { return this._lazyUrl ? this._lazyUrl(ctx) : this._url; }
-    hasModal(): boolean { return this._requiresConfirmation || this._schema !== null; }
+    /** Whether the action opens a modal: `modal()`, a confirmation, a form, or a custom heading, eyebrow, description or content. */
+    hasModal(): boolean {
+        if (this._hasModal !== null) return this._hasModal;
+        return this._requiresConfirmation || this._schema !== null || this._modalHeading !== null || this._modalEyebrow !== null || this._modalDescription !== null || this._modalContent !== null || this._modalContentFooter !== null;
+    }
     /**
      * Form shown in the modal. With a function, the components are rebuilt on every request; it receives the schema and
      * the mounted action's `arguments` (as sent by the browser: check them).
@@ -189,8 +209,12 @@ export class Action implements Renderable {
      * Extra buttons in the modal footer, after the submit button. An action with an `action()` function runs on top of this
      * one (with its own modal, if it has one), and gets this action's form data as `parentData`.
      */
-    extraModalFooterActions(actions: Action[]): this { this._extraModalFooterActions = actions; return this; }
-    getExtraModalFooterActions(): Action[] { return this._extraModalFooterActions; }
+    extraModalFooterActions(actions: Action[] | ((action: Action) => Action[])): this { this._extraModalFooterActions = actions; return this; }
+    private _cachedExtraModalFooterActions: Action[] | null = null;
+    getExtraModalFooterActions(): Action[] {
+        if (typeof this._extraModalFooterActions !== 'function') return this._extraModalFooterActions;
+        return (this._cachedExtraModalFooterActions ??= this._extraModalFooterActions(this) ?? []);
+    }
     // --- modal behavior
     private _closeByClickingAway = true;
     private _closeByEscaping = true;
@@ -213,6 +237,129 @@ export class Action implements Renderable {
     stickyModalFooter(condition = true): this { this._stickyFooter = condition; return this; }
     modalAlignment(alignment: 'start' | 'center' | null): this { this._modalAlignment = alignment; return this; }
     modalFooterActionsAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._footerAlignment = alignment; return this; }
+    private _modalEyebrow: Lazy<string | HtmlString | null, ActionCallContext> = null;
+    private _schemaDisabled: Lazy<boolean, ActionCallContext> = false;
+    private _modalContent: Lazy<string | HtmlString | null, ActionCallContext> = null;
+    private _modalContentFooter: Lazy<string | HtmlString | null, ActionCallContext> = null;
+    private _registeredModalActions: Action[] = [];
+    private _modalSubmitCustomizer: ((action: Action) => Action | false | void) | null = null;
+    private _modalCancelCustomizer: ((action: Action) => Action | false | void) | null = null;
+    private _hasCancel = true;
+    private _unsavedChangesAlert: Lazy<boolean | null, ActionCallContext> = null;
+    private _clickThrough: Lazy<boolean, ActionCallContext> = false;
+    private _autofocus: Lazy<boolean, ActionCallContext> = true;
+    private _overlayParentActions: Lazy<boolean, ActionCallContext> = false;
+    private _cancelParentActions: boolean | string | null = null;
+    private _cancelParentActionsOnClose: boolean | string | null = null;
+    private _modalWindowAttributes: Lazy<ExtraAttributes, ActionCallContext>[] = [];
+    private _modalOverlayAttributes: Lazy<ExtraAttributes, ActionCallContext>[] = [];
+    private _slideOverPosition: 'start' | 'end' | null = null;
+    private _hasModal: boolean | null = null;
+    /** Short line above the modal heading (the operation, when the heading names the record). Escaped, unless an `HtmlString`. */
+    modalEyebrow(eyebrow: Lazy<string | HtmlString | null, ActionCallContext>): this { this._modalEyebrow = eyebrow; return this; }
+    /** Every field of the modal form is disabled (read-only modal); their values are not submitted. */
+    disabledSchema(condition: Lazy<boolean, ActionCallContext> = true): this { this._schemaDisabled = condition; return this; }
+    async isSchemaDisabled(ctx: ActionCallContext): Promise<boolean> { return Boolean(await evaluate(this._schemaDisabled, ctx)); }
+    /** Whether `disabledSchema()` was called (its condition is then evaluated). */
+    hasDisabledSchemaCondition(): boolean { return this._schemaDisabled !== false; }
+    /**
+     * Custom content above the modal form. A string is escaped; an `HtmlString` (a rendered view…) is inserted as is: build
+     * it from escaped values. A function receives the action context (`ctx.action.renderModalAction(name, ctx)` renders an
+     * action of `registerModalActions()`).
+     */
+    modalContent(content: Lazy<string | HtmlString | null, ActionCallContext>): this { this._modalContent = content; return this; }
+    /** Custom content below the modal form; same rules as `modalContent()`. */
+    modalContentFooter(content: Lazy<string | HtmlString | null, ActionCallContext>): this { this._modalContentFooter = content; return this; }
+    /**
+     * Actions rendered inside the custom modal content (`renderModalAction()`): they are mounted on top of this one, like
+     * extra footer actions.
+     */
+    registerModalActions(actions: Action[]): this { this._registeredModalActions = [...this._registeredModalActions, ...actions]; return this; }
+    /** The modal's actions: extra footer actions and registered modal actions. */
+    getModalActions(): Action[] { return [...this.getExtraModalFooterActions(), ...this._registeredModalActions]; }
+    private _modalActionMountContext: Record<string, unknown> | null = null;
+    private _parentMountContext: Record<string, unknown> | null = null;
+    /** An action of the modal, set up to be mounted on top of this one while the modal renders. */
+    getModalAction(name: string): Action | null {
+        const action = this.getModalActions().find((a) => a.getName() === name) ?? null;
+        if (action && this._modalActionMountContext) action._parentMountContext = this._modalActionMountContext;
+        return action;
+    }
+    /** Renders an action of `registerModalActions()` (call it from `modalContent()`). */
+    async renderModalAction(name: string, ctx: ActionCallContext): Promise<string> {
+        const action = this.getModalAction(name);
+        if (!action) return '';
+        const schemaCtx = { livewire: ctx.livewire, component: null as any, operation: null, record: ctx.record, get: () => undefined, state: undefined };
+        return (await action.isVisible(schemaCtx)) ? action.toHtml(schemaCtx) : '';
+    }
+    /** `false` removes the cancel button; a function changes it (`(action) => action.label('Close')`). */
+    modalCancelAction(action: boolean | ((action: Action) => Action | false | void)): this {
+        if (typeof action === 'function') { this._modalCancelCustomizer = action; this._hasCancel = true; } else { this._hasCancel = action; this._modalCancelCustomizer = null; }
+        return this;
+    }
+    /** A modal footer button that submits the modal with these arguments (merged into the handler's `arguments`), e.g. "Create & create another". */
+    makeModalSubmitAction(name: string, args: Record<string, unknown> = {}): Action { return Action.make(name).button().color('gray').action(`callMountedAction(${js(args)})`); }
+    /**
+     * Warns before leaving the page while this modal is open (panels with `unsavedChangesAlerts()`). On by default, except
+     * for a `disabledSchema()`.
+     */
+    unsavedChangesAlert(condition: Lazy<boolean | null, ActionCallContext> = true): this { this._unsavedChangesAlert = condition; return this; }
+    async hasUnsavedChangesAlert(ctx: ActionCallContext): Promise<boolean> { const value = await evaluate(this._unsavedChangesAlert, ctx); return value ?? !(await this.isSchemaDisabled(ctx)); }
+    /** The page behind the modal stays usable: no backdrop, no scroll lock; clicking away no longer closes the modal. */
+    modalClickThrough(condition: Lazy<boolean, ActionCallContext> = true): this { this._clickThrough = condition; return this; }
+    /** `false`: the first focusable element of the modal is not focused when it opens. */
+    modalAutofocus(condition: Lazy<boolean, ActionCallContext> = true): this { this._autofocus = condition; return this; }
+    /** This action's modal opens on top of its parent's, which stays visible, instead of replacing it. */
+    overlayParentActions(condition: Lazy<boolean, ActionCallContext> = true): this { this._overlayParentActions = condition; return this; }
+    async shouldOverlayParentActions(ctx: ActionCallContext): Promise<boolean> { return Boolean(await evaluate(this._overlayParentActions, ctx)); }
+    /** Whether `overlayParentActions()` was called (its condition is then evaluated). */
+    hasOverlayParentActionsCondition(): boolean { return this._overlayParentActions !== false; }
+    /** Once this (child) action has run, its parent actions are cancelled too: all of them, or up to (and including) the named one. */
+    cancelParentActions(toAction: boolean | string | null = true): this { this._cancelParentActions = toAction; return this; }
+    /** Closing this (child) action's modal also cancels its parent actions: all of them, or up to (and including) the named one. */
+    cancelParentActionsOnClose(toAction: boolean | string | null = true): this { this._cancelParentActionsOnClose = toAction; return this; }
+    shouldCancelAllParentActions(): boolean { return this._cancelParentActions === true; }
+    getParentActionToCancelTo(): string | null { return typeof this._cancelParentActions === 'string' ? this._cancelParentActions : null; }
+    getParentActionsToCancelOnClose(): boolean | string { return typeof this._cancelParentActionsOnClose === 'string' ? this._cancelParentActionsOnClose : this._cancelParentActionsOnClose === true; }
+    /** Attributes of the modal window (`class` is added to its classes). `merge: true` keeps the attributes of previous calls. */
+    extraModalWindowAttributes(attributes: Lazy<ExtraAttributes, ActionCallContext>, merge = false): this { this._modalWindowAttributes = addAttributeSet(this._modalWindowAttributes, attributes, merge); return this; }
+    /** Attributes of the modal's backdrop. `merge: true` keeps the attributes of previous calls. */
+    extraModalOverlayAttributes(attributes: Lazy<ExtraAttributes, ActionCallContext>, merge = false): this { this._modalOverlayAttributes = addAttributeSet(this._modalOverlayAttributes, attributes, merge); return this; }
+    /** Side a slide-over enters from: `end` (default, right in left-to-right languages) or `start`. */
+    slideOverPosition(position: 'start' | 'end' | null): this { this._slideOverPosition = position === 'start' || position === 'end' ? position : null; return this; }
+    /** `true`: the action has a modal (no need to infer it); `false`: never. */
+    modal(condition: boolean | null = true): this { this._hasModal = condition; return this; }
+    // --- rate limiting
+    private _rateLimit: Lazy<number | null, ActionCallContext> = null;
+    private _rateLimitedNotification: ((notification: any, ctx: ActionCallContext & { seconds: number; minutes: number }) => any) | null | undefined = undefined;
+    private _rateLimitedNotificationTitle: string | ((ctx: ActionCallContext & { seconds: number; minutes: number }) => string | null) | null = null;
+    /**
+     * Attempts per minute, per IP address, page class and action (with its arguments and record). Over the limit, the action
+     * does not run and a notification is sent. Checked on the server when the action runs (on submit, for a modal).
+     */
+    rateLimit(maxAttempts: Lazy<number | null, ActionCallContext>): this { this._rateLimit = maxAttempts; return this; }
+    async getRateLimit(ctx: ActionCallContext): Promise<number | null> { const value = await evaluate(this._rateLimit, ctx); return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null; }
+    /** Customizes the notification sent over the rate limit (`ctx.seconds` until available); `null` sends none. */
+    rateLimitedNotification(customize: ((notification: any, ctx: ActionCallContext & { seconds: number; minutes: number }) => any) | null): this { this._rateLimitedNotification = customize; return this; }
+    getRateLimitedNotificationCustomizer(): ((notification: any, ctx: ActionCallContext & { seconds: number; minutes: number }) => any) | null | undefined { return this._rateLimitedNotification; }
+    /** Title of the rate limited notification ("Too many attempts" by default). */
+    rateLimitedNotificationTitle(title: string | ((ctx: ActionCallContext & { seconds: number; minutes: number }) => string | null) | null): this { this._rateLimitedNotificationTitle = title; return this; }
+    getRateLimitedNotificationTitle(ctx: ActionCallContext & { seconds: number; minutes: number }): string | null { const title = this._rateLimitedNotificationTitle; return typeof title === 'function' ? title(ctx) : title; }
+    // --- database transactions
+    private _databaseTransaction: Lazy<boolean, ActionCallContext> | null = null;
+    /**
+     * Runs the action (from `before()` to `after()`) in a database transaction of the host's data adapter, rolled back when it
+     * throws. `halt()` / `cancel()` commit, unless called with `true`. Defaults to the panel's `databaseTransactions()`.
+     */
+    databaseTransaction(condition: Lazy<boolean, ActionCallContext> | null = true): this { this._databaseTransaction = condition; return this; }
+    /** `null` when not set on the action (the host's default applies). */
+    async hasDatabaseTransactions(ctx: ActionCallContext): Promise<boolean | null> { return this._databaseTransaction === null ? null : Boolean(await evaluate(this._databaseTransaction, ctx)); }
+    // --- extra HTML attributes
+    private _extraAttributes: Lazy<ExtraAttributes, ComponentContext>[] = [];
+    /** Attributes merged onto the action's outer element (`class` is added to its classes). `merge: true` keeps the attributes of previous calls. */
+    extraAttributes(attributes: Lazy<ExtraAttributes, ComponentContext>, merge = false): this { this._extraAttributes = addAttributeSet(this._extraAttributes, attributes, merge); return this; }
+    async getExtraAttributes(ctx: ComponentContext): Promise<ExtraAttributes> { return mergeAttributeSets(await Promise.all(this._extraAttributes.map((set) => evaluate(set, ctx)))); }
+    private async withExtraAttributes(html: string, ctx: ComponentContext): Promise<string> { return this._extraAttributes.length ? mergeIntoRootTag(html, await this.getExtraAttributes(ctx)) : html; }
     private _steps: any[] | null = null;
     /** Builds the wizard of `steps()`: registered by `@navette-js/forms`, which owns the `Wizard` component. */
     static stepsRenderer: ((steps: any[], submit: Action, cancel: Action) => any) | null = null;
@@ -311,10 +458,10 @@ export class Action implements Renderable {
         if (typeof this._preserveData === 'function') return this._preserveData(data) ?? {};
         return Object.fromEntries(this._preserveData.filter((field) => Object.hasOwn(data, field)).map((field) => [field, data[field]]));
     }
-    /** Stops the action from one of its hooks; the modal stays open. */
-    halt(): never { throw new ActionHalt(false); }
-    /** Stops the action from one of its hooks and closes the modal. */
-    cancel(): never { throw new ActionHalt(true); }
+    /** Stops the action from one of its hooks; the modal stays open. `true` rolls back its database transaction. */
+    halt(shouldRollBackDatabaseTransaction = false): never { throw new ActionHalt(false, shouldRollBackDatabaseTransaction); }
+    /** Stops the action from one of its hooks and closes the modal. `true` rolls back its database transaction. */
+    cancel(shouldRollBackDatabaseTransaction = false): never { throw new ActionHalt(true, shouldRollBackDatabaseTransaction); }
 
     async call(ctx: ActionCallContext): Promise<unknown> {
         if (!this._handler) return null;
@@ -327,7 +474,8 @@ export class Action implements Renderable {
     }
 
     /** Menu item of a table bulk action. The click goes through the table's Alpine `mountAction()`, which sends the selection. */
-    async toGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>): Promise<string> {
+    async toGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>): Promise<string> { return this.withExtraAttributes(await this.renderGroupedHtml(ctx, context), ctx); }
+    private async renderGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const expression = `mountAction(${js(this.name)}, {}, ${js(context)})`;
         const attributes = new Attributes()
@@ -342,11 +490,13 @@ export class Action implements Renderable {
      * Menu item of a row action inside an ActionGroup. Disabled-capable and key-bound items use a different class order
      * than plain items; front-end CSS and tests rely on the exact markup.
      */
-    async toRecordGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> {
+    async toRecordGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> { return this.withExtraAttributes(await this.renderRecordGroupedHtml(ctx, context, wireKey), ctx); }
+    private async renderRecordGroupedHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const color = this._lazyColor ? await this._lazyColor(ctx) : this._color;
         const iconName = this._lazyIcon ? await this._lazyIcon(ctx) : (this._groupedIcon ?? this._icon);
-        const expression = e(`mountAction(${js(this.name)}, {}, ${js(context)})`);
+        const alpineClick = await this.resolveAlpineClick(ctx);
+        const click = alpineClick ? `x-on:click="${e(alpineClick)}"` : `wire:click="${e(`mountAction(${js(this.name)}, {}, ${js(context)})`)}"`;
         const colors = color !== 'gray' ? colorManager.getComponentClasses('dropdown-item', color) : [];
         const label = (await evaluate(this._label, ctx)) ?? this.getDefaultLabel();
         const iconHtml = iconName ? icon(iconName, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': `mountAction(${js(this.name)}, {}, ${js(context)})` }).class(color !== 'gray' ? ['fi-color', `fi-color-${color}`] : []) }) : '';
@@ -359,19 +509,21 @@ export class Action implements Renderable {
             if (this._newTab) return `<a href="${e(href)}" target="_blank" role="menuitem" tabindex="-1" wire:key="${e(wireKey)}" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}">${plainIcon}<span class="fi-dropdown-list-item-label">${e(label)}</span></a>`;
             return `<a href="${e(href)}" wire:navigate wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${plainIcon}<span class="fi-dropdown-list-item-label">${e(label)}</span></a>`;
         }
-        if (this._disabled !== false) {
+        if (this.canBeDisabled()) {
             // Conditionally disabled: this markup is used whether or not the action ends up disabled.
             const disabled = await this.isDisabled(ctx);
-            return `<button ${disabled ? 'aria-disabled="true" ' : ''}role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', disabled ? 'fi-disabled' : null, ...colors].filter(Boolean).join(' ')}" wire:click="${expression}" wire:key="${e(wireKey)}">${inner}</button>`;
+            const tooltip = disabled ? await this.tooltipAttribute(ctx) : '';
+            return `<button ${tooltip}${disabled ? 'aria-disabled="true" ' : ''}role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', disabled ? 'fi-disabled' : null, ...colors].filter(Boolean).join(' ')}" ${click} wire:key="${e(wireKey)}">${inner}</button>`;
         }
         if (this._keyBindings.length) {
-            return `<button x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}" wire:click="${expression}" wire:key="${e(wireKey)}">${inner}</button>`;
+            return `<button x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-grouped-action', 'fi-dropdown-list-item', ...colors].join(' ')}" ${click} wire:key="${e(wireKey)}">${inner}</button>`;
         }
-        return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="${expression}" wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${inner}</button>`;
+        return `<button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${click} wire:key="${e(wireKey)}" class="${['fi-dropdown-list-item', 'fi-ac-grouped-action', ...colors].join(' ')}" role="menuitem" tabindex="-1">${inner}</button>`;
     }
 
     /** Small link (or icon button) for a table row action. */
-    async toLinkHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> {
+    async toLinkHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> { return this.withExtraAttributes(await this.renderLinkHtml(ctx, context, wireKey), ctx); }
+    private async renderLinkHtml(ctx: ComponentContext, context: Record<string, unknown>, wireKey: string): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         // `button()`, `badge()`, `outlined()` or `labeledFrom()` in a table row: rendered like a header action.
         if (this._view === 'button' || this._view === 'badge' || this._outlined || this._labeledFrom) return this.toHtml(ctx, context);
@@ -381,7 +533,7 @@ export class Action implements Renderable {
         const label = (await evaluate(this._label, ctx)) ?? this.getDefaultLabel();
         const classes = ['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...(color !== 'gray' ? colorManager.getComponentClasses('link', color) : [])].join(' ');
         if (this._iconButton) {
-            const disabled = this._disabled !== false && (await this.isDisabled(ctx));
+            const disabled = this.canBeDisabled() && (await this.isDisabled(ctx));
             const buttonClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', disabled ? 'fi-disabled' : null, ...(color !== 'gray' ? colorManager.getComponentClasses('icon-button', color) : [])].filter(Boolean).join(' ');
             const glyph = iconName ? icon(iconName, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': raw }) }) : '';
             return `<button title="${e(label)}" aria-label="${e(label)}" ${disabled ? 'disabled ' : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${buttonClasses}"${disabled ? '' : ` wire:click="${e(raw)}"`} wire:key="${e(wireKey)}">${glyph}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }))}</button>`;
@@ -389,15 +541,20 @@ export class Action implements Renderable {
         const iconHtml = iconName ? icon(iconName, { size: 'sm', attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': raw }) }) : '';
         const href = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
         const tooltip = await this.tooltipAttribute(ctx);
+        const alpineClick = await this.resolveAlpineClick(ctx);
+        const linkDisabled = this.canBeDisabled() && (await this.isDisabled(ctx));
         // Only local or http(s) URLs become links (no `javascript:` or protocol-relative URLs).
         if (href && /^(\/(?!\/)|https?:\/\/)/.test(href)) return `<a href="${e(href)}" ${this._newTab ? 'target="_blank" ' : ''}${tooltip}${this._newTab ? '' : 'wire:navigate '}wire:key="${e(wireKey)}" class="${classes}">${iconName ? icon(iconName, { size: 'sm' }) : ''}<span class="fi-link-label">${e(label)}</span></a>`;
         const keys = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
-        return `<button ${keys}${tooltip}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${classes}" wire:click="${e(raw)}" wire:key="${e(wireKey)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }), 'sm')}<span class="fi-link-label">${e(label)}</span></button>`;
+        // Disabled: no click (a tooltip still shows), `disabled` when there is no tooltip.
+        const rowClick = linkDisabled ? '' : alpineClick ? ` x-on:click="${e(alpineClick)}"` : ` wire:click="${e(raw)}"`;
+        return `<button ${keys}${tooltip}${linkDisabled ? `aria-disabled="true" ${tooltip ? '' : 'disabled '}` : ''}type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${linkDisabled ? `${classes} fi-disabled` : classes}"${rowClick} wire:key="${e(wireKey)}">${iconHtml}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': raw }), 'sm')}<span class="fi-link-label">${e(label)}</span></button>`;
     }
 
     /** Modal of a mounted action; `content` is the rendered form, if any. */
     async toModalHtml(ctx: ActionCallContext, index: number, content: string | null = null, mountContext: Record<string, unknown> = {}): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
+        ctx = { ...ctx, action: this };
         const schemaCtx = { livewire: ctx.livewire, component: null as any, operation: null, record: ctx.record, get: () => undefined, state: undefined };
         const label = (await evaluate(this._label, schemaCtx)) ?? this.getDefaultLabel();
         const color = this._lazyColor ? await this._lazyColor(schemaCtx) : this._color;
@@ -405,31 +562,80 @@ export class Action implements Renderable {
         // A confirmation is centered (md); a form is start-aligned (4xl), except at small widths.
         const width = this._modalWidth ?? (confirmation ? 'md' : '4xl');
         const submitLabel = this._lazySubmitLabel?.(ctx) ?? this._modalSubmitActionLabel ?? t(confirmation ? 'filament-actions::modal.actions.confirm.label' : 'filament-actions::modal.actions.submit.label');
+        // Actions of the modal (footer, custom content) are mounted on top of this one, with its context.
+        const childContext = { ...mountContext, parentAction: index };
+        this._modalActionMountContext = childContext;
+        const customContent = async (value: Lazy<string | HtmlString | null, ActionCallContext>) => {
+            const resolved = await evaluate(value, ctx);
+            return resolved === null || resolved === undefined || resolved === '' ? '' : resolved instanceof HtmlString ? resolved.html : e(resolved);
+        };
         // Hook order: custom content, schema, content footer, each between its before/after slots.
         const scopes = (ctx.livewire as any).getRenderHookScopes?.() ?? [];
         const hook = (name: string) => renderHook(name, scopes, { action: this });
-        const hooked = hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_BEFORE) + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_AFTER)
-            + (content !== null ? hook(ActionsRenderHook.MODAL_SCHEMA_BEFORE) + content + hook(ActionsRenderHook.MODAL_SCHEMA_AFTER) : '')
-            + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_BEFORE) + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_AFTER);
+        let hooked: string;
+        try {
+            hooked = hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_BEFORE) + (await customContent(this._modalContent)) + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_AFTER)
+                + (content !== null ? hook(ActionsRenderHook.MODAL_SCHEMA_BEFORE) + content + hook(ActionsRenderHook.MODAL_SCHEMA_AFTER) : '')
+                + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_BEFORE) + (await customContent(this._modalContentFooter)) + hook(ActionsRenderHook.MODAL_CUSTOM_CONTENT_FOOTER_AFTER);
+        } finally { this._modalActionMountContext = null; }
         if (content !== null || hooked !== '') content = hooked;
-        // Footer actions with a handler are mounted on top of this one, with its context.
-        const footerActions = await Promise.all(this._extraModalFooterActions.map((a) => (a.isMountable() ? a.toHtml(schemaCtx, { ...mountContext, parentAction: index }) : a.toHtml(schemaCtx))));
+        // Footer: submit, extra actions, cancel (reversed when centered, as in Filament).
+        const footerAlignment = this._footerAlignment ?? (confirmation ? 'center' : 'start');
+        const footer: string[] = [];
+        if (this._hasSubmit) {
+            let submit: Action | false | void = Action.make('submit').label(submitLabel).color(color === 'gray' ? 'primary' : color).submit('callMountedAction');
+            submit = this._modalSubmitCustomizer ? (this._modalSubmitCustomizer(submit) ?? submit) : submit;
+            if (submit) footer.push(await submit.toHtml(schemaCtx));
+        }
+        for (const action of this.getExtraModalFooterActions()) {
+            if (!(await action.isVisible(schemaCtx))) continue;
+            footer.push(action.isMountable() ? await action.toHtml(schemaCtx, childContext) : await action.toHtml(schemaCtx));
+        }
+        if (this._hasCancel) {
+            let cancel: Action | false | void = Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()');
+            cancel = this._modalCancelCustomizer ? (this._modalCancelCustomizer(cancel) ?? cancel) : cancel;
+            if (cancel) footer.push(await cancel.toHtml(schemaCtx));
+        }
+        if (footerAlignment === 'center') footer.reverse();
+        const clickThrough = Boolean(await evaluate(this._clickThrough, ctx));
+        const icon = this._modalIcon ?? (this._requiresConfirmation ? icons.resolve('actions::modal.confirmation') ?? 'o-exclamation-triangle' : null);
+        const eyebrow = await evaluate(this._modalEyebrow, ctx);
         return views.render('filament-actions::modal', {
             // A wizard has its own buttons (back, next, submit): the modal has no footer.
-            hasFooter: !this.isWizard(),
-            closeByClickingAway: this._closeByClickingAway, closeByEscaping: this._closeByEscaping, closeButton: this._closeButton, stickyHeader: this._stickyHeader, stickyFooter: this._stickyFooter,
-            footerAlignment: this._footerAlignment ?? (confirmation ? 'center' : 'start'),
+            hasFooter: !this.isWizard() && footer.length > 0,
+            closeByClickingAway: this._closeByClickingAway && !clickThrough, closeByEscaping: this._closeByEscaping, closeButton: this._closeButton, stickyHeader: this._stickyHeader, stickyFooter: this._stickyFooter,
+            clickThrough, autofocus: Boolean(await evaluate(this._autofocus, ctx)),
+            slideOverPosition: this._slideOverPosition ?? 'end',
+            windowAttributes: mergeAttributeSets(await Promise.all(this._modalWindowAttributes.map((set) => evaluate(set, ctx)))),
+            overlayAttributes: mergeAttributeSets(await Promise.all(this._modalOverlayAttributes.map((set) => evaluate(set, ctx)))),
+            attributesToHtml,
+            footerAlignment, footer: footer.join(''),
             slideOver: this._slideOver, content, confirmation, width, alignment: this._modalAlignment ?? (confirmation || ['xs', 'sm'].includes(width) ? 'center' : 'start'),
             livewireId: ctx.livewire.id, id: `fi-${ctx.livewire.id}-action-${index}`, index, name: this.name,
             heading: (await evaluate(this._modalHeading, ctx)) ?? label,
+            eyebrow: eyebrow === null || eyebrow === undefined || eyebrow === '' ? null : eyebrow,
             description: (await evaluate(this._modalDescription, ctx)) ?? (this._requiresConfirmation ? t('filament-actions::modal.confirmation') : null),
-            iconName: this._modalIcon ?? (this._requiresConfirmation ? icons.resolve('actions::modal.confirmation') ?? 'o-exclamation-triangle' : null), color,
-            cancel: await Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()').toHtml(schemaCtx),
-            // The submit button of a gray action uses the primary color.
-            submit: !this._hasSubmit ? '' : (await Action.make('submit').label(submitLabel).color(color === 'gray' ? 'primary' : color).submit('callMountedAction').toHtml(schemaCtx)) + footerActions.join(''),
+            iconName: icon, color: this._modalIconColor ?? color ?? 'primary',
+            // Closing the modal unmounts the action (and its parents, with `cancelParentActionsOnClose()`).
+            cancelParentActionsOnClose: this.getParentActionsToCancelOnClose(),
         });
     }
-    alpineClickHandler(handler: string | null): this { this._alpineClick = handler; return this; }
+    /**
+     * JavaScript (Alpine) run on click, instead of a request to the server: e.g. `close()` in a modal. Never build it from
+     * user input.
+     */
+    alpineClickHandler(handler: string | null): this { this._alpineClick = handler; this._lazyAlpineClick = null; return this; }
+    private _lazyAlpineClick: ((ctx: ComponentContext) => string | null | Promise<string | null>) | null = null;
+    /**
+     * Runs JavaScript in the browser on click, without any request: no modal, no server code. In a schema, `$get()` and
+     * `$set()` read and change its fields. Never build the string from user input (it is executed as code); a value read
+     * with `$get()` is data and is safe to use as a string.
+     */
+    actionJs(action: string | null | ((ctx: ComponentContext) => string | null | Promise<string | null>)): this {
+        if (typeof action === 'function') { this._lazyAlpineClick = action; this._alpineClick = null; } else this.alpineClickHandler(action);
+        return this;
+    }
+    private async resolveAlpineClick(ctx: ComponentContext): Promise<string | null> { return this._lazyAlpineClick ? this._lazyAlpineClick(ctx) : this._alpineClick; }
     private _livewireTarget: string | null = null;
     private _iconAfter = false;
     /** Loading indicator target (`wire:target`) when the click is handled in JavaScript. */
@@ -439,14 +645,88 @@ export class Action implements Renderable {
     keyBindings(bindings: string[]): this { this._keyBindings = bindings; return this; }
     getName(): string { return this.name; }
 
-    private _authorize: Lazy<boolean, ComponentContext> = true;
-    /** Authorization check, separate from `visible` / `hidden`: when it fails, the action is hidden and the server refuses it. */
-    authorize(condition: Lazy<boolean, ComponentContext>): this { this._authorize = condition; return this; }
-    async isVisible(ctx: ComponentContext): Promise<boolean> { return !(await evaluate(this._hidden, ctx)) && (await evaluate(this._visible, ctx)) && Boolean(await evaluate(this._authorize, ctx)); }
+    // --- authorization (Filament's `CanBeAuthorized`)
+    private _authorization: ActionAuthorization | Lazy<boolean | AuthorizationResponse, ComponentContext> | null = null;
+    private _authorizationMessage: Lazy<string | null, ComponentContext> = null;
+    private _authorizationTooltip: Lazy<boolean, ComponentContext> = false;
+    private _authorizationNotification: Lazy<boolean, ComponentContext> = false;
+    private _unauthorizedNotification: ((notification: any, ctx: ActionCallContext & { response: AuthorizationResponse }) => any) | null | undefined = undefined;
+    private _unauthorizedNotificationTitle: string | ((ctx: ActionCallContext & { response: AuthorizationResponse }) => string | null) | null = null;
+    /**
+     * Authorization check, separate from `visible` / `hidden`: when it fails, the action is hidden and the server refuses it.
+     * A string (or a list of strings, all required) is a policy ability of the host (resource, relation manager), checked
+     * with the action's record; a function returns a boolean or an `AuthorizationResponse`.
+     */
+    authorize(abilities: string | string[] | Lazy<boolean | AuthorizationResponse, ComponentContext>, args: unknown[] = []): this {
+        this._authorization = typeof abilities === 'string' || Array.isArray(abilities) ? { type: 'all', abilities: [abilities].flat(), arguments: args } : abilities;
+        return this;
+    }
+    /** Policy abilities of which one is enough. */
+    authorizeAny(abilities: string | string[], args: unknown[] = []): this { this._authorization = { type: 'any', abilities: [abilities].flat(), arguments: args }; return this; }
+    /** Message used when the authorization is denied without one (plain `false`): it keeps the action visible for `authorizationTooltip()` / `authorizationNotification()`. */
+    authorizationMessage(message: Lazy<string | null, ComponentContext>): this { this._authorizationMessage = message; return this; }
+    /** Unauthorized: the action is shown disabled, with the denial message as its tooltip (hidden when there is no message). */
+    authorizationTooltip(condition: Lazy<boolean, ComponentContext> = true): this { this._authorizationTooltip = condition; return this; }
+    /** Unauthorized: the action stays clickable, and clicking it sends a notification with the denial message (hidden when there is no message). */
+    authorizationNotification(condition: Lazy<boolean, ComponentContext> = true): this { this._authorizationNotification = condition; return this; }
+    /** Customizes the notification of `authorizationNotification()`; `null` sends none. */
+    unauthorizedNotification(customize: ((notification: any, ctx: ActionCallContext & { response: AuthorizationResponse }) => any) | null): this { this._unauthorizedNotification = customize; return this; }
+    unauthorizedNotificationTitle(title: string | ((ctx: ActionCallContext & { response: AuthorizationResponse }) => string | null) | null): this { this._unauthorizedNotificationTitle = title; return this; }
+    getUnauthorizedNotificationCustomizer(): ((notification: any, ctx: ActionCallContext & { response: AuthorizationResponse }) => any) | null | undefined { return this._unauthorizedNotification; }
+    getUnauthorizedNotificationTitle(ctx: ActionCallContext & { response: AuthorizationResponse }): string | null { const title = this._unauthorizedNotificationTitle; return typeof title === 'function' ? title(ctx) : title; }
+    hasAuthorization(): boolean { return this._authorization !== null || this._authorizationMessage !== null || this._authorizationTooltip !== false || this._authorizationNotification !== false; }
+    async getAuthorizationMessage(ctx: ComponentContext): Promise<string | null> { return evaluate(this._authorizationMessage, ctx); }
+    async hasAuthorizationTooltip(ctx: ComponentContext): Promise<boolean> { return Boolean(await evaluate(this._authorizationTooltip, ctx)); }
+    async hasAuthorizationNotification(ctx: ComponentContext): Promise<boolean> { return Boolean(await evaluate(this._authorizationNotification, ctx)); }
+    /** The authorization decision in this context. Abilities are checked by the host (`inspectActionAbility()`); a host that cannot check them denies. */
+    async getAuthorizationResponse(ctx: ComponentContext): Promise<AuthorizationResponse> {
+        const authorization = this._authorization;
+        if (authorization === null) return AuthorizationResponse.allow();
+        if (!isAbilityAuthorization(authorization)) return AuthorizationResponse.from(await evaluate(authorization, ctx));
+        const inspect = (ctx.livewire as any)?.inspectActionAbility;
+        let firstDenied: AuthorizationResponse | null = null;
+        for (const ability of authorization.abilities) {
+            const response = typeof inspect === 'function' ? AuthorizationResponse.from(await inspect.call(ctx.livewire, ability, ctx.record ?? null, authorization.arguments)) : AuthorizationResponse.deny();
+            if (authorization.type === 'any') { if (response.allowed()) return response; firstDenied ??= response; }
+            else if (response.denied()) return response;
+        }
+        return authorization.type === 'any' ? (firstDenied ?? AuthorizationResponse.deny()) : AuthorizationResponse.allow();
+    }
+    /** The decision, a denial carrying `authorizationMessage()` when one is set. */
+    async getAuthorizationResponseWithMessage(ctx: ComponentContext): Promise<AuthorizationResponse> {
+        const response = await this.getAuthorizationResponse(ctx);
+        if (response.allowed()) return response;
+        const message = await this.getAuthorizationMessage(ctx);
+        return message ? response.withMessage(message) : response;
+    }
+    async isAuthorized(ctx: ComponentContext): Promise<boolean> { return (await this.getAuthorizationResponse(ctx)).allowed(); }
+    /** Authorized, or kept visible by `authorizationTooltip()` / `authorizationNotification()` because the denial has a message. */
+    async isAuthorizedOrNotHiddenWhenUnauthorized(ctx: ComponentContext): Promise<boolean> {
+        if (!(await this.hasAuthorizationTooltip(ctx)) && !(await this.hasAuthorizationNotification(ctx))) return this.isAuthorized(ctx);
+        const response = await this.getAuthorizationResponseWithMessage(ctx);
+        return response.allowed() || Boolean(response.message());
+    }
+    async isVisible(ctx: ComponentContext): Promise<boolean> { return !(await evaluate(this._hidden, ctx)) && (await evaluate(this._visible, ctx)) && (await this.isAuthorizedOrNotHiddenWhenUnauthorized(ctx)); }
     visible(condition: Lazy<boolean, ComponentContext> = true): this { this._visible = condition; return this; }
     /** Shown but unusable; the server also refuses to mount it. */
     disabled(condition: Lazy<boolean, ComponentContext> = true): this { this._disabled = condition; return this; }
-    async isDisabled(ctx: ComponentContext): Promise<boolean> { return evaluate(this._disabled, ctx); }
+    /** Disabled by `disabled()`, or unauthorized with `authorizationTooltip()`. */
+    async isDisabled(ctx: ComponentContext): Promise<boolean> {
+        if (await evaluate(this._disabled, ctx)) return true;
+        if (await this.hasAuthorizationNotification(ctx)) return false;
+        if (!(await this.hasAuthorizationTooltip(ctx))) return false;
+        return !(await this.isAuthorized(ctx));
+    }
+    /** Whether the action may render as disabled (its markup then carries the disabled state). */
+    private canBeDisabled(): boolean { return this._disabled !== false || this._authorizationTooltip !== false; }
+    /** The tooltip; unauthorized with `authorizationTooltip()`, the denial message. */
+    async getTooltip(ctx: ComponentContext): Promise<string | null> {
+        if (await this.hasAuthorizationTooltip(ctx)) {
+            const response = await this.getAuthorizationResponseWithMessage(ctx);
+            if (response.denied() && response.message()) return response.message();
+        }
+        return evaluate(this._tooltip, ctx);
+    }
 
     private _view: 'button' | 'link' | 'icon-button' | 'badge' | null = null;
     private _labeledFrom: string | null = null;
@@ -468,7 +748,7 @@ export class Action implements Renderable {
     outlined(condition = true): this { this._outlined = condition; return this; }
     getView(): 'button' | 'link' | 'icon-button' | 'badge' | null { return this._view; }
     /** Markup of a link, icon button or badge trigger; `attributes` carries the click (or href) behavior. */
-    private async styledTriggerHtml(ctx: ComponentContext, view: 'link' | 'icon-button' | 'badge', attributes: string, tag: 'button' | 'a', wireTarget: string | null): Promise<string> {
+    private async styledTriggerHtml(ctx: ComponentContext, view: 'link' | 'icon-button' | 'badge', attributes: string, tag: 'button' | 'a', wireTarget: string | null, disabled = false): Promise<string> {
         const label = (await evaluate(this._label, ctx)) ?? this.getDefaultLabel();
         const iconName = this._lazyIcon ? await this._lazyIcon(ctx) : this._icon;
         const color = this._lazyColor ? await this._lazyColor(ctx) : this._color;
@@ -476,25 +756,35 @@ export class Action implements Renderable {
         const loader = tag === 'button' && wireTarget ? loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': wireTarget })) : '';
         const glyph = iconName ? icon(iconName, { attributes: tag === 'button' && wireTarget ? new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': wireTarget }) : undefined }) : '';
         const tooltip = await this.tooltipAttribute(ctx);
-        if (view === 'icon-button') return `<${tag} title="${e(label)}" aria-label="${e(label)}" ${tooltip}${attributes} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', `fi-size-${this._size}`, ...colors('icon-button')])}">${glyph}${loader}</${tag}>`;
-        if (view === 'badge') return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-badge-action', 'fi-badge', `fi-size-${this._size}`, ...colors('badge')])}">${glyph}${loader}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(label)}</span></span></${tag}>`;
-        return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-link-action', 'fi-link', `fi-size-${this._size}`, ...colors('link')])}">${glyph}${loader}<span class="fi-link-label">${e(label)}</span></${tag}>`;
+        // Disabled: with a tooltip, the element must still receive the pointer, so it loses its click instead of being `disabled`.
+        if (disabled) attributes = `${tooltip ? stripClickAttributes(attributes) : `${attributes}${tag === 'button' ? ' disabled' : ''}`} aria-disabled="true"`;
+        const state = disabled ? 'fi-disabled' : null;
+        if (view === 'icon-button') return `<${tag} title="${e(label)}" aria-label="${e(label)}" ${tooltip}${attributes} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', state, `fi-size-${this._size}`, ...colors('icon-button')])}">${glyph}${loader}</${tag}>`;
+        if (view === 'badge') return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-badge-action', 'fi-badge', state, `fi-size-${this._size}`, ...colors('badge')])}">${glyph}${loader}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(label)}</span></span></${tag}>`;
+        return `<${tag} ${tooltip}${attributes} class="${cls(['fi-ac-link-action', 'fi-link', state, `fi-size-${this._size}`, ...colors('link')])}">${glyph}${loader}<span class="fi-link-label">${e(label)}</span></${tag}>`;
     }
 
-    /** Renders the action as a button (or as a link when it has a URL). */
-    async toHtml(ctx: ComponentContext, explicitMountContext: Record<string, unknown> | null = null): Promise<string> {
+    /** Renders the action as a button (or as a link when it has a URL), with its extra attributes. */
+    async toHtml(ctx: ComponentContext, explicitMountContext: Record<string, unknown> | null = null): Promise<string> { return this.withExtraAttributes(await this.renderHtml(ctx, explicitMountContext), ctx); }
+    private async renderHtml(ctx: ComponentContext, explicitMountContext: Record<string, unknown> | null): Promise<string> {
         if (!colorManager) throw new Error('No color manager: call useColorManager() first.');
         const linkUrl = this._lazyUrl ? this._lazyUrl(ctx) : this._url;
+        const alpineClick = await this.resolveAlpineClick(ctx);
+        const disabled = this.canBeDisabled() && (await this.isDisabled(ctx));
+        // An action of a modal's custom content is mounted on top of the modal's action.
+        explicitMountContext ??= this._parentMountContext;
         // Explicit trigger styles (link, icon button, badge), and the icon button / labeled button pair of `labeledFrom()`.
         if (this._submit === null && (this._view === 'link' || this._view === 'icon-button' || this._view === 'badge' || this._labeledFrom)) {
             const safeUrl = linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl) ? linkUrl : null;
             const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
-            const mountExpression = this._handler ? this.mountExpressionFor(mountContext) : null;
-            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${this._alpineClick ? `x-on:click="${e(this._alpineClick)}" ` : ''}${(mountExpression ?? this._action) ? `wire:click="${e(mountExpression ?? this._action!)}" ` : ''}`;
+            // JavaScript click handler (`actionJs()`): nothing is sent to the server.
+            const mountExpression = (this._handler || this.hasModalContentOnly()) && !alpineClick ? this.mountExpressionFor(mountContext) : null;
+            const wireClick = alpineClick ? null : (mountExpression ?? this._action);
+            const click = safeUrl ? `href="${e(safeUrl)}" ${this._newTab ? 'target="_blank" ' : 'wire:navigate '}` : `type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" ${alpineClick ? `x-on:click="${e(alpineClick)}" ` : ''}${wireClick ? `wire:click="${e(wireClick)}" ` : ''}`;
             const tag = safeUrl ? 'a' : 'button';
-            const target = this._livewireTarget ?? mountExpression ?? this._action;
+            const target = this._livewireTarget ?? wireClick;
             if (this._labeledFrom) {
-                const iconButton = (await this.styledTriggerHtml(ctx, 'icon-button', click.trim(), tag, target)).replace('class="fi-ac-icon-btn-action', `class="${this._labeledFrom}:fi-hidden fi-ac-icon-btn-action`);
+                const iconButton = (await this.styledTriggerHtml(ctx, 'icon-button', click.trim(), tag, target, disabled)).replace('class="fi-ac-icon-btn-action', `class="${this._labeledFrom}:fi-hidden fi-ac-icon-btn-action`);
                 const previousView = this._view, previousLabeled = this._labeledFrom;
                 this._view = null; this._labeledFrom = null;
                 try {
@@ -502,42 +792,55 @@ export class Action implements Renderable {
                     return iconButton + labeled;
                 } finally { this._view = previousView; this._labeledFrom = previousLabeled; }
             }
-            return this.styledTriggerHtml(ctx, this._view as 'link' | 'icon-button' | 'badge', click.trim(), tag, target);
+            return this.styledTriggerHtml(ctx, this._view as 'link' | 'icon-button' | 'badge', click.trim(), tag, target, disabled);
         }
+        const tooltip = await this.tooltipAttribute(ctx);
         if (linkUrl !== null && /^(\/(?!\/)|https?:\/\/)/.test(linkUrl)) {
-            const link = new Attributes().class(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
+            const link = new Attributes().class(['fi-ac-btn-action', 'fi-btn', { 'fi-disabled': disabled }, `fi-size-${this._size}`, ...(this._color !== 'gray' ? colorManager.getComponentClasses('button', this._color) : [])]);
             const linkIcon = this._icon ? icon(this._icon) : '';
             const badge = typeof this._badge === 'function' ? await this._badge() : this._badge;
             const badgeHtml = badge !== null && badge !== '' ? `<div class="fi-btn-badge-ctn"><span class="${['fi-color', `fi-color-${this._badgeColor}`, ...colorManager.getComponentClasses('badge', this._badgeColor).filter((c) => !c.startsWith('fi-color')), 'fi-badge', 'fi-size-xs'].join(' ')}">${e(String(badge))}</span></div>` : '';
-            return `<a href="${e(linkUrl)}" ${this._newTab ? 'target="_blank" ' : ''}${await this.tooltipAttribute(ctx)}${this._newTab ? '' : 'wire:navigate '}${link.toHtml()}>${linkIcon}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}${badgeHtml}</a>`;
+            // Disabled with a tooltip: no link, but still focusable for the tooltip.
+            const linkOff = disabled && tooltip !== '';
+            const href = linkOff ? 'tabindex="0" ' : `href="${e(linkUrl)}" ${this._newTab ? 'target="_blank" ' : ''}`;
+            return `<a ${href}${tooltip}${this._newTab || linkOff ? '' : 'wire:navigate '}${disabled ? 'aria-disabled="true" ' : ''}${link.toHtml()}>${linkIcon}${e((await evaluate(this._label, ctx)) ?? this.getDefaultLabel())}${badgeHtml}</a>`;
         }
         const isSubmit = this._submit !== null;
         // Handler action: the click mounts the action on the server, with the host's context (e.g. the record).
         const mountContext = explicitMountContext ?? (ctx.livewire as any)?.getActionMountContext?.() ?? {};
-        // Without context, the short form `mountAction('name')` is emitted.
-        const mountExpression = this._handler ? this.mountExpressionFor(mountContext) : null;
+        // Without context, the short form `mountAction('name')` is emitted; a JavaScript click handler sends nothing.
+        const mountExpression = (this._handler || this.hasModalContentOnly()) && !alpineClick ? this.mountExpressionFor(mountContext) : null;
+        const wireClick = alpineClick ? null : (mountExpression ?? this._action);
+        // Disabled with a tooltip: the button keeps the pointer for the tooltip but loses its click.
+        const clickable = !(disabled && tooltip !== '');
         const attributes = new Attributes()
             .merge({
+                'aria-disabled': disabled ? 'true' : null,
+                disabled: disabled && tooltip === '' ? 'disabled' : null,
                 type: isSubmit ? 'submit' : 'button',
                 'wire:loading.attr': 'aria-disabled',
                 'wire:loading.class': 'fi-disabled',
                 'wire:target': this._livewireTarget ?? this._submit,
                 'x-bind:disabled': isSubmit ? 'isProcessing' : null,
             })
-            .class(['fi-ac-btn-action', 'fi-btn', `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : colorManager.getComponentClasses('button', this._color))])
-            .when(this._action, (a) => a.set('wire:click', this._action!))
-            .when(mountExpression, (a) => a.set('wire:click', mountExpression!))
-            .when(this._alpineClick, (a) => a.set('x-on:click', this._alpineClick!));
-        const wireTarget = this._livewireTarget ?? this._submit ?? this._action ?? mountExpression;
+            .class(['fi-ac-btn-action', 'fi-btn', { 'fi-disabled': disabled }, `fi-size-${this._size}`, ...(this._outlined ? ['fi-outlined', ...colorManager.getComponentClasses('button-outlined', this._color)] : colorManager.getComponentClasses('button', this._color))])
+            .when(clickable && wireClick, (a) => a.set('wire:click', wireClick!))
+            .when(clickable && alpineClick, (a) => a.set('x-on:click', alpineClick!));
+        const wireTarget = this._livewireTarget ?? this._submit ?? wireClick;
         const keyBindings = this._keyBindings.length ? `x-bind:id="$id('key-bindings')" x-mousetrap.global.${this._keyBindings.map((k) => k.replace(/\+/g, '-')).join('.')}="document.getElementById($el.id)?.click()" ` : '';
         return views.render('filament-actions::button', {
-            attributes: attributes.toHtml(), isSubmit, keyBindings, iconAfter: this._iconAfter, hasWireLoader: wireTarget !== null,
+            attributes: attributes.toHtml(), isSubmit, keyBindings: keyBindings + tooltip, iconAfter: this._iconAfter, hasWireLoader: wireTarget !== null,
             label: (await evaluate(this._label, ctx)) ?? this.getDefaultLabel(),
             wireLoader: loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': wireTarget })),
             iconHtml: this._icon ? icon(this._icon, { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': wireTarget }) }) : '',
             formLoader: loadingIndicator(new Attributes({ 'x-cloak': 'x-cloak', 'x-show': 'isProcessing' })),
         });
     }
+}
+
+/** Removes the click behavior (href, `x-on:`, `wire:click`, `wire:navigate`) from rendered attributes. */
+function stripClickAttributes(attributes: string): string {
+    return attributes.replace(/\s*(?:href|x-on:[^\s=]+|wire:click[^\s=]*|wire:navigate)(?:="[^"]*")?/g, '').trim();
 }
 
 /** Group of actions collapsed into a dropdown behind a "⋮" icon button. */
@@ -581,14 +884,21 @@ export class ActionGroup {
     hasDropdown(): boolean { return this._dropdown; }
     /** The actions side by side, as a group of buttons. */
     buttonGroup(condition = true): this { this._buttonGroup = condition; return this; }
+    private _flip = true;
     /** Menu placement: `bottom-start`, `bottom-end`, `top-start`... (`bottom-end` in tables). */
-    dropdownPlacement(placement: string | null): this { this._placement = placement !== null && /^(top|bottom|left|right)(-(start|end))?$/.test(placement) ? placement : null; return this; }
+    dropdownPlacement(placement: string | null): this { this._placement = placement !== null && (/^(top|bottom|left|right)(-(start|end))?$/.test(placement) || placement === 'auto-placement') ? placement : null; return this; }
+    /** Places the menu on the side with the most space, instead of a fixed placement that flips when there is no room. */
+    dropdownAutoPlacement(): this { this._placement = 'auto-placement'; this._flip = false; return this; }
+    /** `false`: the menu keeps its placement even without room for it. */
+    dropdownFlip(condition = true): this { this._flip = condition; return this; }
     /** Menu width: `xs` to `7xl`. */
     dropdownWidth(width: string | null): this { this._width = width !== null && /^(xs|sm|md|lg|xl|[2-7]xl)$/.test(width) ? width : null; return this; }
     /** Distance between the trigger and the menu, in pixels (8 by default). */
     dropdownOffset(offset: number | null): this { this._offset = offset !== null && Number.isFinite(offset) ? Math.max(0, Math.round(offset)) : null; return this; }
     /** Maximum height of the menu, as a CSS length; it scrolls beyond. */
     maxHeight(height: string | null): this { this._maxHeight = height !== null && /^[0-9.]+(px|rem|em|vh|%)$/.test(height) ? height : null; return this; }
+    /** Filament's name of `maxHeight()`. */
+    dropdownMaxHeight(height: string | null): this { return this.maxHeight(height); }
     hidden(condition: Lazy<boolean, ComponentContext> = true): this { this._hidden = condition; return this; }
     visible(condition: Lazy<boolean, ComponentContext> = true): this { return this.hidden(typeof condition === 'function' ? async (ctx) => !(await condition(ctx)) : !condition); }
     async isVisible(ctx: ComponentContext): Promise<boolean> {
@@ -636,6 +946,6 @@ export class ActionGroup {
         if (!lists.length) return '';
         const panelClasses = cls(['fi-dropdown-panel', this._width ? `fi-width-${this._width}` : null, { 'fi-scrollable': this._maxHeight !== null }]);
         const style = this._maxHeight ? ` style="max-height: ${this._maxHeight}"` : '';
-        return `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${this.triggerHtml()}</div><div x-cloak x-float.placement.${this._placement ?? 'bottom-end'}.flip.teleport.offset="{ offset: ${this._offset ?? 8} }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="fi-dropdown-list" role="group">${items.join(' ')}</div>`).join('')}</div></div>`;
+        return `<div x-data="filamentDropdown" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${this.triggerHtml()}</div><div x-cloak x-float.placement.${this._placement ?? 'bottom-end'}${this._flip ? '.flip' : ''}.teleport.offset="{ offset: ${this._offset ?? 8} }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="${panelClasses}"${style}>${lists.map((items) => `<div class="fi-dropdown-list" role="group">${items.join(' ')}</div>`).join('')}</div></div>`;
     }
 }
