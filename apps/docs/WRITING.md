@@ -28,7 +28,7 @@ Only this subset is rendered — do not use anything else:
 - Paragraphs, **bold**, *italic*, `inline code`, links `[label](/forms/select#making-the-field-searchable)`.
 - Internal links are absolute site paths without the numeric prefixes, optionally with an anchor (anchors are the heading text lowercased, spaces as `-`, punctuation removed).
 - Bullet lists (`-`) and numbered lists (`1.`), one level of nesting (two spaces).
-- Fenced code blocks with a language: ```` ```ts ````, ```` ```bash ````, ```` ```html ````, ```` ```css ````, ```` ```json ````.
+- Fenced code blocks with a language: ```` ```ts ````, ```` ```bash ````, ```` ```html ````, ```` ```css ````, ```` ```json ```` (```` ```js ````, ```` ```jsx ````, ```` ```vue ```` and ```` ```svelte ```` for browser code rendered by JavaScript frameworks).
 - GitHub-style tables.
 - Asides, on their own lines, with Markdown inside:
 

@@ -12,6 +12,7 @@ import { Color, e } from '@navette-js/support';
 import { Component as WireComponent } from '@navette-js/wire';
 import { LabOrders } from './lab-orders.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
+import { LabFrameworkFields } from './lab-framework-fields.ts';
 import {
     BulkActionGroup, Count, Filter, Group, IconColumn, Indicator, NumberConstraint, Panel as TablePanel, QueryBuilder, SelectColumn, SelectFilter, Split, Stack, Sum,
     TernaryFilter, TextColumn, TextConstraint, ToggleColumn, type Table,
@@ -320,7 +321,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .brandName('Navette Lab')
         .setColors({ primary: Color.Violet })
         .login(options.login)
-        .resources([LabProducts, LabCards, LabOrders, LabFields, LabCatalogBrands, LabCatalogProducts])
+        // The framework-rendered field example is left out of the parity screenshots.
+        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields]), LabCatalogBrands, LabCatalogProducts])
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.
         .pages([LabWidgetsDashboard])
         .widgets(labWidgets)
