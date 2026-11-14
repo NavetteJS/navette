@@ -247,6 +247,146 @@ Select.make('author_id')
     ])
 ```
 
+### Handling `MorphTo` relationships
+
+A polymorphic relationship lets the user pick a record among several models: a comment belongs to a product or to a blog post. `MorphToSelect` is not a select field itself, but two fields inside a fieldset: the first selects the type, the second the record of that type. They save the record's `<name>_type` and `<name>_id` attributes, like any other fields, through the resource's data adapter. Pass the types with `types()`, each a `MorphToSelect.Type` of an Objection model:
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .types([
+        MorphToSelect.Type.make(Product)
+            .titleAttribute('name'),
+        MorphToSelect.Type.make(Post)
+            .titleAttribute('title'),
+    ])
+```
+
+The type saved in `commentable_type` is the model's static `morphClass` property if it has one (for example the Laravel class names of an existing database, `static morphClass = 'App\\Models\\Shop\\Product'`), otherwise its class name. `MorphToSelect.Type.make(Product).alias('product')` sets it for one type, and `label()` changes the type's label (the model's class name, humanized, by default). The attributes may be renamed with `typeColumn()` and `keyColumn()`. When the form edits a record, both fields are filled from its attributes, and the record select shows the label of the saved record.
+
+`types()` also accepts a function, which receives the [field context](/forms/overview#using-the-field-context) and returns the types synchronously.
+
+#### Customizing the option labels for each morphed type
+
+The `titleAttribute()` is used to extract the titles out of each product or post. If you'd like to customize the label of each option, you can use the `getOptionLabelFromRecordUsing()` method to transform the record into a label:
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .types([
+        MorphToSelect.Type.make(Product)
+            .getOptionLabelFromRecordUsing((record) => `${record.name} - ${record.slug}`),
+        MorphToSelect.Type.make(Post)
+            .titleAttribute('title'),
+    ])
+```
+
+#### Customizing the relationship query for each morphed type
+
+You may customize the database query that retrieves options using the `modifyOptionsQueryUsing()` method. It receives the Objection query builder and the field context, and must change the query synchronously (or return a new one):
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .types([
+        MorphToSelect.Type.make(Product)
+            .titleAttribute('name')
+            .modifyOptionsQueryUsing((query) => query.where('is_visible', true)),
+        MorphToSelect.Type.make(Post)
+            .titleAttribute('title')
+            .modifyOptionsQueryUsing((query) => query.where('is_visible', true)),
+    ])
+```
+
+The query also scopes validation: a key sent by the browser is only accepted if this query finds it, and a type that is not in `types()` is rejected. Scope the query with values computed on the server (the signed-in user, the tenant), never with a public property the browser can change.
+
+By default, the title attribute is searched; `searchColumns(['name', 'sku'])` searches other columns, and `forceSearchCaseInsensitive()` compares in lower case for databases with case-sensitive `like`, such as PostgreSQL. To list the records some other way, replace the queries with `getOptionsUsing()`, `getSearchResultsUsing()` and `getOptionLabelUsing()` on the type.
+
+<Aside variant="tip">
+Many of the same options in the select field are available for `MorphToSelect`, including `searchable()`, `preload()`, `native()`, `allowHtml()`, `optionsLimit()`, `searchDebounce()`, the [select messages](#customizing-the-select-messages) and `live()`. They apply to the record select. `required()` makes both fields required; `contained(false)` removes the fieldset's border.
+</Aside>
+
+#### Customizing the morph select fields
+
+You may further customize the "key" select field for a specific morph type using the `modifyKeySelectUsing()` method:
+
+```ts
+import { MorphToSelect, TextInput } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .types([
+        MorphToSelect.Type.make(Product)
+            .titleAttribute('name')
+            .modifyKeySelectUsing((select) => select
+                .createOptionForm([
+                    TextInput.make('name').required(),
+                ])
+                .createOptionUsing(async (data) => (await Product.query().insert(data)).id)),
+        MorphToSelect.Type.make(Post)
+            .titleAttribute('title'),
+    ])
+```
+
+This is useful if you want to customize the "key" select field for each morphed type individually. If you want to customize the key select for all types, you can use the `modifyKeySelectUsing()` method on the `MorphToSelect` component itself; it runs before the type's:
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .types([
+        MorphToSelect.Type.make(Product).titleAttribute('name'),
+        MorphToSelect.Type.make(Post).titleAttribute('title'),
+    ])
+    .modifyKeySelectUsing((select) => select.native(false))
+```
+
+You can also modify the "type" select field using the `modifyTypeSelectUsing()` method:
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .types([
+        MorphToSelect.Type.make(Product).titleAttribute('name'),
+        MorphToSelect.Type.make(Post).titleAttribute('title'),
+    ])
+    .modifyTypeSelectUsing((select) => select.native(false))
+```
+
+The callbacks receive the field and the field context, and return the field (or a replacement). Changing the type clears the selected record.
+
+#### Using toggle buttons for the type selector
+
+By default, the type selector is a select field. You may switch it to use inline [toggle buttons](toggle-buttons) using the `typeSelectToggleButtons()` method:
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .typeSelectToggleButtons()
+    .types([
+        MorphToSelect.Type.make(Product).titleAttribute('name'),
+        MorphToSelect.Type.make(Post).titleAttribute('title'),
+    ])
+```
+
+When using toggle buttons, `modifyTypeSelectUsing()` receives the `ToggleButtons` field:
+
+```ts
+import { MorphToSelect } from '@navette-js/forms';
+
+MorphToSelect.make('commentable')
+    .typeSelectToggleButtons()
+    .types([
+        MorphToSelect.Type.make(Product).titleAttribute('name'),
+        MorphToSelect.Type.make(Post).titleAttribute('title'),
+    ])
+    .modifyTypeSelectUsing((toggleButtons) => toggleButtons.grouped())
+```
+
 ### Saving other relationships
 
 For other relationships, any field can load and save its state itself with `loadStateFromRelationshipsUsing()` and `saveRelationshipsUsing()`. The second callback runs after the record is saved; such a field is not part of the saved data:

@@ -42,6 +42,7 @@ import { containedFile, deleteContainedFile, isStoredFileKey, serveContainedFile
 export type { FileRequest, FileResponse, LocalFileStorageOptions } from './file-storage.ts';
 import { signedFileUrl, temporaryFileUrlExpiry, type FileUrlStorage } from '@navette-js/support';
 export { safeFileUrl } from './file-upload-support.ts';
+export { MorphToSelect, MorphToSelectType, type MorphModel } from './morph-to-select.ts';
 export { saveContentToRecord, StorageFileAttachmentProvider, type FileAttachmentContext, type FileAttachmentProvider } from './file-attachment-provider.ts';
 export { getRichContentAttribute, InteractsWithRichContent, RichContentAttribute, type HasRichContent } from './rich-content-attribute.ts';
 export { acceptsFileUploads, findFileUploadComponent, isFileUploadForSchemas } from './upload-targets.ts';
