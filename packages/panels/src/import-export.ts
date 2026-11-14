@@ -4,9 +4,9 @@ import { buildXlsx, type XlsxOptions, type XlsxRowInput, type XlsxStyle } from '
 import { AssertionError } from 'node:assert';
 import { Action } from '@navette-js/actions';
 import { CheckboxList } from '@navette-js/forms';
-import { configured, icons } from '@navette-js/support';
+import { configured, icons, readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregate } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
-import { getTableQuery, getVisibleColumns } from '@navette-js/tables';
+import { addRelationshipsToQuery, ensureRelationshipSupport, getTableQuery, getVisibleColumns } from '@navette-js/tables';
 import { registerDownloader, sendDownload, type Downloader } from './downloads.ts';
 import { Notification } from './notifications.ts';
 
@@ -105,6 +105,22 @@ export class ExportColumn {
     /** `false`: unchecked in the export modal. */
     enabledByDefault(condition = true): this { this._enabledByDefault = condition; return this; }
     isEnabledByDefault(): boolean { return this._enabledByDefault; }
+    private _aggregates: RelationshipAggregates | null = null;
+    private aggregatesOf(): RelationshipAggregates { return (this._aggregates ??= new RelationshipAggregates(`ExportColumn ${this.name}`)); }
+    /** Number of related records (`withCount()`): `ExportColumn.make('posts_count').counts('posts')`; also `'posts as alias'` or `{ posts: (query) => … }`. */
+    counts(relationships: AggregatedRelationships | null): this { this.aggregatesOf().set('count', relationships); return this; }
+    /** Whether related records exist (`withExists()`): `ExportColumn.make('posts_exists').exists('posts')`. */
+    exists(relationships: AggregatedRelationships | null): this { this.aggregatesOf().set('exists', relationships); return this; }
+    /** Average of a column of the related records: `ExportColumn.make('posts_avg_rating').avg('posts', 'rating')`. */
+    avg(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('avg', relationship, column); return this; }
+    /** Sum of a column of the related records: `ExportColumn.make('orders_sum_total').sum('orders', 'total')`. */
+    sum(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('sum', relationship, column); return this; }
+    /** Minimum of a column of the related records: `ExportColumn.make('orders_min_total').min('orders', 'total')`. */
+    min(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('min', relationship, column); return this; }
+    /** Maximum of a column of the related records: `ExportColumn.make('orders_max_total').max('orders', 'total')`. */
+    max(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('max', relationship, column); return this; }
+    /** Relationship aggregates selected by the export query for this column. */
+    getRelationshipAggregates(): RelationshipAggregate[] { return this._aggregates?.all() ?? []; }
     /** A hidden column is not offered in the modal and never written (the condition cannot depend on a record). */
     hidden(condition: ExportLazy<boolean> = true): this { this._hidden = condition; return this; }
     visible(condition: ExportLazy<boolean> = true): this { this._visible = condition; return this; }
@@ -130,7 +146,8 @@ export class ExportColumn {
     /** The raw value of a record. */
     getState(record: any, ctx: Partial<ExportColumnContext> = {}): unknown {
         const full: ExportColumnContext = { options: {}, export: null, ...ctx, record, column: this };
-        return this._state ? this._state(record, full) : this.name.split('.').reduce((value: any, key) => (value === null || value === undefined ? value : value[key]), record);
+        // `author.name` reads the eager-loaded relationship; a has-many relationship (`tags.name`) gives the list of values.
+        return this._state ? this._state(record, full) : readRecordPath(record, this.name);
     }
     /** The value written to the file: formatted, limited, with its prefix and suffix; a list joined with `, ` (or as JSON). */
     getFormattedState(record: any, ctx: Partial<ExportColumnContext> = {}): unknown {
@@ -342,6 +359,9 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
             // The table's current query (filters, search, sort); a bulk export only takes the selected records.
             const tableQuery = getTableQuery(table, livewire);
             const query = { ...tableQuery, modifiers: [...(tableQuery.modifiers ?? []), (q: any) => currentExporter.modifyQuery(q, options), ...(modifyQueryUsing ? [(q: any) => { modifyQueryUsing!(q, { options, livewire }); }] : [])] } as any;
+            // Relationships of the exported columns are eager-loaded, and their relationship aggregates selected.
+            addRelationshipsToQuery(query, columns);
+            ensureRelationshipSupport(adapter, query);
             const records: string[] | null = bulk ? await livewire.getSelectedRecordKeys() : null;
             const selection = records ? { ...query, keys: records } : query;
             const perPage = Math.max(1, Math.floor(lazy(chunkSize, livewire)));

@@ -91,42 +91,27 @@ new Table()
 
 #### Accessing related data from columns
 
-Navette does not resolve relationships from a column name: a column named `author.name` reads the `author.name` key of the record, which does not exist. To display data from a related record, add it to the list query of the data adapter as a computed column, then read it in the column:
+You can also display data in a column that belongs to a relationship. For example, if you have a `Post` model that belongs to an `Author` model (the `author` relationship of its `relationMappings`), you can display the author's name in the table:
 
 ```ts
-import { ObjectionAdapter } from '@navette-js/database';
 import { TextColumn } from '@navette-js/tables';
 
-static adapter = new ObjectionAdapter(Post, {
-    modify: (query) => {
-        query.select(
-            'posts.*',
-            Post.knex()('authors').select('authors.name').whereRaw('authors.id = posts.author_id').as('author_name'),
-        );
-    },
-});
-
-// In `table()`:
-TextColumn.make<Post>('author.name')
-    .getStateUsing(({ record }) => record.author_name ?? null)
-    .searchable({ column: 'author_name' })
-    .sortable({ column: 'author_name' })
+TextColumn.make('author.name')
 ```
 
 ```preview
-// records: [{"title": "Introducing Navette", "author_name": "Ada Lovelace"}, {"title": "Building your first panel", "author_name": "Grace Hopper"}, {"title": "Ten tips for faster tables", "author_name": "Alan Turing"}]
+// records: [{"title": "Introducing Navette", "author": {"name": "Ada Lovelace"}}, {"title": "Building your first panel", "author": {"name": "Grace Hopper"}}, {"title": "Ten tips for faster tables", "author": {"name": "Alan Turing"}}]
 new Table()
     .pluralModelLabel('posts')
     .columns([
         TextColumn.make('title'),
-        TextColumn.make('author.name')
-            .getStateUsing(({ record }) => record.author_name ?? null)
-            .searchable({ column: 'author_name' })
-            .sortable({ column: 'author_name' }),
+        TextColumn.make('author.name'),
     ])
 ```
 
-The column keeps the name `author.name`, so its default label is "Author". `getStateUsing()` reads the computed value, and the `column` option tells sorting and searching which column of the query to use. See [displaying data from relationships](/tables/columns/overview#displaying-data-from-relationships) for details.
+In this case, Navette looks for an `author` relationship on the `Post` model, and then displays the `name` attribute of that relationship. We call this "dot notation", and you can use it to display any attribute of any relationship, even nested relationships. Navette uses this dot notation to eager-load the results of that relationship for you, and the column can be sorted and searched through the relationship.
+
+For more information about column relationships, visit the [Relationships section](/tables/columns/overview#displaying-data-from-relationships).
 
 ### Defining table filters
 
@@ -415,7 +400,7 @@ export class PostResource extends Resource {
 }
 ```
 
-`ObjectionAdapter` reads and writes an [Objection](https://vincit.github.io/objection.js/) model with [Knex](https://knexjs.org/). Its `modify` function is applied to every query of the resource: use it to restrict which records are visible, and to add computed columns such as the name of a related record. To display data from another source, such as an API or an in-memory array, [write your own adapter](/tables/custom-data).
+`ObjectionAdapter` reads and writes an [Objection](https://vincit.github.io/objection.js/) model with [Knex](https://knexjs.org/). Its `modify` function is applied to every query of the resource: use it to restrict which records are visible, or to add computed columns. Data from related records is read with [dot notation](#accessing-related-data-from-columns). To display data from another source, such as an API or an in-memory array, [write your own adapter](/tables/custom-data).
 
 ## Using a table outside a resource
 

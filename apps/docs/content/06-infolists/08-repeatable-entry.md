@@ -50,7 +50,7 @@ For example, the state of this entry might be represented as:
 ]
 ```
 
-The state must be an array: the record should carry the items, loaded by its data adapter. Any other state is treated as an empty list, and you may display text instead with [`placeholder()`](/infolists/overview#adding-placeholder-text-if-an-entry-is-empty).
+The state must be an array. When the entry is named after a relationship of the record's Objection model (`relationMappings`), such as `comments`, the related records are loaded for you if the record does not carry them yet; the components of each item can use dot notation too (`author.name`). Any other state is treated as an empty list, and you may display text instead with [`placeholder()`](/infolists/overview#adding-placeholder-text-if-an-entry-is-empty).
 
 The `columns()` method sets the grid of the components inside each item: a number applies from the `lg` breakpoint, and an object sets it per breakpoint, like the `columns()` method of a [grid](/schemas/layouts).
 
@@ -221,5 +221,5 @@ Section.make('Line Items')
 ```
 
 <Aside variant="warning">
-Not available in Navette yet: limiting item processing (`maxItemsForProcessing()`), and loading the items of a relationship automatically: the record must carry them.
+Not available in Navette yet: limiting item processing (`maxItemsForProcessing()`).
 </Aside>

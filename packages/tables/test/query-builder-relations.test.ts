@@ -212,3 +212,42 @@ test('number constraint on a relationship: sum, average, minimum and maximum of 
         await db.schema.dropTable('comments');
     }
 });
+
+test('dot syntax: `creator.name` filters an attribute of related records, through nested relationships too', async () => {
+    const dotted = TextConstraint.make('author.name');
+    assert.deepEqual([dotted.getRelationshipName(), dotted.getColumn(), dotted.getLabel()], ['author', 'name', 'Author']);
+    const r = await run({ a: rule('author.name', 'equals', { text: 'Linus' }) }, [dotted]);
+    assert.deepEqual([r.titles, r.summaries.a, r.nodes], [['B'], 'Author equals Linus', [{ relationship: 'author', nodes: [{ kind: 'compare', column: 'name', operator: '=', value: 'Linus' }] }]]);
+    assert.throws(() => TextConstraint.make('author..name'), /Invalid constraint name/);
+    assert.throws(() => TextConstraint.make('author.__proto__'), /Invalid constraint name/);
+
+    class Country extends Model { static tableName = 'countries'; }
+    class Writer extends Model {
+        static tableName = 'authors';
+        static get relationMappings() { return { country: { relation: Model.BelongsToOneRelation, modelClass: Country, join: { from: 'authors.country_id', to: 'countries.id' } } }; }
+    }
+    class Article extends Model {
+        static tableName = 'posts';
+        static get relationMappings() { return { author: { relation: Model.BelongsToOneRelation, modelClass: Writer, join: { from: 'posts.author_id', to: 'authors.id' } } }; }
+    }
+    await db.schema.createTable('countries', (t) => { t.increments('id'); t.string('name'); });
+    await db.schema.alterTable('authors', (t) => { t.integer('country_id'); });
+    try {
+        await db('countries').insert([{ name: 'France' }, { name: 'Finland' }]);
+        await db('authors').where('id', 1).update({ country_id: 1 });
+        await db('authors').where('id', 2).update({ country_id: 2 });
+        const nested = [NumberConstraint.make('author.country.id'), TextConstraint.make('author.country.name').label('Country')];
+        const titles = async (rules: unknown) => {
+            const { nodes } = compileRules(nested, sanitizeRules(nested, rules));
+            return (await Article.query().where((query: any) => applyConditions(query, nodes)).orderBy('id')).map((row: any) => row.title);
+        };
+        assert.deepEqual(await titles({ a: rule('author.country.name', 'startsWith', { text: 'Fin' }) }), ['B']);
+        assert.deepEqual(await titles({ a: rule('author.country.name', 'equals.inverse', { text: 'Finland' }) }), ['A', 'C']);
+        assert.deepEqual(await titles({ a: rule('author.country.id', 'equals', { number: 1 }) }), ['A', 'C']);
+        const { nodes: aggregate } = compileRules(nested, sanitizeRules(nested, { a: rule('author.country.id', 'equals', { number: 1, aggregate: 'sum' }) }));
+        assert.throws(() => applyConditions(Article.query(), aggregate), /nested relationship author.country/);
+    } finally {
+        await db.schema.dropTable('countries');
+        await db.schema.alterTable('authors', (t) => { t.dropColumn('country_id'); });
+    }
+});

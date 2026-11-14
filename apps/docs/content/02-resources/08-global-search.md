@@ -36,11 +36,11 @@ By default, only the record title attribute is searched. To search other columns
 static globallySearchableAttributes = ['name', 'email'];
 ```
 
-The columns are filtered by the adapter of the resource, so they may include columns computed in its query, like a `customer_name` subquery added by the [`modify` option](/advanced/data-adapters#customizing-the-query):
+If you wish to search a relationship's attributes, you may use dot notation. The search matches records whose related record matches, and the relationship is loaded with the results, for their [details](#adding-extra-details-to-global-search-results):
 
 ```ts
 export class OrderResource extends Resource {
-    static globallySearchableAttributes = ['number', 'customer_name'];
+    static globallySearchableAttributes = ['number', 'customer.name'];
 }
 ```
 
@@ -57,8 +57,22 @@ Global search results can display details below their title. Return them from `g
 ```ts
 static getGlobalSearchResultDetails(record: any): Record<string, unknown> {
     return {
-        Author: record.author_name,
-        Category: record.category_name,
+        Author: record.author?.name,
+        Category: record.category?.name,
+    };
+}
+```
+
+The relationships of dot-notation [searchable attributes](#globally-searching-across-multiple-columns) are already loaded. To read another relationship, load it first: `getGlobalSearchResultDetails()` may be `async`, and `loadMissingRelationships()` loads the missing relationships of an Objection record, once per result:
+
+```ts
+import { loadMissingRelationships } from '@navette-js/support';
+
+static async getGlobalSearchResultDetails(record: any): Promise<Record<string, unknown>> {
+    await loadMissingRelationships(record, ['author.name', 'category.name']);
+    return {
+        Author: record.author?.name,
+        Category: record.category?.name,
     };
 }
 ```

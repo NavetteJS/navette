@@ -57,7 +57,7 @@ export class ProductExporter extends Exporter {
 }
 ```
 
-A column reads the attribute with its name; a name with dots reads a loaded relationship (`brand.name`). `state()` computes the value yourself, from the record and the [context](#using-export-options):
+A column reads the attribute with its name; a name with dots reads a [relationship](#displaying-data-from-relationships) (`brand.name`). `state()` computes the value yourself, from the record and the [context](#using-export-options):
 
 ```ts
 import { ExportColumn } from '@navette-js/panels';
@@ -102,6 +102,90 @@ ExportAction.make()
 ### Disabling the column selection
 
 `columnMapping(false)` removes the column checkboxes: every column is exported, and the modal only asks for confirmation.
+
+### Displaying data from relationships
+
+You may use "dot notation" to access columns within relationships. The name of the relationship comes first, followed by a period, followed by the name of the column to display:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('author.name')
+```
+
+The relationship is eager-loaded with the exported records (it must be declared by the Objection model's `relationMappings`). A relationship holding several records (`tags.name`) gives the list of their values.
+
+### Counting relationships
+
+If you wish to count the number of related records in a column, you may use the `counts()` method:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('users_count')
+    .counts('users')
+```
+
+In this example, `users` is the name of the relationship to count from. The name of the column must be `users_count`, as this is the convention (Laravel's `withCount()`) used to name the result.
+
+If you'd like to scope the relationship before counting, you can pass an object to the method, where the key is the relationship name and the value is the function to scope the Objection query with:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('users_count')
+    .counts({
+        users: (query) => query.where('is_active', true),
+    })
+```
+
+### Determining relationship existence
+
+If you simply wish to indicate whether related records exist in a column, you may use the `exists()` method:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('users_exists')
+    .exists('users')
+```
+
+In this example, `users` is the name of the relationship to check for existence. The name of the column must be `users_exists`. If you'd like to scope the relationship before checking existence, pass an object, as for `counts()`:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('users_exists')
+    .exists({
+        users: (query) => query.where('is_active', true),
+    })
+```
+
+### Aggregating relationships
+
+Navette provides several methods for aggregating a relationship field, including `avg()`, `max()`, `min()` and `sum()`. For instance, if you wish to show the average of a field on all related records in a column, you may use the `avg()` method:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('users_avg_age')
+    .avg('users', 'age')
+```
+
+In this example, `users` is the name of the relationship, while `age` is the field that is being averaged. The name must be `users_avg_age`: the relationship, the function and the field.
+
+If you'd like to scope the relationship before aggregating, you can pass an object to the method, where the key is the relationship name and the value is the function to scope the Objection query with:
+
+```ts
+import { ExportColumn } from '@navette-js/panels';
+
+ExportColumn.make('users_avg_age')
+    .avg({
+        users: (query) => query.where('is_active', true),
+    }, 'age')
+```
+
+The aggregates are selected by the export query, with the records, so they need a data adapter that supports relationships (`ObjectionAdapter`).
 
 ## Formatting the values
 
@@ -190,14 +274,14 @@ ExportColumn.make('description')
 
 ## Modifying the export query
 
-`modifyQuery()` changes the query of the exported records, for example to load relationships. It receives the options too:
+`modifyQuery()` changes the query of the exported records, for example to leave some of them out. It receives the options too:
 
 ```ts
 import { Exporter } from '@navette-js/panels';
 
 export class ProductExporter extends Exporter {
     static modifyQuery(query: any): void {
-        query.withGraphFetched('brand');
+        query.where('products.is_visible', true);
     }
 }
 ```

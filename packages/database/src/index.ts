@@ -2,8 +2,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import knexFactory, { type Knex } from 'knex';
 import { Model, type ModelClass, type QueryBuilder } from 'objection';
+import type { RelationshipAggregate } from '@navette-js/support';
+import { applyEagerLoading, applyRelationshipAggregates, castRelationshipAggregates, jsonColumnExpression, orderByColumn, relatedRecordsOf, resolveRelationshipColumn, whereRelationshipExists } from './relationships.ts';
 
 export { Model };
+export * from './relationships.ts';
 export type { Knex };
 
 export type SortDirection = 'asc' | 'desc';
@@ -25,6 +28,17 @@ export type ListQuery = {
     keys?: string[];
     /** Extra server-side conditions (list tab, custom filter); never built from unvalidated browser input. */
     modifiers?: ((query: any) => void)[];
+    /**
+     * Related records to load with each record, as dot-notation paths (`author`, `author.country`, `comments`): the relationships of
+     * dot-notation columns (`author.name`). Segments that are not relationships are ignored (JSON attributes). Optional for adapters:
+     * one that does not support relationships may ignore it (columns then read nested objects of the records, if any).
+     */
+    with?: string[];
+    /**
+     * Relationship aggregates to select on each record under their alias (`posts_count`), from `counts()`, `exists()`, `avg()`,
+     * `sum()`, `min()` and `max()`. Only adapters whose `supportsRelationships()` returns true receive them.
+     */
+    aggregates?: RelationshipAggregate[];
     page: number;
     perPage: number;
 };
@@ -69,6 +83,20 @@ export interface DataAdapter<T = any> {
     transaction?<T>(fn: () => Promise<T>): Promise<T>;
     /** A copy limited to the records whose `column` equals `value` (nested resources); optional. */
     scopedTo?(column: string, value: string | number): DataAdapter<T>;
+    /**
+     * True when the adapter handles relationships: `with` and `aggregates` of list queries, and dot-notation (`author.name`) search,
+     * sort and column search through relationships. Optional: without it, columns that aggregate relationships throw a clear error.
+     */
+    supportsRelationships?(): boolean;
+}
+
+/** Throws when a list query needs relationship support (aggregates) that the adapter does not declare (`supportsRelationships()`). */
+export function assertRelationshipSupport(adapter: { getLabel?(): string; supportsRelationships?(): boolean }, query: { aggregates?: RelationshipAggregate[] }): void {
+    if (!query.aggregates?.length || (typeof adapter.supportsRelationships === 'function' && adapter.supportsRelationships())) return;
+    const aggregate = query.aggregates[0];
+    let label = 'custom';
+    try { label = adapter.getLabel?.() ?? label; } catch { /* label unavailable */ }
+    throw new Error(`The "${aggregate.alias}" column aggregates the "${aggregate.relationship}" relationship (${aggregate.function === 'count' ? 'counts' : aggregate.function}()), but the data adapter of "${label}" does not support relationships. Use ObjectionAdapter, or implement supportsRelationships() and ListQuery.aggregates in your adapter.`);
 }
 
 /** Transactions open in the current async context, by connection. */
@@ -119,6 +147,8 @@ export function sqlite(filename: string): Knex {
 }
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => '\\' + c);
+/** Case-insensitive LIKE on a bound column identifier; LIKE wildcards of the searched value are escaped. */
+const LIKE = "lower(??) like ? escape '\\'";
 
 export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     private model: ModelClass<M>;
@@ -195,12 +225,23 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     }
     /** Count and column aggregates over every record of the query (for summary rows). */
     async aggregate(query: Omit<ListQuery, 'page' | 'perPage'>, columns: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] } = {}): Promise<{ count: number; sum: Record<string, number>; avg: Record<string, number>; min: Record<string, unknown>; max: Record<string, unknown> }> {
-        const q = this.model.knex().from(this.filtered(query).toKnexQuery().as('t')).count({ __count: '*' });
-        for (const column of columns.sum ?? []) q.sum({ [`sum_${column}`]: `t.${column}` });
-        for (const column of columns.avg ?? []) q.avg({ [`avg_${column}`]: `t.${column}` });
-        for (const column of columns.min ?? []) q.min({ [`min_${column}`]: `t.${column}` });
-        for (const column of columns.max ?? []) q.max({ [`max_${column}`]: `t.${column}` });
+        const q = this.model.knex().from(this.filtered(query, true).toKnexQuery().as('t')).count({ __count: '*' });
+        const plain = (list: string[] | undefined) => (list ?? []).filter((column) => !resolveRelationshipColumn(this.model, column));
+        for (const column of plain(columns.sum)) q.sum({ [`sum_${column}`]: `t.${column}` });
+        for (const column of plain(columns.avg)) q.avg({ [`avg_${column}`]: `t.${column}` });
+        for (const column of plain(columns.min)) q.min({ [`min_${column}`]: `t.${column}` });
+        for (const column of plain(columns.max)) q.max({ [`max_${column}`]: `t.${column}` });
         const row = ((await q.first()) ?? {}) as Record<string, unknown>;
+        // A relationship column (`items.price`) is summarized over the related records of the listed records, each counted once (Filament).
+        for (const [fn, list] of Object.entries(columns) as ['sum' | 'avg' | 'min' | 'max', string[]][]) {
+            for (const column of list ?? []) {
+                const relationship = resolveRelationshipColumn(this.model, column);
+                if (!relationship) continue;
+                const related = relatedRecordsOf(this.filtered(query), this.model, relationship);
+                const value = ((await this.model.knex().from(related.toKnexQuery().as('r'))[fn]({ value: `r.${relationship.attribute}` }).first()) ?? {}) as Record<string, unknown>;
+                row[`${fn}_${column}`] = value.value ?? null;
+            }
+        }
         return {
             count: Number(row.__count ?? 0),
             sum: Object.fromEntries((columns.sum ?? []).map((column) => [column, Number(row[`sum_${column}`] ?? 0)])),
@@ -212,8 +253,10 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async aggregateGroups(query: Omit<ListQuery, 'page' | 'perPage'>, columns: { sum?: string[]; avg?: string[]; min?: string[]; max?: string[] }, group: (query: any) => void): Promise<AggregateGroup[]> {
         const knex = this.model.knex();
         const table = this.model.tableName;
+        const relationshipColumn = Object.values(columns).flat().find((column) => resolveRelationshipColumn(this.model, column as string));
+        if (relationshipColumn) throw new Error(`aggregateGroups(): "${relationshipColumn}" is a relationship column; aggregate its groups one at a time with aggregate().`);
         // Like Laravel's summary query: the list query becomes a subquery named after the table, so `posts.status` and `status` both work.
-        const q = knex.from(this.filtered(query).toKnexQuery().as(table)).count({ __count: '*' });
+        const q = knex.from(this.filtered(query, true).toKnexQuery().as(table)).count({ __count: '*' });
         const qualify = (column: string) => `${table}.${column}`;
         for (const column of columns.sum ?? []) q.sum({ [`sum_${column}`]: qualify(column) });
         for (const column of columns.avg ?? []) q.avg({ [`avg_${column}`]: qualify(column) });
@@ -244,7 +287,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         const pad = (n: number) => String(n).padStart(2, '0');
         const stamp = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
         const column = options.dateColumn ?? 'created_at';
-        const q = this.model.knex().from(this.filtered(query).toKnexQuery().as('t')).select(this.model.knex().raw(`strftime('%Y-%m', t.??) as month`, [column])).whereBetween(`t.${column}`, [stamp(options.start), stamp(options.end)]).groupBy('month');
+        const q = this.model.knex().from(this.filtered(query, true).toKnexQuery().as('t')).select(this.model.knex().raw(`strftime('%Y-%m', t.??) as month`, [column])).whereBetween(`t.${column}`, [stamp(options.start), stamp(options.end)]).groupBy('month');
         if (options.average) q.avg({ aggregate: `t.${options.average}` }); else q.count({ aggregate: '*' });
         options.modify?.(q);
         const rows = new Map(((await q) as { month: string; aggregate: number }[]).map((row) => [row.month, Number(row.aggregate ?? 0)]));
@@ -260,7 +303,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async sum(query: Omit<ListQuery, 'page' | 'perPage'>, columns: string[]): Promise<Record<string, number>> {
         if (!columns.length) return {};
         // The filtered query is used as a subquery so its computed (aliased) columns remain usable by the search.
-        const q = this.model.knex().from(this.filtered(query).toKnexQuery().as('t'));
+        const q = this.model.knex().from(this.filtered(query, true).toKnexQuery().as('t'));
         for (const column of columns) q.sum({ [column]: `t.${column}` });
         const row = ((await q.first()) ?? {}) as Record<string, unknown>;
         return Object.fromEntries(columns.map((column) => [column, Number(row[column] ?? 0)]));
@@ -273,11 +316,15 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     }
 
     async paginate(query: ListQuery): Promise<Page<M>> {
-        return this.finishPagination(this.filtered(query), query);
+        const page = await this.finishPagination(this.filtered(query, true), query);
+        castRelationshipAggregates(page.records, query.aggregates ?? []);
+        return page;
     }
+    /** Relationships (`with`, `aggregates`, dot-notation search and sort) are supported through the model's `relationMappings`. */
+    supportsRelationships(): boolean { return true; }
 
     /** Base query with modifiers, global search and per-column searches applied. */
-    private filtered(query: Omit<ListQuery, 'page' | 'perPage'>): QueryBuilder<M, M[]> {
+    private filtered(query: Omit<ListQuery, 'page' | 'perPage'>, withAggregates = false): QueryBuilder<M, M[]> {
         const q = this.base(query.trashed ?? 'without');
         if (query.keys) q.whereIn(`${this.model.tableName}.${this.keyColumn}`, query.keys.map(String).slice(0, 10000));
         for (const modifier of query.modifiers ?? []) modifier(q);
@@ -287,22 +334,41 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         if (words.length && columns.length) {
             // Each word must match at least one column, case-insensitively; LIKE wildcards in the input are escaped.
             for (const word of words) {
+                const pattern = `%${escapeLike(word.toLowerCase())}%`;
                 q.where((sub) => {
-                    for (const column of columns) sub.orWhereRaw("lower(??) like ? escape '\\'", [column, `%${escapeLike(word.toLowerCase())}%`]);
+                    for (const column of columns) {
+                        // `author.name`: the word must match the name of a related author (Laravel's `orWhereHas()`).
+                        const relationship = resolveRelationshipColumn(this.model, column);
+                        const json = relationship ? null : jsonColumnExpression(this.model, column);
+                        if (relationship) whereRelationshipExists(sub, this.model, relationship, (related, qualified) => { related.whereRaw(LIKE, [qualified, pattern]); }, 'or');
+                        else if (json) sub.orWhereRaw(`lower(${json.sql}) like ? escape '\\'`, [...json.bindings, pattern]);
+                        else sub.orWhereRaw(LIKE, [column, pattern]);
+                    }
                 });
             }
         }
         for (const [column, value] of Object.entries(query.columnSearches ?? {})) {
-            for (const word of String(value ?? '').trim().split(/\s+/).filter(Boolean)) q.whereRaw("lower(??) like ? escape '\\'", [column, `%${escapeLike(word.toLowerCase())}%`]);
+            const relationship = resolveRelationshipColumn(this.model, column);
+            const json = relationship ? null : jsonColumnExpression(this.model, column);
+            for (const word of String(value ?? '').trim().split(/\s+/).filter(Boolean)) {
+                const pattern = `%${escapeLike(word.toLowerCase())}%`;
+                if (relationship) whereRelationshipExists(q, this.model, relationship, (related, qualified) => { related.whereRaw(LIKE, [qualified, pattern]); });
+                else if (json) q.whereRaw(`lower(${json.sql}) like ? escape '\\'`, [...json.bindings, pattern]);
+                else q.whereRaw(LIKE, [column, pattern]);
+            }
         }
+        // Relationship aggregates are selected after the modifiers, which may select columns of their own.
+        if (withAggregates) applyRelationshipAggregates(q, this.model, query.aggregates ?? []);
         return q;
     }
 
     private async finishPagination(q: QueryBuilder<M, M[]>, query: ListQuery): Promise<Page<M>> {
         const total = await q.clone().resultSize();
         if (query.groupSort?.modify) query.groupSort.modify(q, query.groupSort.direction);
-        else if (query.groupSort) q.orderBy(query.groupSort.column, query.groupSort.direction);
-        if (query.sort) q.orderBy(query.sort.column, query.sort.direction);
+        else if (query.groupSort) orderByColumn(q, this.model, query.groupSort.column, query.groupSort.direction);
+        // `author.name`: ordered by a correlated subquery of the related value (single-record relationships only).
+        if (query.sort) orderByColumn(q, this.model, query.sort.column, query.sort.direction);
+        if (query.with?.length) applyEagerLoading(q, this.model, query.with);
         q.orderBy(this.keyColumn, 'asc');
         const perPage = Math.max(1, query.perPage);
         const lastPage = Math.max(1, Math.ceil(total / perPage));

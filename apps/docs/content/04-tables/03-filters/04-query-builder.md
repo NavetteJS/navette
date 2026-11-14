@@ -80,12 +80,14 @@ Every constraint except the relationship constraint can also [filter an attribut
 
 ### Text constraints
 
-Text constraints allow you to filter text fields:
+Text constraints allow you to filter text fields. They can be used to filter any text field, including via relationships.
 
 ```ts
 import { TextConstraint } from '@navette-js/tables';
 
 TextConstraint.make('name') // Filter the `name` column
+
+TextConstraint.make('creator.name') // Filter the `name` column on the `creator` relationship using dot syntax
 ```
 
 By default, the following operators are available:
@@ -103,12 +105,14 @@ Text entered into these operators is treated as literal text, so characters such
 
 ### Boolean constraints
 
-Boolean constraints allow you to filter boolean fields:
+Boolean constraints allow you to filter boolean fields. They can be used to filter any boolean field, including via relationships.
 
 ```ts
 import { BooleanConstraint } from '@navette-js/tables';
 
 BooleanConstraint.make('is_visible') // Filter the `is_visible` column
+
+BooleanConstraint.make('creator.is_admin') // Filter the `is_admin` column on the `creator` relationship using dot syntax
 ```
 
 By default, the following operators are available:
@@ -118,12 +122,14 @@ By default, the following operators are available:
 
 ### Number constraints
 
-Number constraints allow you to filter numeric fields:
+Number constraints allow you to filter numeric fields. They can be used to filter any numeric field, including via relationships.
 
 ```ts
 import { NumberConstraint } from '@navette-js/tables';
 
 NumberConstraint.make('stock') // Filter the `stock` column
+
+NumberConstraint.make('orders.item_count') // Filter the `item_count` column on the `orders` relationship using dot syntax
 ```
 
 By default, the following operators are available:
@@ -146,25 +152,26 @@ NumberConstraint.make('stock')
 
 ### Aggregating related records
 
-When a number constraint targets a [relationship](#filtering-an-attribute-of-related-records), an "Aggregate" field lets the user compare the sum, average, minimum or maximum of the related values instead of each value:
+When using a relationship column with a number constraint, users also have the ability to "aggregate" related records: an "Aggregate" field lets them filter the column to be the sum, average, minimum or maximum of all the related records at once, instead of each value:
 
 ```ts
 import { NumberConstraint } from '@navette-js/tables';
 
-NumberConstraint.make('orderTotal')
-    .relationship('orders', 'total')
+NumberConstraint.make('orders.total')
 ```
 
 With "Sum" and "Is minimum" 1000, the rule keeps the customers whose orders total at least 1,000. Without an aggregate, it keeps those with at least one order of 1,000 or more.
 
 ### Date constraints
 
-Date constraints allow you to filter date fields:
+Date constraints allow you to filter date fields. They can be used to filter any date field, including via relationships.
 
 ```ts
 import { DateConstraint } from '@navette-js/tables';
 
 DateConstraint.make('created_at') // Filter the `created_at` column
+
+DateConstraint.make('creator.created_at') // Filter the `created_at` column on the `creator` relationship using dot syntax
 ```
 
 By default, the following operators are available:
@@ -340,7 +347,9 @@ RelationshipConstraint.make('categories')
 
 ### Filtering an attribute of related records
 
-To filter an attribute of a relationship, dot syntax (`creator.name`) is not supported: give the constraint its own name and call `relationship()` with the name of the relationship and the attribute to filter:
+The dot syntax (`creator.name`) filters the attribute after the last dot on the relationship before it: the rule matches the records that have at least one related record satisfying it (Laravel's `whereHas()`). Nested relationships are walked one after the other: `TextConstraint.make('author.country.name')`. The relationships must be declared in the model's `relationMappings`. The default label is the part of the name before the first dot ("Creator"); use `label()` to change it.
+
+When the name of the constraint should differ from the attribute, call `relationship()` with the name of the relationship and the attribute to filter:
 
 ```ts
 import { TextConstraint } from '@navette-js/tables';
@@ -350,7 +359,7 @@ TextConstraint.make('creatorName')
     .relationship('creator', 'name')
 ```
 
-The rule matches records that have at least one related record satisfying it. As with [relationship constraints](#relationship-constraints), the relationship must be declared in the model's `relationMappings`.
+The [aggregates](#aggregating-related-records) of number constraints, and [relationship constraints](#relationship-constraints), apply to a direct relationship of the table's model.
 
 ### Nullable constraints
 
@@ -372,7 +381,7 @@ A value is considered empty when it is `null` or an empty string.
 
 ## Filtering a different column
 
-By default, a constraint filters the column of the query that has its name. To filter another column, or a [computed column](/tables/columns/overview#displaying-data-from-relationships) of the query, use the `attribute()` method:
+By default, a constraint filters the column of the query that has its name. To filter another column, or a computed column of the query, use the `attribute()` method (to filter an attribute of related records, use the [dot syntax](#filtering-an-attribute-of-related-records)):
 
 ```ts
 import { TextConstraint } from '@navette-js/tables';

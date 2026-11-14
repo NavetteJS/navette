@@ -110,18 +110,16 @@ Count can be used to find the total number of records in the dataset:
 import { Count, TextColumn } from '@navette-js/tables';
 
 TextColumn.make('employee.name')
-    .getStateUsing(({ record }) => record.employee_name ?? null)
     .summarize(Count.make())
 ```
 
 ```preview
-// records: [{"title": "Prepare the release notes", "employee_name": "Ada Lovelace"}, {"title": "Review the pull requests", "employee_name": "Grace Hopper"}, {"title": "Update the screenshots", "employee_name": "Alan Turing"}]
+// records: [{"title": "Prepare the release notes", "employee": {"name": "Ada Lovelace"}}, {"title": "Review the pull requests", "employee": {"name": "Grace Hopper"}}, {"title": "Update the screenshots", "employee": {"name": "Alan Turing"}}]
 new Table()
     .pluralModelLabel('tasks')
     .columns([
         TextColumn.make('title'),
         TextColumn.make('employee.name')
-            .getStateUsing(({ record }) => record.employee_name ?? null)
             .summarize(Count.make()),
     ])
 ```
@@ -390,16 +388,37 @@ TextColumn.make('product.brand')
     .summarize(Values.make())
 ```
 
-## Summarizing a computed column
+## Summarizing relationships
 
-Summaries are computed on the column of the query that the column [sorts by](/tables/columns/overview#sorting-by-a-different-column). For a column whose state comes from a computed column, set the `column` option of `sortable()`:
+A [relationship column](/tables/columns/overview#displaying-data-from-relationships) is summarized over the related records of the table's records, each related record counted once. For example, the sum of the prices of the items of the listed orders:
 
 ```ts
 import { Sum, TextColumn } from '@navette-js/tables';
 
-TextColumn.make<Order>('items_count')
-    .numeric()
-    .sortable({ column: 'items_count' })
+TextColumn.make('items.price')
+    .summarize(Sum.make())
+```
+
+A [relationship aggregate](/tables/columns/overview#counting-relationships) column is summarized like any column of the query, for example the total number of items of the listed orders:
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make('items_count')
+    .counts('items')
+    .summarize(Sum.make())
+```
+
+## Summarizing a computed column
+
+Summaries are computed on the column of the query that the column [sorts by](/tables/columns/overview#sorting-by-a-different-column). For a column whose state comes from another column of the query, set the `column` option of `sortable()`:
+
+```ts
+import { Sum, TextColumn } from '@navette-js/tables';
+
+TextColumn.make<Order>('total')
+    .getStateUsing(({ record }) => record.total_in_cents / 100)
+    .sortable({ column: 'total_in_cents' })
     .summarize(Sum.make())
 ```
 

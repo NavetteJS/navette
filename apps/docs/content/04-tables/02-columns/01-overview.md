@@ -108,89 +108,128 @@ You may display placeholder text when the state of a text column is empty (`null
 import { TextColumn } from '@navette-js/tables';
 
 TextColumn.make('department.name')
-    .getStateUsing(({ record }) => record.department_name ?? null)
     .placeholder('No department')
 ```
 
 ```preview
-// records: [{"name": "Ada Lovelace", "department_name": "Engineering"}, {"name": "Grace Hopper", "department_name": null}, {"name": "Alan Turing", "department_name": "Research"}]
+// records: [{"name": "Ada Lovelace", "department": {"name": "Engineering"}}, {"name": "Grace Hopper", "department": null}, {"name": "Alan Turing", "department": {"name": "Research"}}]
 new Table()
     .pluralModelLabel('employees')
     .columns([
         TextColumn.make('name'),
         TextColumn.make('department.name')
-            .getStateUsing(({ record }) => record.department_name ?? null)
             .placeholder('No department'),
     ])
 ```
 
 ### Displaying data from relationships
 
-A column does not load relationships. A dot in a column name has no special meaning for the state: `TextColumn.make('author.name')` reads `record['author.name']`. To display data from a related record, add it to the list query of the data adapter, preferably as a subquery so that each record stays a single row and pagination stays exact:
-
-```ts
-import { ObjectionAdapter } from '@navette-js/database';
-
-static adapter = new ObjectionAdapter(Post, {
-    modify: (query) => {
-        query.select(
-            'posts.*',
-            Post.knex()('authors').select('authors.name').whereRaw('authors.id = posts.author_id').as('author_name'),
-        );
-    },
-});
-```
-
-Then read the computed column from the record. Keeping the relationship in the column's name gives it a meaningful default label ("Author"), and the `column` options make it [sortable](#sorting) and [searchable](#searching):
+You may use "dot notation" to access columns within relationships. The name of the relationship comes first, followed by a period, followed by the name of the column to display:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
 
-TextColumn.make<Post>('author.name')
-    .getStateUsing(({ record }) => record.author_name ?? null)
-    .searchable({ column: 'author_name' })
-    .sortable({ column: 'author_name' })
+TextColumn.make('author.name')
 ```
 
+The relationship must be declared by the Objection model (`relationMappings`). The table eager-loads it with the records (one query per relationship, not one per row), and nested relationships work too: `TextColumn.make('author.country.name')`. When a relationship holds several records (has-many, many-to-many), the state is the list of their values, which a text column can display [as a list](/tables/columns/text#listing-multiple-values):
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('tags.name')
+    .badge()
+```
+
+Use `distinctList()` to show each value only once. A first segment that is not a relationship is read as a key of an object attribute, such as a JSON column (`meta.title`); when the model lists that column in its `jsonAttributes`, the key can be sorted and searched too.
+
 ```preview
-// records: [{"title": "Introducing Navette", "author_name": "Ada Lovelace"}, {"title": "Building your first panel", "author_name": "Grace Hopper"}, {"title": "Ten tips for faster tables", "author_name": "Alan Turing"}]
+// records: [{"title": "Introducing Navette", "author": {"name": "Ada Lovelace"}, "tags": [{"name": "news"}, {"name": "release"}]}, {"title": "Building your first panel", "author": {"name": "Grace Hopper"}, "tags": [{"name": "tutorial"}]}, {"title": "Ten tips for faster tables", "author": {"name": "Alan Turing"}, "tags": []}]
 new Table()
     .pluralModelLabel('posts')
     .columns([
         TextColumn.make('title'),
-        TextColumn.make('author.name')
-            .getStateUsing(({ record }) => record.author_name ?? null)
-            .searchable({ column: 'author_name' })
-            .sortable({ column: 'author_name' }),
+        TextColumn.make('author.name'),
+        TextColumn.make('tags.name').badge(),
     ])
 ```
 
+Relationship columns can be [sorted](#sorting) and [searched](#searching) like any other column: the search matches records whose related record matches (`whereExists`), and the sort orders by the related value with a subquery, so each record stays a single row and the pagination stays exact. Sorting is only possible through relationships that hold a single record (belongs-to-one, has-one).
+
+<Aside variant="info">
+Relationships are handled by the data adapter. `ObjectionAdapter` supports them; a [custom adapter](/advanced/data-adapters) receives the relationships to load in `with`, and the dot-notation names in its search and sort columns. A custom adapter that returns records with nested objects (`{ author: { name } }`) displays them without doing anything.
+</Aside>
+
 #### Counting relationships
 
-To count related records, add a counting subquery in the same way:
+If you wish to count the number of related records in a column, you may use the `counts()` method:
 
 ```ts
-import { ObjectionAdapter } from '@navette-js/database';
 import { TextColumn } from '@navette-js/tables';
 
-static adapter = new ObjectionAdapter(Order, {
-    modify: (query) => {
-        query.select(
-            'orders.*',
-            Order.knex()('order_items').count('*').whereRaw('order_items.order_id = orders.id').as('items_count'),
-        );
-    },
-});
+TextColumn.make('users_count').counts('users')
+```
 
-// In `table()`:
-TextColumn.make<Order>('items_count')
-    .label('Items')
-    .numeric()
-    .sortable()
+In this example, `users` is the name of the relationship to count from. The name of the column must be `users_count`, as this is the convention (Laravel's `withCount()`) used to name the result. A camel-case relationship gives a snake-case name: `blogPosts` gives `blog_posts_count`. The count is selected with the records by a subquery, so the column can be sorted.
+
+You may choose another name with `as`: `counts('users as members_count')`, for a column named `members_count`.
+
+If you'd like to scope the relationship before counting, you can pass an object to the method, where the key is the relationship name and the value is the function to scope the Objection query with:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('users_count').counts({
+    users: (query) => query.where('is_active', true),
+})
+```
+
+#### Determining relationship existence
+
+If you simply wish to indicate whether related records exist in a column, you may use the `exists()` method:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('users_exists').exists('users')
+```
+
+In this example, `users` is the name of the relationship to check for existence. The name of the column must be `users_exists`. The state is `true` or `false`, which suits an [icon column](/tables/columns/icon) with `boolean()`.
+
+If you'd like to scope the relationship before checking existence, you can pass an object to the method, where the key is the relationship name and the value is the function to scope the Objection query with:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('users_exists').exists({
+    users: (query) => query.where('is_active', true),
+})
+```
+
+#### Aggregating relationships
+
+Navette provides several methods for aggregating a relationship field, including `avg()`, `max()`, `min()` and `sum()`. For instance, if you wish to show the average of a field on all related records in a column, you may use the `avg()` method:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('users_avg_age').avg('users', 'age')
+```
+
+In this example, `users` is the name of the relationship, while `age` is the field that is being averaged. The name of the column must be `users_avg_age`: the relationship, the function and the field (`orders_sum_total`, `orders_max_total`).
+
+If you'd like to scope the relationship before aggregating, you can pass an object to the method, where the key is the relationship name and the value is the function to scope the Objection query with:
+
+```ts
+import { TextColumn } from '@navette-js/tables';
+
+TextColumn.make('users_avg_age').avg({
+    users: (query) => query.where('is_active', true),
+}, 'age')
 ```
 
 <Aside variant="info">
-The `modify` function of the adapter applies to every query of the resource, including the queries of record pages and actions. Computed columns are read-only: if the model writes all of its attributes, remove them before saving, for example in `$formatDatabaseJson()`.
+Relationship and column names are written by you, never taken from the browser, and must be plain identifiers. Aggregates need a data adapter that supports relationships (`ObjectionAdapter`); with any other adapter, the table throws an error naming the column and the adapter.
 </Aside>
 
 ## Setting a column's label
@@ -238,14 +277,14 @@ Each click cycles through ascending order, descending order, and no sort.
 
 ### Sorting by a different column
 
-By default, the table is sorted by the column of the query that has the column's name. If the state of the column comes from another column of the query, such as a [computed column](#displaying-data-from-relationships), pass it with the `column` option:
+By default, the table is sorted by the column of the query that has the column's name (through the relationship for a [relationship column](#displaying-data-from-relationships) such as `author.name`). If the state of the column comes from another column of the query, pass it with the `column` option, which may be a relationship column too:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
 
-TextColumn.make<Post>('author.name')
-    .getStateUsing(({ record }) => record.author_name ?? null)
-    .sortable({ column: 'author_name' })
+TextColumn.make<Post>('author')
+    .getStateUsing(({ record }) => `${record.author?.first_name} ${record.author?.last_name}`)
+    .sortable({ column: 'author.last_name' })
 ```
 
 When the sort column evolves in the opposite direction of the displayed value, set `inverted: true`. For example, an age computed from a birth date is sorted by the date, in reverse:
@@ -287,14 +326,14 @@ The search term is split into words. Each word must appear, ignoring case, in at
 
 ### Searching a different column
 
-By default, the column of the query that has the column's name is searched. To search a [computed column](#displaying-data-from-relationships) instead, pass it with the `column` option:
+By default, the column of the query that has the column's name is searched (through the relationship for a [relationship column](#displaying-data-from-relationships)). To search another column instead, pass it with the `column` option, which may be a relationship column too:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';
 
-TextColumn.make<Order>('customer.name')
-    .getStateUsing(({ record }) => record.customer_name ?? null)
-    .searchable({ column: 'customer_name' })
+TextColumn.make<Order>('customer')
+    .getStateUsing(({ record }) => record.customer?.full_name ?? null)
+    .searchable({ column: 'customer.last_name' })
 ```
 
 <Aside variant="info">

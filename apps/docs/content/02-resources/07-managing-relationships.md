@@ -88,18 +88,22 @@ static table(table: Table): Table {
 
 ## Listing related records
 
-The table of a relation manager is a normal [table](/tables/overview): search, sort, filters and pagination all go through the adapter returned by `adapterFor()`. To display a column of another table, add it to the query with a subquery:
+The table of a relation manager is a normal [table](/tables/overview): search, sort, filters and pagination all go through the adapter returned by `adapterFor()`. Its columns can display the related records' own relationships with [dot notation](/tables/columns/overview#displaying-data-from-relationships), and [relationship aggregates](/tables/columns/overview#counting-relationships):
 
 ```ts
 static adapterFor(ownerKey: string): DataAdapter {
     return new ObjectionAdapter(Payment, {
         modify: (query) => {
-            const knex = Payment.knex();
-            query
-                .select('payments.*', knex('orders').select('orders.number').whereRaw('orders.id = payments.order_id').as('order_number'))
-                .whereIn('payments.order_id', knex('orders').select('id').where({ customer_id: ownerKey }));
+            query.whereIn('payments.order_id', Payment.knex()('orders').select('id').where({ customer_id: ownerKey }));
         },
     });
+}
+
+static table(table: Table): Table {
+    return table.columns([
+        TextColumn.make('order.number').searchable().sortable(),
+        TextColumn.make('amount').money('EUR'),
+    ]);
 }
 ```
 

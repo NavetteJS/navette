@@ -2,6 +2,7 @@
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
 import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeUrl, js, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Enum, type EnumCase, type Lazy, configured } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
+import { loadMissingRelationships, loadRelationshipAggregates, normalizeRelationshipAggregates, readRecordPath, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregateFunction } from '@navette-js/support';
 import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
 
 export { setCodeHighlighterLoader } from './code-highlighter.ts';
@@ -291,9 +292,16 @@ abstract class Entry extends Component {
         if (this._state) state = await this._state(ctx);
         else {
             const record = ctx.record as any;
-            // `department.name`: flat `department_name` attribute (column computed by the adapter), otherwise a path into the object.
-            if (record && this._name!.includes('.')) state = record[this._name!.replace(/\./g, '_')] ?? this._name!.split('.').reduce((node: any, key) => node?.[key], record);
-            else state = record?.[this._name!];
+            // `department.name`: flat `department_name` attribute (column computed by the adapter), otherwise the relationship,
+            // loaded when missing (Objection models), or a path into the object; a has-many relationship gives a list of values.
+            if (record && this._name!.includes('.')) {
+                state = record[this._name!.replace(/\./g, '_')];
+                if (state === undefined) { await loadMissingRelationships(record, [this._name!]); state = readRecordPath(record, this._name!); }
+            } else {
+                state = record?.[this._name!];
+                // A relationship named like the entry (`RepeatableEntry.make('comments')`) is loaded when missing.
+                if (state === undefined && record) { await loadMissingRelationships(record, [this._name!]); state = record[this._name!]; }
+            }
         }
         return state === null || state === undefined ? (this._default ?? state) : state;
     }
@@ -380,6 +388,27 @@ type MoneyOptions = { divideBy?: number | null; locale?: string | null; decimalP
 
 /** Read-only text: badge, color, icon, money, number, date, list, Markdown and HTML. */
 export class TextEntry extends Entry {
+    /** State of an aggregate of related records, loaded for the record (Laravel's `loadCount()`, `loadSum()`…) under the entry's name. */
+    private aggregateState(fn: RelationshipAggregateFunction, relationships: AggregatedRelationships | null, column: string | null): this {
+        if (relationships === null) { this._state = null; return this; }
+        const aggregates = normalizeRelationshipAggregates(fn, relationships, column, `TextEntry ${this._name}`);
+        return this.state(async (ctx) => {
+            const record = ctx.record as any;
+            if (record === null || record === undefined) return null;
+            await loadRelationshipAggregates(record, aggregates, `TextEntry ${this._name}`);
+            return record[this._name!] ?? null;
+        });
+    }
+    /** Number of related records: `TextEntry.make('posts_count').counts('posts')` (also `'posts as alias'` or `{ posts: (query) => … }`). */
+    counts(relationships: AggregatedRelationships | null): this { return this.aggregateState('count', relationships, null); }
+    /** Average of a column of the related records: `TextEntry.make('posts_avg_rating').avg('posts', 'rating')`. */
+    avg(relationship: AggregatedRelationship | null, column: string | null): this { return this.aggregateState('avg', relationship, column); }
+    /** Sum of a column of the related records: `TextEntry.make('orders_sum_total').sum('orders', 'total')`. */
+    sum(relationship: AggregatedRelationship | null, column: string | null): this { return this.aggregateState('sum', relationship, column); }
+    /** Minimum of a column of the related records: `TextEntry.make('orders_min_total').min('orders', 'total')`. */
+    min(relationship: AggregatedRelationship | null, column: string | null): this { return this.aggregateState('min', relationship, column); }
+    /** Maximum of a column of the related records: `TextEntry.make('orders_max_total').max('orders', 'total')`. */
+    max(relationship: AggregatedRelationship | null, column: string | null): this { return this.aggregateState('max', relationship, column); }
     private _badge = false;
     private _color: PerItem<string | null> = null;
     private _icon: PerItem<string | null> = null;

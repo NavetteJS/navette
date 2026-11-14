@@ -1,5 +1,8 @@
 // @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
+import { readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregate } from '@navette-js/support';
+import { addRelationshipsToQuery, ensureRelationshipSupport, groupScopeThroughRelationship, relationshipWriteTarget } from './relationships.ts';
+export { addRelationshipsToQuery, ensureRelationshipSupport } from './relationships.ts';
 import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { Checkbox, Select, Toggle } from '@navette-js/forms';
@@ -126,6 +129,29 @@ export abstract class Column<R = any> {
     alignLeft(): this { return this.alignment('left'); }
     alignCenter(): this { return this.alignment('center'); }
     getStateUsing(resolver: StateResolver<R>): this { this._state = resolver; return this; }
+    private _relationshipAggregates: RelationshipAggregates | null = null;
+    private aggregatesOf(): RelationshipAggregates { return (this._relationshipAggregates ??= new RelationshipAggregates(`Column ${this.name}`)); }
+    /**
+     * Counts the related records (Laravel's `withCount()`): `TextColumn.make('posts_count').counts('posts')`. Also `'posts as alias'`,
+     * a list, or `{ posts: (query) => query.where('published', true) }` to count some of them. The column is named like the alias.
+     */
+    counts(relationships: AggregatedRelationships | null): this { this.aggregatesOf().set('count', relationships); return this; }
+    /** Whether related records exist (`withExists()`): `IconColumn.make('posts_exists').exists('posts').boolean()`. */
+    exists(relationships: AggregatedRelationships | null): this { this.aggregatesOf().set('exists', relationships); return this; }
+    /** Average of a column of the related records (`withAvg()`): `TextColumn.make('posts_avg_rating').avg('posts', 'rating')`. */
+    avg(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('avg', relationship, column); return this; }
+    /** Sum of a column of the related records (`withSum()`): `TextColumn.make('orders_sum_total').sum('orders', 'total')`. */
+    sum(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('sum', relationship, column); return this; }
+    /** Minimum of a column of the related records (`withMin()`): column `orders_min_total`. */
+    min(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('min', relationship, column); return this; }
+    /** Maximum of a column of the related records (`withMax()`): column `orders_max_total`. */
+    max(relationship: AggregatedRelationship | null, column: string | null): this { this.aggregatesOf().set('max', relationship, column); return this; }
+    /** Relationship aggregates selected by the list query for this column. */
+    getRelationshipAggregates(): RelationshipAggregate[] { return this._relationshipAggregates?.all() ?? []; }
+    private _distinctList = false;
+    /** With a relationship holding several records (`tags.name`), repeated values are shown once. */
+    distinctList(condition = true): this { this._distinctList = condition; return this; }
+    isDistinctList(): boolean { return this._distinctList; }
     protected _enum: Enum<string | number> | null = null;
     /**
      * Displays values through an enum (label, color, icon), like Filament does for an attribute cast to an enum. Without it,
@@ -158,7 +184,9 @@ export abstract class Column<R = any> {
     /** Suffix of the `fi-ta-header-cell-…` / `fi-ta-cell-…` classes: underscores become dashes, dots are kept. */
     getCssName(): string { return this.name.replace(/_/g, '-'); }
     async getState(record: R): Promise<unknown> {
-        const state = this._state ? await this._state({ record }) : (record as any)[this.name];
+        // `author.name` reads the loaded relationship (`record.author.name`); `tags.name` gives the list of the related names.
+        let state = this._state ? await this._state({ record }) : readRecordPath(record, this.name);
+        if (this._distinctList && Array.isArray(state)) state = [...new Set(state)];
         return (state === null || state === undefined || state === '') && this._default !== null ? this._default : state;
     }
     /** True for editable cells: they are not wrapped in a link or button to the record. */
@@ -653,7 +681,8 @@ export class Group<R = any> {
     /** Group value of a record, as text; `null` when empty. */
     getStringKey(record: R): string | null {
         if (this._keyUsing) { const custom = this._keyUsing(record); return custom === null || custom === undefined || custom === '' ? null : String(custom); }
-        let key = (record as any)?.[this.getColumn()];
+        let key = readRecordPath(record, this.getColumn()) as any;
+        if (Array.isArray(key)) key = key[0];
         if (key === null || key === undefined || key === '') return null;
         if (typeof key === 'boolean') key = key ? 1 : 0;
         return this._date ? String(key).slice(0, 10) : String(key);
@@ -670,6 +699,8 @@ export class Group<R = any> {
     /** Restricts a query to the records of the group with the given key. */
     scope(query: any, key: string | null): void {
         if (this._scopeUsing) { this._scopeUsing(query, key); return; }
+        // `author.name`: records whose related author has this name (or no author, for the empty group).
+        if (groupScopeThroughRelationship(query, this.getColumn(), key, this._date)) return;
         if (key === null) query.where((sub: any) => sub.whereNull(this.getColumn()).orWhere(this.getColumn(), ''));
         else if (this._date) query.whereRaw('date(??) = ?', [this.getColumn(), key]);
         else query.where(this.getColumn(), key);
@@ -1010,7 +1041,8 @@ export class IconColumn<R = any> extends Column<R> {
 
 /** Application-defined validation rule of an editable column: synchronous check and message (`:attribute` already replaced). */
 export type ColumnValidationRule = { name: string; passes: (value: unknown) => boolean; message: (attribute: string) => string };
-type StateHook<R> = (ctx: { state: unknown; record: R }) => unknown | Promise<unknown>;
+/** `relatedRecord`: for a relationship column (`author.name`), the related record whose attribute is written. */
+type StateHook<R> = (ctx: { state: unknown; record: R; relatedRecord?: unknown }) => unknown | Promise<unknown>;
 
 const isBlank = (value: unknown) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '') || (Array.isArray(value) && value.length === 0);
 const isNumeric = (value: unknown) => (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)));
@@ -1106,18 +1138,26 @@ export abstract class EditableColumn<R = any> extends Column<R> {
     /** Value written from a validated value: blank values become `null`. */
     castState(input: unknown): unknown { return isBlank(input) ? null : input; }
     /**
-     * Saves an already validated value. Only the column's declared name is written: a relationship column (`author.name`)
-     * can only be edited with `updateStateUsing()`.
+     * Saves an already validated value. Only the column's declared name is written. A relationship column (`author.name`) writes
+     * the attribute of the single related record (the hooks receive it as `relatedRecord`); a key of a JSON attribute
+     * (`meta.lang`) updates that attribute of the record.
      */
     async updateState(record: R, input: unknown, adapter: Pick<DataAdapter<R>, 'getKey' | 'update'>): Promise<unknown> {
         const state = this.castState(input);
-        await this._beforeStateUpdated?.({ state, record });
+        const target = this.name.includes('.') ? await relationshipWriteTarget(record, this.name) : null;
+        const relatedRecord = target?.relatedRecord ?? null;
+        await this._beforeStateUpdated?.({ state, record, relatedRecord });
         if (this._updateStateUsing) {
-            try { return await this._updateStateUsing({ state, record }); } finally { await this._afterStateUpdated?.({ state, record }); }
+            try { return await this._updateStateUsing({ state, record, relatedRecord }); } finally { await this._afterStateUpdated?.({ state, record, relatedRecord }); }
         }
-        if (this.name.includes('.')) return { error: t('filament-tables::table.columns.editable.unavailable') };
-        await adapter.update(adapter.getKey(record), { [this.name]: state });
-        await this._afterStateUpdated?.({ state, record });
+        if (target?.save) await target.save(state);
+        else if (this.name.includes('.')) {
+            const [attribute, ...path] = this.name.split('.');
+            const current = (record as any)?.[attribute];
+            if (path.length !== 1 || !current || typeof current !== 'object' || Array.isArray(current)) return { error: t('filament-tables::table.columns.editable.unavailable') };
+            await adapter.update(adapter.getKey(record), { [attribute]: { ...current, [path[0]]: state } });
+        } else await adapter.update(adapter.getKey(record), { [this.name]: state });
+        await this._afterStateUpdated?.({ state, record, relatedRecord });
         return state;
     }
     /** `x-tooltip` expression of editable controls: the column tooltip, replaced by the validation error when there is one. */
@@ -2200,6 +2240,14 @@ export function sanitizeColumnState<R>(table: Table<R>, state: unknown): ColumnS
 }
 
 /**
+ * Search term of a column's individual search field: `author.name` is bound as `tableColumnSearches.author.name`, which the
+ * browser state may hold nested (`{ author: { name } }`), like Filament's `data_get()`. Only text is accepted.
+ */
+function columnSearchOf(host: TableHost, name: string): string {
+    const value = readRecordPath(host.tableColumnSearches ?? {}, name);
+    return typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
+}
+/**
  * List query (search, column searches, filters, sort) for the host's state, without pagination.
  * Only what the table declares is accepted, whatever state the browser sends.
  */
@@ -2209,11 +2257,13 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
     const query: Omit<ListQuery, 'page' | 'perPage'> = {
         search: host.tableSearch,
         searchColumns: table.getColumns().filter((c) => c.isGloballySearchable()).map((c) => c.getSearchColumn()),
-        columnSearches: Object.fromEntries(table.getColumns().filter((c) => c.isIndividuallySearchable() && String(host.tableColumnSearches?.[c.name] ?? '').trim() !== '').map((c) => [c.name, String(host.tableColumnSearches[c.name])])),
+        columnSearches: Object.fromEntries(table.getColumns().filter((c) => c.isIndividuallySearchable() && columnSearchOf(host, c.name) !== '').map((c) => [c.getSearchColumn(), columnSearchOf(host, c.name)])),
         sort: sortColumn?.isSortable() ? { column: sortColumn.getSortColumn(), direction: ((direction === 'desc') !== sortColumn.isSortInverted() ? 'desc' : 'asc') as SortDirection } : table.getDefaultSort(),
     };
     const grouping = getTableGrouping(table, host);
     if (grouping) query.groupSort = { column: grouping.group.getColumn(), direction: grouping.direction, ...(grouping.group.getOrderQueryUsing() ? { modify: grouping.group.getOrderQueryUsing()! } : {}) };
+    // Relationships of dot-notation columns are eager-loaded, and relationship aggregates selected (`posts_count`).
+    addRelationshipsToQuery(query, table.getColumns(), grouping ? [grouping.group.getColumn()] : []);
     // The host can restrict the query (active list tab).
     (host as any).modifyTableQuery?.(query);
     for (const modifier of table.getQueryModifiers()) (query.modifiers ??= []).push((q) => { modifier(q); });
@@ -2295,6 +2345,7 @@ export async function getTableRecords<R>(table: Table<R>, host: TableHost, adapt
     // The page size comes from the browser: only a declared option is accepted.
     const requested = host.tableRecordsPerPage === 'all' || (host.tableRecordsPerPage as unknown) === 'all' ? 'all' : Number(host.tableRecordsPerPage);
     const option = options.includes(requested as any) ? requested : options[0];
+    ensureRelationshipSupport(adapter, { aggregates: table.getColumns().flatMap((c) => c.getRelationshipAggregates()) });
     if (!table.isPaginated() || option === 'all') return adapter.paginate({ ...getTableQuery(table, host), page: 1, perPage: MAX_UNPAGINATED_RECORDS });
     return adapter.paginate({ ...getTableQuery(table, host), page: Number(host.paginators.page) || 1, perPage: option as number });
 }
@@ -2381,7 +2432,7 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     const aggregate = (query: Omit<ListQuery, 'page' | 'perPage'>): Promise<SummaryValues> => adapter.aggregate(query, aggregateColumns());
     const query = getTableQuery(table, host);
     const all = await aggregate(query);
-    const present = (name: string) => page.records.map((record) => (record as any)[name]).filter((v) => v !== null && v !== undefined && v !== '');
+    const present = (name: string) => page.records.flatMap((record) => [readRecordPath(record, name)].flat()).filter((v) => v !== null && v !== undefined && v !== '');
     const onPage: SummaryValues = {
         count: page.records.length,
         sum: Object.fromEntries(names('sum').map((name) => [name, present(name).reduce((total, v) => total + Number(v), 0)])),
@@ -2458,7 +2509,8 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
             const groupQuery = { ...query, modifiers: [...(query.modifiers ?? []), (q: any) => group.scope(q, key)] };
             // Aggregates of every group in one grouped query (`groupQueryUsing()`); a group it does not return is aggregated alone.
             const groupQueryCallback = group.getGroupQuery();
-            if (groupQueryCallback && adapter.aggregateGroups && !groupedValues.has(group)) {
+            // Relationship columns (`items.price`) are aggregated one group at a time, through the related records.
+            if (groupQueryCallback && adapter.aggregateGroups && !groupedValues.has(group) && !Object.values(aggregateColumns()).flat().some((name) => name.includes('.'))) {
                 groupedValues.set(group, adapter.aggregateGroups(query, aggregateColumns(), groupQueryCallback).then((rows) => {
                     const map = new Map<string, SummaryValues>();
                     for (const { key: value, ...values } of rows) { const groupKey = group.getKeyFromGroupValue(value); if (groupKey !== null && !map.has(groupKey)) map.set(groupKey, values); }
@@ -2482,6 +2534,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     const grouping = reordering ? null : getTableGrouping(table, host);
     // Groups only: no pagination and no record rows, just one summary row per group.
     const groupsOnly = grouping !== null && table.isGroupsOnly();
+    ensureRelationshipSupport(adapter, { aggregates: table.getColumns().flatMap((c) => c.getRelationshipAggregates()) });
     const page = reordering
         ? await adapter.paginate({ ...getTableQuery(table, host), sort: { column: reorderColumn!, direction: 'asc' }, page: 1, perPage: REORDER_LIMIT })
         : groupsOnly ? await adapter.paginate({ ...getTableQuery(table, host), page: 1, perPage: GROUPS_ONLY_LIMIT }) : await getTableRecords(table, host, adapter);
