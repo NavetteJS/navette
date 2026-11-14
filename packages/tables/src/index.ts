@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 views.namespace('filament-tables', fileURLToPath(new URL('../views', import.meta.url)));
 export * from './query-builder.ts';
+export { makeTableSelectTable } from './table-select.ts';
 
 /** Render hook slots of a table. */
 export const TablesRenderHook = {
@@ -1950,6 +1951,17 @@ export class Table<R = any> {
     /** Maximum number of records the user may select at once (also enforced on the server). */
     maxSelectableRecords(count: number | null): this { this._maxSelectableRecords = count !== null && count > 0 ? Math.floor(count) : null; return this; }
     getMaxSelectableRecords(): number | null { return this._maxSelectableRecords; }
+    private _queryModifiers: ((query: any) => unknown)[] = [];
+    /**
+     * Changes the table's query (an Objection query builder): only the records it keeps are shown, and, in a `TableSelect`,
+     * only those can be selected. Several calls add up.
+     */
+    modifyQueryUsing(callback: (query: any) => unknown): this { this._queryModifiers.push(callback); return this; }
+    getQueryModifiers(): ((query: any) => unknown)[] { return this._queryModifiers; }
+    private _arguments: Record<string, unknown> = {};
+    /** Values passed to the table by its host (the `tableArguments()` of a `TableSelect`), read with `getArguments()`. */
+    arguments(args: Record<string, unknown>): this { this._arguments = args ?? {}; return this; }
+    getArguments(): Record<string, unknown> { return this._arguments; }
     /** "Select all" only selects the records of the current page. */
     selectCurrentPageOnly(condition = true): this { this._selectsCurrentPageOnly = condition; return this; }
     selectsCurrentPageOnly(): boolean { return this._selectsCurrentPageOnly; }
@@ -2111,6 +2123,7 @@ export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQue
     if (grouping) query.groupSort = { column: grouping.group.getColumn(), direction: grouping.direction, ...(grouping.group.getOrderQueryUsing() ? { modify: grouping.group.getOrderQueryUsing()! } : {}) };
     // The host can restrict the query (active list tab).
     (host as any).modifyTableQuery?.(query);
+    for (const modifier of table.getQueryModifiers()) (query.modifiers ??= []).push((q) => { modifier(q); });
     for (const filter of table.getFilters()) {
         const state = host.tableFilters?.[filter.name];
         filter.apply(query, state && typeof state === 'object' ? state : filter.getDefaultState());
@@ -2222,6 +2235,11 @@ export type RenderTableOptions<R> = {
     bulkActions?: string[];
     /** HTML of the filters form (`tableFiltersForm` schema), if there are filters. */
     filtersForm?: string | null;
+    /**
+     * Record checkboxes without bulk actions (`TableSelect`): the selection is entangled with this Livewire property of the
+     * host (a key, or a list of keys), and the deselected records of "select all" are not tracked.
+     */
+    selection?: { property: string; disabled?: boolean } | null;
 };
 
 /** Maximum number of rows shown (and reorderable) in reordering mode. */
@@ -2335,7 +2353,8 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     const number = (n: number) => n.toLocaleString('en-US');
     const visible = getVisibleColumns(table, host);
     const rows = [];
-    const hasBulk = (options.bulkActions ?? []).length > 0;
+    const selectionOnly = !reordering && !!options.selection;
+    const hasBulk = (options.bulkActions ?? []).length > 0 || selectionOnly;
     const selectable = (hasBulk || reordering) && !groupsOnly;
     const filled = (value: string | null) => value !== null && value.trim() !== '';
     // A new group starts when the title changes; the previous group then gets its summary row.
@@ -2418,6 +2437,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         randomKey: () => Array.from(randomBytes(16), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join(''),
         // "Select all" covers every record of the current query.
         allCount: table.getPaginationMode() === 'simple' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length : page.total,
+        selection: selectionOnly ? { property: options.selection!.property, disabled: options.selection!.disabled === true } : null,
         maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() === 'simple' ? rows.length : page.total,
         columns: visible.map((c) => ({ name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), responsive: c.getResponsiveClasses(), width: c.getWidth(), growable: c.getWidth() === null && c.canGrow(), wrapHeader: c.canHeaderWrap(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none' })),
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'), grayButtonClasses: classes('button', 'gray'), indicatorColorClasses: (color: string) => classes('badge', color),

@@ -15,6 +15,7 @@ import Highlight from '@tiptap/extension-highlight';
 import { RICH_CONTENT_EXTENSIONS, SizedImage, customRichContentExtensions, registerTextColors, sanitizeCssColor, TextColor, textColorsForJs, MentionProvider, type CustomBlockClass } from './rich-content.ts';
 export { CustomBlockNode, GridColumnNode, GridNode, LeadNode, MentionNode, MentionProvider, MergeTagNode, registerRichContentExtensions, RichContentCustomBlock, RichContentRenderer, sanitizeCssColor, SizedImage, SmallMark, TextColor, TextColorMark, type CustomBlockClass } from './rich-content.ts';
 import { RichEditorTool } from './rich-editor-tool.ts';
+import { createTableSelectFields } from './table-select.ts';
 export { RichEditorTool, type RichEditorToolDefinition } from './rich-editor-tool.ts';
 import { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
 export { RICH_EDITOR_TOOL_DEFINITIONS } from './rich-editor-tools.ts';
@@ -304,6 +305,12 @@ export abstract class Field extends Component {
         });
     }
 }
+
+// Records picked from a table (inline or in a modal): see ./table-select.ts.
+export { getTableSelectDataAdapter, getTableSelectDefinition, useTableSelectDriver, type TableConfiguration, type TableSelectDefinition, type TableSelectDriver } from './table-select.ts';
+export const { TableSelect, ModalTableSelect } = createTableSelectFields({ Field, colors: () => colorManager });
+export type TableSelect = InstanceType<typeof TableSelect>;
+export type ModalTableSelect = InstanceType<typeof ModalTableSelect>;
 
 export class TextInput extends Field {
     private _type: string | null = null;
