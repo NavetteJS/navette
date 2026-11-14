@@ -441,13 +441,17 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
 export class ExportAction {
     /** Records the exports requested by export actions instead of building them (tests); `restore()` stops it. */
     static fake(): ExportFake { exportFake?.restore(); exportFake = new ExportFake(); return exportFake; }
-    static make(name = 'export'): ExportActionInstance { return makeExportAction(name, false); }
+    /** Name of `ExportAction.make()` without a name. */
+    static getDefaultName(): string { return 'export'; }
+    static make(name: string | null = null): ExportActionInstance { return makeExportAction(name ?? this.getDefaultName(), false); }
 }
 /** Exports the selected records to CSV and XLSX files. */
 export class ExportBulkAction {
     /** Same fake as `ExportAction.fake()`: it records both actions. */
     static fake(): ExportFake { return ExportAction.fake(); }
-    static make(name = 'export'): ExportActionInstance { return makeExportAction(name, true); }
+    /** Name of `ExportBulkAction.make()` without a name. */
+    static getDefaultName(): string { return 'export'; }
+    static make(name: string | null = null): ExportActionInstance { return makeExportAction(name ?? this.getDefaultName(), true); }
 }
 
 // ------------------------------------------------------------------ background work and history

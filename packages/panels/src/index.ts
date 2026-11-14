@@ -12,7 +12,7 @@ import express, { type Request, type Response, type Router } from 'express';
 import { Action, ActionHalt, AuthorizationResponse, useColorManager, ActionGroup, useCsrfToken as useActionsCsrfToken, type ActionCallContext } from '@navette-js/actions';
 import { actionRateLimitKey, clearDefaultActionUrlScript, getActionRateLimitStore, MountedAction, readDefaultActionQuery, type MountedActionHost } from './action-support.ts';
 export { actionRateLimitKey, getActionRateLimitStore, MemoryActionRateLimitStore, MountedAction, readDefaultActionQuery, useActionRateLimitStore, type ActionRateLimitStore, type DefaultActionQuery } from './action-support.ts';
-export { AuthorizationResponse } from '@navette-js/actions';
+export { AuthorizationResponse, DenyResponse, type DenyMessage } from '@navette-js/actions';
 /** A mounted action in the component state: name, arguments, server-side context and form data. */
 export type MountedActionState = { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown>; /** Read by the unsaved changes alert of the browser. */ hasUnsavedChangesAlert?: boolean };
 /** Evaluation context of an action's visibility and authorization on mount. */
@@ -4353,8 +4353,9 @@ export class ListRecords extends Page implements TableHost {
             const records = await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)));
             for (const record of records) {
                 if (!record) { failed++; continue; }
-                const allowed = authorization === null ? true : typeof authorization === 'string' ? await canOn(this, authorization, record) : await authorization(record, { ...ctx, record });
-                if (!allowed) { unauthorized++; continue; }
+                // A denial may be a `DenyResponse`: its message is grouped by key in the failure notification.
+                const response = authorization === null ? null : typeof authorization === 'string' ? await inspectOn(this, authorization, record) : AuthorizationResponse.from(await authorization(record, { ...ctx, record }));
+                if (response?.denied()) { unauthorized++; action.reportBulkAuthorizationFailure(response); continue; }
                 const reportedBefore = action.getSuccessfulSelectedRecordsCount();
                 try {
                     const result = await process(record);

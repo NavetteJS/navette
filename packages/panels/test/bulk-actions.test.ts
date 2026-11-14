@@ -3,7 +3,7 @@ import { after, before, test } from 'node:test';
 import { Action } from '@navette-js/actions';
 import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database';
 import { TextColumn, TrashedFilter, type Table } from '@navette-js/tables';
-import { DeleteBulkAction, Panel, Resource, type Policy, type User } from '../src/index.ts';
+import { AuthorizationResponse, DenyResponse, DeleteBulkAction, Panel, Resource, type Policy, type User } from '../src/index.ts';
 import { runInRequest } from '../src/notifications.ts';
 
 class Post extends Model { static tableName = 'posts'; }
@@ -64,6 +64,25 @@ test('`authorizeIndividualRecords()`: unauthorized records are skipped and repor
     assert.equal(pending[0].title, 'Deleted 2 of 3');
     assert.match(String(pending[0].body), /permission to delete 1/);
     assert.deepEqual(list.selectedTableRecords, [], 'selection cleared');
+});
+
+test('`DenyResponse`: denials are grouped by key, each message gets its count; plain denial messages are grouped by text', async () => {
+    await db('posts').delete();
+    await db('posts').insert([{ title: 'A', status: 'admin' }, { title: 'B', status: 'admin' }, { title: 'C', status: 'locked' }, { title: 'D', status: 'draft' }]);
+    const list = await page();
+    list.selectedTableRecords = (await db('posts')).map((row: any) => String(row.id));
+    const action = Action.make('purge').failureNotificationTitle((success, total) => `${success}/${total}`).missingBulkAuthorizationFailureNotificationMessage((count) => `${count} without message`)
+        .authorizeIndividualRecords((record: any) => record.status === 'admin'
+            ? DenyResponse.make('cannot_purge_admin', (failureCount, totalCount) => (failureCount === totalCount ? 'All were admins.' : `${failureCount} of ${totalCount} were admins.`))
+            : record.status === 'locked' ? AuthorizationResponse.deny('Locked.') : true);
+    const { result, pending } = await runInRequest('bulk', () => list.processSelectedRecords(action, () => true));
+    assert.deepEqual(result, { total: 4, success: 1, unauthorized: 3, failed: 0 });
+    assert.deepEqual([pending[0].title, pending[0].body], ['1/4', '2 of 4 were admins. Locked.']);
+    const plain = Action.make('purge').failureNotificationTitle('Failed').missingBulkAuthorizationFailureNotificationMessage((count) => `${count} without message`).authorizeIndividualRecords((record: any) => record.status === 'draft');
+    const second = await runInRequest('bulk', () => list.processSelectedRecords(plain, () => true));
+    assert.equal(second.pending[0].body, '3 without message');
+    assert.equal(DenyResponse.make('k', 'Text').message(5, 9), 'Text');
+    assert.equal(DenyResponse.make('k', 'Text').getKey(), 'k');
 });
 
 test('`processSelectedRecords()`: failures, success notification, chunks', async () => {

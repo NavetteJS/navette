@@ -702,7 +702,10 @@ export function importFileRule(rule: ImportFileRule, livewire: () => any): Rule 
 export class ImportAction {
     /** Records the imports requested by import actions instead of processing them (tests); `restore()` stops it. */
     static fake(): ImportFake { importFake?.restore(); importFake = new ImportFake(); return importFake; }
-    static make(name = 'import'): ImportActionInstance {
+    /** Name of `ImportAction.make()` without a name. */
+    static getDefaultName(): string { return 'import'; }
+    static make(name: string | null = null): ImportActionInstance {
+        name ??= this.getDefaultName();
         let importer: typeof Importer | null = null, maxRows: ActionLazy<number> = DEFAULT_MAX_IMPORT_ROWS, maxKilobytes = 5120, mapping = true, queued = false;
         let chunkSize: ActionLazy<number> = 100, delimiter: ActionLazy<string | null> = null, encoding: ActionLazy<string | null> = null, headerOffset: ActionLazy<number | null> = null;
         let staticOptions: ActionLazy<Record<string, unknown>> = {};

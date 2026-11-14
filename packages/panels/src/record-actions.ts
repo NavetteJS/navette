@@ -69,7 +69,10 @@ export type BulkOutcome = { total: number; success: number; unauthorized: number
  */
 export async function sendBulkActionOutcome(action: Action, ctx: Context, outcome: BulkOutcome): Promise<void> {
     const { total, success, unauthorized, failed } = outcome;
-    const counts = { successCount: success, failureCount: total - success, totalCount: total, isAll: success === 0, missingAuthorizationFailureMessageCount: unauthorized, missingProcessingFailureMessageCount: failed };
+    // Denials of `authorizeIndividualRecords()` with a message (`DenyResponse` keys, `AuthorizationResponse.deny(message)`) bring it.
+    const authorizationMessages = action.getBulkAuthorizationFailureMessages();
+    const unauthorizedWithoutMessage = authorizationMessages.length ? Math.min(unauthorized, action.getBulkAuthorizationFailureWithoutMessageCount()) : unauthorized;
+    const counts = { successCount: success, failureCount: total - success, totalCount: total, isAll: success === 0, missingAuthorizationFailureMessageCount: unauthorizedWithoutMessage, missingProcessingFailureMessageCount: failed, authorizationFailureMessages: authorizationMessages };
     const context: Context = { ...ctx, ...counts };
     if (unauthorized + failed === 0) await sendActionSuccess(action, context, null);
     else {
@@ -77,7 +80,7 @@ export async function sendBulkActionOutcome(action: Action, ctx: Context, outcom
         const reported = action.getBulkProcessingFailureMessages();
         const reportedCount = action.getTotalSelectedRecordsCount() - action.getSuccessfulSelectedRecordsCount() - action.getBulkProcessingFailureWithoutMessageCount();
         const unreported = Math.max(0, failed - Math.max(0, reportedCount));
-        const body = [unauthorized ? action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorized, total) : null, ...reported, unreported ? action.getMissingBulkProcessingFailureNotificationMessage(unreported, total) : null].filter(Boolean).join(' ');
+        const body = [...authorizationMessages, unauthorizedWithoutMessage ? action.getMissingBulkAuthorizationFailureNotificationMessage(unauthorizedWithoutMessage, total) : null, ...reported, unreported ? action.getMissingBulkProcessingFailureNotificationMessage(unreported, total) : null].filter(Boolean).join(' ');
         // Without a failure title, the success title keeps the user informed.
         await sendActionFailure(action, context, { success, total }, body || null, action.getSuccessNotificationTitle());
     }
@@ -136,9 +139,11 @@ export class CreateAction extends CustomizableAction {
      * Without a resource, the resource (or relation manager) is the host component's. A name (`CreateAction.make('createPost')`)
      * replaces the default one.
      */
+    /** Name of `CreateAction.make()` without a name. */
+    static override getDefaultName(): string { return 'create'; }
     static make(resourceOrName: ResourceLike | string | null = null, name: string | null = null): CreateAction {
         const resource = typeof resourceOrName === 'string' ? null : resourceOrName;
-        const action = new CreateAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? 'create');
+        const action = new CreateAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? this.getDefaultName());
         const of = (livewire: any) => resource ?? livewire.resource;
         action.authorize(({ livewire, record }) => can(livewire, 'create', record))
             .label(({ livewire }) => t('filament-actions::create.single.label', { label: of(livewire).modelLabel }))
@@ -175,9 +180,11 @@ type MutateRecordData = (data: Record<string, unknown>, ctx: Context) => Record<
 export class EditAction extends CustomizableAction {
     private _mutateRecordData: MutateRecordData | null = null;
     /** Without an argument, the resource (or relation manager) is the host component's. */
+    /** Name of `EditAction.make()` without a name. */
+    static override getDefaultName(): string { return 'edit'; }
     static make(resourceOrName: ResourceLike | string | null = null, name: string | null = null): EditAction {
         const resource = typeof resourceOrName === 'string' ? null : resourceOrName;
-        const action = new EditAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? 'edit');
+        const action = new EditAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? this.getDefaultName());
         const of = (livewire: any) => resource ?? livewire.resource;
         action.authorize(({ livewire, record }) => can(livewire, 'update', record))
             .label(t('filament-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
@@ -217,9 +224,11 @@ export class EditAction extends CustomizableAction {
  */
 export class ViewAction extends Action {
     private _mutateRecordData: MutateRecordData | null = null;
+    /** Name of `ViewAction.make()` without a name. */
+    static override getDefaultName(): string { return 'view'; }
     static make(resourceOrName: ResourceLike | string | null = null, name: string | null = null): ViewAction {
         const resource = typeof resourceOrName === 'string' ? null : resourceOrName;
-        const action = new ViewAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? 'view');
+        const action = new ViewAction((typeof resourceOrName === 'string' ? resourceOrName : name) ?? this.getDefaultName());
         const of = (livewire: any) => resource ?? livewire.resource;
         action.authorize(({ livewire, record }) => can(livewire, 'view', record))
             .label(t('filament-actions::view.single.label')).color('gray').tableIcon(icons.resolve('actions::view-action') ?? 'c-eye').groupedIcon(icons.resolve('actions::view-action.grouped') ?? 'm-eye')
@@ -253,8 +262,10 @@ export class ReplicateAction extends CustomizableAction {
     private _mutateRecordData: MutateRecordData | null = null;
     private _beforeSaved: ((ctx: { replica: Record<string, unknown>; data: Record<string, unknown>; record: unknown }) => unknown) | null = null;
     private _afterSaved: ((ctx: { replica: unknown; data: Record<string, unknown>; record: unknown }) => unknown) | null = null;
+    /** Name of `ReplicateAction.make()` without a name. */
+    static override getDefaultName(): string { return 'replicate'; }
     static make(name: string | null = null): ReplicateAction {
-        const action = new ReplicateAction(name ?? 'replicate');
+        const action = new ReplicateAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'replicate', record))
             .label(t('filament-actions::replicate.single.label')).tableIcon(icons.resolve('actions::replicate-action') ?? 'c-square-2-stack').groupedIcon(icons.resolve('actions::replicate-action.grouped') ?? 'm-square-2-stack')
             .modalHeading(({ livewire, record }) => t('filament-actions::replicate.single.modal.heading', { label: livewire.resource.getRecordTitle(record) }))
@@ -303,8 +314,10 @@ const inTable = (livewire: any) => typeof livewire.getTable === 'function';
 
 /** Delete action with confirmation. On an edit page, deletes the page's record and returns to the list. On a table row, deletes the row. */
 export class DeleteAction extends CustomizableAction {
+    /** Name of `DeleteAction.make()` without a name. */
+    static override getDefaultName(): string { return 'delete'; }
     static make(name: string | null = null): DeleteAction {
-        const action = new DeleteAction(name ?? 'delete');
+        const action = new DeleteAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'delete', record))
             .label(t('filament-actions::delete.single.label')).color('danger').keyBindings(['mod+d']).tableIcon(icons.resolve('actions::delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::delete-action.grouped') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
@@ -327,8 +340,10 @@ export class DeleteAction extends CustomizableAction {
 
 /** Restores a soft-deleted record: the page's record, or a table row. Only visible when the record is deleted. */
 export class RestoreAction extends CustomizableAction {
+    /** Name of `RestoreAction.make()` without a name. */
+    static override getDefaultName(): string { return 'restore'; }
     static make(name: string | null = null): RestoreAction {
-        const action = new RestoreAction(name ?? 'restore');
+        const action = new RestoreAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'restore', targetOf(livewire, record)))
             .label(t('filament-actions::restore.single.label')).color('gray').tableIcon(icons.resolve('actions::restore-action') ?? 'c-arrow-uturn-left').groupedIcon(icons.resolve('actions::restore-action.grouped') ?? 'm-arrow-uturn-left')
             .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
@@ -351,8 +366,10 @@ export class RestoreAction extends CustomizableAction {
 
 /** Permanently deletes a soft-deleted record. Only visible when the record is deleted. */
 export class ForceDeleteAction extends CustomizableAction {
+    /** Name of `ForceDeleteAction.make()` without a name. */
+    static override getDefaultName(): string { return 'forceDelete'; }
     static make(name: string | null = null): ForceDeleteAction {
-        const action = new ForceDeleteAction(name ?? 'forceDelete');
+        const action = new ForceDeleteAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'forceDelete', targetOf(livewire, record)))
             .label(t('filament-actions::force-delete.single.label')).color('danger').tableIcon(icons.resolve('actions::force-delete-action') ?? 'c-trash').groupedIcon(icons.resolve('actions::force-delete-action.grouped') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
@@ -409,8 +426,10 @@ async function runBulk(action: CustomizableAction, ctx: Context, each: (record: 
  * query with `fetchSelectedRecords(false)`; the notification reports the records that could not be deleted.
  */
 export class DeleteBulkAction extends CustomizableAction {
+    /** Name of `DeleteBulkAction.make()` without a name. */
+    static override getDefaultName(): string { return 'delete'; }
     static make(name: string | null = null): DeleteBulkAction {
-        const action = new DeleteBulkAction(name ?? 'delete');
+        const action = new DeleteBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'deleteAny', record))
             .label(t('filament-actions::delete.multiple.label')).color('danger').icon(icons.resolve('actions::delete-action') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::delete-action.modal') ?? 'o-trash')
@@ -434,8 +453,10 @@ export class DeleteBulkAction extends CustomizableAction {
 
 /** Restores the soft-deleted records selected in a table, each one checked with the `restore` ability. */
 export class RestoreBulkAction extends CustomizableAction {
+    /** Name of `RestoreBulkAction.make()` without a name. */
+    static override getDefaultName(): string { return 'restore'; }
     static make(name: string | null = null): RestoreBulkAction {
-        const action = new RestoreBulkAction(name ?? 'restore');
+        const action = new RestoreBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'restoreAny', record))
             .label(t('filament-actions::restore.multiple.label')).color('gray').icon(icons.resolve('actions::restore-action') ?? 'm-arrow-uturn-left')
             .requiresConfirmation().modalIcon(icons.resolve('actions::restore-action.modal') ?? 'o-arrow-uturn-left')
@@ -461,8 +482,10 @@ export class RestoreBulkAction extends CustomizableAction {
 
 /** Permanently deletes the soft-deleted records selected in a table, each one checked with the `forceDelete` ability. */
 export class ForceDeleteBulkAction extends CustomizableAction {
+    /** Name of `ForceDeleteBulkAction.make()` without a name. */
+    static override getDefaultName(): string { return 'forceDelete'; }
     static make(name: string | null = null): ForceDeleteBulkAction {
-        const action = new ForceDeleteBulkAction(name ?? 'forceDelete');
+        const action = new ForceDeleteBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire, record }) => can(livewire, 'forceDeleteAny', record))
             .label(t('filament-actions::force-delete.multiple.label')).color('danger').icon(icons.resolve('actions::force-delete-action') ?? 'm-trash')
             .requiresConfirmation().modalIcon(icons.resolve('actions::force-delete-action.modal') ?? 'o-trash')
@@ -655,8 +678,10 @@ function excludeKeys(query: any, keys: string[]): void {
 
 /** Attaches existing records to a relation manager's owner (many-to-many). */
 export class AttachAction extends RecordSelectAction {
+    /** Name of `AttachAction.make()` without a name. */
+    static override getDefaultName(): string { return 'attach'; }
     static make(name: string | null = null): AttachAction {
-        const action = new AttachAction(name ?? 'attach').setUpRecordSelect('attach');
+        const action = new AttachAction(name ?? this.getDefaultName()).setUpRecordSelect('attach');
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.schema((schema: Schema) => [action.getRecordSelect(), ...managerOf(schema.livewire).pivotForm(schema)])
             .action(async (ctx) => {
@@ -676,8 +701,10 @@ const isReadOnlyRelationManager = (livewire: any): boolean => typeof livewire?.i
 
 /** Gives existing records to the owner of a one-to-many relation manager (their foreign key). */
 export class AssociateAction extends RecordSelectAction {
+    /** Name of `AssociateAction.make()` without a name. */
+    static override getDefaultName(): string { return 'associate'; }
     static make(name: string | null = null): AssociateAction {
-        const action = new AssociateAction(name ?? 'associate').setUpRecordSelect('associate');
+        const action = new AssociateAction(name ?? this.getDefaultName()).setUpRecordSelect('associate');
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.schema(() => [action.getRecordSelect()])
             .action(async (ctx) => {
@@ -694,8 +721,10 @@ export class AssociateAction extends RecordSelectAction {
 
 /** Detaches a row from the owner without deleting it. */
 export class DetachAction extends CustomizableAction {
+    /** Name of `DetachAction.make()` without a name. */
+    static override getDefaultName(): string { return 'detach'; }
     static make(name: string | null = null): DetachAction {
-        const action = new DetachAction(name ?? 'detach');
+        const action = new DetachAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::detach.single.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
@@ -714,8 +743,10 @@ export class DetachAction extends CustomizableAction {
 }
 /** Detaches the selected rows: one by one, or at once with `fetchSelectedRecords(false)`. */
 export class DetachBulkAction extends CustomizableAction {
+    /** Name of `DetachBulkAction.make()` without a name. */
+    static override getDefaultName(): string { return 'detach'; }
     static make(name: string | null = null): DetachBulkAction {
-        const action = new DetachBulkAction(name ?? 'detach');
+        const action = new DetachBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::detach.multiple.label')).color('danger').icon(icons.resolve('actions::detach-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::detach-action.modal') ?? 'o-x-mark')
@@ -737,8 +768,10 @@ export class DetachBulkAction extends CustomizableAction {
 
 /** Removes a row from the owner (clears its foreign key) without deleting it. */
 export class DissociateAction extends CustomizableAction {
+    /** Name of `DissociateAction.make()` without a name. */
+    static override getDefaultName(): string { return 'dissociate'; }
     static make(name: string | null = null): DissociateAction {
-        const action = new DissociateAction(name ?? 'dissociate');
+        const action = new DissociateAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::dissociate.single.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'c-x-mark').groupedIcon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
@@ -757,8 +790,10 @@ export class DissociateAction extends CustomizableAction {
 }
 /** Dissociates the selected rows: one by one, or at once with `fetchSelectedRecords(false)`. */
 export class DissociateBulkAction extends CustomizableAction {
+    /** Name of `DissociateBulkAction.make()` without a name. */
+    static override getDefaultName(): string { return 'dissociate'; }
     static make(name: string | null = null): DissociateBulkAction {
-        const action = new DissociateBulkAction(name ?? 'dissociate');
+        const action = new DissociateBulkAction(name ?? this.getDefaultName());
         action.authorize(({ livewire }) => !isReadOnlyRelationManager(livewire));
         action.label(t('filament-actions::dissociate.multiple.label')).color('danger').icon(icons.resolve('actions::dissociate-action') ?? 'm-x-mark')
             .requiresConfirmation().modalIcon(icons.resolve('actions::dissociate-action.modal') ?? 'o-x-mark')
