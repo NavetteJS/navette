@@ -18,6 +18,10 @@ import { Notification, Notifications, publish, runInRequest, useNotificationsCol
 import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
 import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
 export { Notification, Notifications, type NotificationActionData, type NotificationActionInput, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
+import { streamBroadcasts, userBroadcastChannel, type BroadcastRecipient } from './broadcasting.ts';
+export { broadcastToUsers, DATABASE_NOTIFICATIONS_SENT_EVENT, dispatchDatabaseNotificationsSent, getBroadcaster, MemoryBroadcaster, NOTIFICATION_BROADCAST_EVENT, useBroadcaster, userBroadcastChannel, type BroadcastMessage, type BroadcastOptions, type BroadcastRecipient, type Broadcaster } from './broadcasting.ts';
+import { NavetteAsset, type Asset } from './assets.ts';
+export { AlpineComponent, Asset, AssetManager, Css, Js, NavetteAsset } from './assets.ts';
 import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
 export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
@@ -456,6 +460,27 @@ export class Panel {
     /** Polling interval (`30s` by default); `null` disables polling. */
     databaseNotificationsPolling(interval: string | null): this { this._databaseNotificationsPolling = interval; return this; }
     getDatabaseNotificationsPollingInterval(): string | null { return this._databaseNotificationsPolling; }
+
+    // -------------------------------------------------------------- broadcasting and assets
+    private _broadcasting: { heartbeat: number } | null = null;
+    /**
+     * Pushes notifications live to the open pages of their users: `Notification.broadcast()` and database notifications sent with
+     * `isEventDispatched`. The panel serves a Server-Sent Events stream to signed-in users; database notifications only poll while it is down.
+     */
+    broadcasting(condition = true, options: { heartbeat?: number } = {}): this { this._broadcasting = condition ? { heartbeat: Math.max(1000, options.heartbeat ?? 25_000) } : null; return this; }
+    hasBroadcasting(): boolean { return this._broadcasting !== null; }
+    getBroadcastingHeartbeat(): number { return this._broadcasting?.heartbeat ?? 25_000; }
+    /** Private broadcast channel of a user of this panel: `<auth guard>.users.<id>` unless the user has `receivesBroadcastNotificationsOn()`. */
+    getBroadcastChannel(user: BroadcastRecipient): string { return userBroadcastChannel(user, this._authGuard ?? `panel-${this._id}`); }
+    /** URL of the panel's broadcast stream, for a tenant's pages. */
+    getBroadcastingUrl(tenant: unknown = this.getTenant()): string {
+        const url = `${this.getLivewirePrefix()}/broadcasting`;
+        return this._tenant && tenant && !this._tenantDomain ? `${url}?tenant=${encodeURIComponent(this.getTenantUrlKey(tenant))}` : url;
+    }
+    private _assets: { assets: Asset[]; packageName: string }[] = [];
+    /** Registers stylesheets, scripts and Alpine components for this panel only (`NavetteAsset.register()` registers them for all panels). */
+    assets(assets: Asset[], packageName = 'app'): this { this._assets.push({ assets, packageName }); return this; }
+    getAssets(): { assets: Asset[]; packageName: string }[] { return this._assets; }
 
     // -------------------------------------------------------------- layout: topbar, navigation, sidebar
     private _topbar = true;
@@ -4760,6 +4785,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     useHtmlSanitizer((html) => richDocumentToHtml(richHtmlToDocument(html)) ?? '');
     views.share({ assetUrl: (file: string) => panel.assetUrl(file) });
     for (const plugin of panel.getPlugins()) plugin.boot?.(panel);
+    for (const { assets, packageName } of panel.getAssets()) NavetteAsset.register(assets, packageName, { panel: panel.getId() });
     assertAuthCapabilities(panel);
     // Tenancy: scoped resources only see the records of the request's tenant.
     const ownership = panel.getTenantOwnershipColumn();
@@ -4843,6 +4869,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
     // Navette's own front-end files.
     router.use(express.static(dir('../dist/navette')));
+    // Registered assets (`NavetteAsset.register()`, `panel.assets()`).
+    router.use(NavetteAsset.middleware());
     // `bootUsing()`: before every request of the panel (its pages, their updates).
     const panelBase = panel.getBaseUrl();
     const belongsToPanel = (path: string) => panelBase === '/' || path === panelBase || path.startsWith(`${panelBase}/`) || path.startsWith(`${livewire}/`);
@@ -4857,6 +4885,33 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         ctx.tenant = await tenantFromPath(path, ctx.user, req.hostname);
         return ctx;
     };
+    // Broadcast stream of the signed-in user (`panel.broadcasting()`): only their own channel, for a tenant they belong to.
+    if (panel.hasBroadcasting()) {
+        router.get(`${livewire}/broadcasting`, async (req, res) => {
+            res.setHeader('Cache-Control', 'no-store');
+            if (req.headers['sec-fetch-site'] === 'cross-site') return void res.status(403).end();
+            const ctx = await context(req, res);
+            if (ctx.denied) return void res.status(403).end();
+            if (!ctx.user) return void res.status(401).end();
+            if ((await panel.mustVerifyEmail(ctx.user)) || (await panel.mustSetUpMultiFactorAuthentication(ctx.user))) return void res.status(403).end();
+            let tenant: string | null = null;
+            if (panel.hasTenancy()) {
+                const key = panel.getTenantDomain() ? panel.getTenantKeyFromRequest(req.path, req.hostname) : (typeof req.query.tenant === 'string' && req.query.tenant.length <= 200 ? req.query.tenant : null);
+                if (key !== null) {
+                    const provider = panel.getTenantProvider();
+                    const found = await provider.find(key);
+                    if (!found || !(await provider.canAccess(ctx.user, found))) return void res.status(403).end();
+                    tenant = provider.getKey(found);
+                }
+            }
+            const id = String(ctx.user.id);
+            streamBroadcasts(req, res, {
+                channel: panel.getBroadcastChannel(ctx.user), tenant, panel: panel.getId(), heartbeat: panel.getBroadcastingHeartbeat(),
+                // The session is checked again at every heartbeat: signing out (or losing access) ends the stream.
+                revalidate: async () => { const user = await panel.user(req); return user !== null && String(user.id) === id && (await panel.userCanAccess(user)); },
+            });
+        });
+    }
     // Notifications sent during the request go into a batch announced to the browser.
     router.use(wireRouter(runtime, livewire, wireContext, async (ctx: PanelContext, _req, res, handle) => {
         const { result, pending } = await runInRequest(ctx.mailbox, () => panel.withTheme(ctx.req, () => panel.withTenant(ctx.tenant ?? null, handle)));
@@ -4910,6 +4965,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
+            assetStyles: NavetteAsset.renderStyles(null, { panel: panel.getId() }), assetScripts: NavetteAsset.renderScripts(null, { panel: panel.getId(), spa: panel.hasSpaMode() }), scriptData: NavetteAsset.renderScriptData(null, { panel: panel.getId() }),
+            broadcasting: panel.hasBroadcasting() && ctx.user ? { url: panel.getBroadcastingUrl(ctx.tenant ?? null) } : null,
         })));
     };
     /** Page access errors: 404 and 403 are answered directly, anything else is rethrown. */

@@ -94,16 +94,21 @@ const panel = Panel.make().id('admin').key(key).login().auth(users).plugin(blogP
 
 ## Registering assets
 
-A plugin cannot add routes to the application. Its stylesheets and scripts must be served by the application, for example with `express.static()`, and the plugin adds the tags with render hooks:
+A plugin registers its stylesheets, scripts and Alpine components with `panel.assets()`, under the name of its npm package. The panel serves the files and adds the tags to its pages:
 
 ```ts
+import { fileURLToPath } from 'node:url';
+import { Css, Js } from '@navette-js/panels';
+
 register(panel) {
-    panel.renderHook('panels::styles.after', () => '<link rel="stylesheet" href="/vendor/audit/audit.css">');
-    panel.renderHook('panels::scripts.after', () => '<script src="/vendor/audit/audit.js" defer></script>');
+    panel.assets([
+        Css.make('audit', fileURLToPath(new URL('../dist/audit.css', import.meta.url))),
+        Js.make('audit', fileURLToPath(new URL('../dist/audit.js', import.meta.url))).defer(),
+    ], '@acme/navette-audit');
 },
 ```
 
-See [render hooks](/advanced/render-hooks) for the list of locations, and [CSS hooks](/styling/css-hooks) to style the existing interface.
+See [registering assets](/advanced/assets) for the details, [render hooks](/advanced/render-hooks) to insert other markup, and [CSS hooks](/styling/css-hooks) to style the existing interface.
 
 <Aside variant="info">
 Navette is written in TypeScript that Node.js runs directly, without a build step. A plugin published on npm should do the same, or ship compiled JavaScript: Node.js does not strip types from files inside `node_modules`.
