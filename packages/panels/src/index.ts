@@ -31,6 +31,9 @@ import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
 export { addDays, addMonths, CALENDAR_LABELS, dayOf, daysBetween, eventsOn, renderCalendar, renderCalendarEvent, timeOf, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarModel, type CalendarView } from './calendar.ts';
 import { DatabaseNotifications, GlobalSearch, keyBindingSuffix, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
+import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentResourceRegistration, parentChainOf, parentRegistrationOf, relatedResourceAdapter, relationManagerTabFromQuery, relationshipNameOf, resolveResourceReference, resourceUrl, scopeAdapterByForeignKey, withRelatedResource, type ResourceReference } from './nested-resources.ts';
+export { ParentResourceRegistration } from './nested-resources.ts';
+import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
 import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
@@ -306,7 +309,9 @@ export class Panel {
     }
     /** Registers resources: their pages and navigation items. */
     resources(resources: (typeof Resource)[]): this {
-        for (const resource of resources) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
+        // A nested resource's URLs start with its parent's slug (cluster included): parents are registered first.
+        const ordered = [...resources].sort((a, b) => parentChainOf(a).length - parentChainOf(b).length);
+        for (const resource of ordered) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
         return this;
     }
     /** A page or resource in a cluster is served under the cluster's slug; the cluster page is registered with it. */
@@ -396,7 +401,7 @@ export class Panel {
             return false;
         }
         const resource = (PageClass as any).resource as typeof Resource | undefined;
-        if (resource && PageClass.prototype instanceof EditRecord) return user !== null || this._guestAccess;
+        if (resource && PageClass.prototype instanceof EditRecord && !resource.isSingular) return user !== null || this._guestAccess;
         if (resource && PageClass.prototype instanceof CreateRecord) return resource.can('create', user);
         if (resource) return resource.can('viewAny', user);
         return this.authorize(user, 'access', { page: PageClass, rule: () => PageClass.canAccess(user!) });
@@ -2061,9 +2066,45 @@ export abstract class Resource {
     /** Simple resource: a single page, with create and edit in modals. */
     static isSimple = false;
 
+    // -------------------------------------------------------------- nesting (Filament's $parentResource)
+    /**
+     * Nested resource: the parent resource under whose records this one is served (`/projects/{project}/tasks/create`).
+     * It has no list nor menu item: its records are listed by a relation manager or related page of the parent
+     * (`static relatedResource = TaskResource`). A function returning the resource (`() => ProjectResource`) breaks circular imports.
+     */
+    static parentResource: ResourceReference | null = null;
+    /** This resource as the parent of `childResource`: `ProjectResource.asParent().relationship('tasks').inverseRelationship('project')`. */
+    static asParent(childResource: typeof Resource | null = null): ParentResourceRegistration { return new ParentResourceRegistration(this, childResource); }
+    /** How this resource is nested: from `parentResource` by default; override it to change the relationship names or the foreign key. */
+    static getParentResourceRegistration(): ParentResourceRegistration | null { return resolveResourceReference(this.parentResource)?.asParent(this) ?? null; }
+    /**
+     * Limits the adapter to the records of a parent record (Filament's `scopeEloquentQueryToParent()`). Defaults to
+     * `adapter.scopedTo(<foreign key>, parentKey)`; `parentRecord` is `null` when called for a relation manager.
+     */
+    static scopeAdapterToParent(adapter: DataAdapter, parentKey: string, _parentRecord: unknown = null): DataAdapter { return scopeAdapterByForeignKey(this, adapter, parentKey); }
+
+    // -------------------------------------------------------------- singular resource
+    /**
+     * Singular resource: bound to a single record (site settings...), managed from its edit page at the resource URL, without
+     * a list. If the record does not exist yet, the form shows its defaults and the first save creates it.
+     */
+    static isSingular = false;
+    /** The record of a singular resource, or `null` if it does not exist yet; defaults to the first record of the adapter. */
+    static async resolveSingularRecord(adapter: DataAdapter = this.adapter): Promise<unknown | null> { return (await adapter.paginate({ page: 1, perPage: 1 })).records[0] ?? null; }
+    /** Attributes given to the record of a singular resource when the first save creates it (`{ group: 'site' }`). */
+    static getSingularRecordAttributes(): Record<string, unknown> { return {}; }
+
     static getPluralModelLabel(): string { return this.pluralModelLabel ?? plural(this.modelLabel); }
     static getTitleCasePluralModelLabel(): string { return this.getPluralModelLabel().split(' ').map(ucfirst).join(' '); }
-    static getUrl(page: string = 'index', record?: string | number): string {
+    /**
+     * URL of a page: `getUrl('edit', 12)`, or with named parameters `getUrl('edit', { record: 12, project: 3 })` (a nested
+     * resource needs its parent's key, under the parent's route parameter name; other parameters go to the query string).
+     */
+    static getUrl(page: string = 'index', record?: string | number | Record<string, unknown>, parameters: Record<string, unknown> = {}): string {
+        if (this.isSingular) return singularResourceUrl(this, page);
+        if ((record !== null && typeof record === 'object') || Object.keys(parameters).length || parentRegistrationOf(this)) {
+            return resourceUrl(this, page, record !== null && typeof record === 'object' ? { ...record, ...parameters } : { ...parameters, ...(record !== undefined ? { record } : {}) });
+        }
         const base = this.panel.getUrl(this.slug);
         if (page in this.relatedPages) return `${base}/${record}/${page}`;
         return page === 'index' ? base : page === 'create' ? `${base}/create` : page === 'view' ? `${base}/${record}` : `${base}/${record}/edit`;
@@ -2102,7 +2143,7 @@ export abstract class Resource {
     static isGloballySearchable = true;
     /** `false`: the search term is matched as a whole instead of word by word. */
     static shouldSplitGlobalSearchTerms = true;
-    static canGloballySearch(): boolean { return this.isGloballySearchable && this.getGloballySearchableAttributes().length > 0; }
+    static canGloballySearch(): boolean { return this.isGloballySearchable && this.getGloballySearchableAttributes().length > 0 && !parentRegistrationOf(this); }
     /** Position of this resource's group in the results; without one, after the others in registration order. */
     static globalSearchSort: number | null = null;
     /** Maximum results rendered per resource. */
@@ -2153,6 +2194,8 @@ export abstract class Resource {
     }
     private static buildPages(): Record<string, typeof Page> {
         const resource = this as unknown as typeof Resource;
+        if (resource.isSingular) return buildSingularResourcePages(resource, { EditRecord, ViewRecord });
+        if (parentRegistrationOf(resource)) return buildNestedResourcePages(resource, { CreateRecord, EditRecord, ViewRecord, ManageRelatedRecords } as any);
         const List = class extends (resource.pages.index ?? ListRecords) {
             static resource = resource;
             static slug = resource.slug;
@@ -2979,7 +3022,7 @@ export class ListRecords extends Page implements TableHost {
     /** Key of this table's persisted state: per page class (and resource or relationship). */
     protected tableSessionKey(part: string): string {
         const page = this.constructor as any;
-        return ['tables', page.name, page.resource?.slug ?? '', page.relationship ?? '', part].join(':');
+        return ['tables', page.name, page.resource?.slug ?? '', relationshipNameOf(page), part].join(':');
     }
     /** Session of the persisted table state: the browser (its CSRF token) and the signed-in user. */
     private tableSession(): string | null {
@@ -3424,14 +3467,25 @@ export class RelationManager extends ListRecords {
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
-    /** Data adapter limited to records related to the given owner. */
-    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('RelationManager.adapterFor() must be defined.'); }
+    /**
+     * Nested resource managing these records (Filament's `$relatedResource`): its table, form, labels and policy are used, the
+     * relationship comes from its nesting, and the create, edit and view actions open its pages instead of modals.
+     * A function returning the resource (`() => TaskResource`) breaks circular imports.
+     */
+    static relatedResource: ResourceReference | null = null;
+    static getRelatedResource(): typeof Resource | null { return resolveResourceReference(this.relatedResource); }
+    /** Data adapter limited to records related to the given owner (the related resource's adapter scoped to the owner, if any). */
+    static adapterFor(ownerKey: string): DataAdapter {
+        const related = this.getRelatedResource();
+        if (related) return relatedResourceAdapter(related, ownerKey);
+        throw new Error('RelationManager.adapterFor() must be defined.');
+    }
     /** Policy for related records (same abilities as a resource policy). */
     static policy: Policy | null = null;
     protected isAccessAuthorized(ctx: PanelContext): Promise<boolean> { return this.resource.can('viewAny', ctx.user); }
-    static table(table: Table): Table { return table; }
-    static form(schema: Schema): Schema { return schema; }
-    static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
+    static table(table: Table): Table { return this.getRelatedResource()?.table(table) ?? table; }
+    static form(schema: Schema): Schema { return this.getRelatedResource()?.form(schema) ?? schema; }
+    static getTitle(): string { return this.title ?? (this.getRelatedResource()?.getTitleCasePluralModelLabel() ?? ucfirst(relationshipNameOf(this).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase())); }
     /** Icon of the manager's tab. */
     static icon: string | null = null;
     static getIcon(): string | null { return this.icon; }
@@ -3453,7 +3507,7 @@ export class RelationManager extends ListRecords {
     /** What ListRecords expects from a resource, provided here by the relation manager. */
     get resource(): any {
         const manager = this.constructor as typeof RelationManager;
-        return (this._facade ??= {
+        return (this._facade ??= withRelatedResource({
             isSimple: true, slug: '', modelLabel: manager.modelLabel, relations: [], adapter: manager.adapterFor(this.ownerRecord),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = manager.policy?.[ability]; return this.panel.authorize(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => manager.pluralModelLabel ?? plural(manager.modelLabel),
@@ -3466,11 +3520,13 @@ export class RelationManager extends ListRecords {
                 return pivot.length ? form.components([...form.getComponents(), ...pivot]) : form;
             },
             pivotFieldNames: () => manager.pivotForm(Schema.make(this)).filter((component): component is Field => component instanceof Field).map((field) => field.getName()),
-        });
+        }, manager.getRelatedResource(), this.ownerRecord));
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
         const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()));
+        // With a related resource, rows link to its view or edit page.
+        if (manager.getRelatedResource()) return linkRelatedRecords(table, this.resource);
         // If there is an "edit" row action, clicking the row opens it.
         const hasEdit = table.getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])).some((a: Action) => a.getName() === 'edit');
         return hasEdit ? table.recordAction('edit') : table;
@@ -3526,12 +3582,19 @@ export class ManageRelatedRecords extends ListRecords {
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
     static policy: Policy | null = null;
-    /** Data adapter limited to records related to the given owner. */
-    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('ManageRelatedRecords.adapterFor() must be defined.'); }
-    static table(table: Table): Table { return table; }
-    static form(schema: Schema): Schema { return schema; }
-    static infolist(schema: Schema): Schema { return schema; }
-    static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
+    /** Nested resource managing these records (Filament's `$relatedResource`), as for a relation manager. */
+    static relatedResource: ResourceReference | null = null;
+    static getRelatedResource(): typeof Resource | null { return resolveResourceReference(this.relatedResource); }
+    /** Data adapter limited to records related to the given owner (the related resource's adapter scoped to the owner, if any). */
+    static adapterFor(ownerKey: string): DataAdapter {
+        const related = this.getRelatedResource();
+        if (related) return relatedResourceAdapter(related, ownerKey);
+        throw new Error('ManageRelatedRecords.adapterFor() must be defined.');
+    }
+    static table(table: Table): Table { return this.getRelatedResource()?.table(table) ?? table; }
+    static form(schema: Schema): Schema { return this.getRelatedResource()?.form(schema) ?? schema; }
+    static infolist(schema: Schema): Schema { return this.getRelatedResource()?.infolist(schema) ?? schema; }
+    static getTitle(): string { return this.title ?? (this.getRelatedResource()?.getTitleCasePluralModelLabel() ?? ucfirst(relationshipNameOf(this).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase())); }
     static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
 
     /** Owner record key: read from the URL on mount, never writable from the browser. */
@@ -3557,16 +3620,19 @@ export class ManageRelatedRecords extends ListRecords {
     /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
-        return (this._facade ??= {
+        return (this._facade ??= withRelatedResource({
             isSimple: true, hasViewPage: false, slug: page.parentResource.slug, modelLabel: page.modelLabel, relations: [], recordTitleAttribute: page.recordTitleAttribute, adapter: page.adapterFor(this.recordKey),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.authorize(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => page.pluralModelLabel ?? plural(page.modelLabel),
             getTitleCasePluralModelLabel: () => (page.pluralModelLabel ?? plural(page.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (page.recordTitleAttribute ? String(record?.[page.recordTitleAttribute] ?? '') : page.modelLabel),
             table: (table: Table) => page.table(table), form: (schema: Schema) => page.form(schema), infolist: (schema: Schema) => page.infolist(schema), getUrl: () => '',
-        });
+        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}));
     }
-    getTable(): Table { return this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel())); }
+    getTable(): Table {
+        const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()));
+        return this.related.getRelatedResource() ? linkRelatedRecords(table, this.resource) : table;
+    }
     getHeaderActions(): Action[] { return []; }
     /** The page content is a group (tabs, if any, then the table). */
     contentSchema(schema: Schema): Schema {
@@ -3858,6 +3924,8 @@ export class CreateAction {
             .label(({ livewire }) => t('filament-actions::create.single.label', { label: of(livewire).modelLabel }))
             .modalHeading(({ livewire }) => t('filament-actions::create.single.modal.heading', { label: String(of(livewire).modelLabel).split(' ').map(ucfirst).join(' ') }))
             .modalSubmitActionLabel(t('filament-actions::create.single.modal.actions.create.label'))
+            // A relation manager with a related resource: its create page instead of the modal.
+            .url(({ livewire }) => (resource ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('create') ?? null)))
             .extraModalFooterActions([Action.make('createAnother').label(t('filament-actions::create.single.modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
             .schema((schema: Schema) => of(schema.livewire).form(schema))
             .action(async (ctx) => {
@@ -3877,6 +3945,8 @@ export class EditAction {
             .label(t('filament-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
             .modalHeading(({ livewire, record }) => t('filament-actions::edit.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::edit.single.modal.actions.save.label'))
+            // A relation manager with a related resource: its edit page instead of the modal.
+            .url(({ livewire, record }) => (resource || !record ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('edit', (livewire as any).resource.adapter.getKey(record)) ?? null)))
             .schema((schema: Schema) => of(schema.livewire).form(schema))
             .fillForm(({ record }) => ({ ...record }))
             .action(async (ctx) => {
@@ -4195,8 +4265,9 @@ export class EditRecord extends ResourceFormPage {
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
-        // Combined tabs: the form's tab is open first.
+        // Combined tabs: the form's tab is open first, unless the URL names a relation manager (`?relation=tasks`).
         if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
+        this.activeRelationManager = relationManagerTabFromQuery(this) ?? this.activeRelationManager;
         await this.hydrate();
         await this.beforeFill();
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
@@ -4283,6 +4354,7 @@ export class ViewRecord extends Page {
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
         if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
+        this.activeRelationManager = relationManagerTabFromQuery(this) ?? this.activeRelationManager;
         await this.hydrate();
     }
     /** The record is reloaded on every request, as on the edit page. */
@@ -4639,13 +4711,15 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtime.register(name('table-select'), TableSelectComponent);
     runtime.register('navette.notifications', Notifications);
     for (const [index, widget] of panel.getWidgets().entries()) runtime.register(name(`widgets.panel.${index}`), widget);
-    for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${resource.slug.replace(/\//g, '.')}.${index}`), widget);
+    // Component names follow the resource's URL path (a nested resource's includes its parents'): two resources never share one.
+    const componentPath = (resource: typeof Resource) => nestedRoutePath(resource).replace(/[{}]/g, '').replace(/\//g, '.');
+    for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${componentPath(resource)}.${index}`), widget);
     for (const resource of panel.getResources()) {
         const managers = new Set<typeof RelationManager>();
         const add = (entries: (typeof RelationManager | RelationGroup)[] | undefined) => { for (const entry of entries ?? []) for (const manager of entry instanceof RelationGroup ? entry.getManagers() : [entry]) managers.add(manager); };
         add(resource.getRelations());
         for (const page of Object.values(resource.getPages())) add((page as any).relationManagers);
-        for (const manager of managers) runtime.register(name(`relation-managers.${resource.slug.replace(/\//g, '.')}.${manager.relationship}`), manager);
+        for (const manager of managers) runtime.register(name(`relation-managers.${componentPath(resource)}.${relationshipNameOf(manager)}`), manager);
     }
 
     // A panel on its own domains: other hosts go to the next routes (another panel, the application).
