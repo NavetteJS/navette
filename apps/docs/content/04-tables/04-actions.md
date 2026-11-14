@@ -421,6 +421,18 @@ static table(table: Table<Post>): Table<Post> {
 
 Toolbar actions are hidden while the user reorders records.
 
+The dropdown of a `BulkActionGroup` opens below its trigger, aligned to its start. `dropdownPlacement()` moves it: `top-start`, `top-end`, `bottom-start`, `bottom-end`, `top`, `bottom`, `left`, `right` (with `-start` or `-end`). Any other value keeps the default:
+
+```ts
+import { DeleteBulkAction } from '@navette-js/panels';
+import { BulkActionGroup } from '@navette-js/tables';
+
+BulkActionGroup.make([
+    DeleteBulkAction.make(),
+])
+    .dropdownPlacement('bottom-end')
+```
+
 ## Positioning record actions
 
 By default, record actions are displayed after the columns. You may move them before the columns, after the checkbox, with `recordActionsPosition('before-columns')`, or before the checkbox with `'before-cells'`:

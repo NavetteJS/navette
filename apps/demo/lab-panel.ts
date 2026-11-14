@@ -11,6 +11,7 @@ import { Livewire, Section } from '@navette-js/schemas';
 import { Color, e } from '@navette-js/support';
 import { Component as WireComponent } from '@navette-js/wire';
 import { LabOrders } from './lab-orders.ts';
+import { labTableFeatureResources } from './lab-table-features.ts';
 import { labWidgets, LabWidgetsDashboard } from './widgets/lab.ts';
 import { LabFrameworkFields } from './lab-framework-fields.ts';
 import { LabSpecificFields } from './lab-specific-fields.ts';
@@ -374,7 +375,7 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .setColors({ primary: Color.Violet })
         .login(options.login)
         // The framework-rendered field and singular settings examples are left out of the parity screenshots.
-        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields, LabSpecificFields, LabRichEditorOptions, LabRepeaterOptions]), LabCatalogBrands, LabCatalogProducts, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabSiteSettings, LabRelations])])
+        .resources([LabProducts, LabCards, LabOrders, LabFields, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabFrameworkFields, LabSpecificFields, LabRichEditorOptions, LabRepeaterOptions]), LabCatalogBrands, LabCatalogProducts, ...(process.env.NAVETTE_NO_THEMES ? [] : [LabSiteSettings, LabRelations, ...labTableFeatureResources])])
         // Example plugins (`examples/`) and a configurable resource.
         .plugin(labPluginExamples())
         // Widgets lab: filters action, clickable stats, chart filters form, empty state actions, Chart.js plugins.

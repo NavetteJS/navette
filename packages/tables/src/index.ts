@@ -10,9 +10,11 @@ import { modal } from '@navette-js/support/ui';
 import { applyConditions, loadRelationshipOptions, modelOfHost, type RelationshipQueryModifier } from './query-builder.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { TableTriggerAction, columnOrderOf, columnToggleStateOf, defaultColumnManagerWidth, getRowLoop, hasReorderedColumns, makeRowLoop, sanitizePollingInterval, syncColumnManagerState, withRowLoop, type ColumnManagerLayoutValue, type ColumnManagerResetActionPositionValue, type ColumnState, type PaginationModeValue, type RowLoop } from './table-features.ts';
 
 views.namespace('filament-tables', fileURLToPath(new URL('../views', import.meta.url)));
 export * from './query-builder.ts';
+export * from './table-features.ts';
 export { makeTableSelectTable } from './table-select.ts';
 
 /** Render hook slots of a table. */
@@ -48,7 +50,10 @@ const BREAKPOINTS = ['sm', 'md', 'lg', 'xl', '2xl'];
 export const LOADING_TARGETS = 'activeTab,applyTableFilters,gotoPage,nextPage,previousPage,removeTableFilter,removeTableFilters,reorderTable,resetTableColumnSearch,resetTableFiltersForm,resetTableSearch,setPage,sortTable,tableColumnSearches,tableFilters,tableGrouping,tableRecordsPerPage,tableSearch,tableSort,toggleTableReordering';
 
 const headline = (s: string) => s.replace(/[_.-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
-type StateResolver<R> = (ctx: { record: R }) => unknown | Promise<unknown>;
+/** State callback of a column: the record, and the loop variable of its row (`rowLoop.iteration`…), `null` outside a table row. */
+type StateResolver<R> = (ctx: { record: R; rowLoop: RowLoop | null }) => unknown | Promise<unknown>;
+/** Options of `Column.searchable()`. */
+export type SearchableOptions = { isIndividual?: boolean; isGlobal?: boolean; column?: string; columns?: string[]; query?: ((query: any, search: string) => unknown) | null };
 
 // ------------------------------------------------------------------ columns
 /** Base class of table columns. */
@@ -76,9 +81,25 @@ export abstract class Column<R = any> {
     /** Summary row below the table. */
     summarize(summarizer: Summarizer | Summarizer[]): this { this._summarizers = Array.isArray(summarizer) ? summarizer : [summarizer]; return this; }
     getSummarizers(): Summarizer[] { return this._summarizers; }
-    /** `column`: column (or query alias) to sort by when it differs from the name, e.g. for a relationship. */
-    sortable(condition: boolean | { column: string; inverted?: boolean } = true): this { this._sortable = condition !== false; this._sortColumn = typeof condition === 'object' ? condition.column : null; this._sortInverted = typeof condition === 'object' && condition.inverted === true; return this; }
+    /**
+     * Sortable column. A list sorts by those database columns (`sortable(['last_name', 'first_name'])`); `column` sorts by
+     * another column (or query alias) than the name; `query` (also the second argument) orders the query yourself.
+     */
+    sortable(condition: boolean | string[] | { column?: string; columns?: string[]; inverted?: boolean; query?: ((query: any, direction: SortDirection) => unknown) | null } = true, query: ((query: any, direction: SortDirection) => unknown) | null = null): this {
+        const options = Array.isArray(condition) ? { columns: condition } : typeof condition === 'object' ? condition : {};
+        this._sortable = condition !== false;
+        this._sortColumns = options.columns?.filter((column) => typeof column === 'string' && column !== '') ?? null;
+        this._sortColumn = options.column ?? this._sortColumns?.[0] ?? null;
+        this._sortInverted = options.inverted === true;
+        this._sortQuery = query ?? options.query ?? null;
+        return this;
+    }
+    protected _sortColumns: string[] | null = null;
+    protected _sortQuery: ((query: any, direction: SortDirection) => unknown) | null = null;
     getSortColumn(): string { return this._sortColumn ?? this.name; }
+    /** Database columns of the sort (Filament's `getSortColumns()`). */
+    getSortColumns(): string[] { return this._sortColumns?.length ? this._sortColumns : [this.getSortColumn()]; }
+    getSortQuery(): ((query: any, direction: SortDirection) => unknown) | null { return this._sortQuery; }
     private _sortInverted = false;
     /** `inverted`: the sort column runs opposite to the displayed value (e.g. an age sorted by birth date). */
     isSortInverted(): boolean { return this._sortInverted; }
@@ -95,12 +116,31 @@ export abstract class Column<R = any> {
     getUrl(record: R): string | null { return this._url ? this._url(record) : null; }
     /** `isGlobal: false` excludes the column from the global search; `isIndividual` adds a search field for this column. */
     getSearchColumn(): string { return this._searchColumn ?? this.name; }
-    searchable(options: boolean | { isIndividual?: boolean; isGlobal?: boolean; column?: string } = true): this {
-        this._searchColumn = typeof options === 'object' ? (options.column ?? null) : null;
-        this._searchable = typeof options === 'boolean' ? options : options.isGlobal !== false;
-        this._individuallySearchable = typeof options === 'object' && options.isIndividual === true;
+    /**
+     * Searchable column. A column name or a list searches those database columns (`searchable(['first_name', 'last_name'])`);
+     * `query` searches with your own query, receiving the query and the search term; `isIndividual` adds a search field for
+     * this column, `isGlobal: false` leaves it out of the global search.
+     */
+    searchable(condition: boolean | string | string[] | SearchableOptions = true, options: SearchableOptions = {}): this {
+        const merged: SearchableOptions = { ...(typeof condition === 'object' && !Array.isArray(condition) ? condition : {}), ...options };
+        const columns = typeof condition === 'string' ? [condition] : Array.isArray(condition) ? condition : merged.columns ?? null;
+        this._searchColumns = columns?.filter((column) => typeof column === 'string' && column !== '') ?? null;
+        this._searchColumn = merged.column ?? this._searchColumns?.[0] ?? null;
+        const enabled = condition !== false;
+        this._searchable = enabled && merged.isGlobal !== false;
+        this._individuallySearchable = enabled && merged.isIndividual === true;
+        this._searchQuery = merged.query ?? null;
         return this;
     }
+    protected _searchColumns: string[] | null = null;
+    protected _searchQuery: ((query: any, search: string) => unknown) | null = null;
+    protected _splitIndividualSearchTerms: boolean | null = null;
+    /** Database columns of the search (Filament's `getSearchColumns()`). */
+    getSearchColumns(): string[] { return this._searchColumns?.length ? this._searchColumns : [this.getSearchColumn()]; }
+    getSearchQuery(): ((query: any, search: string) => unknown) | null { return this._searchQuery; }
+    /** Whether this column's own search field splits the term into words; `null` follows the table's `splitSearchTerms()`. */
+    splitIndividualSearchTerms(condition: boolean | null = true): this { this._splitIndividualSearchTerms = condition; return this; }
+    shouldSplitIndividualSearchTerms(): boolean | null { return this._splitIndividualSearchTerms; }
     /** Lets the user hide the column from the column manager. */
     toggleable(condition = true, options: { isToggledHiddenByDefault?: boolean } = {}): this { this._toggleable = condition; this._toggledHiddenByDefault = options.isToggledHiddenByDefault === true; return this; }
     alignment(alignment: 'start' | 'center' | 'end' | null): this { this._alignment = alignment; return this; }
@@ -161,7 +201,7 @@ export abstract class Column<R = any> {
     /** Enum case of a state item, or `null`. */
     protected enumCaseOf(record: R, item: unknown): EnumCase<string | number> | null { return resolveEnumCase(item, { enum: this._enum, record, attribute: this.name }); }
     /** Fixed state, or a function of the record (alias of `getStateUsing()` for a value). */
-    state(state: unknown | ((record: R) => unknown)): this { this._state = typeof state === 'function' ? ({ record }) => (state as (record: R) => unknown)(record) : () => state; return this; }
+    state(state: unknown | ((record: R, ctx: { rowLoop: RowLoop | null }) => unknown)): this { this._state = typeof state === 'function' ? ({ record, rowLoop }) => (state as (record: R, ctx: { rowLoop: RowLoop | null }) => unknown)(record, { rowLoop }) : () => state; return this; }
     /** True when the state is the record attribute named like the column (no custom state, no relationship). */
     hasAttributeState(): boolean { return this._state === null && !this.name.includes('.'); }
     protected _default: unknown = null;
@@ -185,7 +225,7 @@ export abstract class Column<R = any> {
     getCssName(): string { return this.name.replace(/_/g, '-'); }
     async getState(record: R): Promise<unknown> {
         // `author.name` reads the loaded relationship (`record.author.name`); `tags.name` gives the list of the related names.
-        let state = this._state ? await this._state({ record }) : readRecordPath(record, this.name);
+        let state = this._state ? await this._state({ record, rowLoop: getRowLoop() }) : readRecordPath(record, this.name);
         if (this._distinctList && Array.isArray(state)) state = [...new Set(state)];
         return (state === null || state === undefined || state === '') && this._default !== null ? this._default : state;
     }
@@ -804,7 +844,7 @@ export class View<R = any> extends ColumnLayout<R> {
     static make<R = any>(view: string | ((ctx: { record: R; recordKey: string }) => string | Promise<string>)): View<R> { return configured(new View<R>(view)); }
     /** Extra data passed to the EJS view. */
     viewData(data: Record<string, unknown>): this { this._viewData = data; return this; }
-    /** Columns rendered inside the view are not part of the table: the view has no children. */
+    /** Columns rendered inside the view: they are columns of the table, and their HTML reaches the EJS view as `children`. */
     components(children: (Column<R> | ColumnLayout<R>)[]): this { this._children = children; return this; }
     getClasses(): string[] { return []; }
     async renderContent(children: string[], record: R, key: string): Promise<string> {
@@ -1854,7 +1894,6 @@ function filterFieldValue(value: unknown): unknown {
 }
 
 // ------------------------------------------------------------------ table
-export type ColumnState = { type: 'column'; name: string; label: string; isHidden: boolean; isToggled: boolean; isToggleable: boolean; isToggledHiddenByDefault: boolean | null };
 
 /** Look of a filters action (trigger, apply, reset), changed with `filtersTriggerAction()`, `filtersApplyAction()` and `filtersResetAction()`. */
 export class FiltersAction {
@@ -1935,7 +1974,7 @@ export class Table<R = any> {
     private _recordClasses: ((record: R) => string | null) | null = null;
     private _filters: TableFilter[] = [];
     private _filtersLayout: FiltersLayout = 'dropdown';
-    private _defaultSort: { column: string; direction: SortDirection } | null = null;
+    private _defaultSort: { column: string | ((query: any, direction: SortDirection) => unknown); direction: SortDirection | null } | null = null;
     private _recordUrl: ((record: R) => string | null) | null = null;
     private _pageOptions: (number | 'all')[] = [5, 10, 25, 50];
     private _paginated = true;
@@ -2053,7 +2092,8 @@ export class Table<R = any> {
     private _filtersFormMaxHeight: string | null = null;
     private _filtersResetPosition: 'header' | 'footer' = 'header';
     private _filterIndicatorsHidden = false;
-    private _persist = { filters: false, search: false, columnSearches: false, sort: false };
+    // As in Filament, the column manager state and the records per page are kept for the session unless turned off.
+    private _persist = { filters: false, search: false, columnSearches: false, sort: false, columns: true, recordsPerPage: true };
     private _recordActionsPosition: 'before-columns' | 'before-cells' | 'after-columns' | 'after-cells' = 'after-columns';
     private _recordActionsAlignment: 'start' | 'center' | 'end' | null = null;
     /**
@@ -2156,12 +2196,32 @@ export class Table<R = any> {
     persistsSearchInSession(): boolean { return this._persist.search; }
     persistsColumnSearchesInSession(): boolean { return this._persist.columnSearches; }
     persistsSortInSession(): boolean { return this._persist.sort; }
-    defaultSort(column: string, direction: SortDirection = 'asc'): this { this._defaultSort = { column, direction }; return this; }
-    recordUrl(resolver: (record: R) => string | null): this { this._recordUrl = resolver; return this; }
+    /**
+     * Sort applied after the user's (or alone): a column name (a sortable column's own sort, or else that database column),
+     * or a function ordering the query itself, receiving the query and the direction.
+     */
+    defaultSort(column: string | ((query: any, direction: SortDirection) => unknown) | null, direction: SortDirection | null = 'asc'): this { this._defaultSort = column === null ? null : { column, direction }; return this; }
+    /** Link of each row: a function of the record (or a fixed URL); `shouldOpenInNewTab` is `openRecordUrlInNewTab()`. */
+    recordUrl(resolver: string | ((record: R) => string | null) | null, shouldOpenInNewTab: boolean | ((record: R) => boolean) | null = null): this {
+        if (shouldOpenInNewTab !== null) this.openRecordUrlInNewTab(shouldOpenInNewTab);
+        this._recordUrl = resolver === null ? null : typeof resolver === 'string' ? () => resolver : resolver;
+        return this;
+    }
     private _reorderColumn: string | null = null;
-    /** Lets users reorder rows by hand; `column` stores the position. */
-    reorderable(column: string | null): this { this._reorderColumn = column; return this; }
-    getReorderColumn(): string | null { return this._reorderColumn; }
+    private _reorderCondition: boolean | (() => boolean) = true;
+    private _reorderDirection: SortDirection = 'asc';
+    /**
+     * Lets users reorder rows by hand: `column` stores the position, `condition` can turn it off, and with `direction: 'desc'`
+     * the first row gets the highest position.
+     */
+    reorderable(column: string | null = null, condition: boolean | (() => boolean) | null = null, direction: SortDirection | null = null): this {
+        this._reorderColumn = column;
+        if (condition !== null) this._reorderCondition = condition;
+        this._reorderDirection = direction === 'desc' ? 'desc' : 'asc';
+        return this;
+    }
+    /** Reorder column, or `null` when the table is not reorderable (no column, or its condition is false). */
+    getReorderColumn(): string | null { return this._reorderColumn !== null && this._reorderColumn !== '' && Boolean(typeof this._reorderCondition === 'function' ? this._reorderCondition() : this._reorderCondition) ? this._reorderColumn : null; }
     /** Page sizes offered; `'all'` shows every record (up to `MAX_UNPAGINATED_RECORDS`). */
     paginationPageOptions(options: (number | 'all')[]): this { this._pageOptions = options.filter((option) => option === 'all' || (Number.isInteger(option) && option > 0)); return this; }
     /** `false`: no pagination, every record is shown (up to `MAX_UNPAGINATED_RECORDS`). An array sets the page options. */
@@ -2188,26 +2248,252 @@ export class Table<R = any> {
     /** Rows per page when the table opens. */
     defaultPaginationPageOption(option: number | 'all' | null): this { this._defaultPageOption = option; return this; }
     getDefaultPageOption(): number | 'all' { return this._defaultPageOption !== null && this._pageOptions.includes(this._defaultPageOption) ? this._defaultPageOption : (this._pageOptions.includes(10) ? 10 : this._pageOptions[0]); }
-    private _paginationMode: 'default' | 'simple' = 'default';
-    /** `'simple'`: previous / next buttons only, without page numbers or total. */
-    paginationMode(mode: 'default' | 'simple'): this { this._paginationMode = mode; return this; }
-    getPaginationMode(): 'default' | 'simple' { return this._paginationMode; }
+    private _paginationMode: PaginationModeValue = 'default';
+    /**
+     * `'simple'`: previous / next buttons only, without page numbers or total. `'cursor'`: previous / next through a cursor
+     * (the sort column values of the last record), without counting the records: fast on big tables.
+     */
+    paginationMode(mode: PaginationModeValue | null): this { this._paginationMode = mode === 'simple' || mode === 'cursor' ? mode : 'default'; return this; }
+    getPaginationMode(): PaginationModeValue { return this._paginationMode; }
     stackedOnMobile(condition = true): this { this._stackedOnMobile = condition; return this; }
     pluralModelLabel(label: string): this { this._label = label; return this; }
+
+    // --- D4: table-level options (identity, pagination, reordering, header, loading, search, sort, persistence, column manager)
+    private _identifier: string | (() => string | null) | null = null;
+    private _queryStringIdentifier: string | (() => string | null) | null = null;
+    /** Tells two tables of the same component apart: it is part of their session keys (persisted state). */
+    identifier(identifier: string | (() => string | null) | null): this { this._identifier = identifier; return this; }
+    getIdentifier(): string | null { const value = typeof this._identifier === 'function' ? this._identifier() : this._identifier; return value === null || value === '' ? null : String(value); }
+    /** Prefix of the table's query string parameters: `queryStringIdentifier('users')` gives `?usersPage=2`. Defaults to `identifier()`. */
+    queryStringIdentifier(identifier: string | (() => string | null) | null): this { this._queryStringIdentifier = identifier; return this; }
+    getQueryStringIdentifier(): string | null { const value = typeof this._queryStringIdentifier === 'function' ? this._queryStringIdentifier() : this._queryStringIdentifier; return value === null || value === '' ? this.getIdentifier() : String(value); }
+    /** Name of the page parameter (Filament's `getTablePaginationPageName()`): `page`, or `<identifier>Page`. */
+    getPaginationPageName(): string { const identifier = this.getQueryStringIdentifier(); return identifier && /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(identifier) ? `${identifier}Page` : 'page'; }
+    private _openRecordUrlInNewTab: boolean | ((record: R) => boolean) = false;
+    /** Row links open in a new tab (for every record, or those for which the function returns `true`). */
+    openRecordUrlInNewTab(condition: boolean | ((record: R) => boolean) = true): this { this._openRecordUrlInNewTab = condition; return this; }
+    shouldOpenRecordUrlInNewTab(record: R): boolean { return Boolean(typeof this._openRecordUrlInNewTab === 'function' ? this._openRecordUrlInNewTab(record) : this._openRecordUrlInNewTab); }
+    private _enforcePageOptions = false;
+    private _extremePaginationLinks = false;
+    private _paginatedWhileReordering = false;
+    private _scrollToTopOnPageChange = false;
+    /** The records per page value from the browser must be one of `paginationPageOptions()` (else the default option applies). */
+    enforcePaginationPageOptions(condition = true): this { this._enforcePageOptions = condition; return this; }
+    enforcesPaginationPageOptions(): boolean { return this._enforcePageOptions; }
+    /** Keeps the records per page for the user's session (on by default, as in Filament). */
+    persistRecordsPerPageInSession(condition = true): this { this._persist.recordsPerPage = condition; return this; }
+    persistsRecordsPerPageInSession(): boolean { return this._persist.recordsPerPage; }
+    /** "First page" and "last page" buttons around the page numbers. */
+    extremePaginationLinks(condition = true): this { this._extremePaginationLinks = condition; return this; }
+    hasExtremePaginationLinks(): boolean { return this._extremePaginationLinks; }
+    /** Scrolls back to the top of the table when the page changes. */
+    scrollToTopOnPageChange(condition = true): this { this._scrollToTopOnPageChange = condition; return this; }
+    shouldScrollToTopOnPageChange(): boolean { return this._scrollToTopOnPageChange; }
+    /** Keeps the pagination while reordering (only the current page's records are reordered, after the previous pages). */
+    paginatedWhileReordering(condition = true): this { this._paginatedWhileReordering = condition; return this; }
+    isPaginatedWhileReordering(): boolean { return this._paginatedWhileReordering; }
+    getReorderDirection(): SortDirection { return this._reorderDirection; }
+    private _reorderAuthorized: boolean | (() => boolean) = true;
+    /** Whether the current user may reorder (on top of the `reorder` policy ability checked by the panel). */
+    authorizeReorder(condition: boolean | (() => boolean) = true): this { this._reorderAuthorized = condition; return this; }
+    isReorderAuthorized(): boolean { return Boolean(typeof this._reorderAuthorized === 'function' ? this._reorderAuthorized() : this._reorderAuthorized); }
+    isReorderable(): boolean { return this.getReorderColumn() !== null && this.isReorderAuthorized(); }
+    private _reorderTrigger: ((action: TableTriggerAction, isReordering: boolean) => TableTriggerAction | void) | null = null;
+    /** Customizes the button that toggles reordering: `reorderRecordsTriggerAction((action, isReordering) => action.button().label(isReordering ? 'Done' : 'Reorder'))`. */
+    reorderRecordsTriggerAction(configure: ((action: TableTriggerAction, isReordering: boolean) => TableTriggerAction | void) | null): this { this._reorderTrigger = configure; return this; }
+    getReorderRecordsTriggerActionView(isReordering: boolean) {
+        const defaults = { label: t(isReordering ? 'filament-tables::table.actions.disable_reordering.label' : 'filament-tables::table.actions.enable_reordering.label'), icon: icons.resolve(isReordering ? 'tables::actions.disable-reordering' : 'tables::actions.enable-reordering') ?? (isReordering ? 'm-check' : 'm-arrows-up-down'), color: 'gray', view: 'icon-button' as const };
+        if (!this._reorderTrigger) return { ...defaults, hidden: false, customized: false };
+        const action = new TableTriggerAction();
+        return { ...(this._reorderTrigger(action, isReordering) ?? action).resolve(defaults), customized: true };
+    }
+    private _beforeReordering: ((order: string[]) => unknown) | null = null;
+    private _afterReordering: ((order: string[]) => unknown) | null = null;
+    /** Runs before the new order is saved, with the keys in their new order. */
+    beforeReordering(callback: ((order: string[]) => unknown) | null): this { this._beforeReordering = callback; return this; }
+    /** Runs after the new order is saved, with the keys in their new order. */
+    afterReordering(callback: ((order: string[]) => unknown) | null): this { this._afterReordering = callback; return this; }
+    async callBeforeReordering(order: string[]): Promise<void> { await this._beforeReordering?.(order); }
+    async callAfterReordering(order: string[]): Promise<void> { await this._afterReordering?.(order); }
+    private _description: string | (() => string | null) | null = null;
+    private _header: string | (() => string | Promise<string>) | null = null;
+    /** Text under the table heading. */
+    description(description: string | (() => string | null) | null): this { this._description = description; return this; }
+    getDescription(): string | null { return typeof this._description === 'function' ? this._description() : this._description; }
+    /**
+     * Replaces the table header (heading, description and header actions) with your HTML, a function returning it, or a
+     * namespaced EJS view rendered with `table` (`header('app::tables.orders-header')`). The HTML is inserted as it is:
+     * escape data with `e()`.
+     */
+    header(header: string | (() => string | Promise<string>) | null): this { this._header = header; return this; }
+    async getHeader(): Promise<string | null> {
+        if (typeof this._header === 'function') return this._header();
+        if (typeof this._header === 'string' && /^[A-Za-z0-9_-]+::[A-Za-z0-9_./-]+$/.test(this._header)) return views.render(this._header, { table: this });
+        return this._header;
+    }
+    private _pollingInterval: string | (() => string | null) | null = null;
+    /** Refreshes the records every `interval` (`10s` by default, `null` stops). */
+    poll(interval: string | (() => string | null) | null = '10s'): this { this._pollingInterval = interval; return this; }
+    getPollingInterval(): string | null { return sanitizePollingInterval(typeof this._pollingInterval === 'function' ? this._pollingInterval() : this._pollingInterval); }
+    private _lazyLoaded = false;
+    private _loadingSkeleton = false;
+    private _striped = false;
+    /** Renders the page without the records, then loads them in a second request (`loadTable()`). */
+    lazyLoaded(condition = true): this { this._lazyLoaded = condition; return this; }
+    /** @deprecated Use `lazyLoaded()`. */
+    deferLoading(condition = true): this { return this.lazyLoaded(condition); }
+    isLazyLoaded(): boolean { return this._lazyLoaded; }
+    /** @deprecated Use `isLazyLoaded()`. */
+    isLoadingDeferred(): boolean { return this.isLazyLoaded(); }
+    /** While the records load, placeholder rows (a skeleton) are shown instead of the loading indicator. */
+    loadingSkeleton(condition = true): this { this._loadingSkeleton = condition; return this; }
+    hasLoadingSkeleton(): boolean { return this._loadingSkeleton; }
+    /** Alternating row backgrounds. */
+    striped(condition = true): this { this._striped = condition; return this; }
+    isStriped(): boolean { return this._striped; }
+    /** Adds columns after those already declared (e.g. after a shared configuration). */
+    pushColumns(columns: (Column<R> | ColumnGroup<R> | ColumnLayout<R>)[]): this {
+        const current = this._columnsLayout ?? this._columns;
+        return this.columns([...(current as (Column<R> | ColumnGroup<R> | ColumnLayout<R>)[]), ...columns]);
+    }
+    private _searchable: boolean | null = null;
+    private _extraSearchColumns: (string | ((query: any, search: string) => unknown))[] = [];
+    private _searchPlaceholder: string | (() => string | null) | null = null;
+    private _searchDebounce: string | null = null;
+    private _searchOnBlur = false;
+    private _splitSearchTerms = true;
+    private _searchUsing: ((query: any, search: string) => unknown) | null = null;
+    /**
+     * Global search field: `true` shows it even without searchable columns, `false` hides it, and a list adds database columns
+     * (or functions receiving the query and a search word) to the searched columns.
+     */
+    searchable(condition: boolean | (string | ((query: any, search: string) => unknown))[] = true): this {
+        if (Array.isArray(condition)) { this._searchable = true; this._extraSearchColumns = condition.filter((column) => typeof column === 'function' || (typeof column === 'string' && column !== '')); }
+        else { this._searchable = condition; if (!condition) this._extraSearchColumns = []; }
+        return this;
+    }
+    getExtraSearchableColumns(): (string | ((query: any, search: string) => unknown))[] { return this._extraSearchColumns; }
+    isSearchable(): boolean { return this._searchable ?? (this._extraSearchColumns.length > 0 || this.getColumns().some((column) => column.isGloballySearchable())); }
+    isSearchableByColumn(): boolean { return this.getColumns().some((column) => column.isIndividuallySearchable()); }
+    searchPlaceholder(placeholder: string | (() => string | null) | null): this { this._searchPlaceholder = placeholder; return this; }
+    getSearchPlaceholder(): string | null { return typeof this._searchPlaceholder === 'function' ? this._searchPlaceholder() : this._searchPlaceholder; }
+    /** Delay before the search runs while typing (`500ms` by default), e.g. `750ms` or `1s`. */
+    searchDebounce(debounce: string | null): this { this._searchDebounce = debounce === null || /^\d+(ms|s)$/.test(debounce) ? debounce : null; return this; }
+    getSearchDebounce(): string { return this._searchDebounce ?? '500ms'; }
+    /** Searches when the field loses focus instead of while typing. */
+    searchOnBlur(condition = true): this { this._searchOnBlur = condition; return this; }
+    isSearchOnBlur(): boolean { return this._searchOnBlur; }
+    /** `false`: the search term is matched as a whole instead of word by word (also the default of individual searches). */
+    splitSearchTerms(condition = true): this { this._splitSearchTerms = condition; return this; }
+    shouldSplitSearchTerms(): boolean { return this._splitSearchTerms; }
+    /** Replaces the global search with your own query: `searchUsing((query, search) => query.where('title', 'like', \`%${search}%\`))`. */
+    searchUsing(callback: ((query: any, search: string) => unknown) | null): this { this._searchUsing = callback; return this; }
+    hasSearchUsingCallback(): boolean { return this._searchUsing !== null; }
+    getSearchUsing(): ((query: any, search: string) => unknown) | null { return this._searchUsing; }
+    private _defaultSortOptionLabel: string | null = null;
+    private _defaultKeySort = true;
+    /** Label of the "no sort" option of the sort select (stacked layouts), `-` by default. */
+    defaultSortOptionLabel(label: string | null): this { this._defaultSortOptionLabel = label; return this; }
+    getDefaultSortOptionLabel(): string { return this._defaultSortOptionLabel ?? '-'; }
+    /** `false`: the records are not sorted by their key last (keep the database's or your query's order). */
+    defaultKeySort(condition = true): this { this._defaultKeySort = condition; return this; }
+    hasDefaultKeySort(): boolean { return this._defaultKeySort; }
+    getDefaultSortColumn(): string | null { return typeof this._defaultSort?.column === 'string' ? this._defaultSort.column : null; }
+    getDefaultSortQuery(): ((query: any, direction: SortDirection) => unknown) | null { return typeof this._defaultSort?.column === 'function' ? this._defaultSort.column : null; }
+    getDefaultSortDirection(): SortDirection | null { const direction = this._defaultSort?.direction; return direction ? (String(direction).toLowerCase() === 'desc' ? 'desc' : 'asc') : null; }
+    /** Every `persist…InSession()` at once: filters, search, column searches, sort, grouping, columns and records per page. */
+    persistInSession(condition = true): this {
+        return this.persistFiltersInSession(condition).persistSearchInSession(condition).persistColumnSearchesInSession(condition).persistSortInSession(condition).persistGroupingInSession(condition).persistColumnsInSession(condition).persistRecordsPerPageInSession(condition);
+    }
+    /** Keeps the column manager state (visible columns and their order) for the user's session (on by default, as in Filament). */
+    persistColumnsInSession(condition = true): this { this._persist.columns = condition; return this; }
+    persistsColumnsInSession(): boolean { return this._persist.columns; }
+    private _columnManager: boolean | null = null;
+    private _reorderableColumns = false;
+    private _deferColumnManager = true;
+    private _columnManagerLayout: ColumnManagerLayoutValue = 'dropdown';
+    private _columnManagerResetPosition: ColumnManagerResetActionPositionValue = 'header';
+    private _columnManagerColumns: number | Record<string, number | null> = 1;
+    private _columnManagerMaxHeight: string | null = null;
+    private _columnManagerWidth: string | null = null;
+    private _columnManagerTrigger: ((action: TableTriggerAction) => TableTriggerAction | void) | null = null;
+    private _columnManagerApply: ((action: TableTriggerAction) => TableTriggerAction | void) | null = null;
+    /** Column manager: shown when columns are toggleable or reorderable; `false` removes it, `true` forces it. */
+    columnManager(condition: boolean | null = true): this { this._columnManager = condition; return this; }
+    hasColumnManager(): boolean { return this._columnManager ?? (this._reorderableColumns || this.hasToggleableColumns()); }
+    /** Lets users reorder the columns from the column manager (drag and drop, or move up / down buttons). */
+    reorderableColumns(condition = true): this { this._reorderableColumns = condition; return this; }
+    hasReorderableColumns(): boolean { return this._reorderableColumns; }
+    /** `false`: every change in the column manager applies at once, without the "Apply" button. */
+    deferColumnManager(condition = true): this { this._deferColumnManager = condition; return this; }
+    hasDeferredColumnManager(): boolean { return this._deferColumnManager; }
+    /** `modal`: the column manager opens in a modal instead of a dropdown. */
+    columnManagerLayout(layout: ColumnManagerLayoutValue | null): this { this._columnManagerLayout = layout === 'modal' ? 'modal' : 'dropdown'; return this; }
+    getColumnManagerLayout(): ColumnManagerLayoutValue { return this._columnManagerLayout; }
+    /** `footer`: the column manager's "Reset" button goes next to "Apply" instead of the heading. */
+    columnManagerResetActionPosition(position: ColumnManagerResetActionPositionValue | null): this { this._columnManagerResetPosition = position === 'footer' ? 'footer' : 'header'; return this; }
+    getColumnManagerResetActionPosition(): ColumnManagerResetActionPositionValue { return this._columnManagerResetPosition; }
+    /** Grid columns of the column manager's checkboxes (a number, or one per breakpoint). */
+    columnManagerColumns(columns: number | Record<string, number | null>): this { this._columnManagerColumns = columns; return this; }
+    /** @deprecated Use `columnManagerColumns()`. */
+    columnToggleFormColumns(columns: number | Record<string, number | null>): this { return this.columnManagerColumns(columns); }
+    getColumnManagerColumns(): number | Record<string, number | null> { return this._columnManagerColumns ?? 1; }
+    /** Maximum height of the column manager dropdown, as a CSS length. */
+    columnManagerMaxHeight(height: string | null): this { this._columnManagerMaxHeight = height !== null && /^[0-9.]+(rem|px|em|vh|%)$/.test(height) ? height : null; return this; }
+    /** @deprecated Use `columnManagerMaxHeight()`. */
+    columnToggleFormMaxHeight(height: string | null): this { return this.columnManagerMaxHeight(height); }
+    getColumnManagerMaxHeight(): string | null { return this._columnManagerMaxHeight; }
+    /** Width of the column manager dropdown or modal (`xs` to `7xl`); wider by default with more grid columns. */
+    columnManagerWidth(width: string | null): this { this._columnManagerWidth = width === null || FILTERS_WIDTHS.includes(width) ? width : null; return this; }
+    /** @deprecated Use `columnManagerWidth()`. */
+    columnToggleFormWidth(width: string | null): this { return this.columnManagerWidth(width); }
+    getColumnManagerWidth(): string { return this._columnManagerWidth ?? defaultColumnManagerWidth(this.getColumnManagerColumns()); }
+    /** Customizes the button that opens the column manager (label, icon, color, look, `slideOver()`, modal heading). */
+    columnManagerTriggerAction(configure: ((action: TableTriggerAction) => TableTriggerAction | void) | null): this { this._columnManagerTrigger = configure; return this; }
+    /** @deprecated Use `columnManagerTriggerAction()`. */
+    toggleColumnsTriggerAction(configure: ((action: TableTriggerAction) => TableTriggerAction | void) | null): this { return this.columnManagerTriggerAction(configure); }
+    /** Customizes the column manager's "Apply" button. */
+    columnManagerApplyAction(configure: ((action: TableTriggerAction) => TableTriggerAction | void) | null): this { this._columnManagerApply = configure; return this; }
+    getColumnManagerTriggerAction(): TableTriggerAction { const action = new TableTriggerAction(); return this._columnManagerTrigger?.(action) ?? action; }
+    getColumnManagerTriggerActionView() {
+        const defaults = { label: t('filament-tables::table.actions.column_manager.label'), icon: icons.resolve('tables::actions.column-manager') ?? 'm-view-columns', color: 'gray', view: 'icon-button' as const };
+        if (!this._columnManagerTrigger) return { ...defaults, hidden: false, customized: false };
+        return { ...this.getColumnManagerTriggerAction().resolve(defaults), customized: true };
+    }
+    getColumnManagerApplyActionView() {
+        const defaults = { label: t('filament-tables::table.column_manager.actions.apply.label'), icon: null, color: 'primary', view: 'button' as const };
+        const action = new TableTriggerAction();
+        const view = { ...(this._columnManagerApply?.(action) ?? action).resolve(defaults), customized: this._columnManagerApply !== null };
+        // As in Filament, the "Apply" button only exists when the column manager is deferred.
+        return { ...view, hidden: view.hidden || !this.hasDeferredColumnManager() };
+    }
 
     getColumns(): Column<R>[] { return this._columns.filter((column) => !column.isHidden()); }
     getColumn(name: string): Column<R> | undefined { return this.getColumns().find((c) => c.name === name); }
     getFilters(): TableFilter[] { return this._filters; }
-    getDefaultSort(): { column: string; direction: SortDirection } | null { return this._defaultSort; }
+    /** Default sort, when it is a column name: `{ column, direction }` (see also `getDefaultSortQuery()`). */
+    getDefaultSort(): { column: string; direction: SortDirection } | null { const column = this.getDefaultSortColumn(); return column === null ? null : { column, direction: this.getDefaultSortDirection() ?? 'asc' }; }
     getRecordUrl(record: R): string | null { return this._recordUrl ? this._recordUrl(record) : null; }
     getPageOptions(): (number | 'all')[] { return this._pageOptions; }
     isStackedOnMobile(): boolean { return this._stackedOnMobile; }
     getPluralModelLabel(): string { return this._label; }
     hasToggleableColumns(): boolean { return this.getColumns().some((c) => c.isToggleable()); }
 
-    /** Default column manager state. */
+    /**
+     * Default column manager state, in declaration order: one item per column, the columns of a `ColumnGroup` gathered in a
+     * group item. Labels are escaped: the column manager renders them as HTML.
+     */
     getDefaultColumnState(): ColumnState[] {
-        return this.getColumns().map((c) => ({ type: 'column', name: c.name, label: c.getLabel(), isHidden: false, isToggled: !c.isToggleable() || !c.isToggledHiddenByDefault(), isToggleable: c.isToggleable(), isToggledHiddenByDefault: c.isToggleable() ? c.isToggledHiddenByDefault() : null }));
+        const item = (c: Column<R>): ColumnState => ({ type: 'column', name: c.name, label: e(c.getLabel()), isHidden: false, isToggled: !c.isToggleable() || !c.isToggledHiddenByDefault(), isToggleable: c.isToggleable(), isToggledHiddenByDefault: c.isToggleable() ? c.isToggledHiddenByDefault() : null });
+        const state: ColumnState[] = [];
+        for (const column of this.getColumns()) {
+            if (column._group === null) { state.push(item(column)); continue; }
+            const last = state[state.length - 1];
+            const label = e(column._group);
+            if (last?.type === 'group' && last.name === label) last.columns!.push(item(column));
+            else state.push({ type: 'group', name: label, label, isHidden: false, isToggled: true, isToggleable: true, isToggledHiddenByDefault: null, columns: [item(column)] });
+        }
+        return state;
     }
     getDefaultFilterState(): Record<string, FilterState> { return Object.fromEntries(this._filters.map((f) => [f.name, f.getDefaultState()])); }
 }
@@ -2219,24 +2505,92 @@ export interface TableHost {
     tableSort: string | null;
     tableColumnSearches: Record<string, string>;
     tableRecordsPerPage: number | 'all';
-    paginators: Record<string, number>;
+    /** The current page number (`page`), or the current cursor in cursor pagination. */
+    paginators: Record<string, number | string>;
     tableFilters?: Record<string, FilterState>;
     tableColumns?: ColumnState[];
     /** Current grouping: `id` or `id:direction`. */
     tableGrouping?: string | null;
     /** Reordering mode: all rows, in position order, with drag handles. */
     isTableReordering?: boolean;
+    /** `false` while a lazy loaded table (`lazyLoaded()`) has not loaded its records yet. */
+    isTableLoaded?: boolean;
 }
 
-/** Visible columns: those left checked in the column manager. Browser state can only hide columns declared toggleable. */
+/**
+ * Visible columns: those left checked in the column manager, in the column manager's order when the columns are
+ * reorderable. Browser state can only hide columns declared toggleable, and only reorder declared columns.
+ */
 export function getVisibleColumns<R>(table: Table<R>, host: TableHost): Column<R>[] {
-    const hidden = new Set((Array.isArray(host.tableColumns) ? host.tableColumns : []).filter((c) => c && c.isToggled === false).map((c) => c.name));
-    return table.getColumns().filter((c) => !(c.isToggleable() && hidden.has(c.name)));
+    const toggled = columnToggleStateOf(host.tableColumns);
+    const visible = table.getColumns().filter((c) => !(c.isToggleable() && toggled.get(c.name) === false));
+    if (!table.hasReorderableColumns() || !Array.isArray(host.tableColumns)) return visible;
+    const order = columnOrderOf(syncColumnManagerState(table.getDefaultColumnState(), host.tableColumns, true));
+    const position = (column: Column<R>) => { const index = order.indexOf(column.name); return index < 0 ? order.length : index; };
+    return visible.map((column, index) => ({ column, index })).sort((a, b) => position(a.column) - position(b.column) || a.index - b.index).map(({ column }) => column);
 }
-/** Sanitizes column state from the browser: only `isToggled` of toggleable columns is kept. */
-export function sanitizeColumnState<R>(table: Table<R>, state: unknown): ColumnState[] {
-    const received = new Map((Array.isArray(state) ? state : []).filter((c) => c && typeof c === 'object').map((c: any) => [String(c.name), c.isToggled]));
-    return table.getDefaultColumnState().map((c) => (c.isToggleable && typeof received.get(c.name) === 'boolean' ? { ...c, isToggled: received.get(c.name) as boolean } : c));
+/** Whether a column is hidden by the column manager (Filament's `isToggledHidden()`). */
+export function isColumnToggledHidden<R>(column: Column<R>, host: TableHost): boolean { return column.isToggleable() && columnToggleStateOf(host.tableColumns).get(column.name) === false; }
+/**
+ * Sanitizes column state from the browser (or the session): only declared columns and groups are kept, with their declared
+ * attributes; only `isToggled` of toggleable columns comes from the state, and the order only when `keepOrder` (reorderable
+ * columns, reordered by the user).
+ */
+export function sanitizeColumnState<R>(table: Table<R>, state: unknown, keepOrder = false): ColumnState[] {
+    const declared = table.getDefaultColumnState();
+    const reordered = table.hasReorderableColumns() && (keepOrder || (Array.isArray(state) && hasReorderedColumns(declared, syncColumnManagerState(declared, state, true))));
+    return syncColumnManagerState(declared, state, reordered);
+}
+
+/** The sort of a column, in a direction: its own query, or its sort columns (inverted columns sort the other way). */
+function columnSort<R>(column: Column<R>, direction: SortDirection): NonNullable<ListQuery['sort']> {
+    const sortDirection: SortDirection = (direction === 'desc') !== column.isSortInverted() ? 'desc' : 'asc';
+    const query = column.getSortQuery();
+    const columns = column.getSortColumns();
+    return { column: column.getSortColumn(), ...(columns.length > 1 ? { columns } : {}), direction: sortDirection, ...(query ?{ modify: (q: any, d: SortDirection) => { query(q, d); } } : {}) };
+}
+
+/** Search and per-column search of the query (Filament's `applySearchToTableQuery()`). */
+function tableSearchQuery<R>(table: Table<R>, host: TableHost): Pick<ListQuery, 'search' | 'searchColumns' | 'searchConstraints' | 'splitSearchTerms' | 'searchUsing' | 'columnSearches' | 'columnSearchOptions'> {
+    const columns = table.getColumns();
+    const global = columns.filter((c) => c.isGloballySearchable());
+    const extra = table.getExtraSearchableColumns();
+    const searchUsing = table.getSearchUsing();
+    const individual = columns.filter((c) => c.isIndividuallySearchable() && columnSearchOf(host, c.name) !== '');
+    return {
+        // A search field the table does not show cannot search (a forged or persisted value is ignored).
+        search: table.isSearchable() ? host.tableSearch : '',
+        searchColumns: [...global.filter((c) => !c.getSearchQuery()).flatMap((c) => c.getSearchColumns()), ...extra.filter((column): column is string => typeof column === 'string')],
+        searchConstraints: [
+            ...global.filter((c) => c.getSearchQuery()).map((c) => (q: any, search: string) => { c.getSearchQuery()!(q, search); }),
+            ...extra.filter((column): column is (query: any, search: string) => unknown => typeof column === 'function').map((callback) => (q: any, search: string) => { callback(q, search); }),
+        ],
+        splitSearchTerms: table.shouldSplitSearchTerms(),
+        ...(searchUsing ? { searchUsing: (q: any, search: string) => { searchUsing(q, search); } } : {}),
+        columnSearches: Object.fromEntries(individual.map((c) => [c.name, columnSearchOf(host, c.name).slice(0, 1000)])),
+        columnSearchOptions: Object.fromEntries(individual.map((c) => {
+            const query = c.getSearchQuery();
+            return [c.name, { columns: c.getSearchColumns(), split: c.shouldSplitIndividualSearchTerms() ?? table.shouldSplitSearchTerms(), ...(query ? { query: (q: any, search: string) => { query(q, search); } } : {}) }];
+        })),
+    };
+}
+
+/** Sort of the query (Filament's `applySortingToTableQuery()`): the user's column sort, then the default sort, then the key. */
+function tableSortQuery<R>(table: Table<R>, host: TableHost): Pick<ListQuery, 'sort' | 'thenSort' | 'keySort'> {
+    const [name, direction] = (host.tableSort ?? '').split(':');
+    const column = name ? table.getColumn(name) : undefined;
+    // Only a sortable column the table shows can sort, whatever the browser sends.
+    const userColumn = column?.isSortable() && !isColumnToggledHidden(column, host) ? column : null;
+    const userDirection: SortDirection = direction === 'desc' ? 'desc' : 'asc';
+    const defaultDirection: SortDirection = table.getDefaultSortDirection() ?? userDirection;
+    const sorts: NonNullable<ListQuery['sort']>[] = userColumn ? [columnSort(userColumn, userDirection)] : [];
+    const defaultColumn = table.getDefaultSortColumn(), defaultQuery = table.getDefaultSortQuery();
+    if (defaultQuery) sorts.push({ column: '', direction: defaultDirection, modify: (q: any, d: SortDirection) => { defaultQuery(q, d); } });
+    else if (defaultColumn !== null && defaultColumn !== userColumn?.name) {
+        const declared = table.getColumn(defaultColumn);
+        sorts.push(declared?.isSortable() ? columnSort(declared, defaultDirection) : { column: defaultColumn, direction: defaultDirection });
+    }
+    return { sort: sorts[0] ?? null, thenSort: sorts.slice(1), keySort: table.hasDefaultKeySort() };
 }
 
 /**
@@ -2252,14 +2606,7 @@ function columnSearchOf(host: TableHost, name: string): string {
  * Only what the table declares is accepted, whatever state the browser sends.
  */
 export function getTableQuery<R>(table: Table<R>, host: TableHost): Omit<ListQuery, 'page' | 'perPage'> {
-    const [column, direction] = (host.tableSort ?? '').split(':');
-    const sortColumn = table.getColumn(column);
-    const query: Omit<ListQuery, 'page' | 'perPage'> = {
-        search: host.tableSearch,
-        searchColumns: table.getColumns().filter((c) => c.isGloballySearchable()).map((c) => c.getSearchColumn()),
-        columnSearches: Object.fromEntries(table.getColumns().filter((c) => c.isIndividuallySearchable() && columnSearchOf(host, c.name) !== '').map((c) => [c.getSearchColumn(), columnSearchOf(host, c.name)])),
-        sort: sortColumn?.isSortable() ? { column: sortColumn.getSortColumn(), direction: ((direction === 'desc') !== sortColumn.isSortInverted() ? 'desc' : 'asc') as SortDirection } : table.getDefaultSort(),
-    };
+    const query: Omit<ListQuery, 'page' | 'perPage'> = { ...tableSearchQuery(table, host), ...tableSortQuery(table, host) };
     const grouping = getTableGrouping(table, host);
     if (grouping) query.groupSort = { column: grouping.group.getColumn(), direction: grouping.direction, ...(grouping.group.getOrderQueryUsing() ? { modify: grouping.group.getOrderQueryUsing()! } : {}) };
     // Relationships of dot-notation columns are eager-loaded, and relationship aggregates selected (`posts_count`).
@@ -2340,14 +2687,75 @@ export function sortTable(host: TableHost, column: string | null = null, directi
 }
 
 /** Loads the page of records matching the host's state. */
-export async function getTableRecords<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>): Promise<RecordPage<R>> {
-    const options = table.getPageOptions();
-    // The page size comes from the browser: only a declared option is accepted.
-    const requested = host.tableRecordsPerPage === 'all' || (host.tableRecordsPerPage as unknown) === 'all' ? 'all' : Number(host.tableRecordsPerPage);
-    const option = options.includes(requested as any) ? requested : options[0];
+export async function getTableRecords<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, query: Omit<ListQuery, 'page' | 'perPage'> = getTableQuery(table, host)): Promise<RecordPage<R>> {
+    const option = getTableRecordsPerPage(table, host);
     ensureRelationshipSupport(adapter, { aggregates: table.getColumns().flatMap((c) => c.getRelationshipAggregates()) });
-    if (!table.isPaginated() || option === 'all') return adapter.paginate({ ...getTableQuery(table, host), page: 1, perPage: MAX_UNPAGINATED_RECORDS });
-    return adapter.paginate({ ...getTableQuery(table, host), page: Number(host.paginators.page) || 1, perPage: option as number });
+    if (!table.isPaginated() || option === 'all') return adapter.paginate({ ...query, page: 1, perPage: MAX_UNPAGINATED_RECORDS });
+    // Cursor pagination: the cursor comes from the browser and is checked by the adapter (an invalid one gives the first page).
+    if (table.getPaginationMode() === 'cursor' && adapter.cursorPaginate) return adapter.cursorPaginate({ ...query, perPage: option, cursor: typeof host.paginators.page === 'string' ? host.paginators.page : null });
+    return adapter.paginate({ ...query, page: Number(host.paginators.page) || 1, perPage: option });
+}
+/**
+ * Records per page from the host's state, which comes from the browser: only a declared option is accepted. Anything else
+ * gives the first option, or the default option with `enforcePaginationPageOptions()`.
+ */
+export function getTableRecordsPerPage<R>(table: Table<R>, host: Pick<TableHost, 'tableRecordsPerPage'>): number | 'all' {
+    const options = table.getPageOptions();
+    const value = host.tableRecordsPerPage as unknown;
+    const requested = value === 'all' ? 'all' : Number(value);
+    if (options.includes(requested as number | 'all')) return requested as number | 'all';
+    return table.enforcesPaginationPageOptions() ? table.getDefaultPageOption() : (options[0] ?? 10);
+}
+
+/** Sets the page from the browser (`setPage()`): a page number, or in cursor pagination a cursor (checked when used). */
+export function setTablePage<R>(table: Table<R>, host: TableHost, page: unknown): void {
+    if (table.getPaginationMode() === 'cursor' && typeof page === 'string' && !/^\d+$/.test(page)) { host.paginators.page = page.length <= 2000 ? page : 1; return; }
+    host.paginators.page = Math.max(1, Math.floor(Number(page)) || 1);
+}
+
+/**
+ * Saves a new order of rows (Filament's `reorderTable()`): only keys of records the table shows are kept, and each gets
+ * its position, counted from the current page's first position when the table stays paginated while reordering (from the
+ * last one with `reorderable(..., direction: 'desc')`). `beforeReordering()` and `afterReordering()` run around it.
+ */
+export async function saveTableOrder<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, order: unknown): Promise<string[] | null> {
+    const column = table.getReorderColumn();
+    if (column === null || !table.isReorderAuthorized() || !Array.isArray(order) || order.length > REORDER_LIMIT) return null;
+    const received = [...new Set(order.filter((key) => typeof key === 'string' || typeof key === 'number').map(String))];
+    // Only records the table currently shows (search, filters, tab and scope applied) can be moved.
+    const shown = new Set(await adapter.listKeys({ ...getTableQuery(table, host), keys: received }));
+    const keys = received.filter((key) => shown.has(key));
+    if (!keys.length) return null;
+    const paginated = table.isPaginatedWhileReordering() && table.isPaginated();
+    const perPage = getTableRecordsPerPage(table, host);
+    const offset = paginated && perPage !== 'all' ? ((Number(host.paginators.page) || 1) - 1) * perPage : 0;
+    const total = table.getReorderDirection() === 'desc' ? (paginated ? (await adapter.listKeys(getTableQuery(table, host))).length : keys.length) : 0;
+    await table.callBeforeReordering(keys);
+    const save = async () => {
+        for (const [index, key] of keys.entries()) await adapter.update(key, { [column.split('.').pop()!]: table.getReorderDirection() === 'desc' ? total - offset - index : offset + index + 1 });
+    };
+    await (adapter.transaction ? adapter.transaction(save) : save());
+    await table.callAfterReordering(keys);
+    return keys;
+}
+/** Moves one row up or down among the shown rows (keyboard reordering, Filament's `moveTableRecord()`). */
+export async function moveTableRecordOrder<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, recordKey: unknown, direction: unknown): Promise<string[] | null> {
+    if (!host.isTableReordering || (direction !== 'up' && direction !== 'down') || (typeof recordKey !== 'string' && typeof recordKey !== 'number')) return null;
+    const order = (await getTableReorderRecords(table, host, adapter)).records.map((record) => adapter.getKey(record));
+    const index = order.indexOf(String(recordKey));
+    const target = index + (direction === 'up' ? -1 : 1);
+    if (index < 0 || target < 0 || target >= order.length) return null;
+    [order[index], order[target]] = [order[target], order[index]];
+    return saveTableOrder(table, host, adapter, order);
+}
+/** Rows of the reordering mode: in position order, all of them (up to `REORDER_LIMIT`) or the current page (`paginatedWhileReordering()`). */
+export async function getTableReorderRecords<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>): Promise<RecordPage<R>> {
+    const query = { ...getTableQuery(table, host), groupSort: null, sort: { column: table.getReorderColumn()!, direction: table.getReorderDirection() }, thenSort: [], keySort: true };
+    if (table.isPaginatedWhileReordering() && table.isPaginated()) {
+        const perPage = getTableRecordsPerPage(table, host);
+        if (perPage !== 'all') return adapter.paginate({ ...query, page: Number(host.paginators.page) || 1, perPage });
+    }
+    return adapter.paginate({ ...query, page: 1, perPage: REORDER_LIMIT });
 }
 
 /** Pagination elements: the first and last pages and a window around the current page, with `...` gaps. */
@@ -2527,21 +2935,24 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
 export const GROUPS_ONLY_LIMIT = 1000;
 
 export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: DataAdapter<R>, options: RenderTableOptions<R> = {}): Promise<string> {
-    const reorderColumn = options.canReorder === false ? null : table.getReorderColumn();
+    const reorderColumn = options.canReorder === false || !table.isReorderAuthorized() ? null : table.getReorderColumn();
     const reordering = reorderColumn !== null && host.isTableReordering === true;
-    // Reordering: all rows of the query, in position order, without pagination or actions.
+    // Reordering: the rows of the query in position order (all, or the page with `paginatedWhileReordering()`), without actions.
     if (reordering) options = { ...options, bulkActions: [], bulkActionGroups: [], headerActions: options.headerActions, rowActions: undefined, rowActionsHtml: undefined, filtersForm: null };
     const grouping = reordering ? null : getTableGrouping(table, host);
     // Groups only: no pagination and no record rows, just one summary row per group.
     const groupsOnly = grouping !== null && table.isGroupsOnly();
     ensureRelationshipSupport(adapter, { aggregates: table.getColumns().flatMap((c) => c.getRelationshipAggregates()) });
-    const page = reordering
-        ? await adapter.paginate({ ...getTableQuery(table, host), sort: { column: reorderColumn!, direction: 'asc' }, page: 1, perPage: REORDER_LIMIT })
+    // Lazy loading: the first render has no records; the browser then calls `loadTable()` (`wire:init`).
+    const loaded = !(table.isLazyLoaded() && host.isTableLoaded === false);
+    const page: RecordPage<R> = !loaded
+        ? { records: [], total: 0, page: 1, perPage: 0, lastPage: 1, from: null, to: null }
+        : reordering ? await getTableReorderRecords(table, host, adapter)
         : groupsOnly ? await adapter.paginate({ ...getTableQuery(table, host), page: 1, perPage: GROUPS_ONLY_LIMIT }) : await getTableRecords(table, host, adapter);
     const [sortColumn, sortDirection] = (host.tableSort ?? '').split(':');
     const number = (n: number) => n.toLocaleString('en-US');
     const visible = getVisibleColumns(table, host);
-    const rows = [];
+    const rows: any[] = [];
     const selectionOnly = !reordering && !!options.selection;
     // Bulk action menus: those given, or one "Bulk actions" menu with `bulkActions`; menus without a visible action are left out.
     const bulkMenus = (options.bulkActionGroups ?? ((options.bulkActions ?? []).length ? [BulkActionGroup.make([]).toMenu(options.bulkActions!)] : [])).filter((menu) => menu.actions.length > 0);
@@ -2553,7 +2964,10 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     let previousGroup: { key: string | null; title: string | null } = { key: null, title: null };
     const columnsLayout = table.getColumnsLayout();
     const visibleSet = new Set(visible);
-    for (const record of page.records) {
+    // Striped rows: every second row of each group (Filament's `$isRecordRowStriped`).
+    let striped = false;
+    // Each row renders with its loop variable (`rowLoop` in column state callbacks, `getRowLoop()` elsewhere).
+    for (const [rowIndex, record] of page.records.entries()) await withRowLoop(makeRowLoop(rowIndex, page.records.length), async () => {
         const key = adapter.getKey(record);
         let groupHeader: { key: string | null; title: string | null; label: string | null; description: string | null; collapsible: boolean; keys: string[]; ariaHidden: boolean } | null = null;
         let summaryBefore: { key: string | null; title: string | null } | null = null;
@@ -2572,7 +2986,10 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
                 ariaHidden: !(filled(groupTitle) || filled(label) || filled(description) || grouping.group.isCollapsible() || selectable),
             };
         }
+        if (grouping && String(groupTitle ?? '') !== String(previousGroup.title ?? '')) striped = false;
         previousGroup = { key: groupKey, title: groupTitle };
+        const isStriped = table.isStriped() && striped;
+        striped = !striped;
         const cells = [];
         if (!groupsOnly) for (const column of visible) cells.push({ name: column.name, cssName: column.getCssName(), alignment: column.getAlignment(), responsive: column.getResponsiveClasses(), label: column.getLabel(), url: column.getUrl(record), html: await column.toHtml(record, key), plain: column.isClickDisabled(), mountExpression: !reordering && column.getActionName() !== null && !column.isClickDisabled() ? `mountAction(${js(column.getActionName())}, {}, ${js({ table: true, recordKey: key })})` : null });
         const recordAction = table.getRecordAction();
@@ -2588,15 +3005,16 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             reorder: reordering ? { id: `${host.id}-table-reorder-${createHash('md5').update(key).digest('hex')}`, label: String((record as any)[table.getColumns()[0]?.name ?? ''] ?? key), position: rows.length + 1 } : null,
             wasClickable: reordering && (recordAction !== null || table.getRecordUrl(record) !== null),
             key, url: reordering ? null : recordAction ? null : table.getRecordUrl(record), cells, actions: groupsOnly ? [] : ((await options.rowActions?.(record)) ?? []),
+            newTab: !reordering && table.shouldOpenRecordUrlInNewTab(record), striped: isStriped,
             actionsHtml: options.rowActionsHtml && !groupsOnly ? await options.rowActionsHtml(record) : null, classes: table.getRecordClasses(record),
             // Row click: the action is mounted with the record key.
             mountExpression: reordering ? null : recordAction ? `mountAction(${js(recordAction)}, {}, ${js({ table: true, recordKey: key })})` : null,
         });
-    }
+    });
     const hasRowActions = rows.some((row) => row.actionsHtml !== null || row.actions.length > 0);
     const actionsBefore = table.getRecordActionsPosition().startsWith('before');
     // Summaries: never while reordering; group summaries go before the next group's header.
-    const summary = reordering ? null : await summarize(table, host, adapter, visible, page, { group: grouping?.group ?? null, groupsOnly, placeholders: { selection: selectable, actions: hasRowActions && !actionsBefore, actionsBefore: hasRowActions && actionsBefore } });
+    const summary = reordering || !loaded ? null : await summarize(table, host, adapter, visible, page, { group: grouping?.group ?? null, groupsOnly, placeholders: { selection: selectable, actions: hasRowActions && !actionsBefore, actionsBefore: hasRowActions && actionsBefore } });
     let trailingGroupSummary = '';
     if (summary && grouping) {
         for (const row of rows) if (row.summaryBefore) row.groupSummaryHtml = await summary.group(grouping.group, row.summaryBefore.key, row.summaryBefore.title);
@@ -2621,24 +3039,35 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         groups: reordering || table.areGroupingSettingsHidden() ? [] : table.getGroups().map((g) => ({ id: g.getId(), label: g.getLabel() })),
         grouping: { active: grouping !== null, trigger: table.getGroupRecordsTriggerActionView(), directionHidden: table.isGroupingDirectionSettingHidden(), inDropdownOnDesktop: table.areGroupingSettingsInDropdownOnDesktop(), collapsedByDefault: table.areGroupsCollapsedByDefault(), groupsOnly },
         id: host.id, targets: LOADING_TARGETS, table, rows, page, number,
-        reorder: reorderColumn !== null ? { active: reordering } : null,
+        reorder: reorderColumn !== null ? { active: reordering, trigger: table.getReorderRecordsTriggerActionView(reordering) } : null,
+        // Row links: in a new tab (`openRecordUrlInNewTab()`), or else through SPA navigation unless a modifier key is held.
+        recordLinkAttributes: (newTab: boolean) => (newTab ? ' target="_blank"' : ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"`),
+        isLoaded: loaded, hasLoadingSkeleton: table.hasLoadingSkeleton(), pollingInterval: reordering || !loaded ? null : table.getPollingInterval(),
+        description: table.getDescription(), header: await table.getHeader(), defaultSortOptionLabel: table.getDefaultSortOptionLabel(),
+        search: { placeholder: table.getSearchPlaceholder() ?? t('filament-tables::table.fields.search.placeholder'), model: table.isSearchOnBlur() ? 'wire:model.live.blur' : `wire:model.live.debounce.${table.getSearchDebounce()}` },
+        columnManager: {
+            layout: table.getColumnManagerLayout(), resetPosition: table.getColumnManagerResetActionPosition(), reorderable: table.hasReorderableColumns(), toggleable: table.hasToggleableColumns(),
+            columns: table.getColumnManagerColumns(), width: table.getColumnManagerWidth(), maxHeight: table.getColumnManagerMaxHeight(),
+            trigger: table.getColumnManagerTriggerActionView(), apply: table.getColumnManagerApplyActionView(), action: table.getColumnManagerTriggerAction(),
+        },
         // No checkboxes without bulk actions (or in groups-only mode), no actions column without row actions.
         toolbarActions: reordering ? [] : (options.toolbarActions ?? []),
         selectable, hasRowActions, actionsPosition: table.getRecordActionsPosition(), actionsAlignment: table.getRecordActionsAlignment() ?? (actionsBefore ? 'start' : null),
         // The key changes on every render to force the checkbox to be replaced.
         randomKey: () => Array.from(randomBytes(16), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join(''),
         // "Select all" covers every record of the current query.
-        allCount: table.getPaginationMode() === 'simple' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length : page.total,
+        allCount: !loaded || table.getPaginationMode() !== 'default' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length : page.total,
         selection: selectionOnly ? { property: options.selection!.property, disabled: options.selection!.disabled === true } : null,
-        maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() === 'simple' ? rows.length : page.total,
+        maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() !== 'default' ? rows.length : page.total,
         columns: visible.map((c) => ({ name: c.name, grouped: c._group !== null, cssName: c.getCssName(), alignment: c.getAlignment(), responsive: c.getResponsiveClasses(), width: c.getWidth(), growable: c.getWidth() === null && c.canGrow(), wrapHeader: c.canHeaderWrap(), label: c.getLabel(), sortable: !reordering && c.isSortable(), individuallySearchable: !reordering && c.isIndividuallySearchable(), sort: sortColumn === c.name ? (sortDirection === 'desc' ? 'descending' : 'ascending') : 'none' })),
         linkClasses: classes('link', 'primary'), dangerLinkClasses: classes('link', 'danger'), primaryButtonClasses: classes('button', 'primary'), badgeClasses: classes('badge', 'primary'), indicatorBadgeClasses: classes('badge', 'primary'), grayButtonClasses: classes('button', 'gray'), indicatorColorClasses: (color: string) => classes('badge', color),
+        buttonColorClasses: (color: string) => (color === 'gray' ? [] : classes('button', color)),
         bulkActions: bulkActionsHtml, bulkMenus, bulkMenuColors: (component: 'button' | 'icon-button', color: string) => (color === 'gray' ? [] : (colorManager?.getComponentClasses(component, color) ?? [])),
         filtersForm: options.filtersForm ?? null, activeFiltersCount: countActiveFilters(table, host), filtersLayout: table.getFiltersLayout(), filterIndicators: table.areFilterIndicatorsHidden() ? [] : getFilterIndicators(table, host),
         filterActions: { trigger: table.getFiltersActionView('trigger'), apply: table.getFiltersActionView('apply'), reset: table.getFiltersActionView('reset') },
         filterActionHtml: (view: FiltersActionView, attributes: string, badge: string | null = null, forceEnabled = false) => filterActionHtml(view, attributes, badge, forceEnabled),
         filtersDeferred: table.hasDeferredFilters(), filtersResetPosition: table.getFiltersResetActionPosition(), filtersFormWidth: table.getFiltersFormWidth(), filtersFormMaxHeight: table.getFiltersFormMaxHeight(), modal,
-        hasColumnManager: !reordering && table.hasToggleableColumns(),
+        hasColumnManager: !reordering && table.hasColumnManager() && !(columnsLayout !== null && !table.hasToggleableColumns()) && !table.getColumnManagerTriggerActionView().hidden,
         afterContainer: options.after ?? '', heading: table.getHeading(), headerActions: options.headerActions ?? [], summaryHtml: summary?.html ?? '', trailingGroupSummary,
         // Column group header row: one cell per ungrouped column, one merged cell per run of columns in the same group.
         headerGroups: visible.some((c) => c._group !== null) ? visible.reduce<{ label: string | null; span: number }[]>((runs, c) => {
@@ -2647,10 +3076,11 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             else runs.push({ label: c._group, span: 1 });
             return runs;
         }, []) : null,
-        isSearchable: !reordering && table.getColumns().some((c) => c.isGloballySearchable()),
+        isSearchable: !reordering && table.isSearchable(),
         emptyState: { custom: await table.getCustomEmptyState(), heading: table.getEmptyStateHeading(), description: table.getEmptyStateDescription(), icon: table.getEmptyStateIcon(), actions: options.emptyStateActions ?? [] },
-        pagination: reordering || groupsOnly || !table.isPaginated() ? '' : views.render('filament::components.pagination', {
-            id: host.id, targets: LOADING_TARGETS + ',paginators', page, number, pageOptions: table.getPageOptions(), elements: paginationElements(page.page, page.lastPage), simple: table.getPaginationMode() === 'simple',
+        pagination: (reordering && !table.isPaginatedWhileReordering()) || groupsOnly || !loaded || !table.isPaginated() ? '' : views.render('filament::components.pagination', {
+            id: host.id, targets: LOADING_TARGETS + ',paginators', page, number, pageOptions: table.getPageOptions(), elements: paginationElements(page.page, page.lastPage), simple: table.getPaginationMode() !== 'default',
+            extremeLinks: table.hasExtremePaginationLinks(), pageName: table.getPaginationPageName(), cursor: page.cursor ?? null,
             attrs: (o: Record<string, any>) => new Attributes(o),
         }),
     });
