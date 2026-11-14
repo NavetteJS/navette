@@ -105,10 +105,29 @@ export abstract class Field extends FieldBase {
     async savesRelationships(): Promise<boolean> { return this._saveRelationships !== null; }
     async loadStateFromRelationships(record: any): Promise<{ state: unknown } | null> { return this._loadStateFromRelationships ? { state: await this._loadStateFromRelationships(record, this.context()) } : null; }
     async saveRelationships(record: any): Promise<void> { if (this._saveRelationships) await this._saveRelationships({ record, state: await this.dehydrateState(this.context().state), ctx: this.context() }); }
-    private stringRuleWith(name: string, parameters: unknown[] = []): this { return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name); }
+    /**
+     * Adds a Laravel-style rule with parameters. A parameter may be a function of the field context (as Filament's
+     * closures): the rule is then built at validation time with the evaluated parameters (a list result is spread).
+     */
+    private stringRuleWith(name: string, parameters: Lazy<unknown, ComponentContext>[] = []): this {
+        if (!parameters.some((parameter) => typeof parameter === 'function')) return this.rule(parameters.length ? `${name}:${parameters.map(String).join(',')}` : name);
+        const options = () => ({ numeric: this.hasNumericValidation(), name: this._name ?? '' });
+        const probe = stringRule(`${name}:${parameters.map(() => '0').join(',')}`, options());
+        let last: Rule | null = null;
+        return this.rule({
+            name: probe?.name ?? name,
+            implicit: probe?.implicit,
+            passes: async (value, ctx) => {
+                const values = (await Promise.all(parameters.map((parameter) => evaluate(parameter as Lazy<unknown, ComponentContext>, ctx)))).flat();
+                last = stringRule(values.length ? `${name}:${values.map(String).join(',')}` : name, options());
+                return last === null || last.passes(value, ctx);
+            },
+            message: (attribute) => last?.message(attribute) ?? '',
+        });
+    }
     /** The value must match the pattern (a RegExp, or a `/pattern/flags` string). */
-    regex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'regex', passes: (v) => { re.lastIndex = 0; return re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
-    notRegex(pattern: RegExp | string): this { const re = typeof pattern === 'string' ? parseRegex(pattern) : pattern; return this.rule({ name: 'not_regex', passes: (v) => { re.lastIndex = 0; return !re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
+    regex(pattern: Lazy<RegExp | string, ComponentContext>): this { return this.rule({ name: 'regex', passes: async (v, ctx) => { const resolved = await evaluate(pattern, ctx); const re = typeof resolved === 'string' ? parseRegex(resolved) : resolved; re.lastIndex = 0; return re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
+    notRegex(pattern: Lazy<RegExp | string, ComponentContext>): this { return this.rule({ name: 'not_regex', passes: async (v, ctx) => { const resolved = await evaluate(pattern, ctx); const re = typeof resolved === 'string' ? parseRegex(resolved) : resolved; re.lastIndex = 0; return !re.test(String(v)); }, message: (a) => `The ${a} field format is invalid.` }); }
     alpha(): this { return this.stringRuleWith('alpha'); }
     alphaDash(): this { return this.stringRuleWith('alpha_dash'); }
     alphaNum(): this { return this.stringRuleWith('alpha_num'); }
@@ -121,39 +140,39 @@ export abstract class Field extends FieldBase {
     ipv6(): this { return this.stringRuleWith('ipv6'); }
     macAddress(): this { return this.stringRuleWith('mac_address'); }
     hexColor(): this { return this.stringRuleWith('hex_color'); }
-    multipleOf(value: number): this { return this.stringRuleWith('multiple_of', [value]); }
+    multipleOf(value: Lazy<number, ComponentContext>): this { return this.stringRuleWith('multiple_of', [value]); }
     /** The value must be one of these (a list, or the values of an enum-like object). */
-    in(values: readonly (string | number)[] | Record<string, string | number> | Enum<string | number>): this { const allowed = (isEnum(values) ? values.values() : Array.isArray(values) ? values : Object.values(values)).map(String); return this.rule({ name: 'in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
-    notIn(values: readonly (string | number)[]): this { const denied = values.map(String); return this.rule({ name: 'not_in', passes: (v) => (Array.isArray(v) ? v : [v]).every((item) => !denied.includes(String(item))), message: (a) => `The selected ${a} is invalid.` }); }
+    in(values: Lazy<readonly (string | number)[] | Record<string, string | number> | Enum<string | number>, ComponentContext>): this { return this.rule({ name: 'in', passes: async (v, ctx) => { const list = await evaluate(values, ctx); const allowed = (isEnum(list) ? list.values() : Array.isArray(list) ? list : Object.values(list)).map(String); return (Array.isArray(v) ? v : [v]).every((item) => allowed.includes(String(item))); }, message: (a) => `The selected ${a} is invalid.` }); }
+    notIn(values: Lazy<readonly (string | number)[], ComponentContext>): this { return this.rule({ name: 'not_in', passes: async (v, ctx) => { const denied = (await evaluate(values, ctx)).map(String); return (Array.isArray(v) ? v : [v]).every((item) => !denied.includes(String(item))); }, message: (a) => `The selected ${a} is invalid.` }); }
     /** `in()` with the values of an enum (`defineEnum()`, `nativeEnum()`) or of an enum-like object. */
-    enum(values: Record<string, string | number> | Enum<string | number>): this { return this.in(values); }
-    startsWith(prefixes: string | string[]): this { return this.stringRuleWith('starts_with', [prefixes].flat()); }
-    endsWith(suffixes: string | string[]): this { return this.stringRuleWith('ends_with', [suffixes].flat()); }
-    doesntStartWith(prefixes: string | string[]): this { return this.stringRuleWith('doesnt_start_with', [prefixes].flat()); }
-    doesntEndWith(suffixes: string | string[]): this { return this.stringRuleWith('doesnt_end_with', [suffixes].flat()); }
+    enum(values: Lazy<Record<string, string | number> | Enum<string | number>, ComponentContext>): this { return this.in(values); }
+    startsWith(prefixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('starts_with', [prefixes].flat()); }
+    endsWith(suffixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('ends_with', [suffixes].flat()); }
+    doesntStartWith(prefixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('doesnt_start_with', [prefixes].flat()); }
+    doesntEndWith(suffixes: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('doesnt_end_with', [suffixes].flat()); }
     /** The field must equal `<name>_confirmation` (or the given field) of the same form. */
     confirmed(field: string | null = null): this { return this.rule(field ? `confirmed:${field}` : 'confirmed'); }
-    same(field: string): this { return this.stringRuleWith('same', [field]); }
-    different(field: string): this { return this.stringRuleWith('different', [field]); }
+    same(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('same', [field]); }
+    different(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('different', [field]); }
     /** Compares with a number or another field of the same form. */
-    gt(fieldOrValue: string | number): this { return this.stringRuleWith('gt', [fieldOrValue]); }
-    gte(fieldOrValue: string | number): this { return this.stringRuleWith('gte', [fieldOrValue]); }
-    lt(fieldOrValue: string | number): this { return this.stringRuleWith('lt', [fieldOrValue]); }
-    lte(fieldOrValue: string | number): this { return this.stringRuleWith('lte', [fieldOrValue]); }
+    gt(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('gt', [fieldOrValue]); }
+    gte(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('gte', [fieldOrValue]); }
+    lt(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('lt', [fieldOrValue]); }
+    lte(fieldOrValue: Lazy<string | number, ComponentContext>): this { return this.stringRuleWith('lte', [fieldOrValue]); }
     /** No duplicates in a list value (tags, multiple select, checkbox list). */
     distinct(): this { return this.stringRuleWith('distinct'); }
     /** Required when another field of the form has one of these values (`requiredIf('type', 'company')`). */
-    requiredIf(field: string, values: unknown): this { return this.stringRuleWith('required_if', [field, ...[values].flat()]); }
-    requiredUnless(field: string, values: unknown): this { return this.stringRuleWith('required_unless', [field, ...[values].flat()]); }
-    requiredIfAccepted(field: string): this { return this.stringRuleWith('required_if_accepted', [field]); }
-    requiredWith(fields: string | string[]): this { return this.stringRuleWith('required_with', [fields].flat()); }
-    requiredWithAll(fields: string | string[]): this { return this.stringRuleWith('required_with_all', [fields].flat()); }
-    requiredWithout(fields: string | string[]): this { return this.stringRuleWith('required_without', [fields].flat()); }
-    requiredWithoutAll(fields: string | string[]): this { return this.stringRuleWith('required_without_all', [fields].flat()); }
-    prohibited(condition = true): this { return condition ? this.stringRuleWith('prohibited') : this; }
-    prohibitedIf(field: string, values: unknown): this { return this.stringRuleWith('prohibited_if', [field, ...[values].flat()]); }
-    prohibitedUnless(field: string, values: unknown): this { return this.stringRuleWith('prohibited_unless', [field, ...[values].flat()]); }
-    prohibits(fields: string | string[]): this { return this.stringRuleWith('prohibits', [fields].flat()); }
+    requiredIf(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('required_if', [field, ...[values].flat()]); }
+    requiredUnless(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('required_unless', [field, ...[values].flat()]); }
+    requiredIfAccepted(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('required_if_accepted', [field]); }
+    requiredWith(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_with', [fields].flat()); }
+    requiredWithAll(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_with_all', [fields].flat()); }
+    requiredWithout(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_without', [fields].flat()); }
+    requiredWithoutAll(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('required_without_all', [fields].flat()); }
+    prohibited(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('prohibited', condition); }
+    prohibitedIf(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('prohibited_if', [field, ...[values].flat()]); }
+    prohibitedUnless(field: Lazy<string, ComponentContext>, values: Lazy<unknown, ComponentContext>): this { return this.stringRuleWith('prohibited_unless', [field, ...[values].flat()]); }
+    prohibits(fields: Lazy<string | string[], ComponentContext>): this { return this.stringRuleWith('prohibits', [fields].flat()); }
     /** Rule applied while `condition` holds (a boolean, or a function of the field context). */
     private conditionalRule(name: string, condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>)): this { return condition === false ? this : this.rule(name, condition); }
     /** The value must be a URL whose host has a DNS A or AAAA record. */
@@ -169,7 +188,7 @@ export abstract class Field extends FieldBase {
     /** The value must be "no", "off", 0, "0", false or "false". */
     declined(condition: boolean | ((ctx: ComponentContext) => boolean | Promise<boolean>) = true): this { return this.conditionalRule('declined', condition); }
     /** Required when another field of the form is declined. */
-    requiredIfDeclined(field: string): this { return this.stringRuleWith('required_if_declined', [field]); }
+    requiredIfDeclined(field: Lazy<string, ComponentContext>): this { return this.stringRuleWith('required_if_declined', [field]); }
     /**
      * The value must be a date after a date (`'2024-01-01'`, `'today'`, `'tomorrow'`) or after the value of another field
      * (`after('start_date')`, relative to the container: `'../start_date'`, or absolute with `'/data.start_date'`).
@@ -339,8 +358,8 @@ export abstract class TableSelectField extends Field {
     multiple(condition = true): this { this._multiple = condition; return this; }
     isMultiple(): boolean { return this._multiple; }
     /** Maximum (and minimum) number of selected records, checked on the server. */
-    maxItems(count: number | null): this { this._maxItems = count; return this; }
-    minItems(count: number | null): this { this._minItems = count; return this; }
+    maxItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_maxItems', count); }
+    minItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minItems', count); }
     getMaxItems(): number | null { return this._maxItems; }
     getMinItems(): number | null { return this._minItems; }
     /** @internal Uses another field's table definition (the `TableSelect` of a `ModalTableSelect`). */
@@ -501,9 +520,9 @@ export class ModalTableSelect extends TableSelectField {
         return this;
     }
     /** Text shown when nothing is selected. */
-    placeholder(placeholder: string | null): this { this._placeholder = placeholder; return this; }
+    placeholder(placeholder: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', placeholder); }
     /** Labels in badges (by default with `multiple()` only). */
-    badge(condition: boolean | null = true): this { this._hasBadges = condition; return this; }
+    badge(condition: Lazy<boolean | null, ComponentContext> = true): this { return this.setLazy('_hasBadges', condition); }
     hasBadges(): boolean { return this._hasBadges ?? this._multiple; }
     badgeColor(color: Lazy<string | null, ComponentContext>): this { this._badgeColor = color; return this; }
     /** Label of a selected record, from the record (`(record) => \`${record.name} (${record.slug})\``). */
@@ -873,14 +892,14 @@ export class Select extends Field {
         return this;
     }
     /** `false`: the JavaScript select, even without search. */
-    native(condition = true): this { this._native = condition; return this; }
+    native(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_native', condition); }
     /** Option labels are HTML (sanitized on the server; JavaScript select only). */
-    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    allowHtml(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_allowHtml', condition); }
     /** Maximum (and minimum) number of selected items of a multiple select, checked on the server. */
-    maxItems(count: number | null): this { this._maxItems = count; return this; }
-    minItems(count: number | null): this { this._minItems = count; return this; }
+    maxItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_maxItems', count); }
+    minItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minItems', count); }
     /** Number of options shown at once in the JavaScript select (50 by default). */
-    optionsLimit(limit: number): this { this._optionsLimit = Math.max(1, Math.floor(limit)); return this; }
+    optionsLimit(limit: Lazy<number, ComponentContext>): this { return this.setLazy('_optionsLimit', limit, (value) => Math.max(1, Math.floor(value))); }
     searchDebounce(ms: Lazy<number, ComponentContext>): this { return this.setLazy('_searchDebounce', ms, (value) => Math.max(0, Math.floor(Number(value) || 0))); }
     loadingMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.loading', message); }
     noSearchResultsMessage(message: Lazy<string, ComponentContext>): this { return this.setLazy('_messages.noSearchResults', message); }
@@ -952,7 +971,7 @@ export class Select extends Field {
     placeholder(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_placeholder', label); }
     private _selectablePlaceholder = true;
     /** `false`: the native select has no empty option. */
-    selectablePlaceholder(condition = true): this { this._selectablePlaceholder = condition; return this; }
+    selectablePlaceholder(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_selectablePlaceholder', condition); }
     searchable(condition = true): this { this._searchable = condition; return this; }
     /** Multiple selection: the state is a list of values; always uses the JavaScript select. */
     multiple(condition = true): this { this._multiple = condition; if (condition) this._searchable = true; return this; }
@@ -970,7 +989,7 @@ export class Select extends Field {
     }
     private _preload = false;
     /** Relationship with `searchable()`: loads the options with the form, instead of on search only. Other options are always loaded. */
-    preload(condition = true): this { this._preload = condition; return this; }
+    preload(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_preload', condition); }
     hydrateState(value: unknown): unknown {
         if (this._multiple) return (Array.isArray(value) ? value : []).map(String);
         return value === null || value === undefined || value === '' ? null : String(value);
@@ -1270,17 +1289,17 @@ export class Repeater extends Field {
      */
     simple(field: Field | null): this { this._simple = field; return this; }
     defaultItems(count: number): this { this._defaultItems = count; return this; }
-    maxItems(count: number): this { this._maxItems = count; return this; }
+    maxItems(count: Lazy<number, ComponentContext>): this { return this.setLazy('_maxItems', count); }
     /** Minimum number of items, checked on the server. */
-    minItems(count: number | null): this { this._minItems = count; return this; }
+    minItems(count: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minItems', count); }
     private _reorderable = true;
     /** `false`: items keep their order (e.g. a relationship without an order column). */
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderable', condition); }
     private _dragAndDrop = true;
     /** Move up / move down buttons in each item header, besides drag and drop. */
-    reorderableWithButtons(condition = true): this { this._reorderableWithButtons = condition; return this; }
+    reorderableWithButtons(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderableWithButtons', condition); }
     /** `false`: no drag and drop (buttons may still reorder, with `reorderableWithButtons()`). */
-    reorderableWithDragAndDrop(condition = true): this { this._dragAndDrop = condition; return this; }
+    reorderableWithDragAndDrop(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_dragAndDrop', condition); }
     /** Reordering is off with `reorderable(false)`, and for a relationship without `orderColumn()` (the order could not be saved). */
     private isReorderable(): boolean { return this._reorderable && !(this._relationship !== null && this._relationship.orderColumn === null && this._orderColumnPending === null); }
     private canDrag(): boolean { return this.isReorderable() && this._dragAndDrop; }
@@ -1290,25 +1309,25 @@ export class Repeater extends Field {
     /** Items laid out in a grid (`2`, or `{ md: 2, xl: 3 }`). */
     grid(columns: Record<string, number> | number | null = 2): this { this._grid = columns; return this; }
     /** Items can be collapsed from their header; `collapsed()` collapses them on load. */
-    collapsible(condition = true): this { this._collapsible = condition; return this; }
+    collapsible(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_collapsible', condition); }
     collapsed(condition = true): this { this._collapsed = condition; if (condition) this._collapsible = true; return this; }
     /** Keeps each item's collapsed state in the browser (local storage). */
-    persistCollapsed(condition = true): this { this._persistCollapsed = condition; return this; }
-    cloneable(condition = true): this { this._cloneable = condition; return this; }
+    persistCollapsed(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_persistCollapsed', condition); }
+    cloneable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_cloneable', condition); }
     /** `false`: no "Add" button (and adding is refused on the server). */
-    addable(condition = true): this { this._addable = condition; return this; }
+    addable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_addable', condition); }
     /** `false`: no delete button (and deleting is refused on the server). */
-    deletable(condition = true): this { this._deletable = condition; return this; }
+    deletable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_deletable', condition); }
     /** Item header label: a string, or a function of the item's state (`({ state }) => state.name ?? null`). Escaped. */
     itemLabel(label: ((ctx: { state: Record<string, unknown>; key: string; index: number }) => string | null) | string | null): this { this._itemLabel = label; return this; }
     /** Item number after the label. */
-    itemNumbers(condition = true): this { this._itemNumbers = condition; return this; }
-    truncateItemLabel(condition = true): this { this._truncateItemLabel = condition; return this; }
+    itemNumbers(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_itemNumbers', condition); }
+    truncateItemLabel(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_truncateItemLabel', condition); }
     /** `false`: items have no header (and so no buttons): only their fields. */
-    itemHeaders(condition = true): this { this._itemHeaders = condition; return this; }
-    addActionLabel(label: string | null): this { this._addActionLabel = label; return this; }
+    itemHeaders(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_itemHeaders', condition); }
+    addActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addActionLabel', label); }
     addActionAlignment(alignment: 'start' | 'center' | 'end' | null): this { this._addActionAlignment = alignment; return this; }
-    labelBetweenItems(label: string | null): this { this._labelBetweenItems = label; return this; }
+    labelBetweenItems(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_labelBetweenItems', label); }
     /**
      * Items are the records of a has-many relationship of the form's model (Objection `relationMappings`): loaded when the form is
      * filled, then created, updated and deleted once the record is saved. `orderColumn()` saves the items' order.
@@ -1429,7 +1448,7 @@ export class Repeater extends Field {
      * (or pass `true`). The new item is inserted after the item whose key is sent as `afterItem`.
      */
     addBetweenAction(modify: ActionModifier | boolean = true): this { this._actionModifiers.addBetween = typeof modify === 'boolean' ? (modify ? (action) => action.visible() : null) : modify; return this; }
-    addBetweenActionLabel(label: string | null): this { this._addBetweenLabel = label; return this; }
+    addBetweenActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addBetweenLabel', label); }
     cloneAction(modify: ActionModifier): this { this._actionModifiers.clone = modify; return this; }
     deleteAction(modify: ActionModifier): this { this._actionModifiers.delete = modify; return this; }
     moveUpAction(modify: ActionModifier): this { this._actionModifiers.moveUp = modify; return this; }
@@ -1520,6 +1539,9 @@ export class Repeater extends Field {
             case 'collapseAll': action = Action.make('collapseAll').label(tr('collapse_all.label')).color('gray').link().size('sm'); break;
             case 'expandAll': action = Action.make('expandAll').label(tr('expand_all.label')).color('gray').link().size('sm'); break;
         }
+        // The guards (`addable()`, `maxItems()`, `reorderable()`…) may be functions: the handler sees their evaluated values.
+        const handler = (action as any)._handler as ((ctx: any) => unknown) | null;
+        if (handler) action.action((ctx) => this.withLazyProperties(async () => handler(ctx)));
         return modifyAction(action, this._actionModifiers[name]);
     }
 
@@ -1773,7 +1795,7 @@ abstract class TemporalField extends Field {
     /** Display format of the JavaScript picker, in PHP's notation (`'d/m/Y'`, `'M j, Y H:i'`). */
     displayFormat(format: Lazy<string | null, ComponentContext>): this { return this.setLazy('_displayFormat', format); }
     /** Format of the saved value, in PHP's notation (`'Y-m-d'` by default for dates, `'Y-m-d H:i:s'` with a time). */
-    format(format: string | null): this { this._format = format; return this; }
+    format(format: Lazy<string | null, ComponentContext>): this { return this.setLazy('_format', format); }
     /** First day of the week in the JavaScript picker: 0 (Sunday) to 6. */
     firstDayOfWeek(day: Lazy<number, ComponentContext>): this { return this.setLazy('_firstDayOfWeek', day, (value) => Math.min(6, Math.max(0, Math.floor(Number(value) || 0)))); }
     weekStartsOnMonday(): this { return this.firstDayOfWeek(1); }
@@ -2015,7 +2037,7 @@ export class Textarea extends Field {
     /** The textarea grows with its content. */
     autosize(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_autosize', condition, Boolean); }
     /** Stops the Grammarly extension from analyzing the content. */
-    disableGrammarly(condition = true): this { this._grammarly = !condition; return this; }
+    disableGrammarly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_grammarly', condition, (value) => !value); }
     /** Removes the spaces around the value before it is validated and saved. */
     trim(condition = true): this { this._trim = condition; return this; }
     hydrateState(value: unknown): unknown { return this._trim && typeof value === 'string' ? value.trim() : value; }
@@ -2063,7 +2085,7 @@ export class TagsInput extends Field {
     tagPrefix(prefix: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagPrefix', prefix); }
     tagSuffix(suffix: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagSuffix', suffix); }
     /** Tags can be reordered by dragging. */
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderable', condition); }
     /** Badge color of the tags (`primary` by default). */
     color(color: Lazy<string | null, ComponentContext>): this { return this.setLazy('_tagColor', color); }
     /** Rules applied to each tag (e.g. a maximum length); the message names the tag. */
@@ -2186,7 +2208,7 @@ export class ToggleButtons extends Field {
     /** Buttons stretch to the width of the field. */
     fullWidth(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_fullWidth', condition, Boolean); }
     /** Number of columns the buttons are spread over (from `lg`), when not inline. */
-    columns(columns: number | null): this { this._columns = columns; return this; }
+    columns(columns: Lazy<number | null, ComponentContext>): this { return this.setLazy('_columns', columns); }
     /** Options that cannot be selected; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
@@ -2345,15 +2367,15 @@ export class RichEditor extends Field {
     /** Browser TipTap extensions: URLs of ES modules exporting an extension (or an array of them). Register their server side with `registerRichContentExtensions()`. */
     extensions(urls: string[]): this { this._jsExtensions = [...this._jsExtensions, ...urls]; return this; }
     /** Saves the content as the editor's JSON document instead of HTML. */
-    json(condition = true): this { this._json = condition; return this; }
+    json(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_json', condition); }
     placeholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_richPlaceholder', text); }
     /** Where files attached in the editor are stored (`FileUpload.storage` by default); without storage, attaching is off. */
     fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
-    fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
+    fileAttachmentsDirectory(directory: Lazy<string | null, ComponentContext>): this { return this.setLazy('_attachmentsDirectory', directory); }
     /** Accepted types of attached files, checked on the file's content (images only: they are inserted as images). */
     fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
     /** Maximum size of attached files, in kilobytes. */
-    fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    fileAttachmentsMaxSize(kilobytes: Lazy<number, ComponentContext>): this { return this.setLazy('_attachmentMaxSize', kilobytes); }
     /** Text colors offered by the `textColor` tool (the Tailwind palette by default): `{ brand: TextColor.make('Brand', '#0ea5e9', '#38bdf8') }`. */
     textColors(colors: Record<string, TextColor> | null): this { this._textColors = colors; if (colors) registerTextColors(colors); return this; }
     getTextColors(): Record<string, TextColor> { return this._textColors ?? TextColor.getDefaults(); }
@@ -2361,22 +2383,22 @@ export class RichEditor extends Field {
     customTextColors(condition = true): this { this._customTextColors = condition; return this; }
     /** Merge tags users insert (`mergeTags` tool and `{{` in the text), replaced by values when the content is rendered: `['name', 'today']` or `{ name: 'Name' }`. */
     mergeTags(tags: string[] | Record<string, string>): this { this._mergeTags = Array.isArray(tags) ? Object.fromEntries(tags.map((tag) => [tag, tag])) : { ...tags }; return this; }
-    noMergeTagSearchResultsMessage(message: string | null): this { this._noMergeTagResults = message; return this; }
+    noMergeTagSearchResultsMessage(message: Lazy<string | null, ComponentContext>): this { return this.setLazy('_noMergeTagResults', message); }
     /** Mentions: `[MentionProvider.make('@').items({ 1: 'Ada' })]`. */
     mentions(providers: MentionProvider[]): this { this._mentions = providers; return this; }
     /** Custom blocks (`customBlocks` tool), as a list or grouped by label. */
     customBlocks(blocks: CustomBlocks): this { this._customBlocks = blocks; return this; }
-    minimalCustomBlockControls(condition = true): this { this._minimalCustomBlockControls = condition; return this; }
+    minimalCustomBlockControls(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_minimalCustomBlockControls', condition); }
     /** Shows the blocks of the panel in a grid. */
-    customBlocksGrid(condition = true): this { this._customBlocksGrid = condition; return this; }
+    customBlocksGrid(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_customBlocksGrid', condition); }
     /** Adds a search field to the blocks panel. */
-    searchableCustomBlocks(condition = true): this { this._searchableCustomBlocks = condition; return this; }
+    searchableCustomBlocks(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_searchableCustomBlocks', condition); }
     /** Panel open when the editor loads (`customBlocks`, `mergeTags`). */
-    activePanel(panel: string | null): this { this._activePanel = panel; return this; }
+    activePanel(panel: Lazy<string | null, ComponentContext>): this { return this.setLazy('_activePanel', panel); }
     /** Keeps the toolbar visible while scrolling the content. */
-    stickyToolbar(condition = true): this { this._stickyToolbar = condition; return this; }
+    stickyToolbar(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_stickyToolbar', condition); }
     /** Lets users resize images with handles; the size is saved on the image. */
-    resizableImages(condition = true): this { this._resizableImages = condition; return this; }
+    resizableImages(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_resizableImages', condition); }
     private attachmentsStorage(): FileStorage | null { return this._attachmentsStorage ?? FileUpload.storage; }
     private findTool(name: string): RichEditorTool | null {
         const custom = this._customTools.find((tool) => tool.getName() === name);
@@ -2696,7 +2718,7 @@ export class CheckboxList extends Field {
     /** Milliseconds to wait after typing before filtering the options (1000 by default). */
     searchDebounce(milliseconds: Lazy<number, ComponentContext>): this { return this.setLazy('_searchDebounce', milliseconds, (value) => Math.max(0, Math.floor(Number(value) || 0))); }
     /** "Select all" / "Deselect all" links. */
-    bulkToggleable(condition = true): this { this._bulkToggleable = condition; return this; }
+    bulkToggleable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_bulkToggleable', condition); }
     /** Customizes the "Select all" link (label, icon, color; it is handled in the browser, so it has no modal). */
     selectAllAction(modify: ActionModifier): this { this._modifySelectAll = modify; return this; }
     /** Customizes the "Deselect all" link. */
@@ -2704,7 +2726,7 @@ export class CheckboxList extends Field {
     getSelectAllAction(): Action { return modifyAction(Action.make('selectAll').label(t('filament-forms::components.checkbox_list.actions.select_all.label')).link().size('sm'), this._modifySelectAll); }
     getDeselectAllAction(): Action { return modifyAction(Action.make('deselectAll').label(t('filament-forms::components.checkbox_list.actions.deselect_all.label')).link().size('sm'), this._modifyDeselectAll); }
     /** Option labels are HTML, cleaned with the HTML sanitizer (as rich content). Leave it off for labels that come from users. */
-    allowHtml(condition = true): this { this._allowHtml = condition; return this; }
+    allowHtml(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_allowHtml', condition); }
     /** Options that cannot be checked; they are refused on the server too. */
     disableOptionWhen(condition: ((value: string, label: string) => boolean) | null): this { this._disableOptionWhen = condition; return this; }
     isOptionDisabled(value: string, label: string): boolean { return this._disableOptionWhen ? this._disableOptionWhen(value, label) : false; }
@@ -2826,7 +2848,7 @@ export class KeyValue extends Field {
     static make(name: string): KeyValue { return configured(new KeyValue(name)); }
     keyLabel(label: Lazy<string, ComponentContext>): this { return this.setLazy('_keyLabel', label); }
     valueLabel(label: Lazy<string, ComponentContext>): this { return this.setLazy('_valueLabel', label); }
-    reorderable(condition = true): this { this._reorderable = condition; return this; }
+    reorderable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_reorderable', condition); }
     private _addable = true;
     private _deletable = true;
     private _editableKeys = true;
@@ -2836,13 +2858,13 @@ export class KeyValue extends Field {
     private _addLabel: string | null = null;
     private _deleteLabel: string | null = null;
     /** `false`: no "Add row" button. */
-    addable(condition = true): this { this._addable = condition; return this; }
+    addable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_addable', condition); }
     /** `false`: rows cannot be deleted. */
-    deletable(condition = true): this { this._deletable = condition; return this; }
+    deletable(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_deletable', condition); }
     /** `false`: keys cannot be changed. The server keeps the saved keys. */
-    editableKeys(condition = true): this { this._editableKeys = condition; return this; }
+    editableKeys(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_editableKeys', condition); }
     /** `false`: values cannot be changed. */
-    editableValues(condition = true): this { this._editableValues = condition; return this; }
+    editableValues(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_editableValues', condition); }
     keyPlaceholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_keyPlaceholder', text); }
     valuePlaceholder(text: Lazy<string | null, ComponentContext>): this { return this.setLazy('_valuePlaceholder', text); }
     addActionLabel(label: Lazy<string | null, ComponentContext>): this { return this.setLazy('_addLabel', label); }
@@ -2972,11 +2994,11 @@ export class MarkdownEditor extends Field {
     private _attachmentMaxSize = 12288;
     /** Where attached files are stored (`FileUpload.storage` by default); without storage, the "Attach files" button is hidden. */
     fileAttachmentsStorage(storage: FileStorage | null): this { this._attachmentsStorage = storage; return this; }
-    fileAttachmentsDirectory(directory: string | null): this { this._attachmentsDirectory = directory; return this; }
+    fileAttachmentsDirectory(directory: Lazy<string | null, ComponentContext>): this { return this.setLazy('_attachmentsDirectory', directory); }
     /** Accepted types of attached files (images), checked on the file's content. */
     fileAttachmentsAcceptedFileTypes(types: string[]): this { this._attachmentTypes = types.filter((type) => type.startsWith('image/') && type !== 'image/svg+xml'); return this; }
     /** Maximum size of attached files, in kilobytes. */
-    fileAttachmentsMaxSize(kilobytes: number): this { this._attachmentMaxSize = kilobytes; return this; }
+    fileAttachmentsMaxSize(kilobytes: Lazy<number, ComponentContext>): this { return this.setLazy('_attachmentMaxSize', kilobytes); }
     private canAttachFiles(): boolean { return this.hasToolbarButton('attachFiles') && (this._attachmentsStorage ?? FileUpload.storage) !== null; }
     private visibleToolbar(): (string | string[])[] {
         if (this.canAttachFiles()) return this._toolbarButtons;
@@ -3052,10 +3074,11 @@ export class CodeEditor extends Field {
     private _canWrap = false;
     static make(name: string): CodeEditor { return configured(new CodeEditor(name)); }
     /** Language: `cpp`, `css`, `go`, `html`, `java`, `javascript`, `json`, `markdown`, `php`, `python`, `sql`, `xml`, `yaml`. */
-    language(language: string | null): this {
-        if (language !== null && !CODE_LANGUAGES.includes(language)) throw new Error(`CodeEditor: unknown language "${language}".`);
-        this._language = language;
-        return this;
+    language(language: Lazy<string | null, ComponentContext>): this {
+        return this.setLazy('_language', language, (value) => {
+            if (value !== null && !CODE_LANGUAGES.includes(value)) throw new Error(`CodeEditor: unknown language "${value}".`);
+            return value;
+        });
     }
     getLanguage(): string | null { return this._language; }
     /**
@@ -3123,29 +3146,29 @@ export class Slider extends Field {
     minValue(value: number): this { this._minValue = value; return this; }
     maxValue(value: number): this { this._maxValue = value; return this; }
     /** Step between values; `1` requires an integer, otherwise the value must be a multiple of the step. */
-    step(step: number | null): this { this._step = step; return this; }
+    step(step: Lazy<number | null, ComponentContext>): this { return this.setLazy('_step', step); }
     /** Minimum / maximum gap between two handles. */
-    minDifference(difference: number | null): this { this._minDifference = difference; return this; }
-    maxDifference(difference: number | null): this { this._maxDifference = difference; return this; }
+    minDifference(difference: Lazy<number | null, ComponentContext>): this { return this.setLazy('_minDifference', difference); }
+    maxDifference(difference: Lazy<number | null, ComponentContext>): this { return this.setLazy('_maxDifference', difference); }
     /** Forbidden margin at the ends: a number, or `[start, end]`. */
     rangePadding(padding: number | [number, number] | null): this { this._rangePadding = padding; return this; }
     /** Colored track segments, one boolean per segment (`[true, false]` by default). */
     fillTrack(fill: boolean[] | null = [true, false]): this { this._fillTrack = fill; return this; }
-    vertical(condition = true): this { this._vertical = condition; return this; }
+    vertical(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_vertical', condition); }
     /** Right to left (top to bottom for a vertical slider, the default when vertical). */
-    rtl(condition: boolean | null = true): this { this._rtl = condition; return this; }
+    rtl(condition: Lazy<boolean | null, ComponentContext> = true): this { return this.setLazy('_rtl', condition); }
     /** Handle behavior (`tap`, `drag`, `fixed`, `snap`, `unconstrained`…); `null`: none. */
     behavior(behavior: string | string[] | null = null): this { this._behavior = behavior; return this; }
     /** Handle tooltips: a boolean, one boolean per handle, or a `RawJs` formatting `$value`. */
     tooltips(tooltips: boolean | RawJs | (boolean | RawJs)[] = true): this { this._tooltips = tooltips; return this; }
     /** Pips: `range` (default), `steps`, `positions`, `count`, `values`. */
     pips(mode: string | null = 'range', density: number | null = null): this { this._pipsMode = mode; this._pipsDensity = density; return this; }
-    pipsMode(mode: string | null): this { this._pipsMode = mode; return this; }
-    pipsDensity(density: number | null): this { this._pipsDensity = density; return this; }
+    pipsMode(mode: Lazy<string | null, ComponentContext>): this { return this.setLazy('_pipsMode', mode); }
+    pipsDensity(density: Lazy<number | null, ComponentContext>): this { return this.setLazy('_pipsDensity', density); }
     /** Pip formatter (a `RawJs` receiving `$value`). */
     pipsFormatter(formatter: RawJs | null): this { this._pipsFormatter = formatter; return this; }
     pipsValues(values: number | number[] | null): this { this._pipsValues = values; return this; }
-    steppedPips(condition = true): this { this._steppedPips = condition; return this; }
+    steppedPips(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_steppedPips', condition); }
     /** Pip filter (a `RawJs` receiving `$value`). */
     pipsFilter(filter: RawJs | null): this { this._pipsFilter = filter; return this; }
     /** Non-linear scale (`{ '10%': 500, '50%': 4000 }`). */
@@ -3298,7 +3321,7 @@ export class OneTimeCodeInput extends Field {
     length(length: number): this { this._length = Math.max(1, Math.min(32, Math.floor(length))); return this; }
     getLength(): number { return this._length; }
     /** Submits the form as soon as the last digit is typed. */
-    submitOnCompletion(condition = true): this { this._submitOnCompletion = condition; return this; }
+    submitOnCompletion(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_submitOnCompletion', condition); }
     readOnly(condition: Lazy<boolean, ComponentContext> = true): this { return this.setLazy('_readOnly', condition, Boolean); }
     hydrateState(value: unknown): unknown { return value === null || value === undefined ? null : String(value); }
     async toHtml(): Promise<string> {
