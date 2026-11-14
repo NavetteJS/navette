@@ -689,6 +689,32 @@ import { Action } from '@navette-js/actions';
 Action.configureUsing((action) => action.size('sm'));
 ```
 
+## Creating a custom action class
+
+To reuse an action, extend `Action`: give it a default name with the static `getDefaultName()`, and configure it in `setUp()`. `make()` then needs no name, returns an instance of your class, runs `setUp()`, then the `configureUsing()` functions:
+
+```ts
+import { Action } from '@navette-js/actions';
+
+export class SendInvoiceAction extends Action {
+    static getDefaultName(): string {
+        return 'sendInvoice';
+    }
+
+    protected setUp(): void {
+        this.label('Send invoice')
+            .icon('o-paper-airplane')
+            .requiresConfirmation()
+            .action(async ({ record }) => sendInvoice(record));
+    }
+}
+
+SendInvoiceAction.make();          // named "sendInvoice"
+SendInvoiceAction.make('resend');  // another name
+```
+
+`Action.getDefaultName()` is `null`, so `Action.make()` without a name throws. Every prebuilt action has its default name: `CreateAction.getDefaultName()` is `'create'`, then `'edit'`, `'view'`, `'delete'`, `'forceDelete'`, `'restore'`, `'replicate'`, `'attach'`, `'associate'`, `'detach'`, `'dissociate'` (and the same for the bulk actions), `'export'`, `'import'`, and `'filter'` for the dashboard's `FilterAction`. Use it to build [action URLs](#opening-an-action-from-a-url) or in tests (`TestAction.make(EditAction)`).
+
 ## Security
 
 Navette provides these protections for every action:

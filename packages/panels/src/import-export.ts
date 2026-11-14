@@ -487,7 +487,12 @@ export class ExportAction {
     static fake(): ExportFake { exportFake?.restore(); exportFake = new ExportFake(); return exportFake; }
     /** Name of `ExportAction.make()` without a name. */
     static getDefaultName(): string { return 'export'; }
-    static make(name: string | null = null): ExportActionInstance { return makeExportAction(name ?? this.getDefaultName(), false); }
+    private static configurators: ((action: ExportActionInstance) => void)[] = [];
+    /** Default setup of every export action created afterwards by `make()`: `ExportAction.configureUsing((action) => action.fileDisk('reports'))`. */
+    static configureUsing(configure: (action: ExportActionInstance) => void): void { this.configurators.push(configure); }
+    /** Forgets the `configureUsing()` callbacks (tests). */
+    static resetConfiguration(): void { this.configurators = []; }
+    static make(name: string | null = null): ExportActionInstance { const action = makeExportAction(name ?? this.getDefaultName(), false); for (const configure of this.configurators) configure(action); return action; }
 }
 /** Exports the selected records to CSV and XLSX files. */
 export class ExportBulkAction {
@@ -495,7 +500,12 @@ export class ExportBulkAction {
     static fake(): ExportFake { return ExportAction.fake(); }
     /** Name of `ExportBulkAction.make()` without a name. */
     static getDefaultName(): string { return 'export'; }
-    static make(name: string | null = null): ExportActionInstance { return makeExportAction(name ?? this.getDefaultName(), true); }
+    private static configurators: ((action: ExportActionInstance) => void)[] = [];
+    /** Default setup of every export bulk action created afterwards by `make()`. */
+    static configureUsing(configure: (action: ExportActionInstance) => void): void { this.configurators.push(configure); }
+    /** Forgets the `configureUsing()` callbacks (tests). */
+    static resetConfiguration(): void { this.configurators = []; }
+    static make(name: string | null = null): ExportActionInstance { const action = makeExportAction(name ?? this.getDefaultName(), true); for (const configure of this.configurators) configure(action); return action; }
 }
 
 // ------------------------------------------------------------------ background work and history

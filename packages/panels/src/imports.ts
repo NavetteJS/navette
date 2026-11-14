@@ -720,6 +720,11 @@ export class ImportAction {
     static fake(): ImportFake { importFake?.restore(); importFake = new ImportFake(); return importFake; }
     /** Name of `ImportAction.make()` without a name. */
     static getDefaultName(): string { return 'import'; }
+    private static configurators: ((action: ImportActionInstance) => void)[] = [];
+    /** Default setup of every import action created afterwards by `make()`: `ImportAction.configureUsing((action) => action.chunkSize(500))`. */
+    static configureUsing(configure: (action: ImportActionInstance) => void): void { this.configurators.push(configure); }
+    /** Forgets the `configureUsing()` callbacks (tests). */
+    static resetConfiguration(): void { this.configurators = []; }
     static make(name: string | null = null): ImportActionInstance {
         name ??= this.getDefaultName();
         let importer: typeof Importer | null = null, maxRows: ActionLazy<number> = DEFAULT_MAX_IMPORT_ROWS, maxKilobytes = 5120, mapping = true, queued = false;
@@ -892,6 +897,7 @@ export class ImportAction {
             fileRules.push(...list);
             return action;
         };
+        for (const configure of this.configurators) configure(action);
         return action;
     }
 }

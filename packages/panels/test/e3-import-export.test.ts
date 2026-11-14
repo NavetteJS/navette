@@ -190,3 +190,21 @@ test('history with a polymorphic user: user_type is the panel id', async () => {
     const id = await plain.startExport({ userId: 4, userType: 'other', exporter: 'X', fileName: 'x', totalRows: 0 });
     assert.equal((await db('exports').where('id', id).first()).user_type, null);
 });
+
+test('ExportAction / ImportAction configureUsing(); modifyCompletedNotification() keeps the links with getActions()', async () => {
+    ExportAction.configureUsing((action) => action.fileDisk('reports'));
+    ImportAction.configureUsing((action) => action.chunkSize(7));
+    try {
+        assert.equal(ExportAction.make().getFileDisk(), 'reports');
+        assert.equal(ImportAction.make().getName(), 'import');
+    } finally { ExportAction.resetConfiguration(); ImportAction.resetConfiguration(); }
+    assert.equal(ExportAction.make().getFileDisk(), null);
+    class LinkedExporter extends GadgetExporter {
+        static getFormats() { return ['csv' as const]; }
+        static modifyCompletedNotification(notification: any) { return notification.actions([...notification.getActions(), { label: 'All gadgets', url: '/admin/gadgets' }]); }
+    }
+    const list = await page();
+    const action = ExportAction.make('linked').exporter(LinkedExporter);
+    const { pending } = await run(() => action.call({ livewire: list, record: null, arguments: {}, data: { columns: ['name'] } }));
+    assert.deepEqual(pending[0].actions.map((item: any) => item.label), ['Download .csv', 'All gadgets']);
+});

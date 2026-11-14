@@ -367,9 +367,41 @@ export class ProductImporter extends Importer {
 
 The context has the row's `data` (cast values by column name), its `originalData` (the cells by header), the `record` (as returned by `resolveRecord()`, then the saved one), the `values` written to the record, the `options`, the `columnMap`, the `import` run and the `livewire` component.
 
+### Customizing how the record is saved
+
+By default, a new record is created and an existing one updated through the resource's data adapter, with the attributes filled by the columns. Override `saveRecord(values, record, ctx)` to save it another way (an upsert, a service of your application…) and return the saved record. `record` is `null` for a new record; `ctx.key` is the key of the existing one, and `ctx.adapter` the data adapter. Call `super.saveRecord()` to keep the default save:
+
+```ts
+import { Importer, type ImportRowContext } from '@navette-js/panels';
+
+export class ProductImporter extends Importer {
+    static async saveRecord(values: Record<string, unknown>, record: Product | null, ctx: ImportRowContext & { adapter: any; key: string | null }) {
+        return productService.upsertBySku(values);
+    }
+}
+```
+
+The `beforeSave()` / `beforeCreate()` / `beforeUpdate()` hooks run before it, and the relationship columns are saved on the returned record after it, before `afterSave()`. Because `saveRecord()` can be customized, `assertImported()` in [importer tests](/testing/imports) does not prove the database was written: check the saved record.
+
+### Rejecting a row
+
 To reject a row from a hook, throw a `RowImportFailedError`: the row is skipped, and listed in the failed rows file with your message. Throw an `ImportValidationError` to reject it with validation errors (`new ImportValidationError({ price: 'The price is too low.' })`). Any other error is logged, and the row is listed with a generic message.
 
-`getCompletedNotificationTitle(run)` and `getCompletedNotificationBody(imported, failed, run)` customize the notification; `modifyCompletedNotification(notification, run)` changes anything else (its icon, its actions…) or returns another notification.
+`getCompletedNotificationTitle(run)` and `getCompletedNotificationBody(imported, failed, run)` customize the notification; `modifyCompletedNotification(notification, run)` changes anything else (its icon, its actions…) or returns another notification. The notification already holds the link to the failed rows file, if any: `notification.getActions()` returns it, to add an action without losing it:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Importer, type ImportRun, type Notification } from '@navette-js/panels';
+
+export class ProductImporter extends Importer {
+    static modifyCompletedNotification(notification: Notification, run: ImportRun): Notification {
+        return notification.actions([
+            ...notification.getActions(),
+            Action.make('viewProducts').label('View products').url('/admin/products'),
+        ]);
+    }
+}
+```
 
 To test an importer, see [testing imports](/testing/imports).
 
@@ -472,6 +504,10 @@ useBackgroundRunner((task) => {
 });
 ```
 
+The runner also receives the task's context, to route it: `type` (`'import'`), the `importer` class, the `run`, the `panel` id, the `userId`, and the `queue` and `connection` names returned by the importer's `getJobQueue()` and `getJobConnection()` (`null` by default). See [running exports in the background](/actions/export#running-exports-in-the-background).
+
+`ImportAction.configureUsing((action) => …)` sets up every import action created afterwards, e.g. to make them all queued.
+
 ## Downloading the failed rows
 
 The failed rows file lists the cells of each failed row, as uploaded (sensitive columns left blank), with its errors. It is kept like the [export files](/actions/export#downloading-the-files): on the disk, for 24 hours, for the user who imported it only.
@@ -507,6 +543,10 @@ Panel.make()
 ```
 
 You can then list the runs in a resource of your own. To store them elsewhere, implement the `ImportExportHistory` interface: `startImport()`, `finishImport()`, `recordFailedImportRow()`, `startExport()`, `finishExport()`.
+
+### Using a polymorphic user relationship
+
+If users of several panels (with their own user tables) share the history, pass `{ polymorphicUser: true }` to `importExportSchema()` and `knexImportExportHistory()` (Filament's `polymorphicUserRelationship()`): runs then also store the id of the panel the user imported from in a `user_type` column. See [the export history](/actions/export#using-a-polymorphic-user-relationship).
 
 ## Security
 

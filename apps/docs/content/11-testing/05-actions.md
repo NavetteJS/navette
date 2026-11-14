@@ -122,6 +122,15 @@ await livewire(TaskResource.getPages().edit, { record: id })
     .assertActionDoesNotExist('publish');
 ```
 
+The function may be asynchronous, and receives the action and its context (with the mount `arguments` of a `TestAction`). The modal getters evaluate the action's functions with that context: `getModalHeading()`, `getModalDescription()`, `getModalEyebrow()` and `getModalSubmitActionLabel()` (asynchronous), `getModalCancelActionLabel()`, `getModalIcon()`, `getModalIconColor()`, `getModalWidth()`, `getModalAlignment()`, `getModalFooterActionsAlignment()`, `isModalSlideOver()`, `isConfirmationRequired()` and `hasModalSubmitAction()`:
+
+```ts
+await livewire(InvoiceResource.getPages().edit, { record: id })
+    .assertActionExists('send', async (action) => (await action.getModalDescription()) === "This will send an email to the customer's primary address, with the invoice attached as a PDF");
+```
+
+Instead of a name, you can pass an action class: its default name is used (`TestAction.make(SendInvoiceAction)`, `assertActionExists(EditAction)`). Every prebuilt action has one (`EditAction.getDefaultName()` is `'edit'`); see [custom action classes](/actions/overview#creating-a-custom-action-class).
+
 ## Testing the visibility of actions
 
 `assertActionVisible()` and `assertActionHidden()` check whether an action is shown, with its [authorization](/resources/authorization); `assertActionEnabled()` and `assertActionDisabled()` whether it can be clicked:

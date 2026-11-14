@@ -285,6 +285,28 @@ Action.make('archive')
     })
 ```
 
+A policy rule (or the function given to `authorizeIndividualRecords()`) may return an [authorization response](/resources/authorization) instead of a boolean, to explain a denial: `AuthorizationResponse.deny(message)` messages are grouped by text in the notification. A `DenyResponse` goes further: its first argument is a key identifying the kind of failure, and its message may be a function receiving how many selected records were denied with that key and how many were selected. Denials sharing a key are grouped into one message; each key of a policy rule gets its own, and the messages are joined in the notification:
+
+```ts
+import { DenyResponse, type Policy } from '@navette-js/panels';
+
+export const userPolicy: Policy<User> = {
+    delete: (user, model) => {
+        if (!model?.is_admin) return true;
+
+        return DenyResponse.make('cannot_delete_admin', (failureCount, totalCount) => {
+            if (failureCount === 1 && totalCount === 1) return 'You cannot delete an admin user.';
+            if (failureCount === totalCount) return 'All users selected were admin users.';
+            if (failureCount === 1) return 'One of the selected users was an admin user.';
+
+            return `${failureCount} of the selected users were admin users.`;
+        });
+    },
+};
+```
+
+Outside a bulk action (a row action, `authorizationTooltip()`), the function receives 1 and 1. Denials without a message use `missingBulkAuthorizationFailureNotificationMessage()`.
+
 The function passed to `processSelectedRecords()` reports a failure by returning `false` or throwing, or with `action.reportBulkProcessingFailure()` (see below) to give its own message. When every record succeeds, the success notification is sent; otherwise a warning (or a danger notification when nothing succeeded) gives the failure title and the messages. `DeleteBulkAction` uses the same notifications: with `authorizeIndividualRecords('delete')`, it deletes record by record instead of in one query.
 
 ### Restoring and force-deleting records in bulk

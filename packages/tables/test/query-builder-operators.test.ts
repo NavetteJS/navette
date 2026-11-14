@@ -39,3 +39,10 @@ test('built-in operators follow the constraint: number equals, integer(), date t
     assert.throws(() => TextConstraint.make('x').operators([IsRelatedToOperator.make()]), /needs a RelationshipConstraint/);
     assert.deepEqual(TextConstraint.make('flag').operators([IsTrueOperator.make()]).getAvailableOperators().map((operator) => operator.name), ['isTrue']);
 });
+
+test('SelectFilter: hasRelationship() and getRelationshipName()', async () => {
+    const { SelectFilter } = await import('../src/index.ts');
+    assert.deepEqual([SelectFilter.make('status').hasRelationship(), SelectFilter.make('status').getRelationshipName()], [false, null]);
+    const author = SelectFilter.make('author').relationship('author', 'name');
+    assert.deepEqual([author.hasRelationship(), author.getRelationshipName()], [true, 'author']);
+});

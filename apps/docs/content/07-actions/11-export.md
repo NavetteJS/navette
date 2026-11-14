@@ -324,6 +324,22 @@ ExportAction.make()
 
 `modifyCompletedNotification(notification, run)` changes anything else (its icon, its actions…), or returns another notification. The run gives the `columnMap` (column name → label) and the `options` of the export.
 
+The notification already holds the download links: `notification.getActions()` returns them, so you can add an action without losing them:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { Exporter, type ExportRun, type Notification } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static modifyCompletedNotification(notification: Notification, run: ExportRun): Notification {
+        return notification.actions([
+            ...notification.getActions(),
+            Action.make('viewProducts').label('View products').url('/admin/products'),
+        ]);
+    }
+}
+```
+
 ## Limiting the number of rows
 
 An export of more than 10,000 rows is refused with a notification. Change the limit with `maxRows()`; it cannot exceed 100,000:
@@ -357,6 +373,47 @@ ExportAction.make()
     .exporter(ProductExporter)
     .formats([ExportFormat.Xlsx]) // or ['xlsx']
 ```
+
+```ts
+import { Exporter, type ExportFormatType } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getFormats(): ExportFormatType[] {
+        return ['csv'];
+    }
+}
+```
+
+### Adding a custom format
+
+Next to `'csv'` and `'xlsx'`, a format can be any object implementing `ExportFormatInterface` (Filament's `ExportFormat` contract): its extension (letters and digits, also its key), its MIME type, and `generate()`, which receives the exported rows (`columns` are the column names, `labels` the header labels, `rows` one array of values per record, in column order) and returns the file's content:
+
+```ts
+import { ExportAction, type ExportFormatInterface } from '@navette-js/panels';
+
+const JsonFormat: ExportFormatInterface = {
+    getExtension: () => 'json',
+    getMimeType: () => 'application/json',
+    generate: ({ columns, rows }) => JSON.stringify(rows.map((row) => Object.fromEntries(columns.map((name, index) => [name, row[index]])))),
+};
+
+ExportAction.make()
+    .exporter(ProductExporter)
+    .formats(['xlsx', JsonFormat])
+```
+
+The completion notification gets one download link per format: "Download .json" by default. `getDownloadNotificationAction(url, run)` returns another one (a `{ label, url }` object or a notification `Action`), and `getDownloader()` how the file is sent (see [customizing how the files are sent](#customizing-how-the-files-are-sent)):
+
+```ts
+const PdfFormat: ExportFormatInterface = {
+    getExtension: () => 'pdf',
+    getMimeType: () => 'application/pdf',
+    generate: async ({ labels, rows }) => renderPdfTable(labels, rows), // a Buffer
+    getDownloadNotificationAction: (url) => ({ label: 'Download the PDF report', url }),
+};
+```
+
+Values reach `generate()` as the columns formatted them, before CSV escaping: protect them yourself if the format can run code (formulas, HTML…).
 
 ### Changing the CSV delimiter
 
@@ -439,6 +496,37 @@ export class ProductExporter extends Exporter {
 
 `setDefaultColumnWidth()` and `setDefaultRowHeight()` set the defaults of the sheet.
 
+To change the file right after the writer is opened, before any row is written, override `configureXlsxWriterAfterOpen()`. It receives an `XlsxWriter` (and the export run), and rows added there go above the header row, for a title or a sub-header:
+
+```ts
+import { Exporter, XlsxStyle, type ExportRun, type XlsxWriter } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static configureXlsxWriterAfterOpen(writer: XlsxWriter, run: ExportRun): XlsxWriter {
+        return writer.addRow({ cells: ['Product catalog'], style: new XlsxStyle().setFontBold().setFontSize(14) });
+    }
+}
+```
+
+> **Warning**
+> Rows added there shift the exported table down. If you also freeze rows in `configureXlsxWriterBeforeClose()`, count the extra rows in `setFreezeRow()`.
+
+To change it before it is closed, after the data rows, override `configureXlsxWriterBeforeClose()`: rows added there go below the data, and `getCurrentSheet()` names the sheet (31 characters at most) and freezes panes with an `XlsxSheetView` (`setFreezeRow(2)` keeps the first row visible while scrolling, `setFreezeColumn('B')` the first column):
+
+```ts
+import { Exporter, XlsxSheetView, type XlsxWriter } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static configureXlsxWriterBeforeClose(writer: XlsxWriter): XlsxWriter {
+        writer.getCurrentSheet()
+            .setName('export')
+            .setSheetView(new XlsxSheetView().setFreezeRow(2).setFreezeColumn('B'));
+
+        return writer;
+    }
+}
+```
+
 ## Downloading the files
 
 The files are kept by the panel for 24 hours, and only the user who exported them can download them. By default they are written on the disk, in `storage/downloads/<panel id>` relative to the working directory (or in the directory of the `NAVETTE_DOWNLOADS` environment variable, then the panel id): they survive restarts and are shared by the processes using the same directory. Expired files are removed as new files are stored, and when they are requested. Keep this directory private: never serve it statically.
@@ -453,6 +541,39 @@ Panel.make()
 ```
 
 Call `prune()` from a scheduled task to remove expired files without waiting for new ones.
+
+### Customizing the storage disk
+
+The panel can also keep named stores, like Laravel's disks: register them with `downloadDisks()`, then pass a name to `fileDisk()` on an export action. Its files are kept in that store, and their download links name the disk (only registered names are accepted by the download route):
+
+```ts
+import { DiskDownloadStore, ExportAction, Panel } from '@navette-js/panels';
+
+Panel.make()
+    .downloadDisks({
+        reports: new DiskDownloadStore({ directory: '/mnt/reports/downloads', ttl: 7 * 24 * 60 * 60 * 1000 }),
+    })
+
+ExportAction.make()
+    .exporter(ProductExporter)
+    .fileDisk('reports')
+```
+
+To use a disk for every export action, set it in a global configuration:
+
+```ts
+ExportAction.configureUsing((action) => action.fileDisk('reports'));
+```
+
+Alternatively, override `getFileDiskName()` on the exporter class, returning the name of the disk (`null`, the default, is the panel's `downloads()` store):
+
+```ts
+export class ProductExporter extends Exporter {
+    static getFileDiskName(): string | null {
+        return 'reports';
+    }
+}
+```
 
 ### Customizing how the files are sent
 
@@ -497,6 +618,24 @@ useBackgroundRunner((task) => {
 });
 ```
 
+The runner also receives the task's context, to route it: `type` (`'export'` or `'import'`), the `exporter` (or `importer`) class, the `run`, the `panel` id, the `userId`, and the `queue` and `connection` names returned by the exporter's `getJobQueue()` and `getJobConnection()` (`null` by default):
+
+```ts
+import { Exporter, useBackgroundRunner } from '@navette-js/panels';
+
+export class ProductExporter extends Exporter {
+    static getJobQueue(): string | null {
+        return 'exports';
+    }
+}
+
+useBackgroundRunner((task, context) => {
+    queues[context?.queue ?? 'default'].add(task);
+});
+```
+
+Laravel's job settings (retries, backoff, timeouts, batches, middleware) have no Navette equivalent: they belong to the queue your runner hands the tasks to.
+
 ## Keeping a history of exports
 
 The panel can record each import and export: who ran it, which file, how many rows succeeded. Create the tables with `importExportSchema()` in a migration, and give the panel the history store:
@@ -512,6 +651,19 @@ Panel.make()
 ```
 
 You can then list the runs in a resource of your own. To store them elsewhere, implement the `ImportExportHistory` interface: `startImport()`, `finishImport()`, `recordFailedImportRow()`, `startExport()`, `finishExport()`.
+
+### Using a polymorphic user relationship
+
+Runs store the id of their user in `user_id`. If users of several panels (with their own user tables) share the history, their ids may collide: like Filament's `polymorphicUserRelationship()`, the `polymorphicUser` option also stores the type of the user in a `user_type` column, which is the id of the panel the user ran the export from. Pass it to both the schema (it adds the column to existing tables) and the store:
+
+```ts
+await importExportSchema(db, { polymorphicUser: true });
+
+Panel.make()
+    .importExportHistory(knexImportExportHistory((table) => db(table), { polymorphicUser: true }))
+```
+
+A store of your own receives the type as `userType` in `startImport()` and `startExport()`; the export run has it as `run.userType`.
 
 To test an exporter, see [testing exports](/testing/exports).
 

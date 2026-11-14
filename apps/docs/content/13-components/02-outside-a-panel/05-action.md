@@ -45,6 +45,42 @@ Render the action in the view with `action()`, and the modals once with `modals(
 </div>
 ```
 
+`action()` renders nothing when the action is hidden (`hidden()`, `visible()`, or unauthorized without `authorizationTooltip()`), so the view needs no visibility check of its own. To hide markup around the action too, test the rendered string, or ask the action itself: `isVisible(ctx)` is asynchronous and needs a context (`{ livewire: this, record: null }`), so call it from the component, for instance in a method the view awaits.
+
+```html
+<% const button = await action('delete') %>
+<% if (button) { %>
+    <div class="danger-zone"><%- button %></div>
+<% } %>
+```
+
+## Chaining actions
+
+From an action's function, `replaceMountedAction(name, args)` closes the running action and opens another action of the same component in its place, with its own arguments, for instance to show a result once a form is submitted. The other action may be hidden: it only needs to be an action of the component:
+
+```ts
+export class ManagePost extends LivewireComponent {
+    publishAction(): Action {
+        return Action.make('publish')
+            .schema([DateTimePicker.make('publish_at')])
+            .action(async ({ data, livewire }) => {
+                const post = await publishPost(this.postId, data.publish_at);
+                await livewire.replaceMountedAction('share', { url: post.url });
+            });
+    }
+
+    shareAction(): Action {
+        return Action.make('share')
+            .hidden()
+            .modalHeading('Share your post')
+            .modalContent(({ arguments: args }) => `Your post is live at ${String(args.url)}`)
+            .modalSubmitAction(false);
+    }
+}
+```
+
+The same works in panel pages, resource pages and relation managers (`ctx.livewire.replaceMountedAction()`). To open a child action on top of the running one instead, see [nested actions](/actions/modals#running-an-action-on-top-of-the-modal).
+
 ## Passing action arguments
 
 To render the same action several times, for different items, pass arguments to `action()`. The action receives them as `arguments`:

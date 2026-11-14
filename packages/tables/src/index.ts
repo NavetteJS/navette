@@ -2048,6 +2048,8 @@ export class SelectFilter extends BaseFilter {
         return this;
     }
     hasRelationship(): boolean { return this._relationship !== null; }
+    /** Name of the relationship of `relationship()`, or `null`. */
+    getRelationshipName(): string | null { return this._relationship?.name ?? null; }
     /** Label of the "None" option of `relationship(..., hasEmptyOption: true)`. */
     emptyRelationshipOptionLabel(label: string | null): this { this._emptyOptionLabel = label; return this; }
     getEmptyRelationshipOptionLabel(): string { return this._emptyOptionLabel ?? t('filament-tables::table.filters.select.relationship.empty_option_label'); }

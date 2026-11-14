@@ -28,7 +28,7 @@ test('a product is imported', async () => {
 });
 ```
 
-`import()` is asynchronous and returns the tester. `assertImported()` checks that the row was saved, and `getRecord()` returns the saved record (`null` when the row failed). The records are really saved: run these tests on a test database.
+`import()` is asynchronous and returns the tester. `assertImported()` checks that the importer completed without an error and resolved a record. It does not prove that the database was written, since your importer may customize [`saveRecord()`](/actions/import#customizing-how-the-record-is-saved): check the saved values with `getRecord()` or the database. `assertImported()` checks that the row was saved, and `getRecord()` returns the saved record (`null` when the row failed). The records are really saved: run these tests on a test database.
 
 ### Mapping the columns
 
