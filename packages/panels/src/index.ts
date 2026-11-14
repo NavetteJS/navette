@@ -17,7 +17,7 @@ import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@
 import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
 import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
 import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
-export { Notification, Notifications, type NotificationActionData, type NotificationActionInput, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
+export { Notification, Notifications, type NotificationActionData, type NotificationActionGroupData, type NotificationActionInput, type NotificationActionItem, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
 import { streamBroadcasts, userBroadcastChannel, type BroadcastRecipient } from './broadcasting.ts';
 export { broadcastToUsers, DATABASE_NOTIFICATIONS_SENT_EVENT, dispatchDatabaseNotificationsSent, getBroadcaster, MemoryBroadcaster, NOTIFICATION_BROADCAST_EVENT, useBroadcaster, userBroadcastChannel, type BroadcastMessage, type BroadcastOptions, type BroadcastRecipient, type Broadcaster } from './broadcasting.ts';
 import { NavetteAsset, type Asset } from './assets.ts';
@@ -32,6 +32,8 @@ export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, Export
 export { buildXlsx, readXlsx } from './xlsx.ts';
 import { fillFiltersSchema, isFilterAction, normalizeFilterValuesFromQueryString, readQueryStringProperty, sanitizeFilterState } from './dashboard-filters.ts';
 export { FilterAction, isFilterAction } from './dashboard-filters.ts';
+import { jsWidgetContentHtml, type JsWidgetRendererSource } from './js-widgets.ts';
+export { isSafeJsWidgetRendererUrl, jsWidgetContentHtml, resolveJsWidgetRenderer, type JsonValue, type JsWidgetLivewire, type JsWidgetProps, type JsWidgetRenderer, type JsWidgetRendererContext, type JsWidgetRendererInstance, type JsWidgetRendererSource, type JsWidgetUtilities, type Snapshot } from './js-widgets.ts';
 import { DownloadStore, type ImportExportHistory } from './import-export.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
@@ -2426,6 +2428,24 @@ export abstract class Widget extends BasePage {
         const column = this.gridColumn();
         return `<div${column.style ? ` style="${column.style}"` : ''} class="${cls(['fi-wi-widget', ...column.classes, ...classes])}">${content}</div>`;
     }
+}
+
+/**
+ * Widget rendered by a JavaScript module (Filament's `HasJsRenderer`): plain DOM code, React, Vue, Svelte… The module's default
+ * export receives `{ host, props, utilities }`, where `props.configuration` is `getRendererConfiguration()` and `utilities.$wire`
+ * calls the widget's `static callable` methods. When the widget renders again, the new configuration goes to the renderer's
+ * `update()` without remounting it; another `getRenderer()` remounts it.
+ */
+export abstract class JsWidget extends Widget {
+    /** URL of the renderer module (`NavetteAsset.getScriptSrc('revenue-overview')`, `/js/revenue-overview.js`), a trusted `RawJs` mount function, or `null`. */
+    abstract getRenderer(): JsWidgetRendererSource | Promise<JsWidgetRendererSource>;
+    /** JSON-serializable data received by the renderer as `props.configuration`: only include what the user may see. */
+    getRendererConfiguration(): Record<string, unknown> | Promise<Record<string, unknown>> { return {}; }
+    /** The section with the renderer, without the widget wrapper: for a custom `render()` that keeps the renderer. */
+    protected async renderJsWidgetContent(): Promise<string> {
+        return jsWidgetContentHtml({ widgetId: this.id, assetUrl: this.panel.assetUrl('js/filament/widgets/components/js-widget.js'), renderer: await this.getRenderer(), rendererConfiguration: await this.getRendererConfiguration() });
+    }
+    async render(): Promise<string> { return this.wrap(await this.renderJsWidgetContent(), ['fi-wi-js']); }
 }
 
 /**
@@ -5112,6 +5132,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     const guarded = async (res: Response, render: () => Promise<void>) => {
         try { await render(); } catch (error) {
             if (error instanceof WireError && (error.status === 404 || error.status === 403)) return renderErrorPage(panel, res.req, res, error.status);
+            // Too many items to process (`maxItemsForProcessing()`): 413, as in Filament.
+            if (Number((error as any)?.status) === 413) return renderErrorPage(panel, res.req, res, 413);
             throw error;
         }
     };

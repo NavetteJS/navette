@@ -131,6 +131,7 @@ Creates `src/admin/widgets/SalesChart.ts`. The dashboard of the panel displays i
 | `stats` (default) | A stats overview widget: a row of numbers. See [stats overview](/widgets/stats-overview) |
 | `chart` | A chart widget. See [charts](/widgets/charts) |
 | `table` | A table widget. See [table widgets](/widgets/table-widgets) |
+| `js` (or `--js`) | A widget rendered by a JavaScript module: the class in `src/admin/widgets/`, and its renderer in `resources/js/admin/widgets/`. See [JavaScript widgets](/widgets/javascript-widgets) |
 
 Use `--panel=app` for the user panel.
 

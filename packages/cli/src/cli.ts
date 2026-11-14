@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { readSecret } from './secret.ts';
-import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateSchemaComponent, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateSchemaComponent, generateJsWidget, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
 if (existsSync(join(cwd, '.env'))) process.loadEnvFile(join(cwd, '.env'));
@@ -170,11 +170,20 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
         },
     },
     'make:widget': {
-        usage: 'navette make:widget <Name> [--panel=admin] [--type=stats|chart|table]   Create a dashboard widget',
+        usage: 'navette make:widget <Name> [--panel=admin] [--type=stats|chart|table] [--js]   Create a dashboard widget (--js: rendered by a JavaScript module)',
         async run() {
             const name = studly(positional[0] ?? fail('Give the widget a name, e.g. OrdersChart'));
-            const type = flag('type') ?? 'stats';
-            if (!['stats', 'chart', 'table'].includes(type)) fail('--type must be stats, chart or table.');
+            const frameworks = ['react', 'vue', 'svelte', 'typescript', 'ts'].filter((option) => flags[option]);
+            if (frameworks.length) fail(`--${frameworks[0]} needs a bundler, which Navette does not run: generate a --js widget and import your framework (or your compiled TypeScript) from its renderer module.`);
+            if (flags.js && flag('type') && flag('type') !== 'js') fail('--js cannot be combined with --type=stats, chart or table.');
+            const type = flags.js ? 'js' : (flag('type') ?? 'stats');
+            if (!['stats', 'chart', 'table', 'js'].includes(type)) fail('--type must be stats, chart, table or js.');
+            if (type === 'js') {
+                const { files, rendererFile } = generateJsWidget(name, panelOf());
+                for (const [file, content] of Object.entries(files)) write(join(cwd, ...file.split('/')), content);
+                say(`\n  Edit the renderer in ${rendererFile}, then add ${name} to the panel's widgets.`);
+                return;
+            }
             write(join(cwd, 'src', panelOf(), 'widgets', `${name}.ts`), generateWidget(name, type as 'stats' | 'chart' | 'table'));
         },
     },

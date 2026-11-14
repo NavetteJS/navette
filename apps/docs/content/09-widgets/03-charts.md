@@ -413,6 +413,80 @@ export class RevenueChart extends ChartWidget {
 
 The JavaScript is written into the page as it is: never build it from user data.
 
+## Styling charts in a theme
+
+To style the canvas-rendered chart from a [custom theme](/styling/overview#creating-a-custom-theme), set these CSS custom properties on `.fi-wi-chart` or a parent element:
+
+```css
+.fi-wi-chart {
+    --chart-border-width: 1;
+    --chart-line-tension: 0.4;
+    --chart-point-radius: 3;
+    --chart-point-style: rect;
+    --chart-bar-border-radius: 4;
+}
+```
+
+- `--chart-border-width`: the thickness of the data outlines.
+- `--chart-line-tension`: the curvature of a line chart, from `0` for straight segments to `1`.
+- `--chart-point-radius`: the marker size for line, radar and scatter charts.
+- `--chart-point-style`: the marker shape: `circle`, `cross`, `crossRot`, `dash`, `line`, `rect`, `rectRounded`, `rectRot`, `star` or `triangle`. Use `none` to hide markers.
+- `--chart-bar-border-radius`: the corner radius of bars. Use `0` for square corners instead of the default rounded corners.
+
+Use unitless numbers and the supported keywords, not CSS lengths such as `3px`. You may set different values for light and dark mode (`.dark .fi-wi-chart { … }`).
+
+<Aside variant="info">
+To configure an individual chart, use [`getOptions()`](#setting-chart-configuration-options). Explicit options for these settings take precedence over the CSS custom properties.
+</Aside>
+
+### Styling the chart legend
+
+The legend beneath a chart is drawn onto the canvas as well. Two properties control the color swatch next to each label:
+
+```css
+.fi-wi-chart {
+    --chart-legend-box-width: 16;
+    --chart-legend-border-radius: 0;
+}
+```
+
+`--chart-legend-box-width` sets how wide each swatch is, and `--chart-legend-border-radius` rounds its corners, which are slightly rounded by default to match the bars of a bar chart. Set it to `0` for square swatches.
+
+### Styling chart tooltips
+
+The tooltip that appears when hovering over a chart is drawn onto the canvas as well. Its shape comes from two more properties:
+
+```css
+.fi-wi-chart {
+    --chart-tooltip-corner-radius: 0;
+    --chart-tooltip-border-width: 1;
+}
+```
+
+Its colors are set differently, so that you can use the same palette and dark mode variants as the rest of your theme. The chart reads them from hidden elements that you style with an ordinary `color` declaration:
+
+```css
+.fi-wi-chart {
+    & .fi-wi-chart-tooltip-bg-color {
+        @apply text-gray-900 dark:text-white;
+    }
+
+    & .fi-wi-chart-tooltip-text-color {
+        @apply text-white dark:text-gray-900;
+    }
+
+    & .fi-wi-chart-tooltip-border-color {
+        @apply text-gray-700 dark:text-gray-200;
+    }
+}
+```
+
+A tooltip has no border until you give it a width, so `--chart-tooltip-border-width` and `.fi-wi-chart-tooltip-border-color` usually change together.
+
+The colors of the chart itself work in the same way: `.fi-wi-chart-bg-color` and `.fi-wi-chart-border-color` fill and outline the data, `.fi-wi-chart-grid-color` draws the grid lines, and `.fi-wi-chart-text-color` labels the axes.
+
+The small charts inside a [stats overview widget](/widgets/stats-overview#styling-stat-charts-in-a-theme) are styled separately, with their own set of properties.
+
 ## Adding a heading and a description
 
 You may add a heading and a description below it with the static `heading` and `description` properties:

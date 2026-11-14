@@ -206,6 +206,38 @@ Stat.make('Unique views', '192.1k')
 
 The trend line is drawn in the browser by Chart.js.
 
+## Styling stat charts in a theme
+
+To style stat charts from a [custom theme](/styling/overview#creating-a-custom-theme), set these CSS custom properties on `.fi-wi-stats-overview-stat` or a parent element:
+
+```css
+.fi-wi-stats-overview-stat {
+    --stat-chart-border-width: 1;
+    --stat-chart-line-tension: 0;
+    --stat-chart-fill: none;
+}
+```
+
+- `--stat-chart-border-width`: the line thickness.
+- `--stat-chart-line-tension`: the curvature, from `0` for straight segments to `1`.
+- `--stat-chart-fill`: the fill target: `start`, `end`, `origin` or `stack`. Use `none` to disable the fill.
+
+Use unitless numbers and the supported keywords, not CSS lengths. You may set different values for light and dark mode.
+
+The chart takes its colors from the [color of the stat](#changing-the-color-of-the-stat). To change them in a theme, style the `.fi-wi-stats-overview-stat-chart-bg-color` and `.fi-wi-stats-overview-stat-chart-border-color` elements with an ordinary `color` declaration:
+
+```css
+.fi-wi-stats-overview-stat {
+    & .fi-wi-stats-overview-stat-chart-border-color {
+        @apply text-gray-400 dark:text-gray-500;
+    }
+}
+```
+
+<Aside variant="info">
+These properties only affect the charts inside stats. [Chart widgets](/widgets/charts#styling-charts-in-a-theme) are styled with their own set, prefixed `--chart-`.
+</Aside>
+
 ## Live updating stats (polling)
 
 By default, stats overview widgets refresh their data every 5 seconds.
