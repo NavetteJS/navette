@@ -107,6 +107,17 @@ ActionGroup.make([
     .dropdownPlacement('top-start')
 ```
 
+Without room for it, the menu flips to the other side; `dropdownFlip(false)` keeps its placement. `dropdownAutoPlacement()` places the menu on the side with the most space instead:
+
+```ts
+import { ActionGroup } from '@navette-js/actions';
+
+ActionGroup.make([
+    // ...
+])
+    .dropdownAutoPlacement()
+```
+
 ## Changing the width, offset and maximum height of the dropdown
 
 ```ts
@@ -117,10 +128,10 @@ ActionGroup.make([
 ])
     .dropdownWidth('xs')
     .dropdownOffset(16)
-    .maxHeight('400px')
+    .dropdownMaxHeight('400px')
 ```
 
-With a maximum height, the menu scrolls beyond it.
+With a maximum height, the menu scrolls beyond it. `maxHeight()` is the same method under a shorter name.
 
 ## Adding dividers between actions
 

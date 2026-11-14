@@ -270,7 +270,7 @@ The URL includes the path of the panel and, in a [multi-tenant panel](/panels/te
 
 ### Generating URLs to resource modals
 
-The list page opens a row action when its URL carries the action name and the record key. The action is mounted with the usual checks: the record must be in the scope of the adapter, and the action must be visible to the user:
+The list page opens a row action when its URL carries the action name and the record key, once the page has loaded. The action is mounted with the usual checks: the record must be in the scope of the adapter, and the action must be visible to the user (see [opening an action from a URL](/actions/overview#opening-an-action-from-a-url)):
 
 ```ts
 `${DepartmentResource.getUrl()}?tableAction=edit&tableActionRecord=${department.id}`

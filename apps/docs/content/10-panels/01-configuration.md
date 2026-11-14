@@ -172,6 +172,8 @@ export class EditSettings extends EditRecord {
 
 A field whose value is reformatted as the page loads (a [mask](/forms/text-input#input-masking)) counts as a change.
 
+With the alerts enabled, pages and relation managers also warn while an action modal is open, unless the action opts out with [`unsavedChangesAlert(false)`](/actions/modals#disabling-the-unsaved-changes-alert).
+
 ## Enabling database transactions
 
 The creation and the saving of a record may run in a database transaction: if anything throws between `beforeCreate()` and `afterCreate()` (or `beforeSave()` and `afterSave()`), every query of the operation is rolled back, relationships included:
@@ -180,7 +182,7 @@ The creation and the saving of a record may run in a database transaction: if an
 panel.databaseTransactions();
 ```
 
-A page may opt in or out with its static `hasDatabaseTransactions` property. The transaction is opened by the resource's data adapter (`DataAdapter.transaction()`): `ObjectionAdapter` supports it, and a custom adapter without this method saves as before.
+It also applies to every action, as if each one called [`databaseTransaction()`](/actions/overview#using-a-database-transaction): an action can opt out with `databaseTransaction(false)`. A page may opt in or out with its static `hasDatabaseTransactions` property. The transaction is opened by the resource's data adapter (`DataAdapter.transaction()`): `ObjectionAdapter` supports it, and a custom adapter without this method saves as before.
 
 Every query made through a connection created with `createConnection()` or `sqlite()` joins the open transaction, whether it comes from an Objection model or from `knex(table)`. Your own code can open one with `transaction()`:
 
