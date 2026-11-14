@@ -332,3 +332,23 @@ test('MultiFactorChallenge outside the login page: enabled providers, form compo
     challenge.clearRateLimiter(grace);
     assert.equal(challenge.isRateLimited(grace), false);
 });
+
+test('combined tabs with a list of relations: the content tab comes first and is active (integer-like keys keep their order)', async () => {
+    class ListEditAuthor extends EditRecord {
+        static relationManagers = [BooksRelationManager, EagerBooksRelationManager];
+        hasCombinedRelationManagerTabsWithContent() { return true; }
+    }
+    class ListAuthorResource extends AuthorResource { static slug = 'list-authors'; }
+    ListAuthorResource.pages = { edit: ListEditAuthor };
+    const panel = Panel.make().id('d10-list').key('k').authGuard('d10-list').auth(auth).resources([ListAuthorResource]);
+    const page = livewire(ListEditAuthor, { record: 1 }, { panel });
+    await page.assertOk().assertSet('activeRelationManager', '');
+    assert.deepEqual([...page.html().matchAll(/data-tab-key="([^"]*)"/g)].map((match) => match[1]), ['', '0', '1']);
+    class AfterEditAuthor extends ListEditAuthor { getContentTabPosition() { return ContentTabPosition.After; } }
+    class AfterAuthorResource extends AuthorResource { static slug = 'after-authors'; }
+    AfterAuthorResource.pages = { edit: AfterEditAuthor };
+    const afterPanel = Panel.make().id('d10-after').key('k').authGuard('d10-after').auth(auth).resources([AfterAuthorResource]);
+    const after = livewire(AfterEditAuthor, { record: 1 }, { panel: afterPanel });
+    await after.assertOk().assertSet('activeRelationManager', '0');
+    assert.deepEqual([...after.html().matchAll(/data-tab-key="([^"]*)"/g)].map((match) => match[1]), ['0', '1', '']);
+});

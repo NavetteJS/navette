@@ -3214,11 +3214,23 @@ function recordPageRelationManagerTabs(page: RelationTabsHost, except: string[] 
     for (const [key, entry] of relationManagerEntries(page.getRelationManagers())) if (!except.includes(key)) tabs[key] = relationEntryTab(page, entry);
     return tabs;
 }
+/**
+ * Order of the keys of a tabs object. A JavaScript object lists integer-like keys (`'0'`, `'1'`… of a list of relations) before
+ * the others, whatever their insertion order: the default tabs carry their real order under this symbol.
+ */
+const TAB_ORDER = Symbol('tabOrder');
+/** Tabs by key, in their order. */
+function orderedTabEntries(tabs: Record<string, SchemaTab>): [string, SchemaTab][] {
+    const order = (tabs as any)[TAB_ORDER] as string[] | undefined;
+    const keys = order ? [...order.filter((key) => key in tabs), ...Object.keys(tabs).filter((key) => !order.includes(key))] : Object.keys(tabs);
+    return keys.map((key) => [key, tabs[key]] as [string, SchemaTab]);
+}
 /** Combined tabs: the content tab (`''`) before or after the relation managers. */
 function recordPageTabComponents(page: RelationTabsHost): Record<string, SchemaTab> {
     const managers = page.getRelationManagerTabComponents(['']);
-    const content = { '': page.getContentTabComponent() };
-    return page.getContentTabPosition() === ContentTabPosition.After ? { ...managers, ...content } : { ...content, ...managers };
+    const content = page.getContentTabComponent();
+    const order = page.getContentTabPosition() === ContentTabPosition.After ? [...Object.keys(managers), ''] : ['', ...Object.keys(managers)];
+    return Object.defineProperty({ ...managers, '': content }, TAB_ORDER, { value: order, enumerable: false });
 }
 /** Content of a record page with its relation manager tabs (always present: hidden when the page has none). */
 function withRecordPageRelationTabs(page: RelationTabsHost, content: Schema): Schema {
@@ -3239,7 +3251,7 @@ function withRecordPageRelationTabs(page: RelationTabsHost, content: Schema): Sc
 function selectInitialRelationTab(page: RelationTabsHost): void {
     const PageClass = page.constructor as any;
     const combined = page.hasCombinedRelationManagerTabsWithContent();
-    const extraKeys = combined ? Object.keys(page.getTabComponents()) : [];
+    const extraKeys = combined ? orderedTabEntries(page.getTabComponents()).map(([key]) => key) : [];
     const initial = combined ? (extraKeys[0] ?? '') : (relationManagerEntries(page.getRelationManagers())[0]?.[0] ?? '0');
     const queryKey: string | null = PageClass.relationManagerQueryStringKey ?? null;
     page.activeRelationManager = relationManagerTabFromQuery(page, queryKey, extraKeys) ?? initial;
@@ -3254,7 +3266,7 @@ class RelationManagerTabs extends SchemaComponent {
     /** Tabs by key: `getTabComponents()` with combined tabs, the relation managers' otherwise. */
     getTabs(): [string, SchemaTab][] {
         const page = this.page();
-        return (this.tabs ??= Object.entries(this.combined ? page.getTabComponents() : page.getRelationManagerTabComponents()).filter((entry): entry is [string, SchemaTab] => entry[1] instanceof SchemaTab));
+        return (this.tabs ??= orderedTabEntries(this.combined ? page.getTabComponents() : page.getRelationManagerTabComponents()).filter((entry): entry is [string, SchemaTab] => entry[1] instanceof SchemaTab));
     }
     /** The tabs are child components (their schemas hold the content tab and custom tabs). */
     getChildSchemas(): Schema[] { return [childSchema(this, this.getTabs().map(([key, tab]) => tab.key(`${slug(key) || 'content'}::tab`)))]; }

@@ -578,7 +578,7 @@ export class EditProject extends EditRecord {
 }
 ```
 
-The keys of the entries are those of `relations` when it is an object, and `'0'`, `'1'`… when it is a list.
+The keys of the entries are those of `relations` when it is an object, and `'0'`, `'1'`… when it is a list. A JavaScript object lists integer-like keys before the others, whatever their place in your code: to order the tabs freely in `getTabComponents()`, name the entries of `relations` with an object.
 
 ### Keeping the active tab in the URL
 
