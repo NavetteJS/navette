@@ -169,10 +169,6 @@ An item whose parent is not in its group is not shown. In the [top navigation](#
 
 To gather many pages under a single item with their own sub-navigation, use a [cluster](/panels/clusters).
 
-<Aside variant="warning">
-The dropdown of a group's items when the sidebar is collapsed to icons is not available yet.
-</Aside>
-
 ## Collapsible sidebar on desktop
 
 To make the sidebar collapsible on desktop as well as mobile, you can use `sidebarCollapsibleOnDesktop()`. The collapsed sidebar shows the icons of the items:
@@ -182,6 +178,12 @@ panel.sidebarCollapsibleOnDesktop();
 ```
 
 To let the user hide the sidebar entirely instead, use `sidebarFullyCollapsibleOnDesktop()`.
+
+### Navigation group dropdowns in a collapsed sidebar
+
+When the sidebar is collapsed to icons, a [navigation group with an icon](#customizing-navigation-groups) is shown as its icon. Clicking it opens a dropdown listing the group's items, with their own icons and badges; an item with [child items](#nesting-navigation-items) forms a separate list with them. Hovering the icon shows the group's label.
+
+The items of a group without an icon are shown as their icons, with their label in a tooltip.
 
 ## Registering custom navigation items
 

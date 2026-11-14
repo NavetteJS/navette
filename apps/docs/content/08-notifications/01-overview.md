@@ -98,6 +98,19 @@ Notification.make()
 
 An icon set with `icon()` replaces the icon of the status, and `iconColor()` replaces its color.
 
+## Setting a background color
+
+Notifications have no background color by default. You may give them one to add context:
+
+```ts
+import { Notification } from '@navette-js/panels';
+
+Notification.make()
+    .title('Saved successfully')
+    .color('success')
+    .send();
+```
+
 ## Setting a duration
 
 By default, notifications are shown for 6 seconds before they're automatically closed. You may specify a custom duration value in milliseconds as follows:
@@ -177,6 +190,97 @@ Notification.make()
 
 The event name may only contain letters, digits and `_ . : -`. Its data comes back from the browser like any other request data: check it in the listener.
 
-<Aside variant="warning">
-Buttons are only displayed in flash notifications: [database notifications](/notifications/database-notifications) show the links. Sending notifications from JavaScript, closing a notification with JavaScript, and changing the position of notifications are not available yet.
-</Aside>
+By default, the event is received by every component of the page. Add `to` with the name of a component to send it to that component only, or `self: true` to send it to the component showing the notification:
+
+```ts
+{ label: 'Refresh', dispatch: { event: 'refreshOrders', to: 'orders-table' } }
+```
+
+When an action has a URL and `close: true`, the notification is closed before the link is followed. `color` changes the color of a link or a button (`'gray'`, `'danger'`…), and `outlined: true` displays an outlined button.
+
+## Sending notifications from JavaScript
+
+Notifications can also be sent from the browser, without a request to the server. The `FilamentNotification` and `FilamentNotificationAction` classes are available on `window` in every panel page, with the same methods as the server-side builder:
+
+```js
+new FilamentNotification()
+    .title('Saved successfully')
+    .success()
+    .body('Changes to the post have been saved.')
+    .actions([
+        new FilamentNotificationAction('view')
+            .button()
+            .url('/posts/5')
+            .openUrlInNewTab(),
+        new FilamentNotificationAction('undo')
+            .color('gray')
+            .dispatch('undoEditingPost', { id: 5 })
+            .close(),
+    ])
+    .send()
+```
+
+The other methods are `status()`, `danger()`, `info()`, `warning()`, `color()`, `icon()`, `iconColor()`, `duration()`, `seconds()` and `persistent()`. An action's label defaults to its name in words (`'undoEdit'` becomes "Undo edit"); `label()` sets another one. Actions also support `dispatchSelf()`, `dispatchTo(component, event, data)` and `outlined()`.
+
+`send()` dispatches a `notificationSent` browser event, which the notifications component of the page receives and displays. The notification travels through the server like any other request data: as on the server, the title and body are escaped, only relative paths and `http(s)` addresses become links, and unknown statuses, colors, icons and event names are left out.
+
+## Closing a notification with JavaScript
+
+Once a notification has been sent, you can close it on demand by dispatching a browser event on the window called `close-notification`, with the ID of the notification. To get the ID, use `getId()`:
+
+```ts
+import { Notification } from '@navette-js/panels';
+
+const notification = Notification.make()
+    .title('Hello')
+    .persistent()
+    .send();
+
+const notificationId = notification.getId();
+```
+
+To close the notification, dispatch the event from a component on the server:
+
+```ts
+this.dispatch('close-notification', { id: notificationId });
+```
+
+Or from JavaScript, in this case Alpine.js:
+
+```html
+<button x-on:click="$dispatch('close-notification', { id: notificationId })" type="button">
+    Close Notification
+</button>
+```
+
+Random IDs are recommended, as you will not risk closing the wrong notification. If you cannot keep the random ID, pass your own ID to `make()`. It may only contain letters, digits and `_ . : -`:
+
+```ts
+import { Notification } from '@navette-js/panels';
+
+Notification.make('greeting')
+    .title('Hello')
+    .persistent()
+    .send();
+```
+
+```html
+<button x-on:click="$dispatch('close-notification', { id: 'greeting' })" type="button">
+    Close Notification
+</button>
+```
+
+In JavaScript, `new FilamentNotification().id('greeting')` sets the ID. If you send several notifications with the same ID, the last one replaces the others.
+
+## Positioning notifications
+
+Notifications are displayed in the top right corner of the page. You may move them with `Notifications.alignment()` and `Notifications.verticalAlignment()`, once when your application starts. The alignment is `'start'`, `'center'`, `'end'`, `'left'` or `'right'`; the vertical alignment is `'start'`, `'center'` or `'end'`:
+
+```ts
+import { Notifications } from '@navette-js/panels';
+
+Notifications.alignment('start');
+Notifications.verticalAlignment('end');
+```
+
+The position applies to every panel of the Node.js process.

@@ -270,6 +270,8 @@ export function labPanel(options: { key: string; login: typeof Login; auth: Auth
         .login(options.login)
         .resources([LabProducts, LabCards, LabFields, LabCatalogBrands, LabCatalogProducts])
         .navigationGroups([NavigationGroup.make('Tables').icon('o-table-cells'), NavigationGroup.make('Forms').collapsible(false)])
+        // Collapsed to icons, the "Tables" group (it has an icon) opens a dropdown of its items.
+        .sidebarCollapsibleOnDesktop()
         .defaultThemeMode('dark')
         .auth(options.auth)
         .canAccess(options.canAccess);
