@@ -5,6 +5,7 @@ import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { jsComponentHtml, normalizeRendererConfiguration, type JsRenderer } from './js-renderer.ts';
+import { DEFERRED_BADGES_X_DATA, LIVEWIRE_PROPERTY, deferredBadgePlaceholderHtml, deferredDropdownBadgePlaceholderHtml, type LazyLoadedTabBadge } from './tabs-rendering.ts';
 
 views.namespace('filament-schemas', fileURLToPath(new URL('../views', import.meta.url)));
 
@@ -102,7 +103,13 @@ export abstract class Component {
     extraAttributes(attributes: Record<string, string>): this { Object.assign(this._extraAttributes, attributes); return this; }
 
     get livewire(): SchemaHost { return this.container.livewire; }
-    isLiberatedFromContainerGrid(): boolean { return false; }
+    protected _liberatedFromContainerGrid = false;
+    /**
+     * Renders the component outside the grid of its schema: no grid column wrapper, only a `.fi-sc-liberated` element with
+     * `display: contents` that holds its Alpine scope, so that its content takes part in the surrounding layout.
+     */
+    liberatedFromContainerGrid(condition = true): this { this._liberatedFromContainerGrid = condition; return this; }
+    isLiberatedFromContainerGrid(): boolean { return this._liberatedFromContainerGrid; }
     /** Server methods the component's JavaScript may call (announced to the browser). */
     getExposedMethods(): string[] { return []; }
     /** False for an exposed method after which the host must re-render (e.g. next wizard step, to show validation errors). */
@@ -592,6 +599,17 @@ export class Tab extends Component {
     badgeIconPosition(position: 'before' | 'after'): this { this._badgeIconPosition = position === 'after' ? 'after' : 'before'; return this; }
     /** Tooltip of the badge (plain text). */
     badgeTooltip(text: Lazy<string | null, ComponentContext>): this { this._badgeTooltip = text; return this; }
+    private _badgeLazyLoaded: Lazy<boolean, ComponentContext> = false;
+    /**
+     * Loads the badge after the page has rendered (`Tabs.getLazyLoadedTabBadges()`), for a badge computed by an expensive
+     * query: pass the badge as a function, so that it only runs in that request. A loading indicator is shown meanwhile.
+     */
+    lazyLoadedBadge(condition: Lazy<boolean, ComponentContext> = true): this { this._badgeLazyLoaded = condition; return this; }
+    /** @deprecated Use `lazyLoadedBadge()` instead. */
+    deferBadge(condition: Lazy<boolean, ComponentContext> = true): this { return this.lazyLoadedBadge(condition); }
+    async isBadgeLazyLoaded(): Promise<boolean> { return Boolean(await evaluate(this._badgeLazyLoaded, this.context())); }
+    /** @deprecated Use `isBadgeLazyLoaded()` instead. */
+    isBadgeDeferred(): Promise<boolean> { return this.isBadgeLazyLoaded(); }
     getLabel(): string { return this.label; }
     getIcon(): string | null { return this._icon; }
     getIconPosition(): 'before' | 'after' { return this._iconPosition; }
@@ -617,7 +635,11 @@ const badgeTooltipAttribute = (tooltip: string | null): string => (tooltip ? ` x
  * the browser only selects a persisted key when it matches an existing tab.
  */
 export class Tabs extends Component {
-    private tabs: Tab[] = [];
+    private tabList: Tab[] = [];
+    /** Original keys of the tabs: their indexes, or the keys of the object given to `schema()`. */
+    private tabKeys: string[] = [];
+    private _livewireProperty: string | null = null;
+    private _hasTabPanels: Lazy<boolean, ComponentContext> = true;
     private label: string;
     private _activeTab: Lazy<number, ComponentContext> = 1;
     private _persistTab: Lazy<boolean, ComponentContext> = false;
@@ -627,7 +649,35 @@ export class Tabs extends Component {
     private _scrollable: Lazy<boolean, ComponentContext> = true;
     constructor(label: string) { super(); this.label = label; this._keyName = `${slug(label)}::data::tabs`; }
     static make(label: string): Tabs { return configured(new Tabs(label)); }
-    schema(tabs: Tab[]): this { this.tabs = tabs; return this; }
+    /** The tabs: a list, or an object whose keys become the tab keys written into the `livewireProperty()`. */
+    schema(tabs: Tab[] | Record<string, Tab>): this {
+        const entries = Array.isArray(tabs) ? tabs.map((tab, index): [string, Tab] => [String(index), tab]) : Object.entries(tabs);
+        this.tabList = entries.map(([, tab]) => tab);
+        this.tabKeys = entries.map(([key]) => key);
+        return this;
+    }
+    /** Filament's name of `schema()`. */
+    tabs(tabs: Tab[] | Record<string, Tab>): this { return this.schema(tabs); }
+    /**
+     * Binds the active tab to a public property of the host component: clicking a tab sets the property (`$set()`), and
+     * only the active tab's content is rendered. The tab keys are the keys of the object given to `schema()`.
+     */
+    livewireProperty(property: string | null): this {
+        if (property !== null && !LIVEWIRE_PROPERTY.test(property)) throw new Error(`Invalid Livewire property name for tabs: ${property}`);
+        this._livewireProperty = property;
+        return this;
+    }
+    getLivewireProperty(): string | null { return this._livewireProperty; }
+    /** `false`: only the tab headers, as a group of pressed buttons (tabs that change a filter rather than show content). */
+    tabPanels(condition: Lazy<boolean, ComponentContext> = true): this { this._hasTabPanels = condition; return this; }
+    async hasTabPanels(): Promise<boolean> { return typeof this._hasTabPanels === 'function' ? Boolean(await this._hasTabPanels(this.context())) : this._hasTabPanels; }
+    async hasLazyLoadedBadges(): Promise<boolean> {
+        this.getChildSchemas();
+        for (const tab of this.tabList) if ((await tab.isVisible()) && (await tab.isBadgeLazyLoaded())) return true;
+        return false;
+    }
+    /** @deprecated Use `hasLazyLoadedBadges()` instead. */
+    hasDeferredBadges(): Promise<boolean> { return this.hasLazyLoadedBadges(); }
     /** Tab active when the page loads (1-based, among the visible tabs). */
     activeTab(tab: Lazy<number, ComponentContext>): this { this._activeTab = tab; return this; }
     /** Remembers the active tab in the browser's local storage, under the key of the tabs. */
@@ -641,9 +691,34 @@ export class Tabs extends Component {
     /** `false`: tabs that do not fit are moved to a "more" dropdown instead of scrolling. */
     scrollable(condition: Lazy<boolean, ComponentContext> = true): this { this._scrollable = condition; return this; }
     getExposedMethods(): string[] { return ['getLazyLoadedTabBadges', 'getDeferredTabBadges']; }
-    getLazyLoadedTabBadges(): Record<string, unknown> { return {}; }
-    getDeferredTabBadges(): Record<string, unknown> { return {}; }
-    getChildSchemas(): Schema[] { return [childSchema(this, this.tabs)]; }
+    /**
+     * Badges of the visible `lazyLoadedBadge()` tabs, keyed like the tabs: label, color classes, icon (rendered here) and
+     * tooltip. Called by the tabs header once the page has rendered.
+     */
+    async getLazyLoadedTabBadges(): Promise<Record<string, LazyLoadedTabBadge>> {
+        this.getChildSchemas();
+        const badges: Record<string, LazyLoadedTabBadge> = {};
+        for (const [index, tab] of this.tabList.entries()) {
+            if (!(await tab.isVisible()) || !(await tab.isBadgeLazyLoaded())) continue;
+            const badge = await tab.getBadge();
+            badges[this.tabKeys[index]] = {
+                badge: badge?.label ?? null,
+                badgeColorClasses: badge ? badgeColorClasses(this, badge.color).join(' ') : '',
+                badgeColorStyles: '',
+                badgeIconHtml: badge?.icon ? icon(badge.icon, { size: 'sm' }) : null,
+                badgeIconPosition: badge?.iconPosition ?? 'before',
+                badgeTooltip: badge?.tooltip ? String(badge.tooltip) : null,
+            };
+        }
+        return badges;
+    }
+    /** @deprecated Use `getLazyLoadedTabBadges()` instead. */
+    getDeferredTabBadges(): Promise<Record<string, LazyLoadedTabBadge>> { return this.getLazyLoadedTabBadges(); }
+    getChildSchemas(): Schema[] {
+        // With a Livewire property, each tab's key is its key in `schema()`, the value written into the property.
+        if (this._livewireProperty !== null) for (const [index, tab] of this.tabList.entries()) tab.key(this.tabKeys[index]);
+        return [childSchema(this, this.tabList)];
+    }
     /** Active tab (1-based): the query string's tab when it names a visible tab, otherwise `activeTab()`. */
     private async getActiveTab(visible: Tab[]): Promise<number> {
         if (this._tabQueryStringKey !== null) {
@@ -663,26 +738,73 @@ export class Tabs extends Component {
         const q = (k: string) => js(k);
         const tabId = (tab: Tab) => `fi-sc-tab-${createHash('md5').update(tab.getKey()!).digest('hex')}`;
         const visible: Tab[] = [];
-        for (const tab of this.tabs) if (await tab.isVisible()) visible.push(tab);
+        const visibleKeys: string[] = [];
+        for (const [index, tab] of this.tabList.entries()) if (await tab.isVisible()) { visible.push(tab); visibleKeys.push(this.tabKeys[index]); }
+        const property = this._livewireProperty;
+        const hasPanels = await this.hasTabPanels();
         const isContained = Boolean(await evaluate(this._contained, ctx));
         const isVertical = Boolean(await evaluate(this._vertical, ctx));
-        const isScrollable = Boolean(await evaluate(this._scrollable, ctx));
-        const isTabPersisted = Boolean(await evaluate(this._persistTab, ctx));
-        const activeTab = await this.getActiveTab(visible);
-        const badges = await Promise.all(visible.map((tab) => tab.getBadge()));
+        const isScrollable = property !== null || Boolean(await evaluate(this._scrollable, ctx));
+        const isTabPersisted = property === null && Boolean(await evaluate(this._persistTab, ctx));
+        const lazy = await Promise.all(visible.map((tab) => tab.isBadgeLazyLoaded()));
+        const hasDeferredBadges = lazy.some(Boolean);
+        const badges = await Promise.all(visible.map((tab, index) => (lazy[index] ? null : tab.getBadge())));
+        // Key of a lazy badge in `deferredBadges`: the tab's index (or object key), its key with a Livewire property.
+        const badgeKey = (index: number) => (property === null && /^\d+$/.test(visibleKeys[index]) ? visibleKeys[index] : js(visibleKeys[index]));
         const badgeHtml = (badge: NonNullable<Awaited<ReturnType<Tab['getBadge']>>>, withIcon: boolean) => {
             const badgeIcon = withIcon && badge.icon ? icon(badge.icon, { size: 'sm' }) : '';
             return `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', 'fi-size-sm', ...badgeColorClasses(this, badge.color)])}">${badge.iconPosition === 'before' ? badgeIcon : ''}<span class="fi-badge-label-ctn"><span class="fi-badge-label">${e(badge.label)}</span></span>${badge.iconPosition === 'after' ? badgeIcon : ''}</span>`;
         };
+        const headerBadge = (index: number, withIcon: boolean) => (badges[index] ? badgeHtml(badges[index]!, withIcon) : lazy[index] ? deferredBadgePlaceholderHtml(badgeKey(index)) : '');
+        const outer = new Attributes().merge({ id: key, 'wire:key': `${id}.${key}.container`, ...this._extraAttributes }).class(['fi-sc-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }]);
+        const tabIcon = (tab: Tab) => (tab.getIcon() ? icon(tab.getIcon()!) : '');
+        const label = (tab: Tab, index: number, withIcon = true) => `${tab.getIconPosition() === 'before' && withIcon ? tabIcon(tab) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${tab.getIconPosition() === 'after' && withIcon ? tabIcon(tab) : ''}${headerBadge(index, true)}`;
+        const assetSrc = e(views.render('filament-schemas::asset', { path: 'tabs' }).trim());
+        const tablistRole = hasPanels ? `role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'"` : 'role="group"';
+        const orientation = hasPanels && isVertical ? ` x-bind:aria-orientation="hasVisibleTabHeaders ? 'vertical' : null"` : '';
+
+        if (property !== null) {
+            // Tabs bound to a property of the host component: a click sets the property, only the active tab is rendered.
+            const current = (this.livewire as any)[property];
+            const activeKey = current === null || current === undefined ? '' : String(current);
+            const activeIndex = visibleKeys.indexOf(activeKey);
+            const activeTab = activeIndex >= 0 ? activeIndex + 1 : await this.getActiveTab(visible);
+            const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['fi-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }])
+                .when(hasDeferredBadges, (a) => a.set('x-data', DEFERRED_BADGES_X_DATA));
+            const buttons = visible.map((tab, index) => {
+                const k = tab.getTabKey();
+                const isActive = activeKey === k;
+                const set = k !== '' ? `$set(${q(property)}, ${q(k)})` : `$set(${q(property)}, null)`;
+                const aria = hasPanels ? `role="tab" aria-controls="${e(tab.getKey()!)}" aria-selected="${isActive}" x-bind:aria-selected="isTabSelected(${q(k)})" tabindex="${isActive ? 0 : -1}"` : `aria-pressed="${isActive}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0"`;
+                return `<button id="${tabId(tab)}" ${aria} x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="${e(`if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }`)}" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="${e(set)}" class="${cls(['fi-tabs-item', { 'fi-active': isActive }])}">${label(tab, index)}</button>`;
+            });
+            const panels: string[] = [];
+            if (hasPanels) for (const tab of visible) {
+                const k = tab.getTabKey();
+                panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="fi-sc-tabs-tab">${activeKey === k ? await tab.toHtml() : ''}</div>`);
+            }
+            return `<div x-data="tabsSchemaComponent({
+ activeTab: ${activeTab},
+ hasTabPanels: ${hasPanels ? 'true' : 'false'},
+ isScrollable: true,
+ isVertical: ${isVertical ? 'true' : 'false'},
+ livewireId: ${e(js(id))},
+ livewireProperty: ${e(js(property))},
+ tab: ${e(js(activeKey))},
+ })" x-load x-load-src="${assetSrc}" wire:ignore.self ${outer.toHtml()}><input type="hidden" x-ref="tabsData" data-active-tab="${e(activeKey)}" /><div ${nav.toHtml()}><div x-ref="tablist" ${tablistRole} aria-label="${e(this.label)}"${orientation} x-on:keydown="handleKeydown($event)" data-prevent-disabled-clicks wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="${e(property)}" class="fi-sc-tabs-tablist">${buttons.join('')}</div></div>${panels.join('')}</div>`;
+        }
+
+        const activeTab = await this.getActiveTab(visible);
         const buttons = visible.map((tab, index) => {
             const k = tab.getTabKey();
-            const tabIcon = tab.getIcon() ? icon(tab.getIcon()!) : '';
-            const badge = badges[index];
-            return `<button type="button" x-bind:class="{
- 'fi-active': isTabSelected(${q(k)}),
+            const overflowClasses = hasPanels ? `
  'fi-sc-tabs-header-overflow': overflowTabs.includes(${q(k)}),
- 'fi-sc-tabs-header-overflow-open': isOverflowOpen &amp;&amp; overflowTabs.includes(${q(k)}),
- }" id="${tabId(tab)}" role="tab" aria-controls="${e(tab.getKey()!)}" tabindex="-1" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-bind:aria-selected="isTabSelected(${q(k)})" x-on:click="selectTab(${q(k)}, $event)" x-show="true" class="fi-tabs-item">${tab.getIconPosition() === 'before' ? tabIcon : ''}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${tab.getIconPosition() === 'after' ? tabIcon : ''}${badge ? badgeHtml(badge, true) : ''}</button>`;
+ 'fi-sc-tabs-header-overflow-open': isOverflowOpen &amp;&amp; overflowTabs.includes(${q(k)}),` : '';
+            const aria = hasPanels ? `role="tab" aria-controls="${e(tab.getKey()!)}" tabindex="-1"` : 'tabindex="0"';
+            const show = hasPanels ? 'true' : `(true) &amp;&amp; ! overflowTabs.includes(${q(k)})`;
+            return `<button type="button" x-bind:class="{
+ 'fi-active': isTabSelected(${q(k)}),${overflowClasses}
+ }" id="${tabId(tab)}" ${aria} x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-bind:${hasPanels ? 'aria-selected' : 'aria-pressed'}="isTabSelected(${q(k)})" x-on:click="selectTab(${q(k)}, $event)" x-show="${show}" class="fi-tabs-item">${label(tab, index)}</button>`;
         });
         // Not scrollable: tabs that do not fit move to an overflow dropdown, opened from a "more" trigger.
         let overflow = '';
@@ -691,30 +813,38 @@ export class Tabs extends Component {
             const triggers = visible.map((tab, index) => {
                 const k = tab.getTabKey();
                 const badge = badges[index];
-                return `<button type="button" tabindex="-1" aria-hidden="true" data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="fi-tabs-item fi-active">${icon('m-chevron-down', { alias: 'schemas::components.tabs.dropdown-trigger-button' })}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${badge ? badgeHtml(badge, false) : ''}</button>`;
+                const badgeContent = badge ? badgeHtml(badge, false) : lazy[index] ? deferredBadgePlaceholderHtml(badgeKey(index)) : '';
+                return `<button type="button" tabindex="${hasPanels ? '-1' : '0'}"${hasPanels ? ' aria-hidden="true"' : ''} data-tabs-overflow-trigger="data-tabs-overflow-trigger" data-tab-trigger-key="${e(k)}" aria-label="${e(`${more}: ${tab.getLabel()}`)}" x-show="overflowReady &amp;&amp; overflowTabs.includes(${q(k)}) &amp;&amp; isTabSelected(${q(k)})" class="fi-tabs-item fi-active">${icon('m-chevron-down', { alias: 'schemas::components.tabs.dropdown-trigger-button' })}<span class="fi-tabs-item-label">${e(tab.getLabel())}</span>${badgeContent}</button>`;
             });
             const items = visible.map((tab, index) => {
                 const k = tab.getTabKey();
                 const badge = badges[index];
-                const listBadge = badge ? `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', ...badgeColorClasses(this, badge.color)])}">${e(badge.label)}</span>` : '';
-                return `<div data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item fi-sc-tabs-overflow-placeholder">${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="fi-dropdown-list-item-label">${e(tab.getLabel())}</span>${listBadge}</div>`;
+                const listBadge = badge ? `<span${badgeTooltipAttribute(badge.tooltip)} class="${cls(['fi-badge', ...badgeColorClasses(this, badge.color)])}">${e(badge.label)}</span>` : lazy[index] ? deferredDropdownBadgePlaceholderHtml(badgeKey(index)) : '';
+                const content = `${tab.getIcon() ? icon(tab.getIcon()!) : ''}<span class="fi-dropdown-list-item-label">${e(tab.getLabel())}</span>${listBadge}`;
+                if (hasPanels) return `<div data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item fi-sc-tabs-overflow-placeholder">${content}</div>`;
+                return `<button role="menuitem" type="button" data-tab-menu-key="${e(k)}" x-bind:aria-disabled="availableTabs.includes(${q(k)}) ? 'false' : 'true'" x-on:click="${e(`if ($el.getAttribute('aria-disabled') !== 'true') selectTab(${q(k)}, $event, true)`)}" x-show="(true) &amp;&amp; overflowTabs.includes(${q(k)})" class="fi-dropdown-list-item">${content}</button>`;
             });
-            overflow = `<div aria-hidden="true" class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { $event.preventDefault(); toggleOverflow() }" class="fi-dropdown-trigger">${triggers.join('')}<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis tabindex="-1" aria-hidden="true" aria-label="${e(more)}" class="fi-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="fi-tabs-item-label">${icon('m-ellipsis-horizontal', { alias: 'schemas::components.tabs.more-tabs-button' })}</span></button></div><div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.fi-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="fi-dropdown-panel fi-sc-tabs-overflow-panel"><div class="fi-dropdown-list">${items.join('')}</div></div></div>`;
+            const ellipsis = `<button type="button" data-tabs-overflow-trigger data-tabs-overflow-ellipsis${hasPanels ? ' tabindex="-1" aria-hidden="true"' : ''} aria-label="${e(more)}" class="fi-tabs-item" x-show="! overflowReady || (overflowTabs.some(key =&gt; availableTabs.includes(key)) &amp;&amp; ! overflowTabs.includes(tab))"><span class="fi-tabs-item-label">${icon('m-ellipsis-horizontal', { alias: 'schemas::components.tabs.more-tabs-button' })}</span></button>`;
+            const panel = hasPanels
+                ? `<div x-cloak x-ref="overflowPanel" x-show="isOverflowOpen" aria-hidden="true" x-on:mousedown.self.prevent x-on:scroll="scheduleUpdate()" x-on:click.outside="if (! $el.closest('.fi-sc-tabs').querySelector('[x-ref=tablist]').contains($event.target) &amp;&amp; ! getOverflowTrigger()?.contains($event.target)) dismissOverflow()" class="fi-dropdown-panel fi-sc-tabs-overflow-panel">`
+                : `<div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" x-on:keydown.home.prevent.stop="focusMenuItem('first')" x-on:keydown.end.prevent.stop="focusMenuItem('last')" class="fi-dropdown-panel">`;
+            const toggle = hasPanels ? '$event.preventDefault(); toggleOverflow()' : 'toggle($event)';
+            overflow = `<div ${hasPanels ? 'aria-hidden="true"' : 'x-data="filamentDropdown"'} class="fi-dropdown"><div x-on:mousedown="if ($event.button === 0) { ${toggle} }" class="fi-dropdown-trigger">${triggers.join('')}${ellipsis}</div>${panel}<div class="fi-dropdown-list">${items.join('')}</div></div></div>`;
         }
         const panels: string[] = [];
-        for (const tab of visible) {
+        if (hasPanels) for (const tab of visible) {
             const k = tab.getTabKey();
             panels.push(`<div aria-labelledby="${tabId(tab)}" id="${e(tab.getKey()!)}" role="tabpanel" tabindex="0" wire:key="${e(`${id}.${tab.getKey()}`)}.container" x-show="true" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" x-on:expand="revealTab(${q(k)})" x-data="filamentSchemaComponent(${e(js(tab.getAlpineScopeConfiguration()))})" class="fi-sc-tabs-tab">${await tab.toHtml()}</div>`);
         }
-        const outer = new Attributes().merge({ id: key, 'wire:key': `${id}.${key}.container`, ...this._extraAttributes }).class(['fi-sc-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }]);
         const nav = new Attributes({ 'x-ref': 'tabsHeader' }).class(['fi-tabs', { 'fi-contained': isContained, 'fi-vertical': isVertical }])
             .when(!isScrollable, (a) => a.merge({ 'x-bind:class': "{ 'fi-invisible': ! overflowReady }" }))
-            .merge({ 'x-cloak': true });
-        const tablistExtra = `${isVertical ? ` x-bind:aria-orientation="hasVisibleTabHeaders ? 'vertical' : null"` : ''} x-on:keydown="handleKeydown($event)"${isScrollable ? '' : ` x-on:dropdown-escape="if (isOverflowOpen) { $event.preventDefault(); $event.stopPropagation(); dismissOverflow() }" x-on:wheel="scrollOverflow($event)" x-on:touchstart="scrollOverflow($event)" x-on:touchmove="scrollOverflow($event)"`}`;
+            .merge({ 'x-cloak': true })
+            .when(hasDeferredBadges, (a) => a.set('x-data', DEFERRED_BADGES_X_DATA));
+        const tablistExtra = `${orientation} x-on:keydown="handleKeydown($event)"${!hasPanels || isScrollable ? '' : ` x-on:dropdown-escape="if (isOverflowOpen) { $event.preventDefault(); $event.stopPropagation(); dismissOverflow() }" x-on:wheel="scrollOverflow($event)" x-on:touchstart="scrollOverflow($event)" x-on:touchmove="scrollOverflow($event)"`}`;
         const persistedTab = isTabPersisted ? e(`$persist(null).as(${js(`filament:tabs:active:${key}`)})`) : 'null';
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${activeTab},
- hasTabPanels: true,
+ hasTabPanels: ${hasPanels ? 'true' : 'false'},
  isScrollable: ${isScrollable ? 'true' : 'false'},
  isVertical: ${isVertical ? 'true' : 'false'},
  isTabPersisted: ${isTabPersisted ? 'true' : 'false'},
@@ -723,7 +853,7 @@ export class Tabs extends Component {
  schemaKey: ${e(js(key.split('.')[0]))},
  tab: ${persistedTab},
  tabQueryStringKey: ${e(js(this._tabQueryStringKey))},
- })" x-load x-load-src="${e(views.render('filament-schemas::asset', { path: 'tabs' }).trim())}"${isScrollable ? '' : ' x-on:resize.window="scheduleUpdate(true)"'} wire:ignore.self ${outer.toHtml()}><div ${nav.toHtml()}><div x-ref="tablist" role="tablist" x-bind:role="hasVisibleTabHeaders ? 'tablist' : 'group'" aria-label="${e(this.label)}"${tablistExtra} class="fi-sc-tabs-tablist">${buttons.join('')}</div>${overflow}</div>${panels.join('')}</div>`;
+ })" x-load x-load-src="${assetSrc}"${!hasPanels || isScrollable ? '' : ' x-on:resize.window="scheduleUpdate(true)"'} wire:ignore.self ${outer.toHtml()}><div ${nav.toHtml()}><div x-ref="tablist" ${tablistRole} aria-label="${e(this.label)}"${tablistExtra} class="fi-sc-tabs-tablist">${buttons.join('')}</div>${overflow}</div>${panels.join('')}</div>`;
     }
 }
 
