@@ -71,7 +71,7 @@ A resource is a class that extends `Resource`, with a few static properties:
 | `form()` | The form [schema](/schemas/overview) used by the create and edit pages. |
 | `table()` | The [table](/tables/overview) of the list page. |
 
-Navette does not generate files for you: there is no command line. Write the class by hand, or start from a resource of the demo application (`apps/demo/resources`).
+To generate a resource class, run `npx navette make:resource` in your project (see the [command line](/getting-started/cli)); add `--generate` to build its form and table from the database table. You may also write the class by hand.
 
 ### Simple (modal) resources
 

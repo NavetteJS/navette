@@ -2263,8 +2263,7 @@ export function richDocumentToHtml(document: unknown): string | null {
 }
 
 /**
- * Rich text editor: the browser works on a TipTap document, the database receives HTML.
- * Not supported yet: custom blocks, merge tags, mentions, text colors.
+ * Rich text editor: the browser works on a TipTap document, the database receives HTML (or the JSON document with `json()`).
  */
 /**
  * Stores a file uploaded by an editor (`componentFileAttachments.<state path>[.<id>]`): type checked on the file's content, size,

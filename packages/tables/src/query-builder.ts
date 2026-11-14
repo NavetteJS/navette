@@ -1,6 +1,5 @@
 // Query builder filter: users compose rules (constraint + operator + settings), optionally grouped in "OR" blocks.
 // All state comes from the browser: it is sanitized against the declared constraints before any use (query, indicators, render).
-// Not supported yet: relationship aggregates (sum, average… of a related column), constraint groups, server-side option search.
 // Date and search SQL is generated for SQLite, MySQL / MariaDB, PostgreSQL and SQL Server, depending on the query's knex client.
 import { Action } from '@navette-js/actions';
 import type { ListQuery } from '@navette-js/database';
