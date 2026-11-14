@@ -4,7 +4,7 @@ import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database
 import { Action, useColorManager as useActionColorManager } from '@navette-js/actions';
 import { ColorManager, resetConfigurators, views } from '@navette-js/support';
 import '@navette-js/support/ui';
-import { t, tc } from '@navette-js/support/i18n';
+import { setLocale, t, tc } from '@navette-js/support/i18n';
 import {
     Average, BadgeColumn, ColumnGroup, Count, Filter, ImageColumn, IsRelatedToOperator, QueryBuilder, QueryBuilderOperator, Range, RelationshipConstraint, SelectColumn, SelectConstraint, SelectFilter, Sum, Table, TernaryFilter, TextColumn, TextConstraint,
     applyTableFilters, callTableColumnMethod, formatIsoDate, getFilterIndicators, getTableQuery, getTableRecords, limitText, limitWords, mergeIntoFirstTag, recordMatchesTableFilters, renderTable, updateTableColumnState, useColorManager, type TableHost,
@@ -83,6 +83,8 @@ test('TextColumn: date tooltips, ISO formats, numbers and money with a locale, l
     assert.ok((await TextColumn.make('published_at').dateTimeTooltip('d/m/Y H:i').toHtml(record)).includes('content: &#039;05\\/03\\/2026 14:30&#039;'));
     assert.match(await TextColumn.make('published_at').timeTooltip().toHtml(record), /content: &#039;14:30:00&#039;/);
     assert.match(await TextColumn.make('published_at').date().sinceTooltip().toHtml(record), /content: &#039;\d+ \w+ ago&#039;/);
+    setLocale('fr');
+    try { assert.match(await TextColumn.make('published_at').since().toHtml(record), /il y a \d+ \w+/); } finally { setLocale('en'); }
     assert.ok((await TextColumn.make('published_at').isoDateTooltip().toHtml(record)).includes('content: &#039;03\\/05\\/2026&#039;'));
     assert.match(await TextColumn.make('published_at').isoDateTimeTooltip(null, 'Europe/Paris').toHtml(record), /content: &#039;March 5, 2026 3:30 PM&#039;/);
     assert.match(await TextColumn.make('published_at').isoTimeTooltip().toHtml(record), /content: &#039;2:30 PM&#039;/);
