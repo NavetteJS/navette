@@ -7,7 +7,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { Action } from '@navette-js/actions';
 import { CheckboxList, FileUpload, Select } from '@navette-js/forms';
 import { Fieldset } from '@navette-js/schemas';
-import { configured, icons } from '@navette-js/support';
+import { configured, icons, type Enum } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
 import { getTableQuery } from '@navette-js/tables';
 import { Notification } from './notifications.ts';
@@ -220,8 +220,11 @@ export class ImportColumn {
     private _cast: ((value: string | null) => unknown) | null = null;
     private _example: string | null = null;
     private _fill: ((record: Record<string, unknown>, value: unknown) => void) | null = null;
+    private _enum: Enum<string | number> | null = null;
     constructor(name: string) { this.name = name; }
     static make(name: string): ImportColumn { return configured(new ImportColumn(name)); }
+    /** A non-empty value must be one of the enum's values (Filament: `ImportColumn::enum()`). */
+    enum(enumeration: Enum<string | number> | null): this { this._enum = enumeration; return this; }
     label(label: string | null): this { this._label = label; return this; }
     getLabel(): string { return this._label ?? this.name.replace(/[_.]+/g, ' ').replace(/^./, (c) => c.toUpperCase()); }
     /** Other file headers that map to this column (compared case-insensitively). */
@@ -261,9 +264,10 @@ export class ImportColumn {
             if (name === 'min' && text.length < Number(parameter)) return fail(`The ${label} field must be at least ${parameter} characters.`);
             if (name === 'in' && !parameter.split(',').includes(text)) return fail(`The selected ${label} is invalid.`);
         }
+        if (this._enum && !blank && !this._enum.has(value!.trim())) return { rule: 'enum', message: `The selected ${label} is invalid.` };
         return null;
     }
-    cast(value: string | null): unknown { return this._cast ? this._cast(value) : value === '' ? null : value; }
+    cast(value: string | null): unknown { return this._cast ? this._cast(value) : value === '' ? null : this._enum && value !== null ? this._enum.tryFrom(value.trim())?.value ?? value : value; }
     fill(record: Record<string, unknown>, value: unknown): void { if (this._fill) this._fill(record, value); else record[this.name] = value; }
 }
 /** Describes an import: its columns, how a row finds or creates its record, and hooks. */

@@ -86,6 +86,8 @@ ImportColumn.make('email')
 
 A row that fails validation is skipped, and listed in the failed rows file with its error.
 
+`enum()` only accepts the values of an [enum](/advanced/enums#importing-enum-values): `ImportColumn.make('status').enum(Status)`.
+
 ### Casting the data
 
 Cells are text. `numeric()` and `boolean()` convert them, and `castStateUsing()` lets you write your own conversion:

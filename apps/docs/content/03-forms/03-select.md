@@ -42,6 +42,8 @@ Select.make('priority')
 
 Values are handled as strings: a number read from the record (`department_id: 4`) is converted to `'4'` when the form is filled.
 
+Options may also come from an [enum](/advanced/enums#using-an-enum-for-field-options): `Select.make('status').options(Status)` lists its values with their labels.
+
 The empty option of a select displays "Select an option" by default. You may change it with `placeholder()`.
 
 ## Loading options from a function

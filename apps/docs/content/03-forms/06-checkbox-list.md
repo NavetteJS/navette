@@ -74,6 +74,8 @@ CheckboxList.make('technologies')
 
 Make sure to use the same keys in the descriptions object as the options object so the right description matches the right option.
 
+When the options come from an [enum](/advanced/enums#enum-descriptions), the descriptions of its cases are used, unless you set others with `descriptions()`.
+
 ## Splitting options into columns
 
 You may split the options into columns by using the `columns()` method. The columns apply from the `lg` breakpoint:

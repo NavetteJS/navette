@@ -19,7 +19,7 @@ SelectColumn.make('status')
     })
 ```
 
-Options may be an object of `{ value: label }` pairs, or an array of `[value, label]` pairs, which keeps the order of numeric keys:
+Options may be an object of `{ value: label }` pairs, an array of `[value, label]` pairs, which keeps the order of numeric keys, or an [enum](/advanced/enums#using-an-enum-for-field-options):
 
 ```ts
 import { SelectColumn } from '@navette-js/tables';

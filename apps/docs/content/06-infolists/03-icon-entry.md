@@ -40,6 +40,8 @@ When there is no icon for the state, nothing is displayed. If the state is an ar
 
 Screen readers announce the state itself, such as "reviewing", or the [tooltip](/infolists/overview#adding-a-tooltip-to-an-entry) when the entry has one.
 
+When the attribute is cast to an [enum](/advanced/enums#enum-icons) on the model, or with `enum()`, the icon and color of each value come from the enum, and screen readers announce its label.
+
 ## Customizing the color
 
 You may change the color of the icon, using the `color()` method. Like `icon()`, it accepts a color name, a map of state values to colors, or a function of the record and the state:

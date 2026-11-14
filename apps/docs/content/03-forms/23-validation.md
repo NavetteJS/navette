@@ -212,7 +212,7 @@ TextInput.make('code')
 
 ### In and not in
 
-Besides the automatic check of fields with options, `in()` accepts a list of values, or an object whose values are the allowed ones (such as a TypeScript `const` enum object, also accepted by `enum()`). `notIn()` rejects the values of the list. On a list value, every item is checked:
+Besides the automatic check of fields with options, `in()` accepts a list of values, an [enum](/advanced/enums), or an object whose values are the allowed ones (such as a TypeScript `const` enum object); `enum()` accepts the same. `notIn()` rejects the values of the list. On a list value, every item is checked:
 
 ```ts
 import { TextInput } from '@navette-js/forms';
