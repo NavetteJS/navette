@@ -45,7 +45,9 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
             const ctx = await makeContext(req, res);
             res.json(await around(ctx, req, res, () => runtime.handle(req.body, ctx)));
         } catch (e) {
-            const status = e instanceof WireError ? e.status : 500;
+            // Errors carrying an HTTP client status (`maxItemsForProcessing()`'s 413) keep it; anything else is a 500.
+            const given = Number((e as any)?.status);
+            const status = e instanceof WireError ? e.status : given >= 400 && given < 500 ? given : 500;
             if (status === 500) console.error(e);
             else if (process.env.NODE_ENV !== 'production') console.warn(`[wire] ${status} ${(e as Error).message} — calls=${JSON.stringify(req.body?.components?.map((c: any) => c.calls))} updates=${JSON.stringify(req.body?.components?.map((c: any) => c.updates))}`);
             res.status(status).send(e instanceof Error ? e.message : 'Error');

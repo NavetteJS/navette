@@ -658,6 +658,18 @@ TextEntry.make('description')
     .tooltip((record, state) => (String(state).length > 50 ? String(state) : null))
 ```
 
+`getCharacterLimit()` returns the limit of the entry, which avoids repeating it in the tooltip:
+
+```ts
+import { TextEntry } from '@navette-js/infolists';
+
+const description: TextEntry = TextEntry.make('description')
+    .limit(50)
+    .tooltip((record, state) => (String(state).length > (description.getCharacterLimit() ?? Infinity) ? String(state) : null));
+```
+
+The limit and its ending may also be functions of the record and of the state item, `(record, state) => …`, for a different limit for each value of a list. `getCharacterLimitEnd()` returns the ending.
+
 ### Limiting word count
 
 You may limit the number of `words()` displayed in the entry:
@@ -734,6 +746,28 @@ TextEntry.make('order_number')
 Browsers only allow copying to the clipboard on secure origins, so this feature only works when the panel is served over HTTPS (or on `localhost`).
 </Aside>
 
+## Adding suffix and prefix actions
+
+You may place an [action](/actions/overview) before and after the entry using the `prefixAction()` and `suffixAction()` methods:
+
+```ts
+import { Action } from '@navette-js/actions';
+import { TextEntry } from '@navette-js/infolists';
+
+TextEntry.make('cost')
+    .prefix('€')
+    .suffixAction(
+        Action.make('copyCostToPrice')
+            .icon('o-clipboard')
+            .requiresConfirmation()
+            .action(async ({ record }) => {
+                await ProductResource.adapter.update(record.id, { price: record.cost });
+            }),
+    )
+```
+
+Like in Filament, affix actions are small icon buttons, unless they choose another style (`button()`, `link()`) or size. Several actions can be given with `prefixActions([...])` and `suffixActions([...])`, and each method also accepts a function of the context returning the action. The actions are mounted with the entry, so they open their modal and run their handler like any other schema action.
+
 <Aside variant="warning">
-Not available in Navette yet: prefix and suffix actions, aggregating relationships (`counts()`, `sum()`…), a different URL for each value of a list, and translated month and day names in date formats.
+Not available in Navette yet: aggregating relationships (`counts()`, `sum()`…), a different URL for each value of a list, and translated month and day names in date formats.
 </Aside>

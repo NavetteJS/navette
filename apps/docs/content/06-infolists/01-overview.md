@@ -512,6 +512,15 @@ TextEntry.make('title')
 
 Alternatively, you may pass `'start'`, `'center'`, `'end'`, `'left'`, `'right'`, `'justify'` or `'between'` to the `alignment()` method. Any other value is ignored.
 
+The `alignLeft()` and `alignRight()` methods align the content to the left or the right whatever the direction of the interface, and `alignJustify()` justifies it:
+
+```ts
+import { TextEntry } from '@navette-js/infolists';
+
+TextEntry.make('code')
+    .alignRight() // Same as alignment('right'), also in right-to-left interfaces.
+```
+
 ## Adding extra content to an entry
 
 Entries contain many "slots" where content can be inserted. Slots can accept text, [any schema component](/schemas/overview) and [actions](/actions/overview). Usually, [prime components](/schemas/primes) are used for content.

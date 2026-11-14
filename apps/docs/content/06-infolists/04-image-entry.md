@@ -23,22 +23,53 @@ If the state is an array of URLs, every image is rendered.
 
 ## Displaying uploaded files
 
-A [file upload](/forms/file-upload) field stores the key of each file, which is a path relative to its storage, such as `posts/4281246003439.jpg`. Since the image entry needs a URL, use `state()` to build the public URL of the file. For example, with files served under `/storage`:
+A [file upload](/forms/file-upload) field stores the key of each file, which is a path relative to its [storage](/advanced/file-storage), such as `posts/4281246003439.jpg`. The state of an image entry can be such a key, or a URL (a path starting with `/`, or an `http(s)://` address).
+
+## Managing the image storage
+
+Like Filament's `disk()`, the `storage()` method sets the storage the keys are relative to. Any `FileStorage` of `@navette-js/forms` works, such as a `LocalFileStorage`:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+import { ImageEntry } from '@navette-js/infolists';
+
+ImageEntry.make('header_image')
+    .storage(postsStorage)
+
+// Or, for every image entry of the application: the default storage of the file upload fields.
+ImageEntry.storage = FileUpload.storage;
+```
+
+As well as allowing a static value, the `storage()` method also accepts a function of the context, which may return a promise. Without a storage, only URLs are displayed.
+
+## Public images
+
+Images of a private storage (a `LocalFileStorage` created with `{ visibility: 'private' }`) are shown through [temporary signed URLs](/advanced/file-storage#temporary-urls-for-private-files), which expire. Images of a public storage use their permanent URL. You can set the visibility of an entry's images with `visibility()`:
 
 ```ts
 import { ImageEntry } from '@navette-js/infolists';
 
 ImageEntry.make('header_image')
-    .state(({ record }) => {
-        const key = (record as Post).header_image;
+    .visibility('public')
 
-        return key ? `/storage/${key.split('/').map(encodeURIComponent).join('/')}` : null;
-    })
+ImageEntry.make('scan')
+    .visibility('private')
 ```
 
-<Aside variant="warning">
-Storage disks (`disk()`), visibility and temporary URLs are not available on the image entry in Navette yet: the entry only renders URLs.
-</Aside>
+A private image needs a storage that implements `temporaryUrl()`; otherwise its permanent URL is used.
+
+## Prevent file existence checks
+
+When the infolist is rendered, the entry checks that each stored image exists (with the storage's `exists()`) and shows the [default image](#adding-a-default-image-url) instead of a missing one. This is all done on the server. When using remote storage with many images, this can be time-consuming. You can use the `checkFileExistence(false)` method to disable this feature:
+
+```ts
+import { ImageEntry } from '@navette-js/infolists';
+
+ImageEntry.make('attachment')
+    .checkFileExistence(false)
+```
+
+`getImageUrl(state)` returns the URL used for a state item: the URL itself, the storage's URL of a key, or `null` for a missing file. Keys containing `..` or unexpected characters never reach the storage, and only local and `http(s)` URLs are displayed.
 
 ## Setting the alt text
 

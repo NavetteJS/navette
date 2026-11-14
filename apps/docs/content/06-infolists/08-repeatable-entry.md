@@ -220,6 +220,42 @@ Section.make('Line Items')
     ])
 ```
 
+## Limiting item processing
+
+An unexpectedly large item collection can take a long time to build and render. You can opt in to a processing limit using `maxItemsForProcessing()`:
+
+```ts
+import { RepeatableEntry, TextEntry } from '@navette-js/infolists';
+
+RepeatableEntry.make('comments')
+    .schema([
+        TextEntry.make('content'),
+    ])
+    .maxItemsForProcessing(100)
+```
+
+If the entry has more than 100 items, Navette aborts with an HTTP 413 response before building its item schemas, without truncating the data. This also applies to the table layout. The limit is disabled by default and accepts a number, or `null` to disable it.
+
+<Aside variant="danger">
+The processing limit also applies to existing data loaded from your database. A record above the limit cannot be displayed through that infolist until you raise the limit or correct its data elsewhere. Choose a limit that accommodates existing records you need to display.
+</Aside>
+
+### Applying processing limits globally
+
+Use `configureUsing()` at startup to set a global default:
+
+```ts
+import { RepeatableEntry } from '@navette-js/infolists';
+
+RepeatableEntry.configureUsing((entry) => {
+    entry.maxItemsForProcessing(100);
+});
+```
+
+You can override this default on individual entries using `maxItemsForProcessing(200)` to increase it, `maxItemsForProcessing(50)` to decrease it, or `maxItemsForProcessing(null)` to disable it. `getMaxItemsForProcessing()` returns the limit.
+
+This is an opt-in performance safeguard, not a security boundary or a guarantee of request duration. The limit applies to each repeatable entry separately, not to the total number of nested items in a request. Navette counts the items of the state before building their schemas: loading the record and state functions still take place before this check.
+
 <Aside variant="warning">
-Not available in Navette yet: limiting item processing (`maxItemsForProcessing()`), and loading the items of a relationship automatically: the record must carry them.
+Not available in Navette yet: loading the items of a relationship automatically: the record must carry them.
 </Aside>
