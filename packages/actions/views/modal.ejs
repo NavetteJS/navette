@@ -1,17 +1,28 @@
 <%# Modal of a mounted action (confirmation or form). Closing it unmounts the action. %>
-<% const trapOnWindow = locals.slideOver || stickyHeader || stickyFooter; const close = '$dispatch(' + js('close-modal') + ', { id: ' + js(id) + ' })'; %>
-<div wire:partial="action-modals.<%- index %>"<% if (description) { %> aria-describedby="<%= id %>.description"<% } %> aria-labelledby="<%= id %>.heading" aria-modal="true" id="<%= id %>" role="<%- confirmation ? 'alertdialog' : 'dialog' %>" tabindex="-1" x-data="filamentModal({
+<%
+    const close = '$dispatch(' + js('close-modal') + ', { id: ' + js(id) + ' })';
+    // When Escape does not close the modal, the close button is the keyboard way out: the window takes the autofocus instead.
+    const windowAutofocusedByDefault = closeButton && !closeByEscaping && Boolean(heading);
+    const extraWindow = { autofocus: windowAutofocusedByDefault, ...windowAttributes };
+    const trapOnWindow = !clickThrough && (locals.slideOver || (width !== 'screen' && (stickyHeader || stickyFooter))) && (extraWindow.autofocus === false || extraWindow.autofocus === null || extraWindow.autofocus === undefined) && extraWindow.tabindex === undefined;
+    if (extraWindow.tabindex === undefined) extraWindow.tabindex = trapOnWindow ? '0' : (windowAutofocusedByDefault ? '-1' : null);
+    const { class: windowClass, ...windowRest } = extraWindow;
+    const { class: overlayClass, ...overlayRest } = overlayAttributes;
+    const trap = 'x-trap.noreturn' + (autofocus ? '' : '.noautofocus') + '="isTrapActive"';
+    const hasIcon = Boolean(iconName);
+%>
+<div wire:partial="action-modals.<%- index %>"<% if (description) { %> aria-describedby="<%= id %>.description"<% } %> aria-labelledby="<%= id %>.heading" aria-modal="<%- clickThrough ? 'false' : 'true' %>" id="<%= id %>" role="<%- confirmation ? 'alertdialog' : 'dialog' %>" tabindex="-1" x-data="filamentModal({
                 id: <%- js(id) %>,
-                isScrollLocked: true,
+                isScrollLocked: <%- clickThrough ? 'false' : 'true' %>,
                 shouldRestoreFocus: false,
             })" data-fi-modal-id="<%= id %>" x-on:close-modal.window="if (($event.detail.id === <%- js(id) %>) && isOpen) close()" x-on:close-modal-quietly.window="if (($event.detail.id === <%- js(id) %>) && isOpen) closeQuietly()" x-on:open-modal.window="if (($event.detail.id === <%- js(id) %>) && (! isOpen)) open()" x-bind:class="{
         'fi-modal-open': isOpen,
-    }" x-cloak x-show="isOpen" class="<%- cls(['fi-modal', locals.slideOver ? 'fi-modal-slide-over' : null, 'fi-absolute-positioning-context', { 'fi-modal-has-sticky-header': stickyHeader, 'fi-modal-has-sticky-footer': stickyFooter }]) %>" wire:key="<%= livewireId %>.actions.<%= name %>.modal" x-on:modal-closed="if ($event.detail.id === <%= js(id) %>) $wire.unmountAction(false)">
-    <div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity class="fi-modal-close-overlay"></div>
+    }" x-cloak x-show="isOpen" class="<%- cls(['fi-modal', locals.slideOver ? 'fi-modal-slide-over' : null, 'fi-absolute-positioning-context', { 'fi-modal-slide-over-from-start': locals.slideOver && slideOverPosition === 'start', 'fi-modal-slide-over-from-end': locals.slideOver && slideOverPosition !== 'start', 'fi-modal-has-sticky-header': stickyHeader, 'fi-modal-has-sticky-footer': stickyFooter, 'fi-width-screen': width === 'screen', 'fi-modal-click-through': clickThrough }]) %>" wire:key="<%= livewireId %>.actions.<%= name %>.modal" x-on:modal-closed="if ($event.detail.id === <%= js(id) %>) $wire.unmountAction(<%= js(cancelParentActionsOnClose) %>)">
+    <% if (!clickThrough) { %><div aria-hidden="true" x-show="isOpen" x-transition.duration.300ms.opacity<%- attributesToHtml(overlayRest) %> class="<%- cls(['fi-modal-close-overlay', overlayClass ? e(overlayClass) : null]) %>"></div><% } %>
 
-    <div<% if (!trapOnWindow) { %> tabindex="-1"<% } %><% if (closeByClickingAway) { %> x-on:click.self="<%= close %>"<% } %><% if (!trapOnWindow) { %> x-trap.noreturn="isTrapActive"<% } %> class="<%- cls(['fi-modal-window-ctn', { 'fi-clickable': closeByClickingAway }]) %>">
-        <form<% if (closeByEscaping) { %> x-on:keydown.window.escape="if (isTopmost()) <%= close %>"<% } %><% if (trapOnWindow) { %> x-trap.noreturn="isTrapActive" tabindex="0"<% } %> x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:submit.prevent="callMountedAction" wire:key="<%= livewireId %>.modal.<%= id %>.window" class="<%- cls(['fi-modal-window', { 'fi-modal-window-has-close-btn': closeButton }, { 'fi-modal-window-has-content': content !== null }, { 'fi-modal-window-has-footer': locals.hasFooter !== false }, { 'fi-modal-window-has-icon': iconName }, 'fi-align-' + alignment, 'fi-width-' + width]) %>">
-            <div wire:key="<%= livewireId %>.modal.<%= id %>.header" class="fi-modal-header">
+    <div<% if (!trapOnWindow) { %> tabindex="-1"<% } %><% if (closeByClickingAway) { %> x-on:click.self="<%= close %>"<% } %><% if (!clickThrough && !trapOnWindow) { %> <%- trap %><% } %> class="<%- cls(['fi-modal-window-ctn', { 'fi-clickable': closeByClickingAway }]) %>">
+        <form<% if (closeByEscaping) { %> x-on:keydown.window.escape="if (isTopmost()) <%= close %>"<% } %> x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave"<% if (width !== 'screen') { %> x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end"<% } %> wire:submit.prevent="callMountedAction" wire:key="<%= livewireId %>.modal.<%= id %>.window"<% if (trapOnWindow) { %> <%- trap %><% } %><%- attributesToHtml(windowRest) %> class="<%- cls(['fi-modal-window', { 'fi-modal-window-has-close-btn': closeButton }, { 'fi-modal-window-has-content': content !== null }, { 'fi-modal-window-has-footer': locals.hasFooter !== false }, { 'fi-modal-window-has-icon': iconName }, 'fi-align-' + alignment, 'fi-width-' + width, windowClass ? e(windowClass) : null]) %>">
+            <div wire:key="<%= livewireId %>.modal.<%= id %>.header" class="<%- cls(['fi-modal-header', { 'fi-vertical-align-center': hasIcon && heading && !eyebrow && !description && alignment === 'start' }]) %>">
                 <% if (closeButton) { %><%- view('filament::components.icon-button', {
                     iconName: 'o-x-mark', iconAlias: 'modal.close-button', iconSize: 'lg', label: t('filament::components/modal.actions.close.label'), className: 'fi-modal-close-btn',
                     extra: attrs({ tabindex: closeByEscaping ? '-1' : null }), after: attrs({ 'x-on:click': "$dispatch('close-modal', { id: " + js(id) + ' })' }),
@@ -26,6 +37,12 @@
                 <% } %>
 
                 <div>
+                    <% if (eyebrow) { %>
+                        <p class="fi-modal-eyebrow">
+                            <% if (typeof eyebrow === 'object' && typeof eyebrow.html === 'string') { %><%- eyebrow.html %><% } else { %><%= eyebrow %><% } %>
+                        </p>
+                    <% } %>
+
                     <h2 id="<%= id %>.heading" class="fi-modal-heading">
                         <%= heading %>
                     </h2>
@@ -38,7 +55,7 @@
                 </div>
             </div>
 
-            <%# The six ActionsRenderHook slots are already assembled into `content` by Action.toModalHtml(). %>
+            <%# The six ActionsRenderHook slots and the custom content are already assembled into `content` by Action.toModalHtml(). %>
             <% if (content !== null) { %>
                 <div wire:key="<%= livewireId %>.modal.<%= id %>.content" class="fi-modal-content">
                     <%- content %>
@@ -48,8 +65,8 @@
             <% if (locals.hasFooter !== false) { %>
             <div wire:key="<%= livewireId %>.modal.<%= id %>.footer" class="fi-modal-footer fi-align-<%- footerAlignment %>">
                 <div class="fi-modal-footer-actions">
-                    <%# Confirmation: cancel then confirm; form: submit then cancel. %>
-                    <%- confirmation ? cancel + submit : submit + cancel %>
+                    <%# Submit, extra actions, cancel; reversed when the footer is centered (confirmations). %>
+                    <%- footer %>
                 </div>
             </div>
             <% } %>

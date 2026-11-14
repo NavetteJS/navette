@@ -663,14 +663,14 @@ export class Testable<C extends Component = any> implements PromiseLike<void> {
         const mounted = (component.mountedActions ?? []) as { name: string; arguments: Record<string, unknown>; context: Record<string, unknown> }[];
         for (const entry of mounted) {
             const parent = typeof entry.context.parentAction === 'number' ? chain[entry.context.parentAction] : null;
-            const action = parent ? parent.action.getExtraModalFooterActions().find((a: any) => a.getName() === entry.name) : (await component.getMountableActions(entry.context)).find((a: any) => a.getName() === entry.name);
+            const action = parent ? parent.action.getModalActions().find((a: any) => a.getName() === entry.name) : (await component.getMountableActions(entry.context)).find((a: any) => a.getName() === entry.name);
             if (!action) return null;
             chain.push({ action, context: entry.context, spec: { name: entry.name, arguments: entry.arguments, context: entry.context } });
         }
         for (const spec of specs) {
             const previous = chain[chain.length - 1];
             const explicit = spec.context.table !== undefined || spec.context.schemaComponent !== undefined || spec.context.bulk !== undefined;
-            const nested = !explicit && previous ? previous.action.getExtraModalFooterActions?.().find((a: any) => a.getName() === spec.name) : undefined;
+            const nested = !explicit && previous ? (previous.action.getModalActions?.() ?? previous.action.getExtraModalFooterActions?.()).find((a: any) => a.getName() === spec.name) : undefined;
             if (nested) {
                 const context = { ...previous.context, parentAction: chain.length - 1 };
                 spec.context = { ...spec.context, parentAction: chain.length - 1 };

@@ -9,7 +9,14 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
-import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
+import { Action, ActionHalt, AuthorizationResponse, useColorManager, ActionGroup } from '@navette-js/actions';
+import { actionRateLimitKey, clearDefaultActionUrlScript, getActionRateLimitStore, MountedAction, readDefaultActionQuery, type MountedActionHost } from './action-support.ts';
+export { actionRateLimitKey, getActionRateLimitStore, MemoryActionRateLimitStore, MountedAction, readDefaultActionQuery, useActionRateLimitStore, type ActionRateLimitStore, type DefaultActionQuery } from './action-support.ts';
+export { AuthorizationResponse } from '@navette-js/actions';
+/** A mounted action in the component state: name, arguments, server-side context and form data. */
+export type MountedActionState = { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown>; /** Read by the unsaved changes alert of the browser. */ hasUnsavedChangesAlert?: boolean };
+/** Evaluation context of an action's visibility and authorization on mount. */
+type ComponentContextLike = { livewire: any; component: any; operation: null; record: unknown; get: () => undefined; state: undefined; arguments: Record<string, unknown> };
 import { Checkbox, Field, RawJs, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
 import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
@@ -68,11 +75,11 @@ export type User = { id: string | number; name: string; email: string; [key: str
  * (`viewAny`, `create`, `update`, `delete`, `deleteAny`, `restore`, `forceDelete`, `reorder`, or your own names).
  * A missing ability is allowed.
  */
-export type Policy<R = any> = Partial<Record<string, (user: User, record: R | null) => boolean | Promise<boolean>>>;
+export type Policy<R = any> = Partial<Record<string, (user: User, record: R | null) => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>>>;
 /** Question asked to the panel's authorization hook. `resource`, `page` or `widget` tells what it is about. */
 export type AuthorizationCheck = { user: User; ability: string; resource: unknown | null; record: unknown | null; page: typeof Page | null; widget: typeof Widget | null };
 /** Return `true` or `false` to decide, or `undefined` to let the resource policy (or `canAccess` / `canView`) answer. */
-export type Authorizer = (check: AuthorizationCheck) => boolean | undefined | Promise<boolean | undefined>;
+export type Authorizer = (check: AuthorizationCheck) => boolean | AuthorizationResponse | undefined | Promise<boolean | AuthorizationResponse | undefined>;
 type MaybePromise<T> = T | Promise<T>;
 /**
  * User provider. `attempt` and `find` are enough for login; the optional methods enable
@@ -407,14 +414,18 @@ export class Panel {
     guestAccess(condition = true): this { this._guestAccess = condition; return this; }
     allowsGuests(): boolean { return this._guestAccess; }
     /** Authorization decision: the panel hook first, then the given rule. Without a user: `false`, unless the panel allows guests. */
-    async authorize(user: User | null, ability: string, subject: { resource?: unknown; record?: unknown; page?: typeof Page; widget?: typeof Widget; rule?: (() => boolean | Promise<boolean>) | null } = {}): Promise<boolean> {
-        if (!user && !this._guestAccess) return false;
+    async authorize(user: User | null, ability: string, subject: { resource?: unknown; record?: unknown; page?: typeof Page; widget?: typeof Widget; rule?: (() => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>) | null } = {}): Promise<boolean> {
+        return (await this.inspect(user, ability, subject)).allowed();
+    }
+    /** The authorization decision with its message: a policy rule (or the `authorizeUsing()` hook) may return an `AuthorizationResponse`. */
+    async inspect(user: User | null, ability: string, subject: { resource?: unknown; record?: unknown; page?: typeof Page; widget?: typeof Widget; rule?: (() => boolean | AuthorizationResponse | Promise<boolean | AuthorizationResponse>) | null } = {}): Promise<AuthorizationResponse> {
+        if (!user && !this._guestAccess) return AuthorizationResponse.deny();
         const decided = await this._authorizer?.({ user: user as User, ability, resource: subject.resource ?? null, record: subject.record ?? null, page: subject.page ?? null, widget: subject.widget ?? null });
-        if (typeof decided === 'boolean') return decided;
+        if (typeof decided === 'boolean' || decided instanceof AuthorizationResponse) return AuthorizationResponse.from(decided);
         if (!subject.rule && subject.resource && !subject.page && !subject.widget && this._strictAuthorization) {
             throw new Error(`Strict authorization mode is enabled, but ${(subject.resource as { name?: string }).name ?? 'the resource'} has no "${ability}" rule in its policy.`);
         }
-        return subject.rule ? Boolean(await subject.rule()) : true;
+        return subject.rule ? AuthorizationResponse.from(await subject.rule()) : AuthorizationResponse.allow();
     }
     /** Whether the user can open a page. List: `viewAny`; create: `create`; edit: checked against the record; custom page: `canAccess`. */
     async canAccessPage(PageClass: typeof Page, user: User | null): Promise<boolean> {
@@ -1027,7 +1038,7 @@ abstract class BasePage extends Component implements SchemaHost {
     getTableSelectComponentName(): string { return `navette.${this.panel.getId()}.table-select`; }
 
     // --- lazy loaded schemas (`lazyLoaded()`): loaded when they enter the viewport, then kept loaded
-    static callable = ['loadDeferredSchema'];
+    static callable = ['loadDeferredSchema', 'mountDefaultActions'];
     loadedDeferredSchemas: Record<string, boolean> = {};
     /** Whether a lazy schema is rendered: loaded already, or holding a field with a validation error (loaded so it shows). */
     async isDeferredSchemaLoaded(schema: Schema): Promise<boolean> {
@@ -1064,13 +1075,96 @@ abstract class BasePage extends Component implements SchemaHost {
     }
 
     // --- mounted actions: the stack lives in the component state, modals are rendered server-side
-    mountedActions: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }[] = [];
+    mountedActions: MountedActionState[] = [];
     /** Files uploaded by rich editors (`componentFileAttachments.<state path>.<id>`), stored by the editor when it asks for their URL. */
     componentFileAttachments: Record<string, unknown> = {};
+    // --- action opened when the page loads (`?action=…`, Filament's `#[Url]` properties). Set from the URL on the first
+    // render, or by a page (`defaultAction = 'onboarding'`); never by the browser afterwards.
+    /** Name of an action of this component opened when it loads (`?action=`). */
+    defaultAction: string | null = null;
+    /** Its arguments (`?actionArguments[key]=value`). */
+    defaultActionArguments: Record<string, unknown> | null = null;
+    /** Its mount context (`?actionContext[key]=value`), checked like a context sent by the browser. */
+    defaultActionContext: Record<string, unknown> | null = null;
+    /** A table action opened when the table loads (`?tableAction=`), for the record `?tableActionRecord=`. */
+    defaultTableAction: string | null = null;
+    defaultTableActionRecord: string | null = null;
+    defaultTableActionArguments: Record<string, unknown> | null = null;
+    /** The component the URL targets (`?actionComponent=`): see `getDefaultActionUrlIdentifier()`. */
+    defaultActionComponent: string | null = null;
+    hasDefaultActionMounted = false;
+    hasDefaultTableActionMounted = false;
+    defaultActionUrlRead = false;
+    static locked = ['defaultAction', 'defaultActionArguments', 'defaultActionContext', 'defaultTableAction', 'defaultTableActionRecord', 'defaultTableActionArguments', 'defaultActionComponent', 'hasDefaultActionMounted', 'hasDefaultTableActionMounted', 'defaultActionUrlRead'];
+    /**
+     * Identifier of this component in action links (`?actionComponent=<identifier>&action=…`). Pages answer `page` (and
+     * consume links without `actionComponent`); other components (relation managers, widgets) answer `null` and open no
+     * action from the URL, unless they return a stable identifier of their own.
+     */
+    getDefaultActionUrlIdentifier(): string | null { return null; }
+    protected getDefaultActionUrlTarget(): unknown { return this.getDefaultActionUrlIdentifier() === 'page' ? (this.defaultActionComponent ?? 'page') : this.defaultActionComponent; }
+    protected isDefaultActionUrlTarget(): boolean {
+        const identifier = this.getDefaultActionUrlIdentifier();
+        const target = this.getDefaultActionUrlTarget();
+        return typeof identifier === 'string' && identifier !== '' && (typeof target === 'string' || typeof target === 'number') && String(target) === identifier;
+    }
+    /** Takes the default action parameters of the URL, once, when the component first renders. */
+    private readDefaultActionsFromUrl(): void {
+        if (this.defaultActionUrlRead) return;
+        this.defaultActionUrlRead = true;
+        const req = (this._ctx as PanelContext | null)?.req;
+        if (!req) return;
+        const query = readDefaultActionQuery(req.originalUrl ?? req.url, (req.query ?? {}) as Record<string, unknown>);
+        if (query.action !== undefined) { this.defaultAction = query.action; this.defaultActionArguments = query.actionArguments ?? null; this.defaultActionContext = query.actionContext ?? null; }
+        if (query.tableAction !== undefined) { this.defaultTableAction = query.tableAction; this.defaultTableActionRecord = query.tableActionRecord ?? null; this.defaultTableActionArguments = query.tableActionArguments ?? null; }
+        if (query.actionComponent !== undefined) this.defaultActionComponent = query.actionComponent;
+    }
+    private hasPendingTableAction(): boolean { return !this.hasDefaultTableActionMounted && typeof this.defaultTableAction === 'string' && this.defaultTableAction !== '' && typeof (this as any).getRecordActions === 'function'; }
+    /** Whether a default action (page `defaultAction`, or one from the URL) waits to be opened by `mountDefaultActions()`. */
+    shouldMountDefaultActions(): boolean {
+        if (!this.isDefaultActionUrlTarget()) return false;
+        return (!this.hasDefaultActionMounted && typeof this.defaultAction === 'string' && this.defaultAction !== '') || this.hasPendingTableAction();
+    }
+    /**
+     * Opens the default actions (called by the browser once the component has loaded). The values come from the URL: the
+     * action is mounted exactly as when the browser mounts it (found among the actions of the component, authorized,
+     * visible, enabled, its record resolved by the component), and an action without a modal is never run from a link.
+     */
+    async mountDefaultActions(): Promise<void> {
+        if (!this.shouldMountDefaultActions()) { this.skipRender(); return; }
+        const objectOrEmpty = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {});
+        const attempt = async (name: string, args: Record<string, unknown>, context: Record<string, unknown>) => {
+            try { await this.mountActionFrom(name, args, context, true); } catch (error) { if (!(error instanceof WireError)) throw error; }
+        };
+        if (this.hasPendingTableAction()) {
+            this.hasDefaultTableActionMounted = true;
+            const record = this.defaultTableActionRecord;
+            if (record === null || typeof record === 'string' || typeof record === 'number') await attempt(String(this.defaultTableAction), objectOrEmpty(this.defaultTableActionArguments), record === null ? { table: true } : { table: true, recordKey: String(record) });
+        }
+        if (!this.hasDefaultActionMounted && typeof this.defaultAction === 'string' && this.defaultAction !== '') {
+            this.hasDefaultActionMounted = true;
+            const context = objectOrEmpty(this.defaultActionContext);
+            if (context.schemaComponent !== undefined && typeof context.schemaComponent !== 'string') return;
+            if (context.recordKey !== undefined && typeof context.recordKey !== 'string' && typeof context.recordKey !== 'number') return;
+            await attempt(this.defaultAction, objectOrEmpty(this.defaultActionArguments), context);
+        }
+    }
     getActionMountContext(): Record<string, unknown> { return {}; }
     protected getActionRecord(): unknown { return null; }
     /** Record targeted by an action mounted in a given context (table row…). */
     protected async resolveActionRecord(_context: Record<string, unknown>): Promise<unknown> { return this.getActionRecord(); }
+    /**
+     * Checks a policy ability for `authorize('update')`: the policy of the component's resource (or relation manager), after
+     * the panel's `authorizeUsing()`. Without a policy for the ability, it is allowed.
+     */
+    async inspectActionAbility(ability: string, record: unknown = null, _args: unknown[] = []): Promise<AuthorizationResponse> { return inspectOn(this, ability, record); }
+    /** Data adapter whose transactions wrap the actions with `databaseTransaction()`. */
+    protected getActionDataAdapter(): DataAdapter | null {
+        const self = this as any;
+        if (typeof self.getDataAdapterForTable === 'function') return self.getDataAdapterForTable();
+        if (typeof self.getDataAdapter === 'function') return self.getDataAdapter();
+        return self.resource?.adapter ?? null;
+    }
     /** Actions that can be mounted in a given context (page header by default). */
     protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
         return typeof context.schemaComponent === 'string' ? this.getSchemaComponentActions(context.schemaComponent) : flattenActions(this.getHeaderActions());
@@ -1106,11 +1200,11 @@ abstract class BasePage extends Component implements SchemaHost {
         return typeof component === 'string' && component.length <= 200 ? { ...this.getActionMountContext(), schemaComponent: component } : this.getActionMountContext();
     }
     private async findMountableAction(name: unknown, context: Record<string, unknown> = this.getActionMountContext()): Promise<Action> {
-        // An action of a modal footer: found among the extra footer actions of its (mounted) parent action.
+        // An action of a modal (footer, custom content): found among the modal actions of its (mounted) parent action.
         if (typeof context.parentAction === 'number') {
             const parent = this.mountedActions[context.parentAction];
             const owner = parent ? await this.findMountableAction(parent.name, parent.context) : null;
-            const child = owner?.getExtraModalFooterActions().find((a) => a.getName() === name && a.isMountable());
+            const child = owner?.getModalActions().find((a) => a.getName() === name && a.isMountable());
             if (!child) throw new WireError(404, `Action not found: ${String(name)}`);
             return child;
         }
@@ -1118,10 +1212,62 @@ abstract class BasePage extends Component implements SchemaHost {
         if (!action) throw new WireError(404, `Action not found: ${String(name)}`);
         return action;
     }
+    /** Handles of the mounted actions, for the actions mounted on top of them (`ctx.parentAction`, `ctx.mountedActions`). */
+    private async mountedActionHandles(upTo: number): Promise<MountedAction[]> {
+        const handles: MountedAction[] = [];
+        for (let index = 0; index < upTo && index < this.mountedActions.length; index++) {
+            const entry = this.mountedActions[index];
+            handles.push(new MountedAction(this.mountedActionHost(), index, await this.findMountableAction(entry.name, entry.context), entry.arguments ?? {}));
+        }
+        return handles;
+    }
+    private mountedActionHost(): MountedActionHost {
+        return {
+            getMountedActionRawData: (index) => { const entry = this.mountedActions[index]; return entry ? (entry.data ??= {}) : {}; },
+            getMountedActionValidatedData: async (index) => {
+                const schema = await this.getMountedActionSchema(index);
+                if (!schema) return {};
+                const errors = await validateSchema(schema);
+                if (Object.keys(errors).length) {
+                    // Shown in the parent's modal; the running action stops (and its own modal does not open).
+                    this._errors = errors;
+                    this.dispatch('form-validation-error', { livewireId: this.id });
+                    throw new ActionHalt(false);
+                }
+                return getSchemaState(schema);
+            },
+            fillMountedActionData: async (index, values) => {
+                const entry = this.mountedActions[index];
+                const schema = await this.getMountedActionSchema(index);
+                if (!entry || !schema) return;
+                const data = (entry.data ??= {});
+                const prefix = `mountedActions.${index}.data.`;
+                // Only fields of the form are filled: nested objects or dot-notation keys.
+                const flat: Record<string, unknown> = {};
+                const flatten = (value: unknown, path: string) => {
+                    if (value && typeof value === 'object' && !Array.isArray(value) && !schema.getFlatComponents().some((c: any) => c instanceof Field && c.getStatePath() === prefix + path)) for (const [key, item] of Object.entries(value)) flatten(item, path ? `${path}.${key}` : key);
+                    else flat[path] = value;
+                };
+                for (const [key, value] of Object.entries(values)) flatten(value, key);
+                for (const field of schema.getFlatComponents()) {
+                    if (!(field instanceof Field)) continue;
+                    const path = String(field.getStatePath());
+                    if (!path.startsWith(prefix) || !Object.hasOwn(flat, path.slice(prefix.length))) continue;
+                    const segments = path.slice(prefix.length).split('.');
+                    if (segments.some((segment) => /^(__proto__|constructor|prototype)$/.test(segment))) continue;
+                    let node: any = data;
+                    for (const segment of segments.slice(0, -1)) node = (node[segment] ??= {});
+                    node[segments[segments.length - 1]] = flat[path.slice(prefix.length)];
+                }
+            },
+        };
+    }
     private async actionContext(mounted: { arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> }) {
         const parentIndex = mounted.context.parentAction;
         const parent = typeof parentIndex === 'number' ? this.mountedActions[parentIndex] : undefined;
         const parentData = parent ? (parent.data ??= {}) : undefined;
+        // Handles of the actions below this one: its parent and every mounted action.
+        const handles = typeof parentIndex === 'number' ? await this.mountedActionHandles(parentIndex + 1) : [];
         // An action of a form field (affix action): its state, and access to the other fields of the same form.
         let fieldAccess: Record<string, unknown> = {};
         if (typeof mounted.context.schemaComponent === 'string') {
@@ -1140,14 +1286,17 @@ abstract class BasePage extends Component implements SchemaHost {
                 };
             }
         }
-        return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}), ...(parentData ? { parentData } : {}), ...fieldAccess };
+        return { livewire: this, record: await this.resolveActionRecord(mounted.context), arguments: mounted.arguments, data: emptyToNull(mounted.data ?? {}), ...(parentData ? { parentData, parentAction: handles[handles.length - 1], mountedActions: handles } : {}), ...fieldAccess };
     }
     /** Form schema of a mounted action: key `mountedActionSchema<n>`, state under `mountedActions.<n>.data`. */
     async getMountedActionSchema(index: number): Promise<Schema | null> {
         const mounted = this.mountedActions[index];
         if (!mounted) return null;
         const action = await this.findMountableAction(mounted.name, mounted.context);
-        return action.applySchema(Schema.make(this).key(`mountedActionSchema${index}`).statePath(`mountedActions.${index}.data`).operation(mounted.name).record(await this.resolveActionRecord(mounted.context)), mounted.arguments ?? {});
+        const schema = action.applySchema(Schema.make(this).key(`mountedActionSchema${index}`).statePath(`mountedActions.${index}.data`).operation(mounted.name).record(await this.resolveActionRecord(mounted.context)), mounted.arguments ?? {});
+        // `disabledSchema()`: every field is disabled (and not submitted).
+        if (schema && (await action.isSchemaDisabled(await this.actionContext(mounted)))) for (const component of schema.getFlatComponents() as any[]) if (component instanceof Field) component.disabled(true);
+        return schema;
     }
     private async renderActionModal(index: number): Promise<string> {
         const mounted = this.mountedActions[index];
@@ -1185,7 +1334,7 @@ abstract class BasePage extends Component implements SchemaHost {
         return component[method](...(Array.isArray(args) ? args : args && typeof args === 'object' ? Object.values(args) : []));
     }
     /** A hidden action can be neither mounted nor run, even through a call forged by the browser. */
-    private async assertActionVisible(action: Action, context: Record<string, unknown> = {}, args: Record<string, unknown> = {}): Promise<void> {
+    private async assertActionVisible(action: Action, context: Record<string, unknown> = {}, args: Record<string, unknown> = {}): Promise<ComponentContextLike> {
         const record = await this.resolveActionRecord(context);
         if (context.recordKey !== undefined && record === null) throw new WireError(404, 'Record not found.');
         // An item action of a schema component (Repeater, Builder): the component checks the arguments (the item key exists).
@@ -1195,21 +1344,92 @@ abstract class BasePage extends Component implements SchemaHost {
         if (!(await action.isVisible(ctx)) || (await action.isDisabled(ctx))) throw new WireError(403, `Action unavailable: ${action.getName()}`);
         // An action with a URL for this record is a link: it cannot be mounted.
         if (action.resolveUrl(ctx) !== null) throw new WireError(404, `Action not found: ${action.getName()}`);
+        return ctx;
     }
-    private syncActionModals(): void {
-        this.dispatch('sync-action-modals', { id: this.id, newActionNestingIndex: this.mountedActions.length ? this.mountedActions.length - 1 : null, shouldOverlayParentActions: false });
+    /**
+     * The authorization of an action about to be mounted or run. Denied: with `authorizationNotification()`, the denial
+     * message is sent (when `notify`) and `false` is returned; otherwise the request is refused.
+     */
+    private async authorizeMountedAction(action: Action, ctx: ComponentContextLike, notify: boolean): Promise<boolean> {
+        const response = await action.getAuthorizationResponseWithMessage(ctx as any);
+        if (response.allowed()) return true;
+        if (!(await action.hasAuthorizationNotification(ctx as any))) throw new WireError(403, `Action unavailable: ${action.getName()}`);
+        if (notify) await this.sendUnauthorizedActionNotification(action, response, ctx);
+        return false;
+    }
+    private async sendUnauthorizedActionNotification(action: Action, response: AuthorizationResponse, ctx: ComponentContextLike): Promise<void> {
+        const customizer = action.getUnauthorizedNotificationCustomizer();
+        if (customizer === null) return;
+        const callContext = { livewire: this, record: ctx.record, arguments: ctx.arguments ?? {}, data: {}, action, response };
+        let notification = Notification.make().danger().title(action.getUnauthorizedNotificationTitle(callContext) ?? response.message()).persistent();
+        notification = (customizer ? await customizer(notification, callContext) : null) ?? notification;
+        if (notification.getData().title) notification.send();
+    }
+    private async sendRateLimitedActionNotification(action: Action, seconds: number, callContext: Record<string, unknown>): Promise<void> {
+        const customizer = action.getRateLimitedNotificationCustomizer();
+        if (customizer === null) return;
+        const minutes = Math.ceil(seconds / 60);
+        const info = { ...(callContext as any), seconds, minutes };
+        let notification = Notification.make().danger()
+            .title(action.getRateLimitedNotificationTitle(info) ?? t('filament-actions::notifications.throttled.title', { seconds, minutes }))
+            .body(t('filament-actions::notifications.throttled.body', { seconds, minutes }));
+        notification = (customizer ? await customizer(notification, info) : null) ?? notification;
+        notification.send();
+    }
+    /**
+     * Runs an action's handler with its rate limit and its database transaction. Returns `false` when it did not run (rate
+     * limited) or stopped with `halt()`; `cancel()` returns `'cancelled'`.
+     */
+    private async runMountedAction(action: Action, callContext: any, stack: MountedActionState[]): Promise<true | false | 'cancelled'> {
+        const limit = await action.getRateLimit(callContext);
+        if (limit !== null) {
+            const req = (this._ctx as PanelContext | null)?.req;
+            const key = actionRateLimitKey(this.constructor.name, String(req?.ip ?? ''), stack);
+            const wait = await getActionRateLimitStore().attempt(key, limit, 60);
+            if (wait > 0) { await this.sendRateLimitedActionNotification(action, wait, callContext); return false; }
+        }
+        const adapter = this.getActionDataAdapter();
+        const transactional = ((await action.hasDatabaseTransactions(callContext)) ?? this.panel.hasDatabaseTransactions()) && typeof adapter?.transaction === 'function';
+        // `halt()` and `cancel()` commit what was done, unless they ask for a rollback.
+        const run = async (): Promise<ActionHalt | null> => {
+            try { await action.call(callContext); return null; } catch (error) {
+                if (error instanceof ActionHalt && !error.rollsBackDatabaseTransaction) return error;
+                throw error;
+            }
+        };
+        let stopped: ActionHalt | null;
+        try { stopped = transactional ? await adapter!.transaction!(run) : await run(); } catch (error) {
+            if (error instanceof ActionHalt) stopped = error;
+            else throw error;
+        }
+        if (!stopped) return true;
+        return stopped.closesModal ? 'cancelled' : false;
+    }
+    private async syncActionModals(): Promise<void> {
+        const top = this.mountedActions[this.mountedActions.length - 1];
+        let overlay = false;
+        if (top) try { overlay = await (await this.findMountableAction(top.name, top.context)).shouldOverlayParentActions(await this.actionContext(top)); } catch (error) { if (!(error instanceof WireError)) throw error; }
+        this.dispatch('sync-action-modals', { id: this.id, newActionNestingIndex: this.mountedActions.length ? this.mountedActions.length - 1 : null, shouldOverlayParentActions: overlay });
     }
     /** False for a table component: its modals are rendered inside the table. */
     protected rendersActionModalsInPage(): boolean { return true; }
+    /** Pages and relation managers warn before leaving while an action modal is open (`unsavedChangesAlert()`). */
+    protected registersUnsavedActionChangesAlert(): boolean { return this.getDefaultActionUrlIdentifier() === 'page'; }
     async renderActionModals(): Promise<string> {
+        this.readDefaultActionsFromUrl();
+        if (this.registersUnsavedActionChangesAlert() && (this._ctx as PanelContext | null)?.panel?.hasUnsavedChangesAlerts()) this.addScript('unsaved-action-changes-alert', `setUpFilamentUnsavedActionChangesAlert({ resolveLivewireComponentUsing: () => window.Livewire.find(${js(this.id)}), $wire })`);
         const modals: string[] = [];
         for (const index of this.mountedActions.keys()) modals.push(await this.renderActionModal(index));
+        // The default actions open once the component has loaded in the browser.
+        const init = this.shouldMountDefaultActions() ? '<div wire:init="mountDefaultActions"></div>' : '';
         return `<div wire:partial="action-modals" x-data="filamentActionModals({
                     livewireId: ${js(this.id)},
-                })" style="height: 0">${modals.join('')}</div>`;
+                })" style="height: 0">${modals.join('')}</div>${init}`;
     }
     /** Mounts an action: without a modal it runs immediately; with one, only the modals fragment is returned. */
-    async mountAction(name: unknown, args: unknown = {}, _context: unknown = {}): Promise<void> {
+    async mountAction(name: unknown, args: unknown = {}, _context: unknown = {}): Promise<void> { await this.mountActionFrom(name, args, _context, false); }
+    /** `fromUrl`: opened by a link (default action): an action without a modal is not run. */
+    private async mountActionFrom(name: unknown, args: unknown, _context: unknown, fromUrl: boolean): Promise<void> {
         this.cancelModalPartialRender();
         // A modal footer action: its context is its parent's (kept by the server), plus the parent's index.
         const parentIndex = (_context as any)?.parentAction;
@@ -1218,27 +1438,43 @@ abstract class BasePage extends Component implements SchemaHost {
             : this.resolveMountContext(_context);
         const action = await this.findMountableAction(name, context);
         const mountArguments = args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {};
-        await this.assertActionVisible(action, context, mountArguments);
-        const mounted = { name: String(name), arguments: mountArguments, context };
+        const visibility = await this.assertActionVisible(action, context, mountArguments);
+        // `authorizationNotification()`: an unauthorized click only sends the denial message.
+        if (!(await this.authorizeMountedAction(action, visibility, true))) return;
+        const mounted: MountedActionState = { name: String(name), arguments: mountArguments, context };
         if (!action.hasModal() || (await action.isModalHidden(await this.actionContext(mounted)))) {
+            // A link must not run an action without the user confirming anything.
+            if (fromUrl) return;
             // Without a modal, `halt()` and `cancel()` simply stop the action.
-            try { await action.call(await this.actionContext(mounted)); } catch (error) { if (!(error instanceof ActionHalt)) throw error; }
+            const ran = await this.runMountedAction(action, await this.actionContext(mounted), [...this.mountedActions, mounted]);
+            if (ran === true && action.shouldCancelAllParentActions() && this.mountedActions.length) { this.mountedActions = []; await this.syncActionModals(); this.clearDefaultActionAfterClose(); }
+            else if (ran === true && action.getParentActionToCancelTo() !== null) await this.unmountAction(action.getParentActionToCancelTo(), true);
             return;
         }
         this.mountedActions.push(mounted);
-        const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
-        if (schema) {
-            // Initial state: field defaults, then `fillForm()`.
-            const data: Record<string, unknown> = {};
-            mounted.data = data;
-            fillSchema(schema, data);
-            const fillContext = await this.actionContext(mounted);
-            const fill = await action.getFormFill(fillContext);
-            if (fill) { fillSchemaFromRecord(schema, data, fill); await loadSchemaRelationships(schema, data, fillContext.record); }
+        try {
+            const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
+            if (schema) {
+                // Initial state: field defaults, then `fillForm()`.
+                const data: Record<string, unknown> = {};
+                mounted.data = data;
+                fillSchema(schema, data);
+                const fillContext = await this.actionContext(mounted);
+                const fill = await action.getFormFill(fillContext);
+                if (fill) { fillSchemaFromRecord(schema, data, fill); await loadSchemaRelationships(schema, data, fillContext.record); }
+            }
+            await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
+        } catch (error) {
+            // `halt()` / `cancel()` while mounting (or invalid parent data): the modal does not open.
+            if (!(error instanceof ActionHalt)) throw error;
+            this.mountedActions.splice(this.mountedActions.indexOf(mounted), 1);
+            if (this.mountedActions.length) this.renderPartial('action-modals', await this.renderActionModals());
+            await this.syncActionModals();
+            return;
         }
-        await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
+        mounted.hasUnsavedChangesAlert = await action.hasUnsavedChangesAlert(await this.actionContext(mounted));
         this.renderPartial('action-modals', await this.renderActionModals());
-        this.syncActionModals();
+        await this.syncActionModals();
     }
     /**
      * Replaces the action being run with another action of the same component, opened in its place (to show a result, as
@@ -1249,46 +1485,69 @@ abstract class BasePage extends Component implements SchemaHost {
         if (index < 0) return;
         const context = this.mountedActions[index].context;
         const action = await this.findMountableAction(name, context);
-        const mounted: { name: string; arguments: Record<string, unknown>; context: Record<string, unknown>; data?: Record<string, unknown> } = { name, arguments: args, context };
+        const mounted: MountedActionState = { name, arguments: args, context };
         this.mountedActions[index] = mounted;
         this._errors = {};
         const schema = await this.getMountedActionSchema(index);
         if (schema) { const data: Record<string, unknown> = {}; mounted.data = data; fillSchema(schema, data); }
         await action.runMountUsing({ ...(await this.actionContext(mounted)), data: (mounted.data ??= {}), action });
+        mounted.hasUnsavedChangesAlert = await action.hasUnsavedChangesAlert(await this.actionContext(mounted));
         this.renderPartial('action-modals', await this.renderActionModals());
-        this.syncActionModals();
+        await this.syncActionModals();
     }
-    unmountAction(_shouldCancelParentActions: unknown = true): void {
-        this.cancelModalPartialRender();
+    /**
+     * Closes the top action. `false`: only it; `true`: every mounted action; an action name: up to (and including) that
+     * parent; `null` (default): what the action asks with `cancelParentActions()`.
+     */
+    async unmountAction(cancelParentActions: unknown = null, _internal = false): Promise<void> {
+        if (!_internal) this.cancelModalPartialRender();
         this._errors = {};
-        this.mountedActions.pop();
-        this.syncActionModals();
+        const top = this.mountedActions[this.mountedActions.length - 1];
+        let action: Action | null = null;
+        if (top) try { action = await this.findMountableAction(top.name, top.context); } catch (error) { if (!(error instanceof WireError)) throw error; }
+        if (cancelParentActions === false || !action) this.mountedActions.pop();
+        else if (cancelParentActions === true || (cancelParentActions === null && action.shouldCancelAllParentActions())) this.mountedActions = [];
+        else {
+            const to = typeof cancelParentActions === 'string' ? cancelParentActions : action.getParentActionToCancelTo();
+            while (this.mountedActions.length) {
+                const closed = this.mountedActions.pop();
+                if (!to || closed?.name === to) break;
+            }
+        }
+        await this.syncActionModals();
+        this.clearDefaultActionAfterClose();
+    }
+    /** Once every action is closed, the `?action=` parameters leave the URL (and the action does not reopen). */
+    private clearDefaultActionAfterClose(): void {
+        if (this.mountedActions.length || !this.isDefaultActionUrlTarget() || this.defaultAction === null) return;
+        this.defaultAction = null; this.defaultActionArguments = null; this.defaultActionContext = null;
+        this.addScript(`clear-default-action-${randomBytes(6).toString('hex')}`, clearDefaultActionUrlScript(['action', 'actionArguments', 'actionContext']));
     }
     async callMountedAction(_args: unknown = {}): Promise<void> {
         this.cancelModalPartialRender();
         const mounted = this.mountedActions[this.mountedActions.length - 1];
         if (!mounted) return;
         const action = await this.findMountableAction(mounted.name, mounted.context);
-        await this.assertActionVisible(action, mounted.context, mounted.arguments ?? {});
+        // Arguments of the submit button (`makeModalSubmitAction()`), merged into the mount arguments for this call.
+        const submitArguments = _args && typeof _args === 'object' && !Array.isArray(_args) ? (_args as Record<string, unknown>) : {};
+        const visibility = await this.assertActionVisible(action, mounted.context, mounted.arguments ?? {});
+        if (!(await this.authorizeMountedAction(action, visibility, false))) return;
         const schema = await this.getMountedActionSchema(this.mountedActions.length - 1);
         if (schema) {
             this._errors = await validateSchema(schema);
             if (Object.keys(this._errors).length) { this.dispatch('form-validation-error', { livewireId: this.id }); return; }
         }
         const callContext = await this.actionContext(mounted);
+        callContext.arguments = { ...(mounted.arguments ?? {}), ...submitArguments };
         if (schema) { callContext.data = await getSchemaState(schema); callContext.schema = schema; }
-        try {
-            await action.call(callContext);
-        } catch (error) {
-            // `action.halt()`: the modal stays open; `action.cancel()`: it closes.
-            if (!(error instanceof ActionHalt)) throw error;
-            if (error.closesModal) { this.mountedActions.pop(); this.syncActionModals(); }
-            return;
-        }
+        const ran = await this.runMountedAction(action, callContext, this.mountedActions);
+        // Rate limited, or `action.halt()`: the modal stays open; `action.cancel()`: it closes.
+        if (ran === false) return;
+        if (ran === 'cancelled') { this.mountedActions.pop(); await this.syncActionModals(); this.clearDefaultActionAfterClose(); return; }
         // The action replaced itself with another one (`replaceMountedAction()`): that one stays open.
         if (this.mountedActions[this.mountedActions.length - 1] !== mounted) return;
         // "… & create another": the modal stays open with a reset form (except the preserved fields).
-        if (schema && _args && typeof _args === 'object' && (_args as any).another === true) {
+        if (schema && submitArguments.another === true) {
             const preserved = JSON.parse(JSON.stringify(action.getDataPreservedForAnother(callContext.data ?? {})));
             const data: Record<string, unknown> = {};
             mounted.data = data;
@@ -1296,8 +1555,8 @@ abstract class BasePage extends Component implements SchemaHost {
             Object.assign(data, preserved);
             return;
         }
-        this.mountedActions.pop();
-        this.syncActionModals();
+        // Closed, with its parents when it asks for it (`cancelParentActions()`).
+        await this.unmountAction(null, true);
     }
 }
 
@@ -1322,6 +1581,8 @@ function topNavigationGroup<G extends { items: NavigationItemView[] }>(group: G)
 export class Page extends BasePage {
     /** Methods the browser may call. A subclass adds its own: `static callable = ['approve']`. */
     static callable = ['mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod'];
+    /** A page opens the actions of links without `actionComponent` (`?action=…`), or with `actionComponent=page`. */
+    getDefaultActionUrlIdentifier(): string | null { return 'page'; }
     static slug = '';
     static title: string | null = null;
     static navigationLabel: string | null = null;
@@ -1582,6 +1843,7 @@ const loginThrottle = new Throttle();
 
 /** Page with the simple layout (login, registration…). */
 export abstract class SimplePage extends BasePage {
+    getDefaultActionUrlIdentifier(): string | null { return 'page'; }
     abstract getTitle(): string;
     getHeading(): string | null { return this.getTitle(); }
     /** Subheading, as trusted HTML (built by the page, with data escaped). */
@@ -2128,6 +2390,12 @@ function multiFactorManagementSection(panel: Panel, user: User): Section {
 
 /** Whether the host component's user has this ability on the component's resource (or relation manager). Use it in your actions' `authorize()`. */
 export const can = (livewire: unknown, ability: string, record: unknown = null): Promise<boolean> | boolean => canOn(livewire, ability, record);
+/** The policy decision, with its message, of the resource hosting a component (allowed without a resource). */
+export async function inspectOn(livewire: any, ability: string, record: unknown = null): Promise<AuthorizationResponse> {
+    const resource = livewire?.resource;
+    if (typeof resource?.inspect === 'function') return resource.inspect(ability, livewire._ctx?.user ?? null, record);
+    return AuthorizationResponse.from(await canOn(livewire, ability, record));
+}
 function canOn(livewire: any, ability: string, record: unknown = null): Promise<boolean> | boolean {
     const resource = livewire?.resource;
     return typeof resource?.can === 'function' ? resource.can(ability, livewire._ctx?.user ?? null, record) : true;
@@ -2172,6 +2440,11 @@ export abstract class Resource {
     static can(ability: string, user: User | null, record: unknown = null): Promise<boolean> {
         const rule = this.policy?.[ability];
         return this.panel.authorize(user, ability, { resource: this, record, rule: rule ? () => rule(user!, record) : null });
+    }
+    /** The decision with its message (a policy rule may return an `AuthorizationResponse`). */
+    static inspect(ability: string, user: User | null, record: unknown = null): Promise<AuthorizationResponse> {
+        const rule = this.policy?.[ability];
+        return this.panel.inspect(user, ability, { resource: this, record, rule: rule ? () => rule(user!, record) : null });
     }
     /** Resource widgets, registered as components. */
     static widgets: (typeof Widget)[] = [];
@@ -3326,11 +3599,7 @@ export class ListRecords extends Page implements TableHost {
         this.tableColumns = table.getDefaultColumnState();
         // Preselect the default group.
         initializeTableGrouping(table, this as any);
-        // `?tableAction=view&tableActionRecord=12` (global search result link): the row action opens on arrival, with the usual checks.
-        const query = ((this._ctx as PanelContext | null)?.req?.query ?? {}) as Record<string, unknown>;
-        if (typeof query.tableAction === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(query.tableAction) && typeof query.tableActionRecord === 'string' && query.tableActionRecord.length <= 64) {
-            try { await this.mountAction(query.tableAction, {}, { table: true, recordKey: query.tableActionRecord }); } catch (error) { if (!(error instanceof WireError)) throw error; }
-        }
+        // `?tableAction=view&tableActionRecord=12` (global search result link): opened once loaded, by `mountDefaultActions()`.
     }
     /** Filters form: one group per filter, bound to `tableDeferredFilters.<filter>`. */
     tableFiltersFormSchema(schema: Schema): Schema {
@@ -3628,6 +3897,8 @@ export class ListRecords extends Page implements TableHost {
  */
 export class TableSelectComponent extends ListRecords {
     static callable = ['getAllSelectableTableRecordKeys'];
+    /** Embedded in a form: opens no action from the URL. */
+    getDefaultActionUrlIdentifier(): string | null { return null; }
     static locked = ['definition', 'isMultiple', 'maxSelectableRecords', 'tableArguments'];
     /** Set by the form on every render, never by the browser. */
     static reactive = ['isDisabled'];
@@ -3733,6 +4004,12 @@ export class TableSelectComponent extends ListRecords {
  * Subclasses declare `relationship`, `adapterFor()`, `table()` and `form()`.
  */
 export class RelationManager extends ListRecords {
+    /**
+     * Relation managers open no action from the URL; return a stable identifier to make links target this manager
+     * (`?actionComponent=<identifier>&tableAction=view&tableActionRecord=12`).
+     */
+    getDefaultActionUrlIdentifier(): string | null { return null; }
+    protected registersUnsavedActionChangesAlert(): boolean { return true; }
     static relationship = '';
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
@@ -3780,6 +4057,7 @@ export class RelationManager extends ListRecords {
         return (this._facade ??= withRelatedResource({
             isSimple: true, slug: '', modelLabel: manager.modelLabel, relations: [], adapter: manager.adapterFor(this.ownerRecord),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = manager.policy?.[ability]; return this.panel.authorize(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null }); },
+            inspect: (ability: string, user: User | null, record: unknown = null) => { const rule = manager.policy?.[ability]; return this.panel.inspect(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => manager.pluralModelLabel ?? plural(manager.modelLabel),
             getTitleCasePluralModelLabel: () => (manager.pluralModelLabel ?? plural(manager.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (manager.recordTitleAttribute ? String(record?.[manager.recordTitleAttribute] ?? '') : manager.modelLabel),
@@ -3893,6 +4171,7 @@ export class ManageRelatedRecords extends ListRecords {
         return (this._facade ??= withRelatedResource({
             isSimple: true, hasViewPage: false, slug: page.parentResource.slug, modelLabel: page.modelLabel, relations: [], recordTitleAttribute: page.recordTitleAttribute, adapter: page.adapterFor(this.recordKey),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.authorize(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
+            inspect: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.inspect(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => page.pluralModelLabel ?? plural(page.modelLabel),
             getTitleCasePluralModelLabel: () => (page.pluralModelLabel ?? plural(page.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (page.recordTitleAttribute ? String(record?.[page.recordTitleAttribute] ?? '') : page.modelLabel),
