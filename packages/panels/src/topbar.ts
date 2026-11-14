@@ -1,8 +1,8 @@
 // Global search and database notifications: two components that live in the panel sidebar.
-import { Attributes, e, icon, js, loadingIndicator, renderHook } from '@navette-js/support';
+import { Attributes, e, icon, js, loadingIndicator, renderHook, sanitizeHtml } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
-import { notificationActionFromArray, notificationActionsHtml, notificationActionToArray, notificationColorClasses, type NotificationActionData, type NotificationData } from './notifications.ts';
+import { notificationActionFromArray, notificationActionsHtml, notificationActionToArray, notificationColorClasses, type NotificationActionItem, type NotificationData } from './notifications.ts';
 import { databaseNotificationsBroadcastScript } from './broadcasting.ts';
 import { richDocumentToHtml, richHtmlToDocument } from '@navette-js/forms';
 import { pagination } from '@navette-js/support/ui';
@@ -99,7 +99,8 @@ export class GlobalSearch extends Component {
 }
 
 /** An action of a database notification: a link or a button (`button`), which may close the notification, dispatch a Livewire event or change its read state. */
-export type DatabaseNotificationAction = NotificationActionData;
+/** An action or an action group of a database notification. */
+export type DatabaseNotificationAction = NotificationActionItem;
 export type DatabaseNotificationRecord = { id: string; title: string | null; body: string | null; icon: string | null; iconColor: string | null; status: string | null; color?: string | null; actions: DatabaseNotificationAction[]; createdAt: Date | null; unread: boolean };
 /** Storage for a user's notifications. `knexNotificationStore()` provides one backed by a `notifications` table. */
 export interface DatabaseNotificationStore {
@@ -176,7 +177,7 @@ function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
         'x-transition:enter-start': 'fi-transition-enter-start', 'x-transition:enter-end': 'fi-transition-enter-end', 'x-transition:leave-start': 'fi-transition-leave-start', 'x-transition:leave-end': 'fi-transition-leave-end',
         'wire:key': `${n.id}.notifications.${n.id}`, 'x-on:close-notification.window': `if ($event.detail.id == ${js(n.id)}) close()`,
     }).class([...notificationColorClasses(n.color), 'fi-no-notification', n.status && /^[a-z]+$/.test(n.status) ? `fi-status-${n.status}` : null, 'fi-inline']);
-    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${notificationActionsHtml(n.actions, { navigate: true })}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
+    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${sanitizeHtml(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${notificationActionsHtml(n.actions, { navigate: true })}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
 const BADGE = 'fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-200 fi-badge';

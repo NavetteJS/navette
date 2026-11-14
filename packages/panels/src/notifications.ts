@@ -1,19 +1,20 @@
 // Flash notifications: the Notification builder, a per-browser mailbox, and the component that displays them.
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { Attributes, e, icon, icons, js, type ColorManager } from '@navette-js/support';
+import { Attributes, HtmlString, e, icon, icons, js, sanitizeHtml } from '@navette-js/support';
+import type { Action, ActionGroup } from '@navette-js/actions';
+import { normalizeNotificationAction, notificationActionFromArray, notificationActionsHtml, notificationActionToArray, type NotificationActionInput, type NotificationActionItem } from './notification-actions.ts';
+export {
+    isNotificationActionGroup, normalizeNotificationAction, notificationActionFromArray, notificationActionsHtml, notificationActionToArray, renderNotificationAction,
+    renderNotificationActionGroup, safeNotificationAttributes, safeNotificationIcon, safeNotificationUrl, useNotificationsColorManager,
+    type NotificationActionData, type NotificationActionDispatch, type NotificationActionGroupData, type NotificationActionInput, type NotificationActionItem, type NotificationActionView,
+} from './notification-actions.ts';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
 import { broadcastToUsers, dispatchDatabaseNotificationsSent, NOTIFICATION_BROADCAST_EVENT, type BroadcastOptions, type BroadcastRecipient } from './broadcasting.ts';
 
-/** A Livewire event dispatched by a notification action: to every component, to the component showing it (`self`), or to a component by name (`to`). */
-export type NotificationActionDispatch = { event: string; data: Record<string, unknown> | unknown[]; direction?: 'self' | 'to' | null; component?: string | null };
-export type NotificationActionData = {
-    label: string; url: string | null; openUrlInNewTab: boolean; close?: boolean; dispatch?: NotificationActionDispatch | null; color?: string | null; button?: boolean; outlined?: boolean;
-    /** Database notifications only: marks the notification as read (or unread) when clicked. */
-    markAsRead?: boolean; markAsUnread?: boolean;
-};
-export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; color?: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionData[] };
+/** `title` and `body` may hold HTML (Markdown converted with `markdownToHtml()`, for instance): it is sanitized when rendered, as in Filament. */
+export type NotificationData = { id: string; title: string | null; body: string | null; status: string | null; color?: string | null; duration: number | 'persistent'; icon: string | null; iconColor: string | null; actions?: NotificationActionItem[] };
 /** The part of a notification store needed to write to it (see `DatabaseNotificationStore`). */
 type NotificationSink = { send(user: string | number, notification: NotificationData): Promise<void> };
 type RequestStore = { mailbox: string; pending: NotificationData[] };
@@ -52,77 +53,8 @@ const STATUS_ICON: Record<string, string> = { danger: 'o-x-circle', info: 'o-inf
 const STATUSES = ['success', 'danger', 'warning', 'info'];
 /** Notification ids end up in `wire:key` and in an Alpine expression: letters, digits and `_ . : -` only. */
 const NOTIFICATION_ID = /^(?!(?:__proto__|constructor|prototype)$)[A-Za-z0-9_.:-]{1,100}$/;
-const EVENT_NAME = /^[A-Za-z0-9_.:-]{1,100}$/;
-const COMPONENT_NAME = /^[A-Za-z0-9_.:\\-]{1,200}$/;
 const COLOR = /^[a-z][a-z0-9-]{0,30}$/;
-/** Only a same-site path (`/…`) or an http(s) URL can become a link (no `javascript:`, `data:` or protocol-relative URLs). */
-export const safeNotificationUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
-/** Icon names that come from the browser or the database are untrusted: only a Heroicons-like name or `prefix:name` (an icon of a registered set). */
-export const safeNotificationIcon = (name: string | null, size: string, classes: string[], alias?: string): string => {
-    if (!name || !/^[a-z0-9-]+(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/.test(name)) return '';
-    try { return icon(name, { size, alias, attributes: new Attributes().class(classes) }); } catch { return ''; }
-};
-
-let colorManager: ColorManager | null = null;
-/** Sets the color manager used for the notification action buttons and links (the panel's). */
-export const useNotificationsColorManager = (manager: ColorManager) => { colorManager = manager; };
-const actionColorClasses = (component: 'button' | 'button-outlined' | 'link', color: string): string[] => {
-    if (colorManager) return color === 'gray' && component === 'button' ? [] : colorManager.getComponentClasses(component, color);
-    return component === 'link' ? ['fi-color', `fi-color-${color}`, 'fi-text-color-600', 'dark:fi-text-color-300'] : [];
-};
-
-/** Filament's default action label: the name, in words, capitalized (`undoEdit` → "Undo edit"). */
-const labelFromName = (name: string): string => {
-    const words = name.split('.')[0].replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase().replace(/[-_]+/g, ' ').trim();
-    return words.charAt(0).toUpperCase() + words.slice(1);
-};
-/** JSON data of an event, copied and kept small (it is rendered in the page). */
-const eventData = (data: unknown): Record<string, unknown> | unknown[] => {
-    if (data === null || data === undefined || typeof data !== 'object') return {};
-    let json: string;
-    try { json = JSON.stringify(data); } catch { return {}; }
-    return json.length <= 2000 ? JSON.parse(json) : {};
-};
 const text = (value: unknown, max: number): string | null => (typeof value === 'string' && value !== '' ? value.slice(0, max) : typeof value === 'number' ? String(value) : null);
-
-/**
- * Reads an action in Filament's array format (`Action::toArray()`, `FilamentNotificationAction.toJSON()`), as stored in the
- * `notifications` table or sent from the browser. Untrusted: unknown values are dropped, URLs are checked when rendered.
- * Action groups (`actions` key) are not supported and give `null`.
- */
-export function notificationActionFromArray(raw: unknown, mapUrl?: (url: string) => string): NotificationActionData | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || 'actions' in raw) return null;
-    const action = raw as Record<string, unknown>;
-    const name = text(action.name, 100);
-    const label = text(action.label, 200) ?? (name ? labelFromName(name) : null);
-    if (!label) return null;
-    const event = typeof action.event === 'string' && EVENT_NAME.test(action.event) ? action.event : null;
-    const direction = action.dispatchDirection === 'self' || action.dispatchDirection === 'to' ? action.dispatchDirection : null;
-    const component = typeof action.dispatchToComponent === 'string' && COMPONENT_NAME.test(action.dispatchToComponent) ? action.dispatchToComponent : null;
-    const url = typeof action.url === 'string' && action.url !== '' ? (mapUrl ? mapUrl(action.url) : action.url).slice(0, 2000) : null;
-    return {
-        label, url, openUrlInNewTab: action.shouldOpenUrlInNewTab === true, close: action.shouldClose === true,
-        dispatch: event && (direction !== 'to' || component) ? { event, data: eventData(action.eventData), direction, component: direction === 'to' ? component : null } : null,
-        color: typeof action.color === 'string' && COLOR.test(action.color) ? action.color : null,
-        button: action.view === 'filament::components.button.index', outlined: action.isOutlined === true,
-        markAsRead: action.shouldMarkAsRead === true, markAsUnread: action.shouldMarkAsUnread === true,
-    };
-}
-/** Writes an action in Filament's array format (for the `notifications` table). */
-export function notificationActionToArray(action: NotificationActionData): Record<string, unknown> {
-    return {
-        name: action.label, color: action.color ?? null, event: action.dispatch?.event ?? null, eventData: action.dispatch?.data ?? [], dispatchDirection: action.dispatch?.direction ?? false,
-        dispatchToComponent: action.dispatch?.component ?? null, extraAttributes: [], icon: null, iconPosition: 'before', iconSize: null, isOutlined: action.outlined === true, isDisabled: false,
-        label: action.label, shouldClose: action.close === true, shouldMarkAsRead: action.markAsRead === true, shouldMarkAsUnread: action.markAsUnread === true,
-        shouldOpenUrlInNewTab: action.openUrlInNewTab, size: 'sm', tooltip: null, url: action.url, view: action.button ? 'filament::components.button.index' : 'filament::components.link',
-    };
-}
-
-export type NotificationActionInput = {
-    label: string; url?: string | null; openUrlInNewTab?: boolean; close?: boolean; color?: string | null; button?: boolean; outlined?: boolean; markAsRead?: boolean; markAsUnread?: boolean;
-    /** `to`: name of the component receiving the event; `self`: only the component showing the notification. */
-    dispatch?: { event: string; data?: Record<string, unknown> | unknown[]; to?: string; self?: boolean } | null;
-};
 
 export class Notification {
     private data: NotificationData;
@@ -148,14 +80,18 @@ export class Notification {
         n.icon = icon && /^[a-z0-9-]+(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/.test(icon) && icon.length <= 100 ? icon : null;
         n.iconColor = typeof data.iconColor === 'string' && COLOR.test(data.iconColor) ? data.iconColor : null;
         n.duration = data.duration === 'persistent' ? 'persistent' : typeof data.duration === 'number' && Number.isFinite(data.duration) && data.duration > 0 ? Math.min(Math.round(data.duration), 86_400_000) : 6000;
-        const actions = (Array.isArray(data.actions) ? data.actions : []).slice(0, 10).map((action) => notificationActionFromArray(action)).filter((action): action is NotificationActionData => action !== null);
+        const actions = (Array.isArray(data.actions) ? data.actions : []).slice(0, 10).map((action) => notificationActionFromArray(action)).filter((action): action is NotificationActionItem => action !== null);
         if (actions.length) n.actions = actions;
         return notification;
     }
     getId(): string { return this.data.id; }
     id(id: string): this { if (!NOTIFICATION_ID.test(id)) throw new Error(`Invalid notification id: ${id}`); this.data.id = id; return this; }
-    title(title: string): this { this.data.title = title; return this; }
-    body(body: string): this { this.data.body = body; return this; }
+    /** Title: text or HTML (an `HtmlString`, or Markdown through `markdownToHtml()`), sanitized when rendered like Filament's `sanitizeHtml()`. */
+    title(title: string | HtmlString | null): this { this.data.title = title instanceof HtmlString ? title.html : title; return this; }
+    /** Body under the title: text or HTML, sanitized when rendered. */
+    body(body: string | HtmlString | null): this { this.data.body = body instanceof HtmlString ? body.html : body; return this; }
+    getTitle(): string | null { return this.data.title; }
+    getBody(): string | null { return this.data.body; }
     status(status: 'success' | 'danger' | 'warning' | 'info'): this { this.data.status = status; return this; }
     success(): this { return this.status('success'); }
     danger(): this { return this.status('danger'); }
@@ -169,25 +105,16 @@ export class Notification {
     seconds(seconds: number): this { return this.duration(seconds * 1000); }
     persistent(): this { this.data.duration = 'persistent'; return this; }
     /**
-     * Actions under the text: links (`url`), or buttons that `close` the notification and/or `dispatch` a Livewire event
-     * (`{ event: 'undoDelete', data: { id: 5 } }`, `to: 'component-name'` or `self: true` to target one component). `button: true` renders
-     * a button instead of a link. In database notifications, `markAsRead` / `markAsUnread` change the read state of the notification.
+     * Actions under the text, as in Filament: `Action`s of `@navette-js/actions` (`Action.make('view').button().url('/posts/1')`,
+     * `.close()`, `.dispatch('undo', { id })`, `.dispatchTo()`, `.dispatchSelf()`, `.markAsRead()`, with `icon()`, `iconPosition()`,
+     * `size()`, `tooltip()`, `extraAttributes()`, `disabled()`), `ActionGroup`s (a dropdown), or plain objects
+     * (`{ label, url, close, dispatch: { event, data, to | self }, button, … }`). Actions are small links unless they chose a style.
      */
-    actions(actions: NotificationActionInput[]): this {
-        this.data.actions = actions.slice(0, 10).map((action) => {
-            const event = action.dispatch?.event;
-            if (event !== undefined && !EVENT_NAME.test(event)) throw new Error(`Invalid notification event name: ${event}`);
-            const to = action.dispatch?.to;
-            if (to !== undefined && !COMPONENT_NAME.test(to)) throw new Error(`Invalid component name: ${to}`);
-            return {
-                label: String(action.label), url: action.url ?? null, openUrlInNewTab: action.openUrlInNewTab === true, close: action.close === true,
-                dispatch: event ? { event, data: action.dispatch?.data ?? {}, direction: to ? 'to' : action.dispatch?.self ? 'self' : null, component: to ?? null } : null,
-                color: action.color && COLOR.test(action.color) ? action.color : null, button: action.button === true, outlined: action.outlined === true,
-                markAsRead: action.markAsRead === true, markAsUnread: action.markAsUnread === true,
-            };
-        });
+    actions(actions: (Action | ActionGroup | NotificationActionInput)[]): this {
+        this.data.actions = actions.slice(0, 10).map((action) => normalizeNotificationAction(action)).filter((action): action is NotificationActionItem => action !== null);
         return this;
     }
+    getActions(): NotificationActionItem[] { return [...(this.data.actions ?? [])]; }
     getData(): NotificationData { return { ...this.data }; }
     /**
      * Stores the notification for this user (panel bell): `await Notification.make()….sendToDatabase(panel.getDatabaseNotifications(), user)`.
@@ -199,8 +126,11 @@ export class Notification {
         if (isEventDispatched) await dispatchDatabaseNotificationsSent(user, options);
         return this;
     }
-    /** The notification as sent to the browser by `broadcast()`. */
-    getBroadcastMessage(): NotificationData & { format: 'filament' } { return { ...this.data, format: 'filament' }; }
+    /** The notification as sent to the browser by `broadcast()`: its actions in Filament's array format, read back by `fromArray()`. */
+    getBroadcastMessage(): Omit<NotificationData, 'actions'> & { actions?: Record<string, unknown>[]; format: 'filament' } {
+        const { actions, ...data } = this.data;
+        return { ...data, ...(actions ? { actions: actions.map(notificationActionToArray) } : {}), format: 'filament' };
+    }
     /**
      * Shows the notification live on the open pages of these users (a user object or id), wherever it is sent from: a request of
      * another user, a queued job, a timer. `options.tenant` limits it to the pages of a tenant (its key), `options.panel` to a panel.
@@ -218,39 +148,10 @@ export class Notification {
     }
 }
 
-/**
- * One action of a notification: a link (only a local or http(s) URL) or a button. Like Filament, the Alpine handler closes the
- * notification or changes its read state, and the Livewire handler dispatches the event. `navigate`: local links use `wire:navigate`.
- */
-export function renderNotificationAction(action: NotificationActionData, options: { navigate?: boolean } = {}): string {
-    const url = safeNotificationUrl(action.url);
-    if (action.label === '' || !(url || action.close || action.dispatch || action.markAsRead || action.markAsUnread)) return '';
-    const color = action.color ?? 'primary';
-    const classes = action.button
-        ? ['fi-ac-btn-action', 'fi-btn', 'fi-size-sm', ...(action.outlined ? ['fi-outlined', ...actionColorClasses('button-outlined', color)] : actionColorClasses('button', color))]
-        : ['fi-ac-link-action', 'fi-link', 'fi-size-sm', ...actionColorClasses('link', color)];
-    const dispatch = action.dispatch;
-    const livewire = dispatch
-        ? dispatch.direction === 'to' && dispatch.component ? `Livewire.dispatchTo(${js(dispatch.component)}, ${js(dispatch.event)}, ${js(dispatch.data)})`
-        : dispatch.direction === 'self' ? `$wire.$dispatchSelf(${js(dispatch.event)}, ${js(dispatch.data)})`
-        : `Livewire.dispatch(${js(dispatch.event)}, ${js(dispatch.data)})`
-        : null;
-    const alpine = action.close ? (url && !action.openUrlInNewTab ? 'close(true)' : 'close()') : action.markAsRead ? 'markAsRead()' : action.markAsUnread ? 'markAsUnread()' : null;
-    const click = [livewire, alpine].filter(Boolean).join('; ');
-    const label = action.button ? e(action.label) : `<span class="fi-link-label">${e(action.label)}</span>`;
-    const onClick = click ? ` x-on:click="${e(click)}"` : '';
-    if (url) return `<a href="${e(url)}"${action.openUrlInNewTab ? ' target="_blank" rel="noopener noreferrer"' : url.startsWith('/') && options.navigate ? ' wire:navigate' : ''}${onClick} class="${e(classes.join(' '))}">${label}</a>`;
-    return `<button type="button"${onClick} class="${e(classes.join(' '))}">${label}</button>`;
-}
-/** Actions of a notification: links and buttons closing it, dispatching a Livewire event, or changing its read state. */
-export function notificationActionsHtml(actions: NotificationActionData[] | undefined, options: { navigate?: boolean } = {}): string {
-    const items = (actions ?? []).map((action) => renderNotificationAction(action, options)).filter(Boolean);
-    return items.length ? `<div class="fi-ac fi-no-notification-actions">${items.join('')}</div>` : '';
-}
 /** Classes of a notification's background color (none for gray, the default). */
 export const notificationColorClasses = (color: string | null | undefined): string[] => (color && color !== 'gray' && COLOR.test(color) ? ['fi-color', `fi-color-${color}`] : []);
 
-/** Renders a flash notification (no date or inline mode). Title, body and action labels are escaped. */
+/** Renders a flash notification (no date or inline mode). Title and body are sanitized HTML (like Filament's `sanitizeHtml()`); action labels are escaped. */
 export function renderNotification(n: NotificationData): string {
     const closeLabel = t('filament-notifications::notification.actions.close.label');
     const attributes = new Attributes()
@@ -262,7 +163,7 @@ export function renderNotification(n: NotificationData): string {
     // An icon that does not exist (a name sent from the browser) is left out instead of failing the whole render.
     let iconHtml = '';
     try { iconHtml = iconName ? icon(iconName, { size: 'lg', attributes: new Attributes().class(iconClasses) }) : ''; } catch { iconHtml = ''; }
-    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${e(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n.actions)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
+    return `<div x-data="notificationComponent({ notification: ${e(js({ id: n.id, duration: n.duration }))} })" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" x-on:mouseenter="pauseDuration('hover')" x-on:mouseleave="resumeDuration('hover')" x-on:focusin="handleFocusIn($event)" x-on:focusout="handleFocusOut($event)" x-on:keydown.escape="handleEscape($event)" ${attributes.toHtml().replace(/"if \(\$event\.detail\.id == '([^']*)'\) close\(\)"/, (_m, id) => `"if ($event.detail.id == '${id}') close()"`)}>${iconHtml}<div class="fi-no-notification-main">${n.title !== null || n.body !== null ? `<div class="fi-no-notification-text">${n.title !== null ? `<h3 class="fi-no-notification-title">${sanitizeHtml(n.title)}</h3>` : ''}${n.body !== null ? `<div class="fi-no-notification-body">${sanitizeHtml(n.body)}</div>` : ''}</div>` : ''}${notificationActionsHtml(n.actions)}</div><button type="button" x-on:click="dismiss()" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
 export type NotificationsAlignment = 'start' | 'center' | 'end' | 'left' | 'right';
