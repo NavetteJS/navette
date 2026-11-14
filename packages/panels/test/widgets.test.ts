@@ -38,3 +38,20 @@ test('chart empty state can be customized', async () => {
     const html = await mount(Second).render();
     assert.match(html, /Nothing yet<\/h2><p class="nv-empty-state-description">Come back tomorrow<\/p>/);
 });
+
+test('widget header icon: rendered like a section header icon, in stats, charts and table widgets', async () => {
+    class Sales extends First { static icon = 'o-banknotes'; static iconColor = 'success'; }
+    class Traffic extends Second { static heading = 'Traffic'; static icon = 'o-chart-bar'; getData() { return { datasets: [{ data: [1, 2] }], labels: ['a', 'b'] }; } }
+    class Plain extends Second { static heading = 'Plain'; }
+    assert.match(await mount(Sales).render(), /<header class="nv-section-header"><svg class="nv-color nv-color-success nv-icon nv-size-lg"[^>]*>[^]*?<\/svg><div class="nv-section-header-content/);
+    assert.match(await mount(Traffic).render(), /class="nv-section-header"><svg class="nv-icon nv-size-lg"[^>]*>[^]*?<\/svg><div class="nv-section-header-content nv-section-header-content-has-heading">/);
+    assert.doesNotMatch(await mount(Plain).render(), /class="nv-section-header"><svg/);
+    // An overridden getIconColor() with an unsafe value gives no color class.
+    class Unsafe extends Sales { getIconColor() { return 'x" onload="alert(1)'; } }
+    assert.doesNotMatch(await mount(Unsafe).render(), /onload/);
+    const { TableWidget } = await import('../src/index.ts');
+    class Orders extends (TableWidget as any) { static icon = 'o-shopping-bag'; static iconColor = 'primary'; table(table: any) { return table; } getDataAdapterForTable() { return null as any; } }
+    const table = (mount(Orders as any) as any).getTable();
+    assert.equal(table.getHeadingIcon(), 'o-shopping-bag');
+    assert.equal(table.getHeadingIconColor(), 'primary');
+});

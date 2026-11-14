@@ -83,6 +83,7 @@
                 <% } else if (heading !== null || description || headerActions.length) { %>
                     <div class="<%- cls(['nv-ta-header', { 'nv-ta-header-adaptive-actions-position': headerActions.length }]) %>">
                         <% if (heading !== null || description) { %>
+                            <% if (headingIcon) { %><div class="nv-ta-header-heading-ctn"><%- headingIcon %><% } %>
                             <div>
                                 <% if (heading !== null) { %>
                                 <h2 class="nv-ta-header-heading">
@@ -95,6 +96,7 @@
                                 </p>
                                 <% } %>
                             </div>
+                            <% if (headingIcon) { %></div><% } %>
                         <% } %>
                         <% if (headerActions.length) { %>
                             <div class="nv-ta-actions nv-align-start nv-wrapped">

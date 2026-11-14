@@ -2418,6 +2418,14 @@ export class Table<R = any> {
     /** Heading shown in the table header. */
     heading(heading: string | null): this { this._heading = heading; return this; }
     getHeading(): string | null { return this._heading; }
+    private _headingIcon: string | null = null;
+    private _headingIconColor: string | null = null;
+    /** Icon before the heading, with the markup of a section header icon (a `TableWidget` sets it from its `icon`). */
+    headingIcon(icon: string | null): this { this._headingIcon = icon; return this; }
+    getHeadingIcon(): string | null { return this._headingIcon; }
+    /** Color of the heading icon (`primary`, `success`…); gray by default. */
+    headingIconColor(color: string | null): this { this._headingIconColor = color; return this; }
+    getHeadingIconColor(): string | null { return this._headingIconColor; }
     /** Actions shown in the table header. */
     headerActions(actions: any[]): this { this._headerActions = actions; return this; }
     getHeaderActions(): any[] { return this._headerActions; }
@@ -3525,7 +3533,8 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         // a modifier key is held. A panel without SPA mode removes it.
         recordLinkAttributes: (newTab: boolean, spa = true) => (newTab ? ' target="_blank"' : spa ? ` x-on:click="if (! ($event.altKey || $event.ctrlKey || $event.metaKey || $event.shiftKey)) { $event.preventDefault(); Alpine.navigate($el.getAttribute('href')) }"` : ''),
         isLoaded: loaded, hasLoadingSkeleton: table.hasLoadingSkeleton(), pollingInterval: reordering || !loaded ? null : table.getPollingInterval(),
-        description: table.getDescription(), header: await table.getHeader(), defaultSortOptionLabel: table.getDefaultSortOptionLabel(),
+        description: table.getDescription(), header: await table.getHeader(),
+        headingIcon: table.getHeadingIcon() && table.getHeading() !== null ? icon(table.getHeadingIcon()!, { size: 'lg', attributes: new Attributes().class(((color) => (color && color !== 'gray' && /^[a-z][a-z0-9-]*$/.test(color) ? ['nv-color', `nv-color-${color}`] : []))(table.getHeadingIconColor())) }) : '', defaultSortOptionLabel: table.getDefaultSortOptionLabel(),
         search: { placeholder: table.getSearchPlaceholder() ?? t('navette-tables::table.fields.search.placeholder'), model: table.isSearchOnBlur() ? 'wire:model.live.blur' : `wire:model.live.debounce.${table.getSearchDebounce()}` },
         columnManager: {
             layout: table.getColumnManagerLayout(), resetPosition: table.getColumnManagerResetActionPosition(), reorderable: table.hasReorderableColumns(), toggleable: table.hasToggleableColumns(),

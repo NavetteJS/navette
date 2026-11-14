@@ -97,6 +97,8 @@ abstract class ShopChart extends ChartWidget {
 
 export class OrdersYearOverYearChart extends ShopChart {
     static heading = 'Orders Year-over-Year';
+    // Header icon (left out of the parity screenshots).
+    static icon = process.env.NAVETTE_NO_THEMES ? null : 'o-chart-bar';
     getType(): string { return 'line'; }
     async getData(): Promise<ChartData> {
         const { orderStatuses } = read(this.pageFilters);
@@ -205,6 +207,8 @@ export class ProductMarginAnalysisChart extends ShopChart {
 
 /** "New" orders older than 3 days, or "Processing" orders older than 7 days. */
 export class FlaggedOrders extends TableWidget {
+    static icon = process.env.NAVETTE_NO_THEMES ? null : 'o-flag';
+    static iconColor = process.env.NAVETTE_NO_THEMES ? null : 'warning';
     getDataAdapterForTable() {
         return new ObjectionAdapter(Order, {
             softDeletes: 'deleted_at',

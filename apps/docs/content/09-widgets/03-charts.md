@@ -502,6 +502,22 @@ export class BlogPostsChart extends ChartWidget {
 
 To compute them, override `getHeading()` and `getDescription()` instead. Both are escaped.
 
+### Adding an icon to the heading
+
+The static `icon` property displays an icon before the heading, like the [icon of a section](/schemas/sections#adding-an-icon-to-the-sections-header), so that charts line up with the sections of the same dashboard. `iconColor` changes its color (gray by default):
+
+```ts
+import { ChartWidget } from '@navette-js/panels';
+
+export class BlogPostsChart extends ChartWidget {
+    static heading = 'Blog Posts';
+    static icon = 'o-chart-bar';
+    static iconColor = 'primary';
+}
+```
+
+To compute them, override `getIcon()` and `getIconColor()`. The icon is shown only when the chart has a heading or a description.
+
 ## Disabling lazy loading
 
 By default, widgets are lazy-loaded. This means that they will only be loaded when they are visible on the page.

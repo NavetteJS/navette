@@ -3048,6 +3048,19 @@ export abstract class Widget extends BasePage {
     static sort: number | null = null;
     /** Loaded when it becomes visible. */
     static isLazy = true;
+    /** Icon before the heading of the header, as in a section (`o-chart-bar`); none by default. */
+    static icon: string | null = null;
+    /** Color of the header icon (`primary`, `success`…); gray by default. */
+    static iconColor: string | null = null;
+    getIcon(): string | null { return (this.constructor as typeof Widget).icon; }
+    getIconColor(): string | null { return (this.constructor as typeof Widget).iconColor; }
+    /** The header icon, with the markup of a section header icon. */
+    protected headerIconHtml(): string {
+        const name = this.getIcon();
+        if (!name) return '';
+        const color = this.getIconColor();
+        return icon(name, { size: 'lg', attributes: new Attributes().class(color && color !== 'gray' && /^[a-z][a-z0-9-]*$/.test(color) ? ['nv-color', `nv-color-${color}`] : []) });
+    }
     get panel(): Panel { return (this._ctx as PanelContext).panel; }
     /**
      * This widget with properties of its own (public properties of the widget), for a page or dashboard:
@@ -3434,7 +3447,7 @@ export abstract class StatsOverviewWidget extends Widget {
             return `<div wire:partial="schema-component::${key}" x-data="navetteSchemaComponent(${e(js({ key, exposedMethods: [], path: '', containerPath: '' }))})" wire:key="${e(`${this.id}.${key}`)}" class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component">${stat.toHtml(this.panel, id)}</div></div>`;
         }).join('');
         const heading = this.getHeading(), description = this.getDescription();
-        const header = heading !== null || description !== null ? `<header class="nv-section-header"><div class="nv-section-header-content nv-section-header-content-has-heading"><div class="nv-section-header-text-ctn">${heading !== null ? `<h3 class="nv-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
+        const header = heading !== null || description !== null ? `<header class="nv-section-header">${this.headerIconHtml()}<div class="nv-section-header-content nv-section-header-content-has-heading"><div class="nv-section-header-text-ctn">${heading !== null ? `<h3 class="nv-section-header-heading">${e(heading)}</h3>` : ''}${description !== null ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div></div></header>` : '';
         const interval = (this.constructor as typeof StatsOverviewWidget).pollingInterval;
         const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}` : '';
         return this.wrap(`<div x-data="navetteSchema({ livewireId: ${e(js(this.id))}, schemaKey: 'content' })" x-on:form-validation-error.window="handleFormValidationError" x-on:reset-schema-component-state.window="handleClientSideStateReset" class="nv-grid nv-sc nv-sc-has-gap" style="--cols-default: repeat(1, minmax(0, 1fr));"><div ${anonymous} class="nv-grid-col" style="--col-span-default: span 1 / span 1;"><div class="nv-sc-component nv-grid-ctn"><div${poll} class="nv-sc-section"><section x-data="{
@@ -3582,7 +3595,7 @@ export abstract class ChartWidget extends Widget {
         const hasText = (heading !== null && heading !== '') || (description !== null && description !== '');
         const hasHeader = hasText || filter !== '' || filtersDropdown !== '';
         const header = hasHeader
-            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header"><div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="nv-section-header-text-ctn">${heading ? `<h2 class="nv-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="nv-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('nv-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('navette::components/section.actions.expand.label')))} : ${e(js(t('navette::components/section.actions.collapse.label')))}" aria-label="${e(t('navette::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="nv-icon-btn nv-size-md nv-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
+            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.nv-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="nv-section-header">${hasText ? this.headerIconHtml() : ''}<div class="${cls(['nv-section-header-content', { 'nv-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="nv-section-header-text-ctn">${heading ? `<h2 class="nv-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="nv-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="nv-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('nv-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('navette::components/section.actions.expand.label')))} : ${e(js(t('navette::components/section.actions.collapse.label')))}" aria-label="${e(t('navette::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="nv-icon-btn nv-size-md nv-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
             : '';
         const options = this.getOptions();
         const colors = ['bg', 'border', 'grid', 'text', 'tooltip-bg', 'tooltip-text', 'tooltip-border'];
@@ -3643,7 +3656,7 @@ export abstract class TableWidget extends Widget implements TableHost {
         const WidgetClass = this.constructor as typeof TableWidget;
         return WidgetClass.heading ?? WidgetClass.name.replace(/Widget$/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
     }
-    getTable(): Table<any> { return this.table(new Table().heading(this.getTableHeading()).paginationMode('simple')).withoutComponentsHiddenOn(this); }
+    getTable(): Table<any> { return this.table(new Table().heading(this.getTableHeading()).headingIcon(this.getIcon()).headingIconColor(this.getIconColor()).paginationMode('simple')).withoutComponentsHiddenOn(this); }
     mount(): void {
         const table = this.getTable();
         this.tableRecordsPerPage = table.getDefaultPageOption();

@@ -62,6 +62,10 @@ test('column options: URL in a new tab, disabled click, header tooltip, alignmen
     // Neither column links to the record: one has its own URL, the other a disabled click.
     assert.doesNotMatch(html, /href="\/posts\//);
     assert.match(clean(await renderTable(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')]), host(), adapter)), /<a href="\/posts\/2"/);
+    // Heading icon: before the heading, like the icon of a section header; nothing without a heading.
+    const headed = clean(await renderTable(new Table<Post>().heading('Posts').headingIcon('o-document-text').headingIconColor('info').columns([TextColumn.make('title')]), host(), adapter));
+    assert.match(headed, /<div class="nv-ta-header-heading-ctn"><svg class="nv-color nv-color-info nv-icon nv-size-lg"[^>]*>[^]*?<\/svg>\s*<div>\s*<h2 class="nv-ta-header-heading">\s*Posts\s*<\/h2>/);
+    assert.doesNotMatch(clean(await renderTable(new Table<Post>().headingIcon('o-document-text').columns([TextColumn.make('title')]), host(), adapter)), /nv-ta-header-heading-ctn/);
     // SPA navigation (`Alpine.navigate()`) only for paths of this site, unless turned off.
     const links = async (table: Table<Post>) => clean(await renderTable(table, host(), adapter));
     assert.match(await links(new Table<Post>().recordUrl((record) => `/posts/${record.id}`).columns([TextColumn.make('title')])), /<a href="\/posts\/2" x-on:click="[^"]*Alpine\.navigate/);
