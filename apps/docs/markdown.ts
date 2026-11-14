@@ -37,6 +37,7 @@ const KEYWORDS: Record<string, string[]> = {
     html: [],
 };
 KEYWORDS.js = KEYWORDS.ts;
+KEYWORDS.jsx = KEYWORDS.ts;
 
 /** A small tokenizer: good enough for documentation snippets, not a parser. */
 export function highlight(code: string, language: string): string {

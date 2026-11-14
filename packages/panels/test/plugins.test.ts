@@ -146,13 +146,13 @@ test('configurable resources: each registration has its own class, slug, navigat
     ]);
     // URLs: the active configuration, or the one asked for.
     assert.equal(OrderResource.getUrl(), '/orders');
-    assert.equal(OrderResource.getUrl('index', undefined, { configuration: 'active' }), '/orders/active');
-    assert.equal(OrderResource.getUrl('edit', 2, { configuration: 'archived' }), '/order-archive/2/edit');
+    assert.equal(OrderResource.getUrl('index', undefined, {}, { configuration: 'active' }), '/orders/active');
+    assert.equal(OrderResource.getUrl('edit', 2, {}, { configuration: 'archived' }), '/order-archive/2/edit');
     assert.equal(archived.getUrl('view', 2), '/order-archive/2');
-    assert.equal(archived.getUrl('index', undefined, { configuration: null }), '/orders');
+    assert.equal(archived.getUrl('index', undefined, {}, { configuration: null }), '/orders');
     assert.equal(OrderResource.withConfiguration('archived', () => OrderResource.getUrl('create')), '/order-archive/create');
     assert.equal(OrderResource.withConfiguration('archived', () => OrderResource.getConfiguration()?.getKey()), 'archived');
-    assert.throws(() => OrderResource.getUrl('index', undefined, { configuration: 'missing' }), /Configuration "missing" not found for OrderResource/);
+    assert.throws(() => OrderResource.getUrl('index', undefined, {}, { configuration: 'missing' }), /Configuration "missing" not found for OrderResource/);
     assert.throws(() => OrderResource.withConfiguration('missing', () => null), /Configuration "missing" not found/);
     // Mistakes.
     assert.throws(() => panel.resources([OrderResource.make('active')]), /key "active" is already registered on panel "configurable"/);

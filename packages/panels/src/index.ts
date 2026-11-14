@@ -10,14 +10,18 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express, { type Request, type Response, type Router } from 'express';
 import { Action, ActionHalt, useColorManager, ActionGroup } from '@navette-js/actions';
-import { Checkbox, Field, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
+import { Checkbox, Field, RawJs, Select, Step, TextInput, Wizard, richDocumentToHtml, richHtmlToDocument, fillSchema, fillSchemaFromRecord, getSchemaState, loadSchemaRelationships, saveSchemaRelationships, validateSchema, useColorManager as useFormsColorManager } from '@navette-js/forms';
 import { Actions, childSchema, Component as SchemaComponent, EmbeddedSchema, Form, Group, Html, RenderHook, Schema, Section, StatefulGroup, type SchemaHost } from '@navette-js/schemas';
 import { WireError } from '@navette-js/wire';
 import { useColorManager as useInfolistsColorManager, useHtmlSanitizer } from '@navette-js/infolists';
-import { Notification, Notifications, publish, runInRequest } from './notifications.ts';
+import { Notification, Notifications, publish, runInRequest, useNotificationsColorManager } from './notifications.ts';
 import { getTableSelectDataAdapter, getTableSelectDefinition, type TableSelectDefinition } from '@navette-js/forms';
-import { MAX_UNPAGINATED_RECORDS, makeTableSelectTable } from '@navette-js/tables';
-export { Notification, Notifications } from './notifications.ts';
+import { BulkActionGroup as TableBulkActionGroup, MAX_UNPAGINATED_RECORDS, makeTableSelectTable, type BulkActionMenu } from '@navette-js/tables';
+export { Notification, Notifications, type NotificationActionData, type NotificationActionInput, type NotificationData, type NotificationsAlignment, type NotificationsVerticalAlignment } from './notifications.ts';
+import { streamBroadcasts, userBroadcastChannel, type BroadcastRecipient } from './broadcasting.ts';
+export { broadcastToUsers, DATABASE_NOTIFICATIONS_SENT_EVENT, dispatchDatabaseNotificationsSent, getBroadcaster, MemoryBroadcaster, NOTIFICATION_BROADCAST_EVENT, useBroadcaster, userBroadcastChannel, type BroadcastMessage, type BroadcastOptions, type BroadcastRecipient, type Broadcaster } from './broadcasting.ts';
+import { NavetteAsset, type Asset } from './assets.ts';
+export { AlpineComponent, Asset, AssetManager, Css, Js, NavetteAsset } from './assets.ts';
 import { getDefaultCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, type MultiFactorAuthenticationProvider, type SecurityKey } from './multi-factor.ts';
 export { AppAuthentication, EmailAuthentication, EmailCodeInput, type EmailAuthenticationStore, decryptSecret, encryptSecret, MemoryCacheStore, MultiFactorChallenge, SecurityKeyAuthentication, SecurityKeyInput, useMultiFactorCacheStore, type AppAuthenticationStore, type MultiFactorAuthenticationProvider, type MultiFactorCacheStore, type SecurityKey, type SecurityKeyStore } from './multi-factor.ts';
 export { base32Decode, base32Encode, generateTotpSecret, hotp, totpCode, totpTimestep, totpUri, verifyTotp, type TotpAlgorithm, type TotpOptions } from './totp.ts';
@@ -26,6 +30,8 @@ export { authenticationOptions, decodeCbor, generateChallenge, registrationOptio
 export { MemorySessionStore, type SessionStore } from './session-store.ts';
 export { csvCell, csvLine, DownloadStore, ExportAction, ExportBulkAction, ExportColumn, Exporter, ImportAction, ImportColumn, Importer, importExportSchema, knexImportExportHistory, parseCsv, readSpreadsheet, RowImportFailedError, runInBackground, TestableExport, TestableImport, useBackgroundRunner, type BackgroundTask, type ExportActionInstance, type ImportActionInstance, type ImportExportHistory } from './import-export.ts';
 export { buildXlsx, readXlsx } from './xlsx.ts';
+import { fillFiltersSchema, isFilterAction, normalizeFilterValuesFromQueryString, readQueryStringProperty, sanitizeFilterState } from './dashboard-filters.ts';
+export { FilterAction, isFilterAction } from './dashboard-filters.ts';
 import { DownloadStore, type ImportExportHistory } from './import-export.ts';
 import { MemorySessionStore, type SessionStore } from './session-store.ts';
 import { addDays, addMonths, CALENDAR_LABELS, CALENDAR_VIEWS, isDate, renderCalendar, visibleRange, type CalendarEvent, type CalendarLabels, type CalendarView } from './calendar.ts';
@@ -35,8 +41,11 @@ export { getCurrentPanel, getPluginId, PanelPlugin, type Plugin } from './plugin
 import { getCurrentPanel, getPluginId, runWithPanel, type Plugin } from './plugins.ts';
 export { PageConfiguration, ResourceConfiguration } from './configurable.ts';
 import { findConfiguration, getActiveConfiguration, isClosestNavigationUrl, getPanelConfigurations, PageConfiguration, resolvePageRegistration, resolveResourceRegistration, resolveUrlTarget, ResourceConfiguration, routeOrder, withConfiguration, withRequestConfiguration } from './configurable.ts';
+import { buildNestedResourcePages, linkRelatedRecords, nestedRoutePath, ParentResourceRegistration, parentChainOf, parentRegistrationOf, relatedResourceAdapter, relationManagerTabFromQuery, relationshipNameOf, resolveResourceReference, resourceUrl, scopeAdapterByForeignKey, withRelatedResource, type ResourceReference } from './nested-resources.ts';
+export { ParentResourceRegistration } from './nested-resources.ts';
+import { buildSingularResourcePages, singularResourceUrl } from './singular-resources.ts';
 export { DatabaseNotifications, GlobalSearch, knexNotificationStore, timeAgo, type DatabaseNotificationAction, type DatabaseNotificationRecord, type DatabaseNotificationStore, type GlobalSearchCategory, type GlobalSearchResult } from './topbar.ts';
-import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type Palette, type RenderHookCallback } from '@navette-js/support';
+import { Attributes, ColorManager, HtmlString, RenderHookRegistry, cls, configured, configureUsing, convertToRgb, e, icon, icons, js, loadingIndicator, renderHook, runWithRenderHooks, views, type AttrValue, type Palette, type RenderHookCallback } from '@navette-js/support';
 import { getLocale, t, tc } from '@navette-js/support/i18n';
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
@@ -310,7 +319,9 @@ export class Panel {
     /** Registers resources: their pages and navigation items. */
     resources(resources: (typeof Resource | ResourceConfiguration)[]): this {
         // A configuration (`OrderResource.make('archived')`) registers the resource once more, with its own slug and options.
-        for (const resource of resources.map((entry) => resolveResourceRegistration(this, entry))) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
+        // A nested resource's URLs start with its parent's slug (cluster included): parents are registered first.
+        const ordered = resources.map((entry) => resolveResourceRegistration(this, entry)).sort((a, b) => parentChainOf(a).length - parentChainOf(b).length);
+        for (const resource of ordered) { resource.panel = this; this.registerCluster(resource); this._resources.push(resource); this._pages.push(...Object.values(resource.getPages())); }
         return this;
     }
     /** A page or resource in a cluster is served under the cluster's slug; the cluster page is registered with it. */
@@ -413,7 +424,7 @@ export class Panel {
             return false;
         }
         const resource = (PageClass as any).resource as typeof Resource | undefined;
-        if (resource && PageClass.prototype instanceof EditRecord) return user !== null || this._guestAccess;
+        if (resource && PageClass.prototype instanceof EditRecord && !resource.isSingular) return user !== null || this._guestAccess;
         if (resource && PageClass.prototype instanceof CreateRecord) return resource.can('create', user);
         if (resource) return resource.can('viewAny', user);
         return this.authorize(user, 'access', { page: PageClass, rule: () => PageClass.canAccess(user!) });
@@ -471,6 +482,27 @@ export class Panel {
     /** Polling interval (`30s` by default); `null` disables polling. */
     databaseNotificationsPolling(interval: string | null): this { this._databaseNotificationsPolling = interval; return this; }
     getDatabaseNotificationsPollingInterval(): string | null { return this._databaseNotificationsPolling; }
+
+    // -------------------------------------------------------------- broadcasting and assets
+    private _broadcasting: { heartbeat: number } | null = null;
+    /**
+     * Pushes notifications live to the open pages of their users: `Notification.broadcast()` and database notifications sent with
+     * `isEventDispatched`. The panel serves a Server-Sent Events stream to signed-in users; database notifications only poll while it is down.
+     */
+    broadcasting(condition = true, options: { heartbeat?: number } = {}): this { this._broadcasting = condition ? { heartbeat: Math.max(1000, options.heartbeat ?? 25_000) } : null; return this; }
+    hasBroadcasting(): boolean { return this._broadcasting !== null; }
+    getBroadcastingHeartbeat(): number { return this._broadcasting?.heartbeat ?? 25_000; }
+    /** Private broadcast channel of a user of this panel: `<auth guard>.users.<id>` unless the user has `receivesBroadcastNotificationsOn()`. */
+    getBroadcastChannel(user: BroadcastRecipient): string { return userBroadcastChannel(user, this._authGuard ?? `panel-${this._id}`); }
+    /** URL of the panel's broadcast stream, for a tenant's pages. */
+    getBroadcastingUrl(tenant: unknown = this.getTenant()): string {
+        const url = `${this.getLivewirePrefix()}/broadcasting`;
+        return this._tenant && tenant && !this._tenantDomain ? `${url}?tenant=${encodeURIComponent(this.getTenantUrlKey(tenant))}` : url;
+    }
+    private _assets: { assets: Asset[]; packageName: string }[] = [];
+    /** Registers stylesheets, scripts and Alpine components for this panel only (`NavetteAsset.register()` registers them for all panels). */
+    assets(assets: Asset[], packageName = 'app'): this { this._assets.push({ assets, packageName }); return this; }
+    getAssets(): { assets: Asset[]; packageName: string }[] { return this._assets; }
 
     // -------------------------------------------------------------- layout: topbar, navigation, sidebar
     private _topbar = true;
@@ -827,7 +859,7 @@ export class Panel {
         for (const page of this._pages) if (page.shouldRegisterNavigation && !(await this.canAccessPage(page, user))) hidden.add(page.slug);
         return hidden;
     }
-    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[] }[] {
+    getNavigation(path: string, badges: Map<string, string | number | null> = new Map(), hidden: Set<string> = new Set()): { label: string | null; itemsId: string; isActive: boolean; icon: string | null; collapsible: boolean; items: NavigationItemView[]; dropdownItems: NavigationItemView[] }[] {
         const menuUrls = this._pages.filter((p) => p.shouldRegisterNavigation && !hidden.has(p.slug) && clusterOf(p) === null).map((p) => this.getUrl(p.slug));
         const items = [
             // The pages of a cluster are in its sub-navigation: the menu only shows the cluster.
@@ -850,7 +882,7 @@ export class Panel {
             // An item with a parent item is shown below it (an unknown parent hides it, as in Filament).
             const own = inGroup.filter((i) => i._parentItem === null).map((i) => view(i, [...i._childItems, ...inGroup.filter((child) => child._parentItem === i.label)]));
             const options = label ? this._navigationGroupOptions.get(label) : undefined;
-            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive || i.activeChildItems), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
+            return { label, itemsId: label ? `fi-sidebar-group-items-${slug(label)}-${createHash('md5').update(label).digest('hex').slice(0, 8)}` : '', isActive: own.some((i) => i.isActive || i.activeChildItems), items: options?.icon ? own.map((i) => ({ ...i, icon: null })) : own, dropdownItems: own, icon: options?.icon ?? null, collapsible: options?.collapsible ?? true };
         }).filter((g) => g.items.length);
     }
 
@@ -1269,17 +1301,21 @@ abstract class BasePage extends Component implements SchemaHost {
     }
 }
 
-/** A navigation group for the topbar: in a dropdown, an item with children forms its own list with them. */
-function topNavigationGroup<G extends { items: NavigationItemView[] }>(group: G): G & { lists: (NavigationItemView & { colorClasses: string[] })[][] } {
-    const colored = (item: NavigationItemView) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] });
+const coloredNavigationItem = (item: NavigationItemView) => ({ ...item, colorClasses: item.isActive ? sharedColors.getComponentClasses('dropdown-item', 'primary') : [] });
+/** The lists of a navigation group's dropdown: an item with children forms its own list with them (Filament's `$lists`). */
+function navigationDropdownLists(items: NavigationItemView[]): (NavigationItemView & { colorClasses: string[] })[][] {
     const lists: (NavigationItemView & { colorClasses: string[] })[][] = [];
-    for (const item of group.items) {
-        if (item.childItems.length) { lists.push([colored(item), ...item.childItems.map(colored)], []); continue; }
+    for (const item of items) {
+        if (item.childItems.length) { lists.push([coloredNavigationItem(item), ...item.childItems.map(coloredNavigationItem)], []); continue; }
         if (!lists.length) lists.push([]);
-        lists[lists.length - 1].push(colored(item));
+        lists[lists.length - 1].push(coloredNavigationItem(item));
     }
     if (lists.length && !lists[lists.length - 1].length) lists.pop();
-    return { ...group, items: group.items.map(colored), lists };
+    return lists;
+}
+/** A navigation group for the topbar: in a dropdown, an item with children forms its own list with them. */
+function topNavigationGroup<G extends { items: NavigationItemView[] }>(group: G): G & { lists: (NavigationItemView & { colorClasses: string[] })[][] } {
+    return { ...group, items: group.items.map(coloredNavigationItem), lists: navigationDropdownLists(group.items) };
 }
 
 /** A panel page, in the full layout (sidebar, header). */
@@ -1479,6 +1515,23 @@ export class Dashboard extends Page {
     /** Grid columns: a number (at the `lg` breakpoint), or one number per breakpoint. */
     getColumns(): number | Record<string, number> { return 2; }
     hasFiltersForm(): boolean { return typeof (this as any).filtersFormSchema === 'function'; }
+    /** Filters edited in a modal: a `FilterAction` among the header actions. */
+    hasFiltersAction(): boolean { return flattenActions(this.getHeaderActions()).some(isFilterAction); }
+    hasFilters(): boolean { return this.hasFiltersForm() || this.hasFiltersAction(); }
+    /** The filters are kept in the user's session between page loads (per tenant). `false` turns this off. */
+    static persistsFiltersInSession = true;
+    persistsFiltersInSession(): boolean { return (this.constructor as typeof Dashboard).persistsFiltersInSession; }
+    /** Session key of the persisted filters: per dashboard class, and per tenant. */
+    getFiltersSessionKey(): string {
+        const tenant = (this._ctx as PanelContext | null)?.tenant;
+        const tenantKey = tenant ? encodeURIComponent(this.panel.getTenantUrlKey(tenant)) : '';
+        return ['dashboard', (this.constructor as typeof Dashboard).name, encodeURIComponent((this.constructor as typeof Dashboard).slug), tenantKey, 'filters'].join(':');
+    }
+    /** Session of the persisted filters: the browser (its CSRF token) and the signed-in user. */
+    private filtersSession(): string | null {
+        const ctx = this._ctx as PanelContext | null;
+        return ctx?.mailbox ? `${ctx.panel.getId()}:${ctx.user?.id ?? ''}:${ctx.mailbox}` : null;
+    }
     getSchema(name: string): Schema {
         if (name !== 'filtersForm') return super.getSchema(name);
         // 2 / 3 / 4 column grid, state under `filters`, live fields.
@@ -1486,12 +1539,38 @@ export class Dashboard extends Page {
         for (const component of schema.getFlatComponents() as any[]) if (component instanceof Field && typeof (component as any).live === 'function') (component as any).live();
         return schema;
     }
-    mount(): void {
-        if (!this.hasFiltersForm()) return;
-        this.filters = {};
-        fillSchema(this.getSchema('filtersForm'), this.filters);
+    /**
+     * Initial filters: from the URL (`?filters[startDate]=…`), or else from the session, or else the form defaults.
+     * Both sources are written by the browser: the values are sanitized, and only the form's fields are kept.
+     */
+    mount(): void | Promise<void> { return this.mountFilters(); }
+    protected async mountFilters(): Promise<void> {
+        if (!this.hasFilters()) return;
+        const ctx = this._ctx as PanelContext | null;
+        let restored = readQueryStringProperty((ctx?.req?.query ?? null) as Record<string, unknown> | null, 'filters');
+        const session = this.filtersSession();
+        if (!restored && session && this.persistsFiltersInSession()) {
+            const saved = sanitizeFilterState(await this.panel.getSessionStore().get(session, this.getFiltersSessionKey()));
+            if (saved && typeof saved === 'object' && !Array.isArray(saved) && Object.keys(saved).length) restored = saved as Record<string, unknown>;
+        }
+        if (restored) restored = normalizeFilterValuesFromQueryString(restored) as Record<string, unknown>;
+        if (this.hasFiltersForm()) {
+            this.filters = {};
+            if (restored) fillFiltersSchema(this.getSchema('filtersForm'), this.filters, restored);
+            else fillSchema(this.getSchema('filtersForm'), this.filters);
+        } else {
+            this.filters = restored;
+        }
+        // Kept in the URL (Livewire `#[Url]`): the browser updates the query string when the filters change.
+        (this._effects as Record<string, unknown>).url = { filters: { as: 'filters', use: 'replace', alwaysShow: false, except: null } };
     }
-    getWidgetData(): Record<string, unknown> { return this.hasFiltersForm() ? { pageFilters: this.filters } : {}; }
+    async dehydrate(): Promise<void> {
+        await super.dehydrate?.();
+        const session = this.filtersSession();
+        if (!session || !this.hasFilters() || !this.persistsFiltersInSession()) return;
+        await this.panel.getSessionStore().set(session, this.getFiltersSessionKey(), sanitizeFilterState(this.filters) ?? null);
+    }
+    getWidgetData(): Record<string, unknown> { return this.hasFilters() ? { pageFilters: this.filters } : {}; }
     protected async renderContent(): Promise<string> {
         const filters = this.hasFiltersForm() ? `<div ${ANONYMOUS_SCHEMA_COMPONENT} class="fi-grid-col" style="--col-span-default: span 1 / span 1;"><div class="fi-sc-component">${await this.getSchema('filtersForm').toHtml()}</div></div>` : '';
         const widgets = await this.renderWidgetsGrid(await this.filterVisibleWidgets(this.getWidgets()), this.getColumns(), 'content');
@@ -2106,6 +2185,34 @@ export abstract class Resource {
     /** Simple resource: a single page, with create and edit in modals. */
     static isSimple = false;
 
+    // -------------------------------------------------------------- nesting (Filament's $parentResource)
+    /**
+     * Nested resource: the parent resource under whose records this one is served (`/projects/{project}/tasks/create`).
+     * It has no list nor menu item: its records are listed by a relation manager or related page of the parent
+     * (`static relatedResource = TaskResource`). A function returning the resource (`() => ProjectResource`) breaks circular imports.
+     */
+    static parentResource: ResourceReference | null = null;
+    /** This resource as the parent of `childResource`: `ProjectResource.asParent().relationship('tasks').inverseRelationship('project')`. */
+    static asParent(childResource: typeof Resource | null = null): ParentResourceRegistration { return new ParentResourceRegistration(this, childResource); }
+    /** How this resource is nested: from `parentResource` by default; override it to change the relationship names or the foreign key. */
+    static getParentResourceRegistration(): ParentResourceRegistration | null { return resolveResourceReference(this.parentResource)?.asParent(this) ?? null; }
+    /**
+     * Limits the adapter to the records of a parent record (Filament's `scopeEloquentQueryToParent()`). Defaults to
+     * `adapter.scopedTo(<foreign key>, parentKey)`; `parentRecord` is `null` when called for a relation manager.
+     */
+    static scopeAdapterToParent(adapter: DataAdapter, parentKey: string, _parentRecord: unknown = null): DataAdapter { return scopeAdapterByForeignKey(this, adapter, parentKey); }
+
+    // -------------------------------------------------------------- singular resource
+    /**
+     * Singular resource: bound to a single record (site settings...), managed from its edit page at the resource URL, without
+     * a list. If the record does not exist yet, the form shows its defaults and the first save creates it.
+     */
+    static isSingular = false;
+    /** The record of a singular resource, or `null` if it does not exist yet; defaults to the first record of the adapter. */
+    static async resolveSingularRecord(adapter: DataAdapter = this.adapter): Promise<unknown | null> { return (await adapter.paginate({ page: 1, perPage: 1 })).records[0] ?? null; }
+    /** Attributes given to the record of a singular resource when the first save creates it (`{ group: 'site' }`). */
+    static getSingularRecordAttributes(): Record<string, unknown> { return {}; }
+
     static getPluralModelLabel(): string { return this.pluralModelLabel ?? plural(this.modelLabel); }
     static getTitleCasePluralModelLabel(): string { return this.getPluralModelLabel().split(' ').map(ucfirst).join(' '); }
     /** Class of the options of the resource's registrations (`ResourceConfiguration` or a subclass): enables `make()`. */
@@ -2120,10 +2227,18 @@ export abstract class Resource {
     static hasConfiguration(): boolean { return this.getConfiguration() !== null; }
     /** Runs `fn` with the registration `key` of this resource active (URLs, `getConfiguration()`). */
     static withConfiguration<T>(key: string, fn: () => T): T { return withConfiguration(this, key, fn); }
-    /** URL of a resource page; `options.configuration` targets a registration (`null`: the default one), the active one otherwise. */
-    static getUrl(page: string = 'index', record?: string | number, options: { configuration?: string | null } = {}): string {
+    /**
+     * URL of a page: `getUrl('edit', 12)`, or with named parameters `getUrl('edit', { record: 12, project: 3 })` (a nested
+     * resource needs its parent's key, under the parent's route parameter name; other parameters go to the query string).
+     * `options.configuration` targets a registration (`null`: the default one); without it, the active one.
+     */
+    static getUrl(page: string = 'index', record?: string | number | Record<string, unknown>, parameters: Record<string, unknown> = {}, options: { configuration?: string | null } = {}): string {
         const target = resolveUrlTarget(this, options.configuration);
-        if (target !== this) return target.getUrl(page, record);
+        if (target !== this) return target.getUrl(page, record, parameters);
+        if (this.isSingular) return singularResourceUrl(this, page);
+        if ((record !== null && typeof record === 'object') || Object.keys(parameters).length || parentRegistrationOf(this)) {
+            return resourceUrl(this, page, record !== null && typeof record === 'object' ? { ...record, ...parameters } : { ...parameters, ...(record !== undefined ? { record } : {}) });
+        }
         const base = this.panel.getUrl(this.slug);
         if (page in this.relatedPages) return `${base}/${record}/${page}`;
         return page === 'index' ? base : page === 'create' ? `${base}/create` : page === 'view' ? `${base}/${record}` : `${base}/${record}/edit`;
@@ -2162,7 +2277,7 @@ export abstract class Resource {
     static isGloballySearchable = true;
     /** `false`: the search term is matched as a whole instead of word by word. */
     static shouldSplitGlobalSearchTerms = true;
-    static canGloballySearch(): boolean { return this.isGloballySearchable && this.getGloballySearchableAttributes().length > 0; }
+    static canGloballySearch(): boolean { return this.isGloballySearchable && this.getGloballySearchableAttributes().length > 0 && !parentRegistrationOf(this); }
     /** Position of this resource's group in the results; without one, after the others in registration order. */
     static globalSearchSort: number | null = null;
     /** Maximum results rendered per resource. */
@@ -2213,6 +2328,8 @@ export abstract class Resource {
     }
     private static buildPages(): Record<string, typeof Page> {
         const resource = this as unknown as typeof Resource;
+        if (resource.isSingular) return buildSingularResourcePages(resource, { EditRecord, ViewRecord });
+        if (parentRegistrationOf(resource)) return buildNestedResourcePages(resource, { CreateRecord, EditRecord, ViewRecord, ManageRelatedRecords } as any);
         const List = class extends (resource.pages.index ?? ListRecords) {
             static resource = resource;
             static slug = resource.slug;
@@ -2266,8 +2383,11 @@ export type NavigationItemView = { label: string; url: string; icon: string | nu
 /** The cluster a page belongs to: its own, or its resource's. */
 export const clusterOf = (page: unknown): typeof Cluster | null => (page as any)?.cluster ?? (page as any)?.resource?.cluster ?? (page as any)?.parentResource?.cluster ?? null;
 type ColumnSpan = number | 'full' | Record<string, number | 'full'>;
-/** Widget: a component displayed in a page's widget grid. */
-export abstract class Widget extends Component {
+/**
+ * Widget: a component displayed in a page's widget grid. Like a page, it may host schemas (`<name>Schema(schema)`) and
+ * actions; the built-in widgets only expose what they use (chart filters, empty state actions).
+ */
+export abstract class Widget extends BasePage {
     static componentName: string;
     /** Width in the widget grid: a number of columns or `'full'` (from `lg`), or a span per breakpoint (`{ md: 2, xl: 3 }`). */
     static columnSpan: ColumnSpan = 1;
@@ -2553,6 +2673,8 @@ export class NavetteInfoWidget extends Widget {
 /** Table properties a list page exposes to its widgets. */
 const PAGE_TABLE_PROPERTIES = ['activeTab', 'paginators', 'tableColumnSearches', 'tableFilters', 'tableRecordsPerPage', 'tableSearch', 'tableSort'];
 
+/** Valid HTML attribute names, Alpine and Livewire directives included (`x-on:click`, `@click`, `wire:click.prevent`). */
+const STAT_ATTRIBUTE_NAME = /^[a-zA-Z_:@][a-zA-Z0-9_:.@-]*$/;
 /** One stat of a StatsOverviewWidget. */
 export class Stat {
     private _description: string | null = null;
@@ -2562,10 +2684,23 @@ export class Stat {
     private _icon: string | null = null;
     private _chart: Record<string, number> | number[] | null = null;
     private _url: string | null = null;
+    private _placeholder: string | null = null;
+    private _extraAttributes: Record<string, AttrValue> = {};
     private label: string;
     private value: string | number | null;
     constructor(label: string, value: string | number | null) { this.label = label; this.value = value; }
-    static make(label: string, value: string | number | null): Stat { return new Stat(label, value); }
+    static make(label: string, value: string | number | null): Stat { return configured(new Stat(label, value)); }
+    /** Registers a callback applied to every stat created afterwards (`Stat.configureUsing((stat) => stat.placeholder('-'))`). */
+    static configureUsing(configure: (stat: Stat) => void): void { configureUsing(Stat, configure); }
+    /** Shown instead of the value when it is blank (`null`, `undefined` or an empty string; `0` is not blank). Escaped. */
+    placeholder(text: string | null): this { this._placeholder = text; return this; }
+    getPlaceholder(): string | null { return this._placeholder; }
+    /**
+     * Extra HTML attributes of the stat (`class`, `wire:click`, `x-on:click`…), written by the developer: names must be
+     * valid attribute names, values are escaped. They replace the previous ones, unless `merge` is `true`.
+     */
+    extraAttributes(attributes: Record<string, AttrValue>, merge = false): this { this._extraAttributes = merge ? { ...this._extraAttributes, ...attributes } : { ...attributes }; return this; }
+    getExtraAttributes(): Record<string, AttrValue> { return this._extraAttributes; }
     description(text: string | null): this { this._description = text; return this; }
     descriptionIcon(name: string | null, position: 'before' | 'after' = 'after'): this { this._descriptionIcon = name; this._descriptionIconPosition = position; return this; }
     /** Color of the description and chart. */
@@ -2578,7 +2713,11 @@ export class Stat {
     toHtml(panel: Panel, key: string): string {
         const tag = this._url ? 'a' : 'div';
         const color = this._color ?? 'gray';
-        const filled = this.value !== null && this.value !== undefined && this.value !== '';
+        const filled = this.value !== null && this.value !== undefined && String(this.value).trim() !== '';
+        const extra = Object.fromEntries(Object.entries(this._extraAttributes)
+            .filter(([name, value]) => STAT_ATTRIBUTE_NAME.test(name) && !(this._url && name === 'href') && value !== null && value !== undefined && value !== false)
+            .map(([name, value]) => [name, value === true ? true : e(String(value))]));
+        const attributes = new Attributes(extra).merge({ class: 'fi-wi-stats-overview-stat' }).toHtml();
         const descriptionIcon = this._descriptionIcon ? icon(this._descriptionIcon) : '';
         const description = this._description
             ? `<div class="${cls([...(color !== 'gray' ? panel.colors.getComponentClasses('stat-description', color) : []), 'fi-wi-stats-overview-stat-description'])}">${this._descriptionIconPosition === 'before' ? descriptionIcon : ''}<span>${e(this._description)}</span>${this._descriptionIconPosition === 'after' ? descriptionIcon : ''}</div>`
@@ -2590,7 +2729,7 @@ export class Stat {
                             values: ${e(js(Object.values(this._chart)))},
                         })" class="${cls([...(color !== 'gray' ? panel.colors.getComponentClasses('stat-chart', color) : []), 'fi-wi-stats-overview-stat-chart'])}"><canvas x-ref="canvas" aria-hidden="true"></canvas><span aria-hidden="true" x-ref="backgroundColorElement" class="fi-wi-stats-overview-stat-chart-bg-color"></span><span aria-hidden="true" x-ref="borderColorElement" class="fi-wi-stats-overview-stat-chart-border-color"></span></div></div>`
             : '';
-        return `<${tag}${this._url ? ` href="${e(this._url)}"` : ''} class="fi-wi-stats-overview-stat"><div class="fi-wi-stats-overview-stat-content"><div class="fi-wi-stats-overview-stat-label-ctn">${this._icon ? icon(this._icon) : ''}<span class="fi-wi-stats-overview-stat-label">${e(this.label)}</span></div>${filled ? `<div class="fi-wi-stats-overview-stat-value">${e(String(this.value))}</div>` : '<div class="fi-wi-stats-overview-stat-placeholder"></div>'}${description}</div>${chart}</${tag}>`;
+        return `<${tag}${this._url ? ` href="${e(this._url)}"` : ''} ${attributes}><div class="fi-wi-stats-overview-stat-content"><div class="fi-wi-stats-overview-stat-label-ctn">${this._icon ? icon(this._icon) : ''}<span class="fi-wi-stats-overview-stat-label">${e(this.label)}</span></div>${filled ? `<div class="fi-wi-stats-overview-stat-value">${e(String(this.value))}</div>` : `<div class="fi-wi-stats-overview-stat-placeholder">${e(this._placeholder ?? '')}</div>`}${description}</div>${chart}</${tag}>`;
     }
 }
 
@@ -2635,12 +2774,77 @@ export type ChartData = { datasets?: Record<string, unknown>[]; labels?: unknown
  * has changed (checksum).
  */
 export abstract class ChartWidget extends Widget {
-    /** Empty state shown when `getData()` returns nothing. */
+    /** Empty state shown when `getData()` returns nothing (see `isEmpty()`). */
     protected getEmptyStateHeading(): string { return t('filament-widgets::chart.empty.heading'); }
     protected getEmptyStateDescription(): string | null { return null; }
     protected getEmptyStateIcon(): string | null { return icons.resolve('widgets::chart-widget.empty-state') ?? 'o-x-mark'; }
-    static callable = ['updateChartData'];
+    /** Actions in the footer of the empty state. They are mounted on the widget, so they may open a modal. */
+    getEmptyStateActions(): (Action | ActionGroup)[] { return []; }
+    /** Custom empty state, as trusted HTML (escape the data you put in it), replacing the default one. */
+    getEmptyState(): string | null | Promise<string | null> { return null; }
+    /** Whether the empty state is shown instead of the chart: when `getData()` returns an empty object by default. */
+    isEmpty(): boolean | Promise<boolean> { return this.getCachedData().then((data) => Object.keys(data).length === 0); }
+    static callable = ['updateChartData', 'mountAction', 'unmountAction', 'callMountedAction', 'callSchemaComponentMethod', 'applyFilters', 'resetFilters'];
     static locked = ['dataChecksum'];
+    /**
+     * Filters form state (`filtersFormSchema()`), read in `getData()`. Updated by the browser: validate it before use.
+     * With deferred filters, the form edits `deferredFilters`, copied here by the "Apply" button.
+     */
+    filters: Record<string, unknown> | null = null;
+    deferredFilters: Record<string, unknown> | null = null;
+    /** `true`: the filters form only applies its changes when the user clicks "Apply". */
+    static hasDeferredFilters = false;
+    hasDeferredFilters(): boolean { return (this.constructor as typeof ChartWidget).hasDeferredFilters; }
+    /** A custom filters form, in a dropdown of the header: the widget defines `filtersFormSchema(schema)` (or `filtersSchema(schema)`). */
+    hasFiltersForm(): boolean { return typeof (this as any).filtersFormSchema === 'function' || typeof (this as any).filtersSchema === 'function'; }
+    /** Name of the filters schema: `filtersForm` (`filtersFormSchema()`), or `filters` (`filtersSchema()`). */
+    private filtersSchemaName(): string { return typeof (this as any).filtersFormSchema === 'function' ? 'filtersForm' : 'filters'; }
+    getSchema(name: string): Schema {
+        if (!this.hasFiltersForm() || name !== this.filtersSchemaName()) return super.getSchema(name);
+        const schema = super.getSchema(name);
+        if (this.hasDeferredFilters()) return schema.statePath('deferredFilters').partiallyRendered();
+        schema.statePath('filters');
+        for (const component of schema.getFlatComponents() as any[]) if (component instanceof Field && typeof (component as any).live === 'function') (component as any).live();
+        return schema;
+    }
+    getFiltersForm(): Schema { return this.getSchema(this.filtersSchemaName()); }
+    /** Fills the filters form with its defaults (and applies them, when deferred). */
+    protected fillFilters(): void {
+        const state: Record<string, unknown> = {};
+        fillSchema(this.getFiltersForm(), state);
+        if (this.hasDeferredFilters()) { this.deferredFilters = state; this.filters = JSON.parse(JSON.stringify(state)); }
+        else this.filters = state;
+    }
+    /** "Apply" button of deferred filters. */
+    applyFilters(): void {
+        if (!this.hasFiltersForm()) return;
+        this.filters = sanitizeFilterState(this.deferredFilters ?? {}) as Record<string, unknown>;
+        this._cachedData = null;
+    }
+    /** Restores the default filters, and applies them at once. */
+    resetFilters(): void {
+        if (!this.hasFiltersForm()) return;
+        this.fillFilters();
+        this._cachedData = null;
+    }
+    /** Header button opening the filters dropdown (it calls nothing on the server). */
+    getFiltersTriggerAction(): Action {
+        return Action.make('filter').label(t('filament-widgets::chart.actions.filter.label')).iconButton().icon(icons.resolve('widgets::chart-widget.filter') ?? 'm-funnel').color('gray');
+    }
+    /** "Apply" button of deferred filters; customize it with `filtersApplyAction(action)`. */
+    getFiltersApplyAction(): Action {
+        const action = Action.make('applyFilters').label(t('filament-widgets::chart.filters.actions.apply.label')).action('applyFilters').button();
+        return typeof (this as any).filtersApplyAction === 'function' ? (this as any).filtersApplyAction(action) : action;
+    }
+    /** "Reset" button of deferred filters; customize it with `filtersResetAction(action)`. */
+    getFiltersResetAction(): Action {
+        const action = Action.make('resetFilters').label(t('filament-widgets::chart.filters.actions.reset.label')).action('resetFilters').color('danger').button();
+        return typeof (this as any).filtersResetAction === 'function' ? (this as any).filtersResetAction(action) : action;
+    }
+    /** Actions the browser may mount: those of the empty state (and of the filter fields). */
+    protected getMountableActions(context: Record<string, unknown>): Action[] | Promise<Action[]> {
+        return typeof context.schemaComponent === 'string' ? super.getMountableActions(context) : flattenActions(this.getEmptyStateActions());
+    }
     /** Polling interval, or `null` to disable polling. */
     static pollingInterval: string | null = '5s';
     static heading: string | null = null;
@@ -2657,8 +2861,8 @@ export abstract class ChartWidget extends Widget {
 
     abstract getType(): string;
     getData(): ChartData | Promise<ChartData> { return {}; }
-    /** Chart.js options. */
-    getOptions(): Record<string, unknown> | null { return null; }
+    /** Chart.js options: an object (serialized to JSON), or `RawJs.make('{ … }')` for JavaScript (callbacks). */
+    getOptions(): Record<string, unknown> | RawJs | null { return null; }
     /** Filters offered in the header: value → label. */
     getFilters(): Record<string, string> | null { return null; }
     getHeading(): string | null { return (this.constructor as typeof ChartWidget).heading; }
@@ -2669,7 +2873,10 @@ export abstract class ChartWidget extends Widget {
     getChartAssistiveContent(): string | null { return null; }
     protected async getCachedData(): Promise<ChartData> { return (this._cachedData ??= await this.getData()); }
     protected async generateDataChecksum(): Promise<string> { return createHash('md5').update(JSON.stringify(await this.getCachedData())).digest('hex'); }
-    async mount(): Promise<void> { this.dataChecksum = await this.generateDataChecksum(); }
+    async mount(): Promise<void> {
+        if (this.hasFiltersForm()) this.fillFilters();
+        this.dataChecksum = await this.generateDataChecksum();
+    }
     /** Called by polling and before each render: only emits data when it has changed. */
     async updateChartData(): Promise<void> {
         const checksum = await this.generateDataChecksum();
@@ -2683,7 +2890,9 @@ export abstract class ChartWidget extends Widget {
         const heading = this.getHeading(), description = this.getDescription(), filters = this.getFilters(), type = this.getType(), maxHeight = this.getMaxHeight();
         const hasMaxHeight = maxHeight !== null && maxHeight !== '' && maxHeight !== '100%';
         const data = await this.getCachedData();
-        const isEmpty = Object.keys(data).length === 0;
+        const isEmpty = await this.isEmpty();
+        const actionCtx = { livewire: this as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined };
+        const filtersDropdown = this.hasFiltersForm() ? await this.renderFiltersDropdown(actionCtx) : '';
         const assistive = isEmpty ? null : this.getChartAssistiveContent();
         const label = [heading, description].filter((value) => value !== null && value !== '').join('. ').trim();
         const collapsible = WidgetClass.isCollapsible;
@@ -2693,24 +2902,41 @@ export abstract class ChartWidget extends Widget {
             ? `<div class="fi-input-wrp fi-wi-chart-filter"><div wire:loading.delay.default.flex wire:target="filter" wire:key="${e(createHash('md5').update(`${this.id}.filter.loading`).digest('hex').slice(0, 16))}" class="fi-input-wrp-prefix fi-inline">${loadingIndicator(new Attributes({ class: 'fi-color fi-color-gray' }))}</div><div wire:loading.delay.default.class.remove="fi-input-wrp-content-ctn-ps" wire:target="filter" class="fi-input-wrp-content-ctn fi-input-wrp-content-ctn-ps"><select aria-label="${e(t('filament-widgets::chart.filter.label'))}" wire:model.live="filter" class="fi-select-input fi-select-input-has-inline-prefix">${Object.entries(filters).map(([value, text]) => `<option value="${e(value)}">${e(text)}</option>`).join('')}</select></div></div>`
             : '';
         const hasText = (heading !== null && heading !== '') || (description !== null && description !== '');
-        const hasHeader = hasText || filter !== '';
+        const hasHeader = hasText || filter !== '' || filtersDropdown !== '';
         const header = hasHeader
-            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header"><div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="fi-section-header-text-ctn">${heading ? `<h2 class="fi-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter ? `<div class="fi-section-header-after-ctn">${filter}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('fi-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-label="${e(t('filament::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
+            ? `<header${collapsible ? ` x-on:click="if (! $event.target.closest('.fi-section-header-after-ctn')) isCollapsed = ! isCollapsed"` : ''} class="fi-section-header"><div class="${cls(['fi-section-header-content', { 'fi-section-header-content-has-heading': hasText }])}">${hasText ? `<div class="fi-section-header-text-ctn">${heading ? `<h2 class="fi-section-header-heading">${e(heading)}</h2>` : ''}${description ? `<p class="fi-section-header-description">${e(description)}</p>` : ''}</div>` : ''}${filter || filtersDropdown ? `<div class="fi-section-header-after-ctn">${filter}${filtersDropdown}</div>` : ''}</div>${collapsible ? `<button aria-expanded="true" x-bind:aria-expanded="(! isCollapsed).toString()" x-bind:aria-controls="$id('fi-section-content')" x-bind:aria-label="isCollapsed ? ${e(js(t('filament::components/section.actions.expand.label')))} : ${e(js(t('filament::components/section.actions.collapse.label')))}" aria-label="${e(t('filament::components/section.actions.collapse.label'))}" type="button" x-on:click.stop="isCollapsed = ! isCollapsed" class="fi-icon-btn fi-size-md fi-section-collapse-btn">${icon('m-chevron-up', { alias: 'section.collapse-button' })}</button>` : ''}</header>`
             : '';
+        const options = this.getOptions();
         const colors = ['bg', 'border', 'grid', 'text', 'tooltip-bg', 'tooltip-text', 'tooltip-border'];
         const refs = ['background', 'border', 'grid', 'text', 'tooltipBackground', 'tooltipText', 'tooltipBorder'];
         const frame = `<div x-load x-load-src="${e(this.panel.assetUrl('js/filament/widgets/components/chart.js'))}" wire:ignore data-chart-type="${e(type)}" x-data="chart({
                                 cachedData: ${e(js(data))},
-                                options: ${e(js(this.getOptions()))},
+                                options: ${options instanceof RawJs ? e(options.js) : e(js(options))},
                                 type: ${e(js(type))},
                             })" class="${cls([...this.panel.colors.getComponentClasses('stat-chart', this.getColor()), 'fi-wi-chart-frame', 'fi-wi-chart-canvas-ctn', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"><canvas x-ref="canvas" aria-hidden="true" style="width: 100%; ${hasMaxHeight ? `max-height: ${e(maxHeight)}` : 'height: 100%; max-height: 100%'}"></canvas>${colors.map((name, index) => `<span aria-hidden="true" x-ref="${refs[index]}ColorElement" class="fi-wi-chart-${name}-color"></span>`).join('')}</div>`;
-        const empty = isEmpty
-            ? `<div class="${cls(['fi-wi-chart-frame', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"${hasMaxHeight ? ` style="min-height: ${e(maxHeight)}"` : ''}>${emptyState({ heading: this.getEmptyStateHeading(), description: this.getEmptyStateDescription() ?? undefined, icon: this.getEmptyStateIcon() ?? undefined, iconColor: 'gray', contained: false })}</div>`
-            : '';
+        const emptyStateActions = this.getEmptyStateActions();
+        let empty = '';
+        if (isEmpty) {
+            const custom = await this.getEmptyState();
+            if (custom !== null && custom !== undefined) empty = String(custom);
+            else {
+                const actions: string[] = [];
+                for (const action of emptyStateActions) if (await action.isVisible(actionCtx)) actions.push(await action.toHtml(actionCtx));
+                const footer = actions.length ? `<div class="fi-ac fi-align-center">${actions.join('')}</div>` : undefined;
+                empty = `<div class="${cls(['fi-wi-chart-frame', { 'fi-wi-chart-frame-no-aspect-ratio': hasMaxHeight }])}"${hasMaxHeight ? ` style="min-height: ${e(maxHeight)}"` : ''}>${emptyState({ heading: this.getEmptyStateHeading(), description: this.getEmptyStateDescription() ?? undefined, icon: this.getEmptyStateIcon() ?? undefined, iconColor: 'gray', contained: false, footer })}</div>`;
+            }
+        }
+        // Modals of the mounted actions (empty state actions, actions of filter fields).
+        const modals = emptyStateActions.length || this.hasFiltersForm() ? await this.renderActionModals() : '';
         const body = `<div${poll}${isEmpty ? ' style="display: none"' : ''}><div class="fi-wi-chart-image"${label ? ` role="img" aria-label="${e(label)}"` : ''}>${frame}</div>${assistive ? `<div class="fi-wi-chart-assistive-content fi-sr-only"><p>${e(assistive)}</p></div>` : ''}</div>${empty}`;
         return this.wrap(`<section x-data="{
         isCollapsed:  false ,
-    }"${collapsible ? ` x-id="['fi-section-content']" x-on:collapse-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = true" x-on:expand="isCollapsed = false" x-on:expand-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:open-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:toggle-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed" x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : ''} class="${cls(['fi-section', { 'fi-section-has-header': hasHeader, 'fi-collapsible': collapsible }])}">${header}<div${collapsible ? ` x-bind:id="$id('fi-section-content')"` : ''} class="fi-section-content-ctn"><div class="fi-section-content">${body}</div></div></section>`, ['fi-wi-chart']);
+    }"${collapsible ? ` x-id="['fi-section-content']" x-on:collapse-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = true" x-on:expand="isCollapsed = false" x-on:expand-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:open-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = false" x-on:toggle-section.window="if ($event.detail.id == (null ?? $el.id)) isCollapsed = ! isCollapsed" x-bind:class="isCollapsed &amp;&amp; 'fi-collapsed'"` : ''} class="${cls(['fi-section', { 'fi-section-has-header': hasHeader, 'fi-collapsible': collapsible }])}">${header}<div${collapsible ? ` x-bind:id="$id('fi-section-content')"` : ''} class="fi-section-content-ctn"><div class="fi-section-content">${body}</div></div></section>${modals}`, ['fi-wi-chart']);
+    }
+    /** Filters dropdown of the header: the trigger button, the form, and the "Apply" / "Reset" buttons when deferred. */
+    protected async renderFiltersDropdown(ctx: any): Promise<string> {
+        const buttons = this.hasDeferredFilters() ? `<div class="fi-wi-chart-filter-content-actions-ctn">${await this.getFiltersApplyAction().toHtml(ctx)}${await this.getFiltersResetAction().toHtml(ctx)}</div>` : '';
+        return `<div x-data="filamentDropdown({ isMenu: false })" class="fi-dropdown fi-wi-chart-filter"><div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">${await this.getFiltersTriggerAction().toHtml(ctx)}</div><div x-cloak x-float.placement.bottom-end.flip.shift.offset="{ offset: 8,  }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" class="fi-dropdown-panel fi-width-xs"><div class="fi-wi-chart-filter-content">${await this.getFiltersForm().toHtml()}${buttons}</div></div></div>`;
     }
 }
 
@@ -2926,6 +3152,18 @@ export class Tab {
     /** False until `badgeColor()` is called: a lazy-loaded badge then gets no color class. */
     hasBadgeColor(): boolean { return this._hasBadgeColor; }
     getQuery(): ((query: any) => void) | null { return this._query; }
+    private _extraAttributes: Record<string, string | number | boolean | null> = {};
+    /** Extra HTML attributes of the tab button, e.g. `{ 'data-cy': 'statement-confirmed-tab' }`; `class` is added to its classes. */
+    extraAttributes(attributes: Record<string, string | number | boolean | null>, merge = false): this { this._extraAttributes = merge ? { ...this._extraAttributes, ...attributes } : { ...attributes }; return this; }
+    getExtraAttributes(): Record<string, string | number | boolean | null> { return this._extraAttributes; }
+    private _excludeQueryWhenResolvingRecord = false;
+    /**
+     * Row actions of the active tab normally only find records that still match the tab's query: with this, a record
+     * that left the tab (e.g. deactivated by the previous action) can still be acted upon. Never use it on a tab that restricts
+     * access (tenant, ownership): the tab is chosen by the browser.
+     */
+    excludeQueryWhenResolvingRecord(condition = true): this { this._excludeQueryWhenResolvingRecord = condition; return this; }
+    shouldExcludeQueryWhenResolvingRecord(): boolean { return this._excludeQueryWhenResolvingRecord; }
 }
 
 /** List page tabs: hidden when the page declares none. */
@@ -2950,6 +3188,10 @@ class ResourceTabs extends SchemaComponent {
         const id = page.id;
         const active = page.getActiveTabKey();
         const q = (k: string) => `'${k.replace(/[^A-Za-z0-9_-]/g, '')}'`;
+        // Extra attributes (`Tab.extraAttributes()`): those the button already has are not repeated; `class` joins its classes.
+        const reserved = new Set(['id', 'type', 'class', 'tabindex', 'data-tab-key', 'wire:click', 'x-show']);
+        const tabExtraAttributes = (tab: Tab) => { const extra = Object.entries(tab.getExtraAttributes()).filter(([name]) => !reserved.has(name)); return extra.length ? ` ${new Attributes(Object.fromEntries(extra)).toHtml()}` : ''; };
+        const extraTabClass = (tab: Tab) => { const value = tab.getExtraAttributes().class; return typeof value === 'string' ? value : null; };
         const buttons = tabs.map(([k, tab]) => {
             const d = `deferredBadges[${q(k)}]`;
             const badge = tab.hasBadge() ? `<span x-show="isLoadingDeferredBadges" x-cloak class="fi-tabs-item-badge-placeholder">${loadingIndicator(new Attributes(), 'sm')}</span><template x-if="
@@ -2973,7 +3215,7 @@ class ResourceTabs extends SchemaComponent {
  ${d}?.badgeIconHtml &&
  ${d}?.badgeIconPosition === 'after'
  "><span x-html="${d}.badgeIconHtml"></span></template></span></template>` : '';
-            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})" class="${cls(['fi-tabs-item', { 'fi-active': k === active }])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}${badge}</button>`;
+            return `<button id="fi-sc-tab-${createHash('md5').update(`${key}.${k}`).digest('hex')}" aria-pressed="${k === active ? 'true' : 'false'}" x-bind:aria-pressed="isTabSelected(${q(k)})" tabindex="0" x-bind:tabindex="getTabIndex(${q(k)})" data-tab-key="${e(k)}" x-bind:data-tab-available="Boolean(true).toString()" x-show="true" x-on:click.capture="if (! selectTab(${q(k)}, $event)) { $event.preventDefault(); $event.stopImmediatePropagation() }" x-bind:class="{ 'fi-active': isTabSelected(${q(k)}) }" type="button" wire:click="$set('activeTab', ${k === '' ? 'null' : q(k)})"${tabExtraAttributes(tab)} class="${cls(['fi-tabs-item', { 'fi-active': k === active }, extraTabClass(tab)])}">${tab.getIcon() && tab.getIconPosition() === 'before' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}<span class="fi-tabs-item-label">${e(tab.getLabel(k))}</span>${tab.getIcon() && tab.getIconPosition() === 'after' ? icon(tab.getIcon()!, { attributes: new Attributes().class(['fi-tabs-item-icon']) }) : ''}${badge}</button>`;
         });
         return `<div x-data="tabsSchemaComponent({
  activeTab: ${Math.max(tabs.findIndex(([k]) => k === active), 0) + 1},
@@ -3039,7 +3281,7 @@ export class ListRecords extends Page implements TableHost {
     /** Key of this table's persisted state: per page class (and resource or relationship). */
     protected tableSessionKey(part: string): string {
         const page = this.constructor as any;
-        return ['tables', page.name, page.resource?.slug ?? '', page.relationship ?? '', part].join(':');
+        return ['tables', page.name, page.resource?.slug ?? '', relationshipNameOf(page), part].join(':');
     }
     /** Session of the persisted table state: the browser (its CSRF token) and the signed-in user. */
     private tableSession(): string | null {
@@ -3229,8 +3471,14 @@ export class ListRecords extends Page implements TableHost {
         if (typeof context.recordKey !== 'string') return null;
         const adapter = this.resource.adapter;
         // The trashed filter shows deleted records: their row actions must find them, no other key is reachable this way.
-        if (trashedFilterValue(this) !== null && adapter.findWithTrashed) return (await adapter.findWithTrashed(context.recordKey)) ?? null;
-        return (await adapter.find(context.recordKey)) ?? null;
+        const record = trashedFilterValue(this) !== null && adapter.findWithTrashed ? await adapter.findWithTrashed(context.recordKey) : await adapter.find(context.recordKey);
+        if (!record) return null;
+        // As in Filament, the record must still match the active tab, unless the tab is `excludeQueryWhenResolvingRecord()`.
+        const tab = this.getTabs()[this.getActiveTabKey()];
+        const modifier = tab?.getQuery();
+        if (!modifier || tab!.shouldExcludeQueryWhenResolvingRecord()) return record;
+        const keys = await adapter.listKeys({ keys: [adapter.getKey(record)], trashed: trashedFilterValue(this) !== null ? 'with' : 'without', modifiers: [modifier] });
+        return keys.length ? record : null;
     }
     /**
      * Writes an editable cell. Everything comes from the browser: the column must exist and be editable and visible, the record
@@ -3304,11 +3552,16 @@ export class ListRecords extends Page implements TableHost {
     async renderTable(): Promise<string> {
         const resource = this.resource;
         const ctx = { livewire: this as any, component: null as any, operation: null, record: null, get: () => undefined, state: undefined };
-        const bulkActions: string[] = [];
-        for (const action of this.getBulkActions()) if (await action.isVisible(ctx)) bulkActions.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
         const table = this.getTable();
+        // One menu per `BulkActionGroup` (the default "Bulk actions" menu when the table declares none).
+        const bulkActionGroups: BulkActionMenu[] = [];
+        for (const group of table.getBulkActionGroups() ?? [TableBulkActionGroup.make(this.getBulkActions())]) {
+            const html: string[] = [];
+            for (const action of group.getActions()) if (await action.isVisible(ctx)) html.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
+            bulkActionGroups.push(group.toMenu(html));
+        }
         return renderTable(table, this, resource.adapter, {
-            bulkActions, headerActions: await this.renderTableHeaderActions(ctx), toolbarActions: await this.renderTableToolbarActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
+            bulkActionGroups, headerActions: await this.renderTableHeaderActions(ctx), toolbarActions: await this.renderTableToolbarActions(ctx), emptyStateActions: await this.renderTableEmptyStateActions(ctx), after: await this.renderActionModals(),
             filtersForm: table.getFilters().length ? await this.getSchema('tableFiltersForm').toHtml() : null,
             rowActionsHtml: table.getRecordActions().length ? async (record) => {
                 const key = resource.adapter.getKey(record);
@@ -3484,14 +3737,25 @@ export class RelationManager extends ListRecords {
     static modelLabel = 'record';
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
-    /** Data adapter limited to records related to the given owner. */
-    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('RelationManager.adapterFor() must be defined.'); }
+    /**
+     * Nested resource managing these records (Filament's `$relatedResource`): its table, form, labels and policy are used, the
+     * relationship comes from its nesting, and the create, edit and view actions open its pages instead of modals.
+     * A function returning the resource (`() => TaskResource`) breaks circular imports.
+     */
+    static relatedResource: ResourceReference | null = null;
+    static getRelatedResource(): typeof Resource | null { return resolveResourceReference(this.relatedResource); }
+    /** Data adapter limited to records related to the given owner (the related resource's adapter scoped to the owner, if any). */
+    static adapterFor(ownerKey: string): DataAdapter {
+        const related = this.getRelatedResource();
+        if (related) return relatedResourceAdapter(related, ownerKey);
+        throw new Error('RelationManager.adapterFor() must be defined.');
+    }
     /** Policy for related records (same abilities as a resource policy). */
     static policy: Policy | null = null;
     protected isAccessAuthorized(ctx: PanelContext): Promise<boolean> { return this.resource.can('viewAny', ctx.user); }
-    static table(table: Table): Table { return table; }
-    static form(schema: Schema): Schema { return schema; }
-    static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
+    static table(table: Table): Table { return this.getRelatedResource()?.table(table) ?? table; }
+    static form(schema: Schema): Schema { return this.getRelatedResource()?.form(schema) ?? schema; }
+    static getTitle(): string { return this.title ?? (this.getRelatedResource()?.getTitleCasePluralModelLabel() ?? ucfirst(relationshipNameOf(this).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase())); }
     /** Icon of the manager's tab. */
     static icon: string | null = null;
     static getIcon(): string | null { return this.icon; }
@@ -3513,7 +3777,7 @@ export class RelationManager extends ListRecords {
     /** What ListRecords expects from a resource, provided here by the relation manager. */
     get resource(): any {
         const manager = this.constructor as typeof RelationManager;
-        return (this._facade ??= {
+        return (this._facade ??= withRelatedResource({
             isSimple: true, slug: '', modelLabel: manager.modelLabel, relations: [], adapter: manager.adapterFor(this.ownerRecord),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = manager.policy?.[ability]; return this.panel.authorize(user, ability, { resource: manager, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => manager.pluralModelLabel ?? plural(manager.modelLabel),
@@ -3526,11 +3790,13 @@ export class RelationManager extends ListRecords {
                 return pivot.length ? form.components([...form.getComponents(), ...pivot]) : form;
             },
             pivotFieldNames: () => manager.pivotForm(Schema.make(this)).filter((component): component is Field => component instanceof Field).map((field) => field.getName()),
-        });
+        }, manager.getRelatedResource(), this.ownerRecord));
     }
     getTable(): Table {
         const manager = this.constructor as typeof RelationManager;
         const table = manager.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()).heading(manager.getTitle()));
+        // With a related resource, rows link to its view or edit page.
+        if (manager.getRelatedResource()) return linkRelatedRecords(table, this.resource);
         // If there is an "edit" row action, clicking the row opens it.
         const hasEdit = table.getRecordActions().flatMap((a: any) => (a instanceof ActionGroup ? a.getActions() : [a])).some((a: Action) => a.getName() === 'edit');
         return hasEdit ? table.recordAction('edit') : table;
@@ -3586,12 +3852,19 @@ export class ManageRelatedRecords extends ListRecords {
     static pluralModelLabel: string | null = null;
     static recordTitleAttribute: string | null = null;
     static policy: Policy | null = null;
-    /** Data adapter limited to records related to the given owner. */
-    static adapterFor(_ownerKey: string): DataAdapter { throw new Error('ManageRelatedRecords.adapterFor() must be defined.'); }
-    static table(table: Table): Table { return table; }
-    static form(schema: Schema): Schema { return schema; }
-    static infolist(schema: Schema): Schema { return schema; }
-    static getTitle(): string { return this.title ?? ucfirst(this.relationship.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()); }
+    /** Nested resource managing these records (Filament's `$relatedResource`), as for a relation manager. */
+    static relatedResource: ResourceReference | null = null;
+    static getRelatedResource(): typeof Resource | null { return resolveResourceReference(this.relatedResource); }
+    /** Data adapter limited to records related to the given owner (the related resource's adapter scoped to the owner, if any). */
+    static adapterFor(ownerKey: string): DataAdapter {
+        const related = this.getRelatedResource();
+        if (related) return relatedResourceAdapter(related, ownerKey);
+        throw new Error('ManageRelatedRecords.adapterFor() must be defined.');
+    }
+    static table(table: Table): Table { return this.getRelatedResource()?.table(table) ?? table; }
+    static form(schema: Schema): Schema { return this.getRelatedResource()?.form(schema) ?? schema; }
+    static infolist(schema: Schema): Schema { return this.getRelatedResource()?.infolist(schema) ?? schema; }
+    static getTitle(): string { return this.title ?? (this.getRelatedResource()?.getTitleCasePluralModelLabel() ?? ucfirst(relationshipNameOf(this).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase())); }
     static getNavigationLabel(): string { return this.navigationLabel ?? this.getTitle(); }
 
     /** Owner record key: read from the URL on mount, never writable from the browser. */
@@ -3617,16 +3890,19 @@ export class ManageRelatedRecords extends ListRecords {
     /** What ListRecords expects from a resource, provided here by the page. */
     get resource(): any {
         const page = this.related;
-        return (this._facade ??= {
+        return (this._facade ??= withRelatedResource({
             isSimple: true, hasViewPage: false, slug: page.parentResource.slug, modelLabel: page.modelLabel, relations: [], recordTitleAttribute: page.recordTitleAttribute, adapter: page.adapterFor(this.recordKey),
             can: (ability: string, user: User | null, record: unknown = null) => { const rule = page.policy?.[ability]; return this.panel.authorize(user, ability, { resource: page, record, rule: rule ? () => rule(user!, record) : null }); },
             getPluralModelLabel: () => page.pluralModelLabel ?? plural(page.modelLabel),
             getTitleCasePluralModelLabel: () => (page.pluralModelLabel ?? plural(page.modelLabel)).split(' ').map(ucfirst).join(' '),
             getRecordTitle: (record: any) => (page.recordTitleAttribute ? String(record?.[page.recordTitleAttribute] ?? '') : page.modelLabel),
             table: (table: Table) => page.table(table), form: (schema: Schema) => page.form(schema), infolist: (schema: Schema) => page.infolist(schema), getUrl: () => '',
-        });
+        }, page.getRelatedResource(), this.recordKey, (this as any).parentRecordKeys ?? {}));
     }
-    getTable(): Table { return this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel())); }
+    getTable(): Table {
+        const table = this.related.table(new Table().pluralModelLabel(this.resource.getPluralModelLabel()));
+        return this.related.getRelatedResource() ? linkRelatedRecords(table, this.resource) : table;
+    }
     getHeaderActions(): Action[] { return []; }
     /** The page content is a group (tabs, if any, then the table). */
     contentSchema(schema: Schema): Schema {
@@ -3918,6 +4194,8 @@ export class CreateAction {
             .label(({ livewire }) => t('filament-actions::create.single.label', { label: of(livewire).modelLabel }))
             .modalHeading(({ livewire }) => t('filament-actions::create.single.modal.heading', { label: String(of(livewire).modelLabel).split(' ').map(ucfirst).join(' ') }))
             .modalSubmitActionLabel(t('filament-actions::create.single.modal.actions.create.label'))
+            // A relation manager with a related resource: its create page instead of the modal.
+            .url(({ livewire }) => (resource ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('create') ?? null)))
             .extraModalFooterActions([Action.make('createAnother').label(t('filament-actions::create.single.modal.actions.create_another.label')).color('gray').action(`callMountedAction(${js({ another: true })})`)])
             .schema((schema: Schema) => of(schema.livewire).form(schema))
             .action(async (ctx) => {
@@ -3937,6 +4215,8 @@ export class EditAction {
             .label(t('filament-actions::edit.single.label')).tableIcon(icons.resolve('actions::edit-action') ?? 'c-pencil-square').groupedIcon(icons.resolve('actions::edit-action.grouped') ?? 'm-pencil-square')
             .modalHeading(({ livewire, record }) => t('filament-actions::edit.single.modal.heading', { label: of(livewire).getRecordTitle(record) }))
             .modalSubmitActionLabel(t('filament-actions::edit.single.modal.actions.save.label'))
+            // A relation manager with a related resource: its edit page instead of the modal.
+            .url(({ livewire, record }) => (resource || !record ? null : ((livewire as any)?.resource?.getRelatedResourceUrl?.('edit', (livewire as any).resource.adapter.getKey(record)) ?? null)))
             .schema((schema: Schema) => of(schema.livewire).form(schema))
             .fillForm(({ record }) => ({ ...record }))
             .action(async (ctx) => {
@@ -4255,8 +4535,9 @@ export class EditRecord extends ResourceFormPage {
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
         this.previousUrl = previousUrlOf((this._ctx as PanelContext | null)?.req);
-        // Combined tabs: the form's tab is open first.
+        // Combined tabs: the form's tab is open first, unless the URL names a relation manager (`?relation=tasks`).
         if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
+        this.activeRelationManager = relationManagerTabFromQuery(this) ?? this.activeRelationManager;
         await this.hydrate();
         await this.beforeFill();
         fillSchemaFromRecord(this.getSchema('form'), this.data, await this.mutateFormDataBeforeFill({ ...this._record }));
@@ -4343,6 +4624,7 @@ export class ViewRecord extends Page {
     async mount(params: Record<string, unknown>): Promise<void> {
         this.recordKey = String(params.record ?? '');
         if (this.hasCombinedRelationManagerTabsWithContent()) this.activeRelationManager = '-1';
+        this.activeRelationManager = relationManagerTabFromQuery(this) ?? this.activeRelationManager;
         await this.hydrate();
     }
     /** The record is reloaded on every request, as on the edit page. */
@@ -4497,7 +4779,10 @@ export class Sidebar extends Component {
             globalSearch: panel.hasGlobalSearch() && inSidebar(panel.getGlobalSearchPosition()) ? await this.mountChild(`navette.${panel.getId()}.global-search`, {}, `${this.id}.global-search`) : null,
             databaseNotifications: panel.getDatabaseNotifications() && inSidebar(panel.getDatabaseNotificationsPosition()) ? await this.mountChild(`navette.${panel.getId()}.database-notifications`, {}, `${this.id}.database-notifications`, { lazy: true }) : null,
             userMenu: inSidebar(panel.getUserMenuPosition()) ? await renderUserMenu(this, 'sidebar') : null,
-            homeUrl: panel.getUrl(), brand: panel.getBrand(), groups: panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user)),
+            homeUrl: panel.getUrl(), brand: panel.getBrand(),
+            // With a sidebar collapsible to icons, a group with an icon and a label opens a dropdown of its items while collapsed.
+            groups: panel.getNavigation(this.currentPath, await panel.resolveNavigationBadges(), await panel.resolveInaccessiblePages(user))
+                .map((group) => ({ ...group, lists: panel.isSidebarCollapsibleOnDesktop() && group.label && group.icon ? navigationDropdownLists(group.dropdownItems) : null })),
             livewireId: this.id,
         });
     }
@@ -4622,6 +4907,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtimeOptions.uploadPrefix ??= panel.getLivewirePrefix();
     // One color manager for all panels: each request sets its own panel's colors on it.
     useColorManager(sharedColors);
+    useNotificationsColorManager(sharedColors);
     useFormsColorManager(sharedColors);
     useTableColorManager(sharedColors);
     useInfolistsColorManager(sharedColors);
@@ -4631,6 +4917,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     useHtmlSanitizer((html) => richDocumentToHtml(richHtmlToDocument(html)) ?? '');
     views.share({ assetUrl: (file: string) => panel.assetUrl(file) });
     for (const plugin of panel.getPlugins()) plugin.boot?.(panel);
+    for (const { assets, packageName } of panel.getAssets()) NavetteAsset.register(assets, packageName, { panel: panel.getId() });
     assertAuthCapabilities(panel);
     // Tenancy: scoped resources only see the records of the request's tenant.
     const ownership = panel.getTenantOwnershipColumn();
@@ -4699,13 +4986,15 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     runtime.register(name('table-select'), TableSelectComponent);
     runtime.register('navette.notifications', Notifications);
     for (const [index, widget] of panel.getWidgets().entries()) runtime.register(name(`widgets.panel.${index}`), widget);
-    for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${resource.slug.replace(/\//g, '.')}.${index}`), widget);
+    // Component names follow the resource's URL path (a nested resource's includes its parents'): two resources never share one.
+    const componentPath = (resource: typeof Resource) => nestedRoutePath(resource).replace(/[{}]/g, '').replace(/\//g, '.');
+    for (const resource of panel.getResources()) for (const [index, widget] of resource.widgets.entries()) runtime.register(name(`widgets.${componentPath(resource)}.${index}`), widget);
     for (const resource of panel.getResources()) {
         const managers = new Set<typeof RelationManager>();
         const add = (entries: (typeof RelationManager | RelationGroup)[] | undefined) => { for (const entry of entries ?? []) for (const manager of entry instanceof RelationGroup ? entry.getManagers() : [entry]) managers.add(manager); };
         add(resource.getRelations());
         for (const page of Object.values(resource.getPages())) add((page as any).relationManagers);
-        for (const manager of managers) runtime.register(name(`relation-managers.${resource.slug.replace(/\//g, '.')}.${manager.relationship}`), manager);
+        for (const manager of managers) runtime.register(name(`relation-managers.${componentPath(resource)}.${relationshipNameOf(manager)}`), manager);
     }
 
     // A panel on its own domains: other hosts go to the next routes (another panel, the application).
@@ -4714,6 +5003,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     router.use(express.static(dir('../dist/filament'), { maxAge: '1y' }));
     // Navette's own front-end files.
     router.use(express.static(dir('../dist/navette')));
+    // Registered assets (`NavetteAsset.register()`, `panel.assets()`).
+    router.use(NavetteAsset.middleware());
     // `bootUsing()`: before every request of the panel (its pages, their updates).
     const panelBase = panel.getBaseUrl();
     const belongsToPanel = (path: string) => panelBase === '/' || path === panelBase || path.startsWith(`${panelBase}/`) || path.startsWith(`${livewire}/`);
@@ -4728,6 +5019,33 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         ctx.tenant = await tenantFromPath(path, ctx.user, req.hostname);
         return ctx;
     };
+    // Broadcast stream of the signed-in user (`panel.broadcasting()`): only their own channel, for a tenant they belong to.
+    if (panel.hasBroadcasting()) {
+        router.get(`${livewire}/broadcasting`, async (req, res) => {
+            res.setHeader('Cache-Control', 'no-store');
+            if (req.headers['sec-fetch-site'] === 'cross-site') return void res.status(403).end();
+            const ctx = await context(req, res);
+            if (ctx.denied) return void res.status(403).end();
+            if (!ctx.user) return void res.status(401).end();
+            if ((await panel.mustVerifyEmail(ctx.user)) || (await panel.mustSetUpMultiFactorAuthentication(ctx.user))) return void res.status(403).end();
+            let tenant: string | null = null;
+            if (panel.hasTenancy()) {
+                const key = panel.getTenantDomain() ? panel.getTenantKeyFromRequest(req.path, req.hostname) : (typeof req.query.tenant === 'string' && req.query.tenant.length <= 200 ? req.query.tenant : null);
+                if (key !== null) {
+                    const provider = panel.getTenantProvider();
+                    const found = await provider.find(key);
+                    if (!found || !(await provider.canAccess(ctx.user, found))) return void res.status(403).end();
+                    tenant = provider.getKey(found);
+                }
+            }
+            const id = String(ctx.user.id);
+            streamBroadcasts(req, res, {
+                channel: panel.getBroadcastChannel(ctx.user), tenant, panel: panel.getId(), heartbeat: panel.getBroadcastingHeartbeat(),
+                // The session is checked again at every heartbeat: signing out (or losing access) ends the stream.
+                revalidate: async () => { const user = await panel.user(req); return user !== null && String(user.id) === id && (await panel.userCanAccess(user)); },
+            });
+        });
+    }
     // Notifications sent during the request go into a batch announced to the browser.
     // Page components by name: an update of a configured page runs with its registration's configuration.
     const pageComponents = new Map<string, typeof Page>();
@@ -4786,6 +5104,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             bodyClass, body, spa: panel.hasSpaMode(), darkMode: panel.hasDarkMode(), darkModeForced: panel.hasDarkModeForced(), defaultThemeMode: panel.getDefaultThemeMode(),
             csrf: csrfToken(req, res), colorVariables: panel.colors.renderCssVariables(), wireStyles: wireStyles(), wireScripts: wireScripts(req, res, livewire),
             notifications: (await runtime.mount('navette.notifications', {}, request)).replace(/^<div /, '<div wire:key="lw-1-0-0" '),
+            assetStyles: NavetteAsset.renderStyles(null, { panel: panel.getId() }), assetScripts: NavetteAsset.renderScripts(null, { panel: panel.getId(), spa: panel.hasSpaMode() }), scriptData: NavetteAsset.renderScriptData(null, { panel: panel.getId() }),
+            broadcasting: panel.hasBroadcasting() && ctx.user ? { url: panel.getBroadcastingUrl(ctx.tenant ?? null) } : null,
         })));
     };
     /** Page access errors: 404 and 403 are answered directly, anything else is rethrown. */

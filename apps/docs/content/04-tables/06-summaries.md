@@ -8,7 +8,7 @@ You may render a "summary" section below your table content. This is great for d
 
 By default, there will be a single summary line for the current page of data, and an additional summary line for the totals for all data if multiple pages are available. With a single page, one "Summary" line is displayed.
 
-You may add summaries to [text columns](/tables/columns/text) using the `summarize()` method:
+You may add summaries to any column using the `summarize()` method:
 
 ```ts
 import { Average, TextColumn } from '@navette-js/tables';
@@ -139,9 +139,33 @@ TextColumn.make('status')
         .query((query) => query.where('status', 'published')))
 ```
 
-<Aside variant="warning">
-Counting the occurrence of each icon of an icon column (`icons()`) is not available yet.
-</Aside>
+### Counting the occurrence of icons
+
+Using a count on an [icon column](/tables/columns/icon) allows you to use the `icons()` method, which gives the user a visual representation of how many of each icon are in the table:
+
+```ts
+import { Count, IconColumn } from '@navette-js/tables';
+
+IconColumn.make('is_published')
+    .boolean()
+    .summarize(Count.make().icons())
+```
+
+```preview
+// records: [{"title": "Introducing Navette", "is_published": true}, {"title": "Building your first panel", "is_published": true}, {"title": "Ten tips for faster tables", "is_published": false}, {"title": "Theming your panel", "is_published": true}]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        IconColumn.make('is_published')
+            .boolean()
+            .summarize(Count.make().icons()),
+    ])
+```
+
+Each icon is listed once per color, with the number of times it appears, using the icons and colors of the column (`icon()`, `color()`, or those of a boolean column). Empty states, and states without an icon, are not counted. An icon count has no label by default: add one with `label()`.
+
+When the state of the column is the record attribute of the same name, the counts come from one SQL query grouped by that attribute. With `getStateUsing()` or a relationship, the records of the summarized dataset are loaded to compute their state. Using `icons()` on another type of column throws an error.
 
 ## Range
 

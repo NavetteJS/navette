@@ -122,7 +122,7 @@ new Table()
 
 Without `color()`, a badge uses the `primary` color.
 
-You may add other things to the badge, like an [icon](#adding-an-icon), and a label instead of the raw value with [`formatStateUsing()`](#formatting):
+You may add other things to the badge, like an [icon](#adding-an-icon), and a label instead of the raw value with [`formatStateUsing()`](#formatting). When the attribute is cast to an [enum](/advanced/enums#casting-model-attributes-to-an-enum) on the model, or with `enum()`, the label, color and icon of each value come from the enum instead:
 
 ```ts
 import { TextColumn } from '@navette-js/tables';

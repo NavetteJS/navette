@@ -14,6 +14,7 @@ There are several ways to manage related records:
 |---|---|
 | Relation manager | An interactive table of related records, under the edit (or View) form of the owner, in a tab. Create, edit, delete, attach and detach in modals. |
 | Relation page | The same table on its own page, reached from the [sub-navigation](/resources/overview#resource-sub-navigation) of the record. |
+| [Nested resource](/resources/nesting) | Related records created and edited on full pages under their owner (`/projects/12/tasks/48/edit`), listed by a relation manager or a relation page. |
 | `Select` or `CheckboxList` field | Choosing existing records from the owner's form, for example the categories of a product. The [adapter](/advanced/data-adapters#saving-data-that-does-not-fit-in-one-row) saves the choice. |
 | `Repeater` field | Editing a few related rows inside the owner's form, saved together with it, such as the lines of an order. |
 

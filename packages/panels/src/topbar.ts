@@ -2,7 +2,8 @@
 import { Attributes, e, icon, js, loadingIndicator, renderHook } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { Component, WireError } from '@navette-js/wire';
-import type { NotificationData } from './notifications.ts';
+import { notificationActionFromArray, notificationActionsHtml, notificationActionToArray, notificationColorClasses, type NotificationActionData, type NotificationData } from './notifications.ts';
+import { databaseNotificationsBroadcastScript } from './broadcasting.ts';
 import { richDocumentToHtml, richHtmlToDocument } from '@navette-js/forms';
 import { pagination } from '@navette-js/support/ui';
 
@@ -16,9 +17,6 @@ const safeIcon = (name: string | null, size: string, classes: string[], alias?: 
     try { return icon(name, { size, alias, attributes: new Attributes().class(classes) }); } catch { return ''; }
 };
 const STATUS_ICONS: Record<string, string> = { danger: 'o-x-circle', info: 'o-information-circle', success: 'o-check-circle', warning: 'o-exclamation-circle' };
-/** Only a same-site path (`/…`) or an http(s) URL can become a link (no `javascript:` or protocol-relative URLs). */
-const safeUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
-
 export type GlobalSearchResult = { title: string; url: string; details: Record<string, string>; /** Buttons under the result: links (`url()`) or Livewire events (`dispatch()`). */ actions?: any[]; record?: unknown };
 export type GlobalSearchCategory = { label: string; results: GlobalSearchResult[] };
 
@@ -100,8 +98,9 @@ export class GlobalSearch extends Component {
     }
 }
 
-export type DatabaseNotificationAction = { label: string; url: string | null; openUrlInNewTab: boolean };
-export type DatabaseNotificationRecord = { id: string; title: string | null; body: string | null; icon: string | null; iconColor: string | null; status: string | null; actions: DatabaseNotificationAction[]; createdAt: Date | null; unread: boolean };
+/** An action of a database notification: a link or a button (`button`), which may close the notification, dispatch a Livewire event or change its read state. */
+export type DatabaseNotificationAction = NotificationActionData;
+export type DatabaseNotificationRecord = { id: string; title: string | null; body: string | null; icon: string | null; iconColor: string | null; status: string | null; color?: string | null; actions: DatabaseNotificationAction[]; createdAt: Date | null; unread: boolean };
 /** Storage for a user's notifications. `knexNotificationStore()` provides one backed by a `notifications` table. */
 export interface DatabaseNotificationStore {
     /** Most recent first; `offset` is the number of notifications to skip (pagination). */
@@ -133,8 +132,8 @@ export function knexNotificationStore(knex: any, options: { table?: string; noti
                 try { data = JSON.parse(row.data) ?? {}; } catch { /* unreadable data: empty notification */ }
                 const iconName = text(data.icon)?.replace(/^heroicon-/, '') ?? null;
                 return {
-                    id: String(row.id), title: text(data.title), body: text(data.body), icon: iconName, iconColor: text(data.iconColor), status: text(data.status),
-                    actions: (Array.isArray(data.actions) ? data.actions : []).slice(0, 10).map((action: any) => ({ label: String(action?.label ?? action?.name ?? ''), url: typeof action?.url === 'string' ? (options.mapUrl ? options.mapUrl(action.url) : action.url) : null, openUrlInNewTab: action?.shouldOpenUrlInNewTab === true })),
+                    id: String(row.id), title: text(data.title), body: text(data.body), icon: iconName, iconColor: text(data.iconColor), status: text(data.status), color: text(data.color),
+                    actions: (Array.isArray(data.actions) ? data.actions : []).slice(0, 10).map((action: unknown) => notificationActionFromArray(action, options.mapUrl)).filter((action: DatabaseNotificationAction | null): action is DatabaseNotificationAction => action !== null),
                     createdAt: row.created_at ? new Date(`${String(row.created_at).replace(' ', 'T').slice(0, 19)}Z`) : null, unread: row.read_at === null || row.read_at === undefined,
                 };
             });
@@ -144,8 +143,8 @@ export function knexNotificationStore(knex: any, options: { table?: string; noti
         async send(user, notification) {
             const at = stamp(new Date());
             const data = {
-                actions: (notification.actions ?? []).map((action) => ({ name: action.label, color: null, icon: null, isDisabled: false, label: action.label, shouldClose: false, shouldMarkAsRead: false, shouldMarkAsUnread: false, shouldOpenUrlInNewTab: action.openUrlInNewTab, size: 'sm', url: action.url, view: 'filament::components.link' })),
-                body: notification.body, color: null, duration: 'persistent', icon: notification.icon ? `heroicon-${notification.icon}` : null, iconColor: notification.iconColor, status: notification.status, title: notification.title, view: null, viewData: [], format: 'filament',
+                actions: (notification.actions ?? []).map(notificationActionToArray),
+                body: notification.body, color: notification.color ?? null, duration: 'persistent', icon: notification.icon ? `heroicon-${notification.icon}` : null, iconColor: notification.iconColor, status: notification.status, title: notification.title, view: null, viewData: [], format: 'filament',
             };
             await knex(table).insert({ id: notification.id, type: 'Filament\\Notifications\\DatabaseNotification', notifiable_type: notifiableType, notifiable_id: user, data: JSON.stringify(data), read_at: null, created_at: at, updated_at: at });
         },
@@ -171,17 +170,13 @@ function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
     const color = n.iconColor ?? n.status;
     const status = n.status && Object.hasOwn(STATUS_ICONS, n.status) ? n.status : null;
     const iconHtml = safeIcon(n.icon ?? (status ? STATUS_ICONS[status] : null), 'md', [...(color && color !== 'gray' && /^[a-z]+$/.test(color) ? ['fi-color', `fi-color-${color}`] : []), 'fi-no-notification-icon'], !n.icon && status ? `notifications::notification.${status}` : undefined);
-    const actions = n.actions.filter((action) => action.label !== '').map((action) => {
-        const url = safeUrl(action.url);
-        return `<a ${new Attributes({ href: url, ...(action.openUrlInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : url?.startsWith('/') ? { 'wire:navigate': true } : {}) }).class(['fi-ac-link-action', 'fi-link', 'fi-size-sm', 'fi-color', 'fi-color-primary', 'fi-text-color-600', 'dark:fi-text-color-300']).toHtml()}><span class="fi-link-label">${e(action.label)}</span></a>`;
-    });
     const closeLabel = t('filament-notifications::notification.actions.close.label');
     const attributes = new Attributes({
         'x-data': `notificationComponent({ notification: ${js({ id: n.id, duration: 'persistent' })} })`,
         'x-transition:enter-start': 'fi-transition-enter-start', 'x-transition:enter-end': 'fi-transition-enter-end', 'x-transition:leave-start': 'fi-transition-leave-start', 'x-transition:leave-end': 'fi-transition-leave-end',
         'wire:key': `${n.id}.notifications.${n.id}`, 'x-on:close-notification.window': `if ($event.detail.id == ${js(n.id)}) close()`,
-    }).class(['fi-no-notification', n.status && /^[a-z]+$/.test(n.status) ? `fi-status-${n.status}` : null, 'fi-inline']);
-    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${actions.length ? `<div class="fi-ac fi-no-notification-actions">${actions.join('')}</div>` : ''}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
+    }).class([...notificationColorClasses(n.color), 'fi-no-notification', n.status && /^[a-z]+$/.test(n.status) ? `fi-status-${n.status}` : null, 'fi-inline']);
+    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${notificationActionsHtml(n.actions, { navigate: true })}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
 const BADGE = 'fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-200 fi-badge';
@@ -260,7 +255,11 @@ export class DatabaseNotifications extends Component {
             'x-on:close-modal.window': `if (($event.detail.id === ${js(id)}) && isOpen) close()`, 'x-on:close-modal-quietly.window': `if (($event.detail.id === ${js(id)}) && isOpen) closeQuietly()`,
             'x-on:open-modal.window': `if (($event.detail.id === ${js(id)}) && (! isOpen)) open()`, 'x-bind:class': "{ 'fi-modal-open': isOpen, }", 'x-cloak': '', 'x-show': 'isOpen',
         }).class(['fi-modal', 'fi-absolute-positioning-context', 'fi-modal-slide-over', 'fi-modal-slide-over-from-end', has ? 'fi-modal-has-sticky-header' : null, 'fi-no-database']);
-        const poll = interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}=""` : '';
+        // With broadcasting, new notifications are announced by the stream; the polling interval only applies while it is down.
+        const { panel, user: signedIn } = (this._ctx ?? {}) as any;
+        const live = typeof panel?.hasBroadcasting === 'function' && panel.hasBroadcasting();
+        if (live) this.addScript('database-notifications-broadcast', databaseNotificationsBroadcastScript(panel.getBroadcastChannel(signedIn), interval));
+        const poll = !live && interval && /^[0-9]+(ms|s)$/.test(interval) ? ` wire:poll.${interval}=""` : '';
         const windowClasses = ['fi-modal-window', 'fi-modal-window-has-close-btn', has ? 'fi-modal-window-has-content' : 'fi-modal-window-has-icon', `fi-align-${has ? 'start' : 'center'}`, 'fi-width-md'].join(' ');
         const transitions = 'x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end"';
         // The window has `autofocus` so the focus trap lands on it, not on "Mark all as read", which Enter would trigger at once.

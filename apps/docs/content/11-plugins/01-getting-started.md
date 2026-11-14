@@ -107,7 +107,7 @@ Keys added later replace the earlier ones: an application may call `addTranslati
 
 ### Assets
 
-Plugins have no routes of their own: Navette serves the stylesheets and scripts they register. A panel plugin registers the assets its panels need with `panel.assets([...], 'your-package')` in its `register()` method, so they are only loaded by the panels that use the plugin: see [registering assets](/plugins/panel-plugins#registering-assets). Assets shared by standalone components are registered with `NavetteAsset.register([...], 'your-package')` when the package is imported. A very small stylesheet may also be inlined with a [render hook](/advanced/render-hooks), as the [standalone plugin walkthrough](/plugins/building-a-standalone-plugin#loading-the-stylesheet) does.
+Plugins have no routes of their own: Navette serves the stylesheets and scripts they register. A panel plugin registers the assets its panels need with `panel.assets([...], 'your-package')` in its `register()` method, so they are only loaded by the panels that use the plugin: see [registering assets](/plugins/panel-plugins#registering-assets). Assets shared by standalone components are registered with `NavetteAsset.register([...], 'your-package')` when the package is imported: see [registering assets](/advanced/assets#registering-assets-for-a-plugin). A very small stylesheet may also be inlined with a [render hook](/advanced/render-hooks), as the [standalone plugin walkthrough](/plugins/building-a-standalone-plugin#loading-the-stylesheet) does.
 
 ## Publishing a plugin
 

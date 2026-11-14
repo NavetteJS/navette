@@ -66,12 +66,27 @@ FileUpload.make('contract')
     .storage(privateStorage)
 ```
 
+As well as allowing static values, the `storage()` and `directory()` methods, like every setter of this field, also accept a function to dynamically calculate them. The function receives the [field context](/forms/overview#using-the-field-context) (`state`, `get`, `record`, `operation`, `livewire`, `component`), and may return a promise:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('receipt_path')
+    .directory(({ record }) => `expense-receipts/${record?.user_id ?? 'new'}`)
+    .maxSize(({ get }) => (get('is_premium') ? 10240 : 1024))
+```
+
+The functions are evaluated each time they are needed (rendering, validation and saving), so they always see the current state of the form.
+
 ### Writing a custom storage
 
 To store files elsewhere (an object storage such as S3, for example), implement the `FileStorage` interface:
 
 - `store(file, directory, name)` receives the temporary file, the directory of the field, and the file name to use, or `null` for a random name. It returns the key to save.
 - `info(key)` returns the name, size, type and URL of a stored file, or `null`.
+- Optionally, `url(key)` returns the URL of a stored file without reading it. It is used when [file information fetching](#preventing-file-information-fetching) is disabled.
+
+`store()` also receives a fourth argument, `{ move: true }`, when the field [moves files](#moving-files-instead-of-copying-when-the-form-is-submitted) instead of copying them. A storage that cannot move a file may ignore it: the temporary file is removed afterwards either way.
 
 ```ts
 import { randomUUID } from 'node:crypto';
@@ -206,9 +221,27 @@ When the form is loaded again, these names are displayed in the field instead of
 
 When the form is saved, the browser sends back the keys of the files that are already stored. Navette only keeps a key if the record being edited already holds it, in the column of the field. A forged request cannot attach another user's file to a record, and the field never returns information or URLs for a key the record doesn't hold. On a Create page, no existing key is accepted.
 
-This check is always enabled, and cannot be turned off for a field. To attach a file that the record doesn't hold yet (a default template, for example), set the key in your data adapter, after validation.
+A key that the record doesn't hold fails validation ("The avatar field contains a file path that is not permitted."), so the record is never saved with a tampered value. Newly uploaded files always pass, the field can still be cleared, and with `multiple()` each key is checked on its own. The same check runs before the field returns the information and URLs of existing files.
+
+This check is always enabled. Filament's `preventFilePathTampering()` exists so that the same code works in both, but it cannot turn the check off: `preventFilePathTampering(false)` throws an error.
 
 This protection only covers the field. Your own routes that serve files must still check access.
+
+### Allowing additional file paths with a callback
+
+If your application legitimately references a key that is not on the record (a button that selects a pre-uploaded template file, for example), pass a function as the second argument of `preventFilePathTampering()` to approve it:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('avatar')
+    .preventFilePathTampering(true, (file) => [
+        'templates/default-avatar.png',
+        'templates/company-logo.png',
+    ].includes(file))
+```
+
+The function receives the key exactly as submitted by the browser, then the [field context](/forms/overview#using-the-field-context), and must return `true` (or a promise of `true`) to approve it. Use exact trusted keys where possible. Do not approve a whole directory with a prefix check: `templates/../secret.pdf` starts with `templates/`. An approved key is saved, and its information and URLs are returned like those of the record's own files.
 
 ## Avatar mode
 
@@ -341,6 +374,37 @@ This is perfectly accompanied by the [`avatar()` method](#avatar-mode), which re
 
 Optionally, you may pass a boolean value to control if the circle cropper is enabled: `circleCropper(false)`.
 
+### Enforcing a specific aspect ratio
+
+If you need to ensure all uploaded images conform to a specific aspect ratio, you can combine the [`imageAspectRatio()` validation method](#image-aspect-ratio-validation) with `automaticallyOpenImageEditorForAspectRatio()`. This will automatically open a simplified image editor when a user uploads an image that doesn't match the required aspect ratio, allowing them to crop the image before it is saved:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('banner')
+    .image()
+    .imageAspectRatio('16:9')
+    .automaticallyOpenImageEditorForAspectRatio()
+```
+
+The editor that appears when cropping is required only shows the crop area and save/cancel buttons: it does not include the full editing controls (rotation, position inputs, etc.) of [`imageEditor()`](#image-editor). If you want users to have access to the full image editor controls, you can enable both:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('banner')
+    .image()
+    .imageEditor()
+    .imageAspectRatio('16:9')
+    .automaticallyOpenImageEditorForAspectRatio()
+```
+
+With both enabled, the image editor still opens automatically when the aspect ratio doesn't match, and users also see an edit button on each uploaded image, with all editing controls. Optionally, you may pass a boolean value, or a function, to control if the aspect ratio editor is enabled: `automaticallyOpenImageEditorForAspectRatio(false)`.
+
+<Aside variant="info">
+This method can only be used with a single aspect ratio, and not with [`multiple()`](#uploading-multiple-files): the field throws an error when it is rendered otherwise. To allow several ratios, use `imageAspectRatio()` for validation only, with the [image editor's aspect ratio options](#allowing-users-to-crop-images-to-aspect-ratios). The ratio itself is still checked on the server by `imageAspectRatio()`.
+</Aside>
+
 ## Cropping and resizing images without the editor
 
 FilePond can crop and resize images before they are uploaded, without the need for a separate editor. Crop images to an aspect ratio with `automaticallyCropImagesToAspectRatio()`, and resize them with `automaticallyResizeImagesToWidth()` and `automaticallyResizeImagesToHeight()`. `automaticallyResizeImagesMode()` sets how the image fits the target size: [`'force'`, `'cover'` or `'contain'`](https://pqina.nl/filepond/docs/api/plugins/image-resize):
@@ -469,6 +533,21 @@ FileUpload.make('attachments')
 
 The button uses the URL returned by the storage's `info()`. It is not shown in [avatar mode](#avatar-mode). Optionally, you may pass a boolean value to control if the files can be opened: `openable(false)`.
 
+### Customizing the URL used when opening a file
+
+By default, the "open" button links to the same URL that is used to display the file in FilePond. If you need a different URL (a signed URL, a URL on a different domain, or a URL for a derived file), you can use the `getOpenableFileUrlUsing()` method:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('attachments')
+    .multiple()
+    .openable()
+    .getOpenableFileUrlUsing((file) => signedUrl(`/files/${file}`, { expiresInMinutes: 5 }))
+```
+
+The function receives the stored key, then the [field context](/forms/overview#using-the-field-context), and returns the URL that should be used when the "open" button is clicked, or a promise of it. Returning `null` falls back to the default URL. Only local URLs (starting with a single `/`) and `http(s)://` URLs are used: anything else (a `javascript:` URL, `//other-site`, a backslash or a control character) is ignored, and the default URL is used.
+
 ## Downloading files
 
 If you wish to add a download button to each saved file instead, you can use the `downloadable()` method:
@@ -483,6 +562,21 @@ FileUpload.make('attachments')
 
 The button also uses the URL returned by the storage, and is not shown in avatar mode either. Browsers only honour the download for URLs on the same origin as the panel: for files served from another domain, send a `Content-Disposition: attachment` header from that server. Optionally, you may pass a boolean value: `downloadable(false)`.
 
+### Customizing the URL used when downloading a file
+
+By default, the download button links to the same URL that is used to display the file in FilePond. If you need a different URL (a route that sends a `Content-Disposition: attachment` header, or the original file when the preview shows a derived image), you can use the `getDownloadableFileUrlUsing()` method:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('attachments')
+    .multiple()
+    .downloadable()
+    .getDownloadableFileUrlUsing((file) => `/attachments/download?path=${encodeURIComponent(file)}`)
+```
+
+The function receives the stored key and the field context, like `getOpenableFileUrlUsing()`, with the same URL checks. Returning `null` falls back to the default URL. The route that answers this URL must check that the user may read the file.
+
 ## Previewing files
 
 By default, images, videos and audio files are previewed in FilePond. If you wish to disable the preview for all files, you can use the `previewable(false)` method:
@@ -494,6 +588,19 @@ FileUpload.make('attachments')
     .multiple()
     .previewable(false)
 ```
+
+## Moving files instead of copying when the form is submitted
+
+By default, files are first uploaded to the temporary folder of the `UploadStore`, and then copied to the storage when the form is submitted. If you wish to move the files instead, use the `moveFiles()` method:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('attachment')
+    .moveFiles()
+```
+
+`LocalFileStorage` moves the file when the temporary folder is on the same disk as the storage, and copies it otherwise. It never overwrites an existing file. A [custom storage](#writing-a-custom-storage) receives `{ move: true }`. Optionally, you may pass a boolean value, or a function, to control if the files should be moved: `moveFiles(false)`.
 
 ## Preventing files from being stored by the field
 
@@ -564,6 +671,19 @@ import { FileUpload } from '@navette-js/forms';
 FileUpload.make('attachment')
     .pasteable(false)
 ```
+
+## Preventing file information fetching
+
+While the form is loaded, the field reads the size and type of each saved file from the storage (`info()`). When using remote storage with many files, this can be time-consuming. You can use the `fetchFileInformation(false)` method to disable this feature:
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('attachment')
+    .fetchFileInformation(false)
+```
+
+The field then only asks the storage for the URL of each file (its `url()` method, or `info()` if it has none), and sends a size of `0` and no type. FilePond downloads the file itself to preview it. A function passed to [`getUploadedFileUsing()`](#preventing-files-from-being-stored-by-the-field) is still called.
 
 ## Customizing the uploading message
 
@@ -688,14 +808,25 @@ To help users meet the requirement rather than just rejecting their upload, comb
 
 ### Number of files validation
 
-You may customize the maximum number of files that may be uploaded at once using the `maxFiles()` method:
+You may customize the number of files that may be uploaded, using the `minFiles()` and `maxFiles()` methods:
 
 ```ts
 import { FileUpload } from '@navette-js/forms';
 
 FileUpload.make('attachments')
     .multiple()
+    .minFiles(2)
     .maxFiles(5)
+```
+
+They count the saved files and the new ones. As with Laravel's `min` rule on a list, an empty field fails `minFiles()` even if it is not required. To only require a minimum in some cases, pass a function, which receives the [field context](/forms/overview#using-the-field-context):
+
+```ts
+import { FileUpload } from '@navette-js/forms';
+
+FileUpload.make('attachments')
+    .multiple()
+    .minFiles(({ operation }) => (operation === 'create' ? 2 : null))
 ```
 
 ## Security
@@ -705,7 +836,8 @@ Navette provides the following protections:
 - The upload requires a signed URL valid for a few minutes, the CSRF token and a signed-in user.
 - The file type is detected from the content, and the stored extension follows the detected type. An HTML or SVG file renamed to `.jpg` is neither accepted as an image nor served as a page.
 - Chosen file names are sanitized, and never overwrite an existing file in `LocalFileStorage`.
-- Existing keys are only accepted for the record that holds them.
+- Existing keys are only accepted for the record that holds them (or approved by [`allowFilePathUsing`](#allowing-additional-file-paths-with-a-callback)); others fail validation.
+- URLs sent to the browser (files, open and download buttons) are local or `http(s)://` only.
 - Types, sizes, number of files, image dimensions and aspect ratios are validated on the server.
 
 What your application must still do:
@@ -713,7 +845,3 @@ What your application must still do:
 - Files stored by `LocalFileStorage` in a folder served by Express are public to anyone who knows their URL. Serve private documents through a route that checks access, and keep random names for them.
 - Treat cropping, resizing, the image editor, the avatar mode and `mimeTypeMap()` as conveniences: they run in the browser and can be bypassed.
 - Decide when to delete files that are no longer used.
-
-<Aside variant="warning">
-The setters of this field take static values, not functions. `minFiles()`, `moveFiles()`, `fetchFileInformation(false)`, `automaticallyOpenImageEditorForAspectRatio()`, `getOpenableFileUrlUsing()` and `getDownloadableFileUrlUsing()` are not available yet. There is no `preventFilePathTampering()`: Navette always only accepts the keys that the record already holds.
-</Aside>

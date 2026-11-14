@@ -1,6 +1,6 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeUrl, js, markdownToHtml, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeUrl, js, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Enum, type EnumCase, type Lazy, configured } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
 
@@ -228,6 +228,14 @@ abstract class Entry extends Component {
     protected _slots: Partial<Record<SlotName, EntrySlot>> = {};
     constructor(name: string) { super(); this._name = name; }
     hasStatePath(): boolean { return true; }
+    protected _enum: Enum<string | number> | null = null;
+    /**
+     * Displays values through an enum (label, color, icon), like Filament does for an attribute cast to an enum. Without it,
+     * the enum of the model's `static casts` is used, and so is a state that is already an enum case.
+     */
+    enum(enumeration: Enum<string | number> | null): this { this._enum = enumeration; return this; }
+    /** Enum case of a state item, or `null`. */
+    protected enumCaseOf(record: unknown, item: unknown): EnumCase<string | number> | null { return resolveEnumCase(item, { enum: this._enum, record, attribute: this._name ?? undefined }); }
     /** Label: a string or a function of the context. Escaped when rendered. */
     label(label: Lazy<string | null, ComponentContext>): this { this._label = label; return this; }
     /** Keeps the label for screen readers only. */
@@ -555,7 +563,8 @@ export class TextEntry extends Entry {
     /** Displayed text of a state item, and whether it is (sanitized) HTML. */
     private formatItem(item: unknown, record: any): { text: string; isHtml: boolean } {
         let isHtml = this._html || this._markdown || this._prose;
-        const value = this._format ? this._format({ state: item, record }) : this._formatter && !isBlank(item) ? this._formatter(item, record) : item;
+        const enumCase = this._format ? null : this.enumCaseOf(record, item);
+        const value = this._format ? this._format({ state: item, record }) : enumCase ? enumCase.getLabel() : this._formatter && !isBlank(item) ? this._formatter(item, record) : item;
         let text: string;
         if (value instanceof HtmlString) { isHtml = true; text = value.html; }
         else {
@@ -607,10 +616,10 @@ export class TextEntry extends Entry {
         const itemData = (item: unknown) => {
             const formatted = collapsed !== null ? { text: collapsed, isHtml: true } : this.formatItem(item, record);
             const plain = formatted.isHtml ? stripTags(formatted.text) : formatted.text;
-            const color = resolveItem(this._color, record, item) ?? (this._badge ? 'primary' : null);
+            const color = resolveItem(this._color, record, item) ?? this.enumCaseOf(record, item)?.getColor() ?? (this._badge ? 'primary' : null);
             const size = textSize(resolveItem(this._size, record, item));
             const iconColor = resolveItem(this._iconColor, record, item);
-            const iconHtml = renderIcon(resolveItem(this._icon, record, item), { size: size === 'md' || size === 'lg' ? size : 'sm', attributes: new Attributes().class(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${safeName(iconColor)}`] : []) });
+            const iconHtml = renderIcon(resolveItem(this._icon, record, item) ?? this.enumCaseOf(record, item)?.getIcon() ?? null, { size: size === 'md' || size === 'lg' ? size : 'sm', attributes: new Attributes().class(iconColor && iconColor !== 'gray' ? ['fi-color', `fi-color-${safeName(iconColor)}`] : []) });
             const isCopyable = Boolean(resolveItem(this._copyable, record, item));
             const tooltip = resolveItem(this._tooltip, record, item);
             let attributes: AttrMap = { class: cls(['fi-in-text-item', { 'fi-prose': this._prose || this._markdown }, fontClass(resolveItem(this._fontFamily, record, item), FONT_FAMILIES)]) };
@@ -828,15 +837,16 @@ export class IconEntry extends Entry {
         const alignment = await this.getAlignment();
         const items = (Array.isArray(state) ? state : [state]).map((item) => {
             const on = item === true || item === 1 || item === '1';
-            let name = resolveMap(this._icon, record, item);
+            const enumCase = this.enumCaseOf(record, item);
+            let name = resolveMap(this._icon, record, item) ?? enumCase?.getIcon() ?? null;
             if (!name && this._boolean && item !== null && item !== undefined) name = on ? (this._trueIcon === false ? null : this._trueIcon ?? icons.resolve('infolists::components.icon-entry.true') ?? 'o-check-circle') : (this._falseIcon === false ? null : this._falseIcon ?? icons.resolve('infolists::components.icon-entry.false') ?? 'o-x-circle');
             if (!name) return '';
-            let color = resolveMap(this._color, record, item);
+            let color = resolveMap(this._color, record, item) ?? enumCase?.getColor() ?? null;
             if (!color && this._boolean && item !== null && item !== undefined) color = on ? this._trueColor ?? 'success' : this._falseColor ?? 'danger';
             const size = resolveItem(this._size, record, item);
             const tooltip = resolveItem(this._tooltip, record, item);
             const attributes = new Attributes().merge({ 'x-tooltip': tooltipJs(tooltip) }).class(iconColorClasses(color));
-            const text = !isBlank(tooltip) ? String(tooltip) : this._boolean ? t(on ? 'filament-infolists::components.entries.icon.true' : 'filament-infolists::components.entries.icon.false') : ['string', 'number', 'boolean'].includes(typeof item) ? String(item) : '';
+            const text = !isBlank(tooltip) ? String(tooltip) : enumCase ? enumCase.getLabel() : this._boolean ? t(on ? 'filament-infolists::components.entries.icon.true' : 'filament-infolists::components.entries.icon.false') : ['string', 'number', 'boolean'].includes(typeof item) ? String(item) : '';
             return `${renderIcon(name, { size: size && ICON_SIZES.has(size) ? size : 'lg', attributes })}${text !== '' ? `<span class="fi-sr-only">${e(text)}</span>` : ''}`;
         }).join('');
         const container = withClass(this.getExtraAttributesMap(), ['fi-in-icon', { 'fi-in-icon-has-line-breaks': this._listWithLineBreaks, 'fi-wrapped': this._wrap }, alignmentClass(alignment)]);

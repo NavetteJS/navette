@@ -53,6 +53,8 @@ A data adapter implements these methods:
 | `exists(column, value, exceptKey)` | Whether another record has this value, for the `unique` validation rule. |
 | `supportsSoftDeletes()`, `isTrashed(record)`, `restore(key)`, `forceDelete(key)` | Soft deletes. |
 
+An adapter may also implement `aggregateGroups(query, columns, group)`: the same aggregates, one row per group of a query grouped by `group(query)`, with the value of the first grouping expression as `key`. Group summaries and [icon counts](/tables/summaries#counting-the-occurrence-of-icons) then need one query instead of one per group, or loading the records. It is optional.
+
 A read-only adapter may refuse writes: return `null` from `update()`, `false` from `delete()`, and throw from `create()`.
 
 ### Understanding the list query

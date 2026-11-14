@@ -87,8 +87,13 @@ async function adapterFor(records: Record<string, unknown>[]): Promise<database.
  */
 async function tableOptions(table: tables.Table, host: any, adapter: database.DataAdapter, ctx: any): Promise<tables.RenderTableOptions<any>> {
     const visible = async (list: any[]) => { const shown = []; for (const action of list) if (await action.isVisible(ctx)) shown.push(action); return shown; };
-    const bulkActions: string[] = [];
-    for (const action of await visible(table.getBulkActions() ?? [])) bulkActions.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
+    // One menu per `BulkActionGroup`, like a list page.
+    const bulkActionGroups: tables.BulkActionMenu[] = [];
+    for (const group of table.getBulkActionGroups() ?? []) {
+        const html: string[] = [];
+        for (const action of await visible(group.getActions())) html.push(await action.toGroupedHtml(ctx, { table: true, bulk: true }));
+        bulkActionGroups.push(group.toMenu(html));
+    }
     const headerActions: string[] = [];
     for (const action of await visible(table.getHeaderActions())) headerActions.push(await action.toHtml(ctx, { table: true }));
     const emptyStateActions: string[] = [];
@@ -114,7 +119,7 @@ async function tableOptions(table: tables.Table, host: any, adapter: database.Da
         }
         return parts.join('');
     } : undefined;
-    return { bulkActions, headerActions, emptyStateActions, filtersForm, rowActionsHtml };
+    return { bulkActionGroups, headerActions, emptyStateActions, filtersForm, rowActionsHtml };
 }
 
 function directives(code: string): { body: string; values: Record<string, string> } {

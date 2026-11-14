@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { readSecret } from './secret.ts';
-import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
+import { generateColumn, generateComponent, generateEntry, generateField, generatePlugin, generateResource, generateMigration, generatePage, generateSchemaComponent, generateWidget, studly, tableName, type ColumnInfo } from './generators.ts';
 
 const cwd = process.cwd();
 if (existsSync(join(cwd, '.env'))) process.loadEnvFile(join(cwd, '.env'));
@@ -148,6 +148,15 @@ const commands: Record<string, { usage: string; run: () => Promise<void> }> = {
         async run() {
             const name = studly(positional[0] ?? fail('Give the column a name, e.g. ProgressColumn'));
             write(join(cwd, 'src', 'columns', `${name}.ts`), generateColumn(name));
+        },
+    },
+    'make:schema-component': {
+        usage: 'navette make:schema-component <Name>             Create a schema component class (src/schemas/components)',
+        async run() {
+            const name = studly(positional[0] ?? fail('Give the component a name, e.g. Chart'));
+            if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) fail(`Invalid component name: ${positional[0]}`);
+            write(join(cwd, 'src', 'schemas', 'components', `${name}.ts`), generateSchemaComponent(name));
+            say(`\n  Use it in a schema: ${name}.make().heading('…'), imported from src/schemas/components/${name}.ts.`);
         },
     },
     'make:component': {

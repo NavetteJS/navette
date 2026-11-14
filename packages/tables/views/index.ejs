@@ -121,21 +121,22 @@
                         <% } %>
                         <%- hook('tables::toolbar.reorder-trigger.after') %>
                         <%- toolbarActions.join('') %>
-                        <% if (bulkActions.length) { %>
+                        <% for (const menu of bulkMenus) { %>
+                            <% const menuTooltip = menu.tooltip ? ' x-tooltip="' + e('{ content: ' + js(menu.tooltip) + ', theme: $store.theme, allowHTML: false }') + '"' : ''; %>
                             <div x-data="filamentDropdown" x-cloak="x-cloak" x-show="getSelectedRecordsCount()" class="fi-dropdown">
                                 <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
-                                    <button title="<%= t('filament-tables::table.actions.open_bulk_actions.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-group fi-icon-btn fi-size-md">
-                                        <%- icon('m-ellipsis-vertical', { alias: 'tables::actions.open-bulk-actions' }) %>
+                                    <button title="<%= menu.label %>"<%- menuTooltip %> type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-group', 'fi-icon-btn', 'fi-size-md', ...bulkMenuColors('icon-button', menu.color)]) %>">
+                                        <%- menu.customized ? icon(menu.icon) : icon('m-ellipsis-vertical', { alias: 'tables::actions.open-bulk-actions' }) %>
                                     </button>
-                                    <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-group fi-btn fi-size-md fi-labeled-from-sm">
-                                        <%- icon('m-ellipsis-vertical', { alias: 'tables::actions.open-bulk-actions' }) %>
-                                        <%= t('filament-tables::table.actions.open_bulk_actions.label') %>
+                                    <button<%- menuTooltip %> type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="<%- cls(['fi-ac-btn-group', 'fi-btn', 'fi-size-md', 'fi-labeled-from-sm', ...bulkMenuColors('button', menu.color)]) %>">
+                                        <%- menu.customized ? icon(menu.icon) : icon('m-ellipsis-vertical', { alias: 'tables::actions.open-bulk-actions' }) %>
+                                        <%= menu.label %>
                                     </button>
                                 </div>
 
-                                <div x-cloak x-float.placement.bottom-start.flip.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel">
+                                <div x-cloak x-float.placement.<%- menu.placement %>.flip.offset="{ offset: 8 }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" role="menu" class="fi-dropdown-panel">
                                     <div class="fi-dropdown-list" role="group">
-                                        <%- bulkActions.join('') %>
+                                        <%- menu.actions.join('') %>
                                     </div>
                                 </div>
                             </div>
@@ -189,9 +190,11 @@
                                 " class="fi-ta-grouping-settings">
                                 <div x-data="filamentDropdown({ isMenu: false })" class="<%- cls(['fi-dropdown', { 'sm:fi-hidden': !grouping.inDropdownOnDesktop }]) %>" wire:key="<%= id %>.table.grouping">
                                     <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
+                                        <% if (grouping.trigger.customized) { %><% if (!grouping.trigger.hidden) { %><%- filterActionHtml(grouping.trigger, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"', null, true) %><% } %><% } else { %>
                                         <button title="<%= t('filament-tables::table.actions.group.label') %>" aria-label="<%= t('filament-tables::table.actions.group.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
                                             <%- icon('m-rectangle-stack', { alias: 'tables::actions.group' }) %>
                                         </button>
+                                        <% } %>
                                     </div>
                                     <div x-cloak x-float.placement.bottom-start.flip.shift.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" wire:ignore.self wire:key="<%= id %>.table.grouping.panel" class="fi-dropdown-panel fi-width-xs" style="">
                                         <div class="fi-ta-grouping-settings-fields">

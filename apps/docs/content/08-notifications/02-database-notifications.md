@@ -97,11 +97,29 @@ class CreateOrder extends CreateRecord {
 
 Inside an action, the panel is available as `livewire.panel`. When the panel has no store, `sendToDatabase()` does nothing. Unlike `send()`, it can be called outside of a request, for example from a scheduled task, as long as you have the store.
 
-The title, body, status, icon, icon color and actions are stored; the duration is not, as database notifications are always persistent. In the notifications panel:
+The title, body, status, icon, icon color, background color and actions are stored; the duration is not, as database notifications are always persistent. In the notifications panel:
 
 - The title is escaped.
 - A plain text body is escaped. A body containing HTML is cleaned: only the tags of the rich editor are kept, and scripts, event handlers and `javascript:` links are removed.
-- Actions are displayed as links below the text. Only a relative path (`/…`) or an `http://` / `https://` address becomes a link.
+- Actions are displayed below the text, as links or as buttons (`button: true`), like in [flash notifications](/notifications/overview#adding-actions-to-notifications): they can open a URL, dispatch a Livewire event and close the notification. Only a relative path (`/…`) or an `http://` / `https://` address becomes a link.
+
+### Marking database notifications as read from an action
+
+An action can mark its notification as read, or as unread, when it is clicked:
+
+```ts
+import { Notification } from '@navette-js/panels';
+
+await Notification.make()
+    .title('Invoice ready')
+    .actions([
+        { label: 'Open', url: '/invoices/42', button: true, markAsRead: true },
+        { label: 'Mark as unread', markAsUnread: true, color: 'gray' },
+    ])
+    .sendToDatabase(livewire.panel.getDatabaseNotifications(), user.id);
+```
+
+Closing a database notification with an action that has `close: true` deletes it, like its close button.
 
 ## Receiving database notifications
 
@@ -134,9 +152,24 @@ Action.make('remind_me')
     })
 ```
 
-<Aside variant="warning">
-Broadcast notifications and receiving database notifications through websockets are not available. New notifications appear at the next poll.
-</Aside>
+### Receiving new database notifications live
+
+Polling is simple, but each open page asks the server for news every 30 seconds. With [broadcasting](/notifications/broadcast-notifications#setting-up-broadcasting-in-a-panel) enabled on the panel, the server tells the open pages when a user has new notifications instead, and the bell stops polling. Pass `true` as the third argument of `sendToDatabase()` to announce the notification:
+
+```ts
+import { knexNotificationStore, Notification, Panel } from '@navette-js/panels';
+
+const panel = Panel.make()
+    // ...
+    .databaseNotifications(knexNotificationStore(knex))
+    .broadcasting();
+
+await Notification.make()
+    .title('Saved successfully')
+    .sendToDatabase(panel.getDatabaseNotifications(), user, true);
+```
+
+The polling interval still applies while the connection to the server is down. See [receiving database notifications live](/notifications/broadcast-notifications#receiving-database-notifications-live) for the details.
 
 ## Managing notifications in the panel
 
@@ -176,7 +209,7 @@ const store: DatabaseNotificationStore = {
 };
 ```
 
-`list()` returns `DatabaseNotificationRecord` objects: `{ id, title, body, icon, iconColor, status, actions, createdAt, unread }`, where `actions` is a list of `{ label, url, openUrlInNewTab }` and `createdAt` a `Date` or `null`. `send()` receives the notification's data, with an `id` that is a new UUID.
+`list()` returns `DatabaseNotificationRecord` objects: `{ id, title, body, icon, iconColor, status, actions, createdAt, unread }`, where `actions` is a list of `{ label, url, openUrlInNewTab, close, dispatch, color, button, outlined, markAsRead, markAsUnread }` and `createdAt` a `Date` or `null`. `send()` receives the notification's data, with an `id` that is a new UUID.
 
 ## Security
 

@@ -175,17 +175,17 @@ During a request for one of the registration's pages (displaying the page, and i
 
 ## Generating URLs for a specific configuration
 
-To generate the URL of a page of a configured registration, pass the `configuration` option to `getUrl()`:
+To generate the URL of a page of a configured registration, pass the `configuration` option in the fourth argument of `getUrl()`, after the record and the other route parameters:
 
 ```ts
 // URL of the default (unconfigured) registration
 OrderResource.getUrl();
 
 // URL of the "active" configuration
-OrderResource.getUrl('index', undefined, { configuration: 'active' });
+OrderResource.getUrl('index', undefined, {}, { configuration: 'active' });
 
 // URL of a specific page of the "archived" configuration
-OrderResource.getUrl('edit', order.id, { configuration: 'archived' });
+OrderResource.getUrl('edit', order.id, {}, { configuration: 'archived' });
 ```
 
 Without the option, `getUrl()` uses the active configuration: inside a configured registration (its pages, its static methods), you only need it to link to another configuration. `configuration: null` targets the default registration.

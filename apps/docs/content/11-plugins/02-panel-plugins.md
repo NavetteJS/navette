@@ -190,7 +190,7 @@ const blog = Panel.make().id('blog').path('blog').key(key).login().auth(users).p
 
 ## Registering assets
 
-Register the stylesheets and scripts that every page of a panel needs with the panel's `assets()` method, in the plugin's `register()` method. They are then only loaded by the panels that use the plugin. Pass the name of your npm package as the second argument: the files are served from the package's own folder, so their IDs cannot clash with another plugin's:
+A plugin registers its stylesheets, scripts and Alpine.js components with the panel's `assets()` method, in its `register()` method: the panel serves the files and adds the tags to its pages, and they are only loaded by the panels that use the plugin. Pass the name of your npm package as the second argument: the files are served from the package's own folder, so their IDs cannot clash with another plugin's:
 
 ```ts
 import { fileURLToPath } from 'node:url';
@@ -202,13 +202,13 @@ export class BlogPlugin extends PanelPlugin {
     register(panel: Panel): void {
         panel.assets([
             Css.make('blog', fileURLToPath(new URL('../resources/blog.css', import.meta.url))),
-            Js.make('blog', fileURLToPath(new URL('../resources/blog.js', import.meta.url))),
+            Js.make('blog', fileURLToPath(new URL('../resources/blog.js', import.meta.url))).defer(),
         ], 'navette-blog');
     }
 }
 ```
 
-Assets shared by standalone components, loaded in every panel or on request, are registered with `NavetteAsset.register([...], 'navette-blog')` when the package is imported. Both are described on the "Registering assets" page of the Advanced section.
+Assets shared by standalone components, loaded in every panel or on request, are registered with `NavetteAsset.register([...], 'navette-blog')` when the package is imported. See [registering assets](/advanced/assets#registering-assets-for-a-plugin) for the details: lazy loading, CSS variables, script data and asynchronous Alpine.js components.
 
 A very small stylesheet may also be inlined with a render hook, only in the panels that use the plugin:
 

@@ -172,6 +172,8 @@ return new Table()
 
 `getTitleFromRecordUsing()` is an alias of `getTitleUsing()`. The title is escaped.
 
+When the attribute is cast to an [enum](/advanced/enums#casting-model-attributes-to-an-enum) on the model, the label of each value is the title of its group.
+
 ### Disabling the title label prefix
 
 By default, the title is prefixed with the label of the group. To disable this prefix, use the `titlePrefixedWithLabel(false)` method:
@@ -405,12 +407,74 @@ Group.make('status')
     ))
 ```
 
+## Customizing the group query
+
+Group summaries are computed by one SQL query, grouped by group, instead of one query per group. By default, it is grouped by the group's column (`date(column)` for [date groups](#date-groups)). You can customize how this is done using the `groupQueryUsing()` method. It receives the summary query and the group's column:
+
+```ts
+import { Group } from '@navette-js/tables';
+
+Group.make('status')
+    .groupQueryUsing((query) => query.groupBy('status'))
+```
+
+The summary query selects from the table's query, under the name of the table, so `status` and `posts.status` both refer to the column. The first grouping expression is the key of each group: it must give the same key as the records. With a [custom group key](#customizing-the-group-key), group the query by the same expression:
+
+```ts
+import { Group } from '@navette-js/tables';
+
+Group.make('status')
+    .getKeyFromRecordUsing((record) => (record.status === 'published' ? 'live' : 'draft'))
+    .getTitleFromRecordUsing((record) => (record.status === 'published' ? 'Live' : 'Draft'))
+    .scopeQueryByKeyUsing((query, key) => (key === 'live'
+        ? query.where('status', 'published')
+        : query.whereNot('status', 'published')))
+    .groupQueryUsing((query) => query.groupByRaw(
+        `case when status = 'published' then 'live' else 'draft' end`,
+    ))
+```
+
+Without `groupQueryUsing()`, a group with a custom key or scope, or grouped by a column of a related table, is summarized one group at a time with `scopeQueryByKeyUsing()`. So is the group of records without a value, and any group that the grouped query does not return. This is also the case with a [custom data adapter](/tables/custom-data) that does not implement `aggregateGroups()`.
+
 Only write column names and SQL that you control in these functions: never insert values from the browser.
+
+## Customizing the groups dropdown trigger action
+
+To customize the groups dropdown trigger button, you may use the `groupRecordsTriggerAction()` method, passing a function that receives the action and changes it. It may be displayed as a `button()`, a `link()` or an `iconButton()` (the default), with its own `label()`, `icon()` and `color()`:
+
+```ts
+import { type Table } from '@navette-js/tables';
+
+static table(table: Table<Post>): Table<Post> {
+    return table
+        .groups([
+            // ...
+        ])
+        .groupRecordsTriggerAction((action) => action
+            .button()
+            .label('Group records'));
+}
+```
+
+```preview
+// records: [{"title": "Introducing Navette", "status": "published"}, {"title": "Building your first panel", "status": "draft"}, {"title": "Ten tips for faster tables", "status": "published"}]
+new Table()
+    .pluralModelLabel('posts')
+    .columns([
+        TextColumn.make('title'),
+        TextColumn.make('status'),
+    ])
+    .groups(['status'])
+    .groupingSettingsInDropdownOnDesktop()
+    .groupRecordsTriggerAction((action) => action
+        .button()
+        .label('Group records'))
+```
 
 ## Persisting the grouping in the session
 
 `persistGroupingInSession()` keeps the grouping chosen by the user when they come back to the page. See [persisting filters](/tables/filters/overview#persisting-filters-in-the-users-session) for where it is stored.
 
-<Aside variant="warning">
-Customizing how a group aggregates the query in `groupsOnly()` mode and the groups dropdown trigger action are not available yet. Grouping is turned off while the user [reorders records](/tables/overview#reordering-records).
+<Aside variant="info">
+As in Filament, grouping is turned off while the user [reorders records](/tables/overview#reordering-records): every record is then listed in the order of the reorder column.
 </Aside>

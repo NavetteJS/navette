@@ -27,6 +27,7 @@ Generators never overwrite an existing file: they stop with an error. Add `--for
 | `navette make:field <Name>` | Creates a custom form field in `src/fields` |
 | `navette make:entry <Name>` | Creates a custom infolist entry in `src/entries` |
 | `navette make:column <Name>` | Creates a custom table column in `src/columns` |
+| `navette make:schema-component <Name>` | Creates a schema component class in `src/schemas/components` |
 | `navette make:component <name>` | Creates a view component in `src/components`, used as `<x-name>` |
 | `navette make:plugin <Name> [--standalone]` | Creates a plugin package in `plugins/` |
 
@@ -133,12 +134,13 @@ Creates `src/admin/widgets/SalesChart.ts`. The dashboard of the panel displays i
 
 Use `--panel=app` for the user panel.
 
-## Generating a custom field, entry or column
+## Generating a custom field, entry, column or schema component
 
 ```bash
 npx navette make:field RatingInput
 npx navette make:entry AudioPlayerEntry
 npx navette make:column ProgressColumn
+npx navette make:schema-component Chart
 ```
 
 | Command | File | Class |
@@ -146,8 +148,9 @@ npx navette make:column ProgressColumn
 | `make:field` | `src/fields/<Name>.ts` | A form field that extends `Field`, with an Alpine.js control bound to its state and a validation rule. See [custom fields](/forms/custom-fields) |
 | `make:entry` | `src/entries/<Name>.ts` | An infolist entry that extends `ViewEntry` and prints its state, escaped. See [custom entries](/infolists/custom-entries) |
 | `make:column` | `src/columns/<Name>.ts` | A table column that extends `Column` and prints its state, escaped. See [custom columns](/tables/columns/custom-columns) |
+| `make:schema-component` | `src/schemas/components/<Name>.ts` | A schema component that extends `Component`, with a `heading()` configuration method accepting a function. See [custom components](/schemas/custom-components) |
 
-The name is converted to PascalCase. These classes are not discovered: import them where you use them, `ProgressColumn.make('progress')`.
+The name is converted to PascalCase. These classes are not discovered: import them where you use them, `ProgressColumn.make('progress')`, `Chart.make()`. An existing file is kept, unless you add `--force`.
 
 ## Generating a view component
 

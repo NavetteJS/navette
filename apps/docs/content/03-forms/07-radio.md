@@ -27,7 +27,7 @@ Radio.make('status')
     })
 ```
 
-Options may be an object of `value: label` pairs, or a list of `[value, label]` pairs.
+Options may be an object of `value: label` pairs, a list of `[value, label]` pairs, or an [enum](/advanced/enums#using-an-enum-for-field-options), whose descriptions are then used as [option descriptions](#setting-option-descriptions).
 
 ## Setting option descriptions
 

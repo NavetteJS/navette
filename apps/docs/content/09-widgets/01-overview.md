@@ -232,6 +232,26 @@ export class RevenueChart extends ChartWidget {
 }
 ```
 
+### Customizing the loading placeholder
+
+While a lazy widget loads, a gray box of the widget's width is shown. Override `placeholder()` to return your own HTML, written by you (escape any data you put in it). Its root element must be a single element, and should keep the widget's grid column, given by `gridColumn()`:
+
+```ts
+import { StatsOverviewWidget } from '@navette-js/panels';
+
+export class OrdersOverview extends StatsOverviewWidget {
+    placeholder(): string {
+        const column = this.gridColumn();
+
+        return `<div role="status" aria-busy="true" class="fi-section ${column.classes.join(' ')}" style="${column.style} height: 6rem;"><div class="fi-section-content-ctn"><div class="fi-section-content">Loading the orders…</div></div></div>`;
+    }
+
+    getStats() {
+        // ...
+    }
+}
+```
+
 ## Filtering widget data
 
 You may add a form to the dashboard that allows the user to filter the data displayed across all widgets. When the filters are updated, the widgets are rendered again with the new data, without reloading the page.
@@ -282,11 +302,88 @@ export class CustomerGrowthChart extends ChartWidget {
 }
 ```
 
-`pageFilters` is `null` when the dashboard has no filters form. A reactive property can only be set by the page, never by the browser through the widget.
+`pageFilters` is `null` when the dashboard has no filters. A reactive property can only be set by the page, never by the browser through the widget.
 
 <Aside variant="warning">
-The filter values come from the user's browser: validate them in your widgets before using them in a query (dates, allowed statuses, existing IDs). Persisting the filters in the session or the URL, and a filters form in an action modal, are not available yet: the filters are reset when the page is reloaded.
+The filter values come from the user's browser, are not validated, and change live: validate them in your widgets before using them in a query (dates, allowed statuses, existing IDs), as in this helper:
+
+```ts
+const STATUSES = ['new', 'processing', 'shipped'];
+
+const statusOf = (value: unknown): string | null => (typeof value === 'string' && STATUSES.includes(value) ? value : null);
+const dateOf = (value: unknown): string | null => (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null);
+```
+
+Pass them to your queries as bound values (`query.where('status', status)`), never inside raw SQL.
 </Aside>
+
+### Filtering widget data using an action modal
+
+Alternatively, you can swap out the filters form for an action modal, opened by a button in the header of the page. There are many benefits to using this approach:
+
+- The filters form is not always visible, which allows you to use the full height of the page for widgets.
+- The filters do not update the widgets until the user clicks the "Apply" button, which means that the widgets are not reloaded until the user is ready. This can improve performance if the widgets are expensive to load.
+- Validation can be performed on the filters form: the user cannot submit the form until it is valid. Canceling the modal discards the user's changes.
+
+To use an action modal instead of a filters form, leave out `filtersFormSchema()` and register a `FilterAction` in the dashboard's `getHeaderActions()`, with the filter fields in `schema()`:
+
+```ts
+import { DatePicker, Select } from '@navette-js/forms';
+import { Dashboard, FilterAction } from '@navette-js/panels';
+
+class ShopDashboard extends Dashboard {
+    static slug = 'shop';
+
+    getHeaderActions() {
+        return [
+            FilterAction.make()
+                .schema([
+                    DatePicker.make('startDate').maxDate('today'),
+                    DatePicker.make('endDate').maxDate('today'),
+                    Select.make('status').options({ new: 'New', shipped: 'Shipped' }),
+                ]),
+        ];
+    }
+}
+```
+
+The action opens in a slide-over, filled with the current filters. Handling the data in the widgets is the same as with a filters form: declare `pageFilters` with `static reactive = PAGE_FILTERS`. `FilterAction.make()` returns an action like any other, so you may customize its label, icon, color or modal (`slideOver(false)`, `modalWidth('lg')`).
+
+<Aside variant="info">
+The rules of the action's form run on the server before the filters are applied. The `filters` property of the page can still be changed by a crafted request, so the widgets must keep validating `pageFilters` before use.
+</Aside>
+
+### Persisting widget filters in the user's session
+
+By default, the dashboard filters persist in the user's session between page loads. If you use [tenancy](/panels/tenancy), filters are persisted separately for each tenant. To disable persistence, set the static `persistsFiltersInSession` property of the dashboard to `false`:
+
+```ts
+import { Dashboard } from '@navette-js/panels';
+
+class ShopDashboard extends Dashboard {
+    static persistsFiltersInSession = false;
+}
+```
+
+Alternatively, override the `persistsFiltersInSession()` method:
+
+```ts
+import { Dashboard, type PanelContext } from '@navette-js/panels';
+
+class ShopDashboard extends Dashboard {
+    persistsFiltersInSession(): boolean {
+        return (this._ctx as PanelContext).user?.role !== 'kiosk';
+    }
+}
+```
+
+The session is the browser's session with the panel, and the values are saved in the panel's session store, like [the persisted table filters](/tables/filters/overview#persisting-filters-in-the-users-session): give the panel your own store with `sessionStore()` to keep them in a database or a shared cache.
+
+### Keeping the filters in the URL
+
+The filters are also kept in the query string of the page (`/shop?filters[startDate]=2026-01-01&filters[status]=shipped`), updated as they change: a reloaded or shared link shows the same filters. When the page loads, the filters come from the URL first, then from the session, then from the defaults of the filters form.
+
+Values read from the URL or the session are sanitized (plain values and lists only, with limited depth and length), and `'true'`, `'false'` and `'null'` are converted to `true`, `false` and `null`. With a filters form, only the values of its fields are kept.
 
 ## Custom widgets
 
