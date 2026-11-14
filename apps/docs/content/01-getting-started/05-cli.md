@@ -28,13 +28,13 @@ Generators never overwrite an existing file: they stop with an error. Add `--for
 | `navette make:panel <id>` | Creates a panel and its folders |
 | `navette make:cluster <Name>` | Creates a cluster gathering pages and resources under one navigation item |
 | `navette make:theme` | Creates a Tailwind theme for a panel, and the npm script compiling it |
-
 | `navette make:field <Name>` | Creates a custom form field in `src/fields` |
 | `navette make:entry <Name>` | Creates a custom infolist entry in `src/entries` |
 | `navette make:column <Name>` | Creates a custom table column in `src/columns` |
 | `navette make:schema-component <Name>` | Creates a schema component class in `src/schemas/components` |
 | `navette make:component <name>` | Creates a view component in `src/components`, used as `<x-name>` |
 | `navette make:plugin <Name> [--standalone]` | Creates a plugin package in `plugins/` |
+| `navette docs`, `docs search <terms>`, `docs show <page>` | Lists, searches or prints the documentation pages of the installed version |
 
 ## Running migrations
 
@@ -232,6 +232,19 @@ npx navette make:plugin Blog
 Creates a panel plugin package in `plugins/blog/`: its `package.json`, an entry point registering its views and translations, a plugin class (`BlogPlugin`, with an option), a page, its view and its English translations, and a `README.md`. Add it to a panel with `.plugin(BlogPlugin.make())`, importing it from `../../plugins/blog/src/index.ts`.
 
 With `--standalone`, the package contains a schema component instead (`make:plugin PriceTag --standalone` creates `PriceTag` and its view), usable in any form, infolist or page. See [getting started with plugins](/plugins/getting-started).
+
+## Reading the documentation offline
+
+`@navette-js/cli` ships the documentation of its version as Markdown files. The `docs` command lists, searches and prints them without a network connection, which is also how AI coding agents find the right API:
+
+```bash
+npx navette docs
+npx navette docs search select options
+npx navette docs show forms/select
+npx navette docs show forms/select#searching-options
+```
+
+See [AI coding agents](/getting-started/ai-agents) for the details.
 
 ## Customizing the generated files
 

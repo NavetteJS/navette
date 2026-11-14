@@ -1,8 +1,10 @@
 // Builds the documentation website from content/**/*.md into a static site.
-// Usage: node build.ts   (DOCS_BASE=/docs for a site served under a sub-path, DOCS_OUT=<dir> for another output directory)
+// Usage: node build.ts   (DOCS_BASE=/docs for a site served under a sub-path, DOCS_OUT=<dir> for another output directory,
+// DOCS_ORIGIN=https://host to make the links of llms.txt and of the .md pages absolute)
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { markdownFile, writeAgentFiles } from './agents.ts';
 import { frontMatter, render, type Heading } from './markdown.ts';
 import { closePreviews, previewDocument, renderPreview } from './previews.ts';
 
@@ -10,12 +12,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const contentDir = path.join(here, 'content');
 const dist = process.env.DOCS_OUT ?? path.join(here, 'dist');
 const base = (process.env.DOCS_BASE ?? '').replace(/\/$/, '');
+const origin = (process.env.DOCS_ORIGIN ?? '').replace(/\/$/, '');
 const navette = path.resolve(here, '../..');
 // `DOCS_VERSION` (the release tag, set by the docs workflow) wins over the workspace version, which stays 0.0.0 between releases.
 const version = (process.env.DOCS_VERSION ?? JSON.parse(readFileSync(path.join(navette, 'packages/panels/package.json'), 'utf8')).version as string).replace(/^v/, '');
 const GITHUB = 'https://github.com/NavetteJS/navette';
 
-export type DocPage = { file: string; url: string; title: string; section: string[]; html: string; headings: Heading[]; text: string; previews: string[] };
+export type DocPage = { file: string; url: string; title: string; description: string | null; markdown: string; section: string[]; html: string; headings: Heading[]; text: string; previews: string[] };
 export type NavNode = { title: string; url?: string; children?: NavNode[] };
 
 const stripPrefix = (name: string) => name.replace(/^\d+-/, '').replace(/\.md$/, '');
@@ -41,11 +44,11 @@ export function collect(): { pages: DocPage[]; nav: NavNode[]; home: DocPage | n
             }
             if (!name.endsWith('.md')) continue;
             const source = readFileSync(full, 'utf8');
-            const { title, body } = frontMatter(source);
+            const { title, description, body } = frontMatter(source);
             const rendered = render(body);
             const isHome = segments.length === 0 && stripPrefix(name) === 'index';
             const url = isHome ? '/' : '/' + [...segments, stripPrefix(name)].join('/');
-            const page: DocPage = { file: path.relative(contentDir, full).replace(/\\/g, '/'), url, title: title ?? titleOf(name), section: sectionTitles, ...rendered };
+            const page: DocPage = { file: path.relative(contentDir, full).replace(/\\/g, '/'), url, title: title ?? titleOf(name), description, markdown: body, section: sectionTitles, ...rendered };
             if (isHome) { home = page; continue; }
             pages.push(page);
             nodes.push({ title: page.title, url });
@@ -64,6 +67,7 @@ const icons = {
     sun: '<svg class="icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2Zm0 13a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm5.657-1.596a.75.75 0 1 0-1.06-1.06l-1.061 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06Zm-9.193 9.192a.75.75 0 1 0-1.06-1.06l-1.06 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM5 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 5 10Zm9.596 5.657a.75.75 0 0 0 1.06-1.06l-1.06-1.061a.75.75 0 1 0-1.06 1.06l1.06 1.06ZM5.404 6.464a.75.75 0 0 0 1.06-1.06l-1.06-1.06a.75.75 0 1 0-1.061 1.06l1.06 1.06Z"/></svg>',
     moon: '<svg class="icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.455 2.004a.75.75 0 0 1 .26.77 7 7 0 0 0 9.958 7.967.75.75 0 0 1 1.067.853A8.5 8.5 0 1 1 6.647 1.921a.75.75 0 0 1 .808.083Z" clip-rule="evenodd"/></svg>',
     github: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>',
+    copy: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6.75" y="6.75" width="10.5" height="10.5" rx="1.5"/><path d="M13.25 4.25v-.5a1.5 1.5 0 0 0-1.5-1.5h-7.5a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h.5"/></svg>',
     chevron: '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>',
 };
 
@@ -76,7 +80,7 @@ function renderNav(nodes: NavNode[], current: string, depth = 0): string {
     }).join('')}</ul>`;
 }
 
-function shell(options: { title: string; description: string; nav: NavNode[]; current: string; main: string; toc: string; bodyClass?: string }): string {
+function shell(options: { title: string; description: string; nav: NavNode[]; current: string; main: string; toc: string; bodyClass?: string; markdown?: string }): string {
     const pageTitle = options.current === '/' ? 'Navette documentation' : `${options.title} - Navette documentation`;
     return withBase(`<!DOCTYPE html>
 <html lang="en">
@@ -85,7 +89,8 @@ function shell(options: { title: string; description: string; nav: NavNode[]; cu
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(pageTitle)}</title>
 <meta name="description" content="${escape(options.description)}">
-<link rel="icon" href="/assets/navette-icon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/navette-icon.svg" type="image/svg+xml">${options.markdown ? `
+<link rel="alternate" type="text/markdown" href="${options.markdown}" title="Markdown">` : ''}
 <link rel="stylesheet" href="/assets/fonts/inter/index.css">
 <link rel="stylesheet" href="/assets/style.css">
 <script>(() => { try { const mode = localStorage.getItem('navette-docs-theme'); if (mode === 'dark' || (!mode && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch {} })();</script>
@@ -129,8 +134,11 @@ function tocOf(headings: Heading[]): string {
 
 function pageHtml(page: DocPage, nav: NavNode[], previous: DocPage | null, next: DocPage | null): string {
     const pager = `<nav class="pager" aria-label="Previous and next pages">${previous ? `<a class="pager-previous" href="${previous.url}"><span>Previous</span>${escape(previous.title)}</a>` : '<span></span>'}${next ? `<a class="pager-next" href="${next.url}"><span>Next</span>${escape(next.title)}</a>` : ''}</nav>`;
-    const main = `<article class="prose"><p class="eyebrow">${escape(page.section.join(' / '))}</p><h1>${escape(page.title)}</h1>${page.html}</article>${pager}`;
-    return shell({ title: page.title, description: page.text.slice(0, 160), nav, current: page.url, main, toc: tocOf(page.headings) });
+    const markdown = '/' + markdownFile(page.url);
+    // The button fetches the .md twin; the link works without JavaScript.
+    const actions = `<div class="page-actions"><button type="button" class="page-copy">${icons.copy}<span>Copy page</span></button><a class="page-markdown" href="${markdown}" type="text/markdown">View as Markdown</a><span class="visually-hidden" role="status"></span></div>`;
+    const main = `<article class="prose"><div class="page-head"><p class="eyebrow">${escape(page.section.join(' / '))}</p>${actions}</div><h1>${escape(page.title)}</h1>${page.html}</article>${pager}`;
+    return shell({ title: page.title, description: page.description ?? page.text.slice(0, 160), nav, current: page.url, main, toc: tocOf(page.headings), markdown });
 }
 
 function homeHtml(home: DocPage | null, nav: NavNode[], pages: DocPage[]): string {
@@ -141,7 +149,7 @@ function homeHtml(home: DocPage | null, nav: NavNode[], pages: DocPage[]): strin
     }).join('');
     const intro = home ? home.html : '';
     const main = `<section class="hero"><p class="eyebrow">Documentation · v${escape(version)}</p><h1>${escape(home?.title ?? 'Navette')}</h1>${intro}<div class="hero-actions"><a class="button button-primary" href="/getting-started/installation">Get started</a><a class="button" href="/getting-started/overview">What is Navette?</a></div></section><section class="cards">${cards}</section>`;
-    return shell({ title: 'Navette', description: home?.text.slice(0, 160) ?? 'Navette documentation', nav, current: '/', main, toc: '', bodyClass: 'home' });
+    return shell({ title: 'Navette', description: home?.text.slice(0, 160) ?? 'Navette documentation', nav, current: '/', main, toc: '', bodyClass: 'home', markdown: '/index.md' });
 }
 
 // ------------------------------------------------------------------ build
@@ -184,6 +192,8 @@ export async function build(): Promise<{ pages: DocPage[]; previewErrors: string
         ...page.headings.map((heading) => ({ t: heading.text, s: `${page.section.join(' / ')} / ${page.title}`, u: `${page.url}#${heading.id}`, x: '' })),
     ]);
     writeFileSync(path.join(dist, 'search.json'), JSON.stringify(index));
+    // Markdown versions for AI agents: /<page>.md, /llms.txt, /llms-full.txt, /pages.json.
+    writeAgentFiles(dist, pages, { prefix: origin + base, version, home });
 
 
     const assets = path.join(dist, 'assets');

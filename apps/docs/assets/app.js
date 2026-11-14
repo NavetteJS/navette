@@ -34,6 +34,39 @@
         setTimeout(() => { button.textContent = 'Copy'; }, 1500);
     }));
 
+    // ------------------------------------------------------------------ copy the page as Markdown (its .md twin)
+    const copyText = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+        const area = Object.assign(document.createElement('textarea'), { value: text });
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.append(area);
+        area.select();
+        const copied = document.execCommand('copy');
+        area.remove();
+        if (!copied) throw new Error('Copy refused');
+    };
+    document.querySelectorAll('.page-copy').forEach((button) => button.addEventListener('click', async () => {
+        const actions = button.closest('.page-actions');
+        const label = button.querySelector('span');
+        const status = actions?.querySelector('[role="status"]');
+        const href = actions?.querySelector('.page-markdown')?.getAttribute('href');
+        if (!href || !label) return;
+        button.disabled = true;
+        try {
+            const response = await fetch(href);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            await copyText(await response.text());
+            label.textContent = 'Copied';
+            if (status) status.textContent = 'Page copied as Markdown.';
+        } catch {
+            label.textContent = 'Copy failed';
+            if (status) status.textContent = 'The page could not be copied: open "View as Markdown" instead.';
+        }
+        setTimeout(() => { label.textContent = 'Copy page'; button.disabled = false; if (status) status.textContent = ''; }, 2000);
+    }));
+
     // ------------------------------------------------------------------ table of contents: highlight the visible heading
     const tocLinks = [...document.querySelectorAll('.toc a')];
     if (tocLinks.length && 'IntersectionObserver' in window) {

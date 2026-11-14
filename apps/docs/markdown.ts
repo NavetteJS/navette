@@ -205,10 +205,10 @@ export function render(markdown: string): Rendered {
     return { html, headings, text: textParts.join(' ').replace(/\s+/g, ' '), previews };
 }
 
-/** Only `title` is read from the front matter. */
-export function frontMatter(source: string): { title: string | null; body: string } {
+/** Reads `title` and the optional one-line `description` from the front matter. */
+export function frontMatter(source: string): { title: string | null; description: string | null; body: string } {
     const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(source);
-    if (!match) return { title: null, body: source };
-    const title = /^title:\s*(.+)$/m.exec(match[1])?.[1]?.trim().replace(/^(['"])(.*)\1$/, '$2') ?? null;
-    return { title, body: source.slice(match[0].length) };
+    if (!match) return { title: null, description: null, body: source };
+    const value = (key: string) => new RegExp(`^${key}:\\s*(.+)$`, 'm').exec(match[1])?.[1]?.trim().replace(/^(['"])(.*)\1$/, '$2') ?? null;
+    return { title: value('title'), description: value('description'), body: source.slice(match[0].length) };
 }

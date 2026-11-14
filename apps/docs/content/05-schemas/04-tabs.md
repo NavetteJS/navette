@@ -1,5 +1,6 @@
 ---
 title: Tabs
+description: Split a long schema into tabs, with icons, badges, a default active tab, and the current tab kept in the URL or the browser.
 ---
 
 ## Introduction
