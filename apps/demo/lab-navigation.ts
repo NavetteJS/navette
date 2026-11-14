@@ -81,7 +81,7 @@ export function labNavigationPanel(options: { key: string; login: typeof Login; 
                 ]),
                 NavigationGroup.make(new HtmlString('Links <span class="nv-badge nv-size-xs" data-nv-html-label>ext</span>')).collapsed().extraSidebarAttributes({ 'data-nv-group': 'links' }).items([
                     NavigationItem.make('Navette on GitHub').url('https://github.com/NavetteJS/navette', true).icon('o-arrow-top-right-on-square'),
-                    NavigationItem.make('Filament documentation').url('https://filamentphp.com/docs', true).icon('o-book-open'),
+                    NavigationItem.make('Documentation').url('https://github.com/NavetteJS/navette#readme', true).icon('o-book-open'),
                 ]),
             ]))
         .breadcrumbs(true, true)
@@ -92,7 +92,7 @@ export function labNavigationPanel(options: { key: string; login: typeof Login; 
                     .action(({ data }) => { Notification.make().success().title('Feedback sent').body(String(data.message ?? '')).send(); }),
                 Action.make('report').label('Stock report').icon('m-chart-bar').url('/lab-nav/stock-report'),
             ],
-            [ActionGroup.make([Action.make('docs').label('Documentation').icon('m-book-open').url('https://filamentphp.com/docs').openUrlInNewTab()])],
+            [ActionGroup.make([Action.make('docs').label('Documentation').icon('m-book-open').url('https://github.com/NavetteJS/navette#readme').openUrlInNewTab()])],
             { logout: (action: Action) => action.label('Leave the lab') },
         ]);
 }
