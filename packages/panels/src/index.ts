@@ -69,7 +69,7 @@ import { applyPanelMiddleware, middlewareFor, type PanelMiddleware, type PanelMi
 import { rewriteSpaLinks } from './spa.ts';
 import { findComponentPanel, getComponentPanels, registerComponentPanel, resolveComponentPanel } from './component-panels.ts';
 export { WidgetConfiguration, type WidgetEntry } from './widget-configuration.ts';
-export { InteractsWithPageTable } from './page-table.ts';
+export { InteractsWithPageTable, type PageTableWidget, type PageTableWidgetStatics } from './page-table.ts';
 export { ContentTabPosition, RelationManagerConfiguration, type RelationManagerEntries, type RelationManagerEntry } from './relation-managers.ts';
 import { ContentTabPosition, managersOfEntry, RelationManagerConfiguration, relationManagerEntries, relationManagerTabFromQuery, type MountedManager, type RelationManagerEntries, type RelationManagerEntry } from './relation-managers.ts';
 import { WidgetConfiguration, widgetClassOf, widgetPropertiesOf, type WidgetEntry } from './widget-configuration.ts';

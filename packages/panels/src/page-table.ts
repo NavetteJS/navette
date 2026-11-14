@@ -9,6 +9,24 @@ export const PAGE_TABLE_STATE_PROPERTIES = ['activeTab', 'paginators', 'tableCol
 
 type WidgetClass = abstract new (...args: any[]) => Widget;
 
+/** Members that `InteractsWithPageTable()` adds to a widget. */
+export interface PageTableWidget {
+    activeTab: string | null;
+    paginators: Record<string, number>;
+    tableColumnSearches: Record<string, string>;
+    tableFilters: Record<string, FilterState>;
+    tableRecordsPerPage: number | 'all';
+    tableSearch: string;
+    tableSort: string | null;
+    getTablePage(): typeof ListRecords;
+    getTablePageInstance(): ListRecords;
+    getPageTableAdapter(): DataAdapter;
+    getPageTableQuery(): Omit<ListQuery, 'page' | 'perPage'>;
+    getPageTableRecords(): Promise<unknown[]>;
+}
+/** Static members that `InteractsWithPageTable()` adds to a widget class. */
+export type PageTableWidgetStatics = { reactive: string[]; tablePage: (() => typeof ListRecords) | null };
+
 /**
  * Adds the page table state to a widget class: `class ProductStats extends InteractsWithPageTable(StatsOverviewWidget) { … }`,
  * with `getTablePage()` (or `static tablePage = () => ListProducts`) naming the list page. `getPageTableQuery()` is the table's
@@ -16,7 +34,8 @@ type WidgetClass = abstract new (...args: any[]) => Widget;
  * The state comes from the page, and goes through the same validation as on the page; it does not check each record's
  * `view` policy: keep restrictions in the table's query.
  */
-export function InteractsWithPageTable<T extends WidgetClass>(Base: T) {
+// The return type is spelled out: the declaration build cannot name an anonymous class with the base's private members.
+export function InteractsWithPageTable<T extends WidgetClass>(Base: T): T & (abstract new (...args: any[]) => PageTableWidget) & PageTableWidgetStatics {
     abstract class InteractsWithPageTableWidget extends Base {
         static reactive = PAGE_TABLE_STATE_PROPERTIES;
         /** List page whose table is observed (or override `getTablePage()`). */
@@ -54,5 +73,5 @@ export function InteractsWithPageTable<T extends WidgetClass>(Base: T) {
             return (await getTableRecords(page.getTable(), page as any, page.getDataAdapterForTable())).records;
         }
     }
-    return InteractsWithPageTableWidget;
+    return InteractsWithPageTableWidget as unknown as T & (abstract new (...args: any[]) => PageTableWidget) & PageTableWidgetStatics;
 }
