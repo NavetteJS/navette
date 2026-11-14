@@ -10,5 +10,6 @@ Navette is an independent project, not affiliated with or endorsed by the Filame
 | [Iconify utils](https://github.com/iconify/iconify/tree/main/packages/utils) © Vjacheslav Trushkin | Conversion of Iconify icons to SVG, flips and rotations (`@navette-js/support`, `iconifyToSvg()`) | MIT | `packages/support/icons/ICONIFY-UTILS-LICENSE.md` |
 | [QR Code generator library](https://www.nayuki.io/page/qr-code-generator-library) © Project Nayuki | Structure of the QR Code encoder (`@navette-js/panels`, `qr-code.ts`) | MIT | header of `packages/panels/src/qr-code.ts` |
 | [Inter](https://github.com/rsms/inter) © The Inter Project Authors | Default font files (`@navette-js/panels/dist/filament/fonts`) | SIL Open Font License 1.1 | `packages/panels/dist/filament/fonts/INTER-LICENSE.txt` |
+| [Vue](https://github.com/vuejs/core) © Yuxi (Evan) You and Vue contributors | Demo only: the `/lab` panel's framework-rendered field example loads the vendored runtime build `vue.runtime.esm-browser.prod.js` 3.5.44 (`apps/demo/public/vendor/vue`); not part of the published packages | MIT | `apps/demo/public/vendor/vue/LICENSE` |
 
 Runtime dependencies installed from npm (Express, Knex, Objection, better-sqlite3, Tiptap, EJS, Busboy…) keep their own licenses.

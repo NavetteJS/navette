@@ -4,6 +4,7 @@ import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, loadingIndic
 import { t } from '@navette-js/support/i18n';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { jsComponentHtml, normalizeRendererConfiguration, type JsRenderer } from './js-renderer.ts';
 
 views.namespace('filament-schemas', fileURLToPath(new URL('../views', import.meta.url)));
 
@@ -1188,5 +1189,39 @@ export class FusedGroup extends Component {
             : `<div class="fi-fo-field-label-col"><div class="fi-fo-field-label-ctn"><label ${labelId}class="fi-fo-field-label"><span class="fi-fo-field-label-content">${e(label)}${this._markedAsRequired ? '<sup class="fi-fo-field-label-required-mark">*</sup>' : ''}</span></label></div></div>`;
         const errorHtml = error !== null ? `<p data-validation-error ${id ? `id="${e(id)}-error" ` : ''}class="fi-fo-field-wrp-error-message">${e(error)}</p>` : '';
         return `<div data-field-wrapper class="fi-fo-field">${labelHtml}<div class="fi-fo-field-content-col"><div ${inner.toHtml()}>${await this.getChildSchemas()[0].toHtml()}</div>${errorHtml}</div></div>`;
+    }
+}
+
+export * from './js-renderer.ts';
+
+/**
+ * Schema component rendered in the browser by a JavaScript module that the application brings (React, Vue, Svelte or plain
+ * DOM code). The module default-exports a mount function `({ host, props, utilities }) => ({ update(props), destroy() })`.
+ */
+export class JsComponent extends Component {
+    protected _renderer: Lazy<JsRenderer | null, ComponentContext> = null;
+    protected _rendererConfiguration: Lazy<Record<string, unknown> | null, ComponentContext> = null;
+    protected _id: Lazy<string | null, ComponentContext> = null;
+
+    static make(): JsComponent { return configured(new JsComponent()); }
+    /** URL of the ES module (resolved against the page URL), or a trusted `RawJs` function expression. Never from user input. */
+    renderer(renderer: Lazy<JsRenderer | null, ComponentContext>): this { this._renderer = renderer; return this; }
+    async getRenderer(): Promise<JsRenderer | null> { return (await evaluate(this._renderer, this.context())) ?? null; }
+    /** JSON-serializable values passed to the renderer as `props.configuration` (sent to the browser: no secrets). */
+    rendererConfiguration(configuration: Lazy<Record<string, unknown> | null, ComponentContext>): this { this._rendererConfiguration = configuration; return this; }
+    async getRendererConfiguration(): Promise<Record<string, unknown>> { return normalizeRendererConfiguration(await evaluate(this._rendererConfiguration, this.context())); }
+    /** Id passed to the renderer as `props.id` (the component key by default). */
+    id(id: Lazy<string | null, ComponentContext>): this { this._id = id; return this; }
+    async getId(): Promise<string | null> { return (await evaluate(this._id, this.context())) ?? this.getKey(); }
+    async toHtml(): Promise<string> {
+        return jsComponentHtml({
+            livewireKey: this.getLivewireKey(),
+            assetUrl: views.render('filament-schemas::asset', { path: 'js-component' }).trim(),
+            renderer: await this.getRenderer(),
+            rendererConfiguration: await this.getRendererConfiguration(),
+            componentConfiguration: { id: await this.getId() },
+            extraAttributes: new Attributes().merge(this._extraAttributes).toHtml(),
+            failedToLoadMessage: t('filament-schemas::components.js_component.failed_to_load'),
+        });
     }
 }

@@ -2,10 +2,11 @@
 import { Attributes, HtmlString, cls, e, evaluate, icon, icons, js, sanitizeHtml, views, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
-import { Component, Icon as SchemaIcon, Schema, Text, childSchema, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem } from '@navette-js/schemas';
+import { Component, Icon as SchemaIcon, Schema, Text, childSchema, debounceMilliseconds, jsFieldHtml, normalizeRendererConfiguration, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem, type JsFieldBindingConfiguration, type JsFieldConfiguration, type JsRenderer } from '@navette-js/schemas';
 import { Action, ActionHalt } from '@navette-js/actions';
 import { colorClassesOf, fieldActionIcon, itemContext, modifyAction, prepareExtraItemAction, resolveAction, type ActionModifier, type ResolvedAction } from './item-actions.ts';
 export { modifyAction, type ActionModifier } from './item-actions.ts';
+export type { JsFieldProps, JsFieldRenderer, JsonValue, JsRendererContext, JsRendererInstance, JsRendererUtilities, Snapshot } from '@navette-js/schemas';
 import { loadingIndicator } from '@navette-js/support';
 import { randomUUID } from 'node:crypto';
 import { generateHTML, generateJSON } from '@tiptap/html/server';
@@ -3209,6 +3210,65 @@ export class Slider extends Field {
         // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
         return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
+    }
+}
+
+/**
+ * Field whose control is rendered in the browser by a JavaScript module that the application brings (React, Vue, Svelte or
+ * plain DOM code), with two-way binding to the field state. The module default-exports a mount function
+ * `({ host, props, utilities }) => ({ update(props), destroy() })`; `props` holds the value, `onChange()`, `onBlur()` and the
+ * input settings (`id`, `isDisabled`, `isInvalid`…). Extend it and override `getRenderer()` to build a reusable field.
+ */
+export class JsField extends Field {
+    protected _renderer: Lazy<JsRenderer | null, ComponentContext> = null;
+    protected _rendererConfiguration: Lazy<Record<string, unknown> | null, ComponentContext> = null;
+    protected _readOnly: Lazy<boolean, ComponentContext> = false;
+    protected _liveDebounce: number | string | null = null;
+
+    static make(name: string): JsField { return configured(new JsField(name)); }
+    /** URL of the ES module (resolved against the page URL), or a trusted `RawJs` function expression. Never from user input. */
+    renderer(renderer: Lazy<JsRenderer | null, ComponentContext>): this { this._renderer = renderer; return this; }
+    async getRenderer(): Promise<JsRenderer | null> { return (await evaluate(this._renderer, this.context())) ?? null; }
+    /** JSON-serializable values passed to the renderer as `props.configuration` (sent to the browser: no secrets). */
+    rendererConfiguration(configuration: Lazy<Record<string, unknown> | null, ComponentContext>): this { this._rendererConfiguration = configuration; return this; }
+    async getRendererConfiguration(): Promise<Record<string, unknown>> { return normalizeRendererConfiguration(await evaluate(this._rendererConfiguration, this.context())); }
+    /** Read-only input (`props.isReadOnly`): the value is still validated and saved, so check it on the server. */
+    readOnly(condition: Lazy<boolean, ComponentContext> = true): this { this._readOnly = condition; return this; }
+    async isReadOnly(): Promise<boolean> { return Boolean(await evaluate(this._readOnly, this.context())); }
+    /**
+     * Sends the edits to the server: on each change, after `props.onBlur()` (`{ onBlur: true }`), or once the user pauses
+     * (`{ debounce: 500 }` or `'500ms'`). `false` turns it off.
+     */
+    live(condition: boolean | { onBlur?: boolean; debounce?: number | string | null } = true): this {
+        super.live(condition);
+        this._liveDebounce = typeof condition === 'object' && !condition.onBlur ? (condition.debounce ?? null) : null;
+        return this;
+    }
+    /** When edits are sent to the server, passed to the renderer's props (`isLive`, `isLiveOnBlur`, `debounce`). */
+    getBindingConfiguration(): JsFieldBindingConfiguration {
+        const isLiveOnBlur = this._liveMode === 'blur';
+        return { isLive: this._liveMode !== null, isLiveOnBlur, debounce: isLiveOnBlur ? null : debounceMilliseconds(this._liveDebounce) };
+    }
+    /** Ids of the helper text and validation error, for the control's `aria-describedby`. */
+    getDescriptionIds(): string[] {
+        if (this.container.getFieldWrapperView?.() === 'filament-forms::plain-field-wrapper') return [];
+        return [this.getHelperTextId(), this.hasError() ? `${this.getId()}-error` : null].filter((id): id is string => id !== null);
+    }
+    async getFieldConfiguration(): Promise<JsFieldConfiguration> {
+        return { id: this.getId(), ariaDescribedBy: this.getDescriptionIds().join(' '), isDisabled: await this.isDisabled(), isReadOnly: await this.isReadOnly(), isRequired: await this.isRequired(), isInvalid: this.hasError() };
+    }
+    async toHtml(): Promise<string> {
+        return this.wrap(jsFieldHtml({
+            livewireKey: this.getLivewireKey(),
+            statePath: this.getStatePath(),
+            assetUrl: asset('js-field'),
+            renderer: await this.getRenderer(),
+            rendererConfiguration: await this.getRendererConfiguration(),
+            fieldConfiguration: await this.getFieldConfiguration(),
+            bindingConfiguration: this.getBindingConfiguration(),
+            extraAttributes: new Attributes().merge(this._extraAttributes).toHtml(),
+            failedToLoadMessage: t('filament-forms::components.js_field.failed_to_load'),
+        }));
     }
 }
 

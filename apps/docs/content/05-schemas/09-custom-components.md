@@ -239,6 +239,177 @@ export class Aside extends Component {
 
 The child schema shares the state path, record and operation of the parent schema. Declaring it in `getChildSchemas()` is required for the fields inside your component to be filled, validated and saved with the rest of the form. You may call `columns()` on the child schema to give it a grid.
 
+## Rendering components with JavaScript frameworks
+
+You may render a schema component with a component of a JavaScript framework, such as React, Vue or Svelte, or with plain DOM code. Your application brings the framework and builds the component into an ES module; Navette loads the module, mounts it and keeps it up to date.
+
+Use `JsComponent` and pass the URL of the module to `renderer()`:
+
+```ts
+import { JsComponent } from '@navette-js/schemas';
+
+JsComponent.make()
+    .key('sales-summary')
+    .renderer('/js/components/sales-summary.js')
+    .rendererConfiguration({ message: 'Sales increased by 12% this quarter.' })
+```
+
+Give each instance a unique `key()`. Instances may share a renderer without sharing their local state. The URL is resolved against the page URL; serve the module from a public folder, as for [fields rendered with JavaScript frameworks](/forms/custom-fields#serving-the-module).
+
+<Aside variant="danger">
+Only use URLs of modules that your application serves, or `RawJs` code that you wrote: never let user input choose the module or appear in a `RawJs` expression. Renderers are not sandboxed and must follow your Content Security Policy. Validate and authorize the requests they make on the server.
+</Aside>
+
+`renderer()` also accepts a function of the component context. If a script you already load defines the mount function, you may pass a trusted `RawJs` expression from `@navette-js/forms` instead of a URL: `.renderer(RawJs.make('window.mountSalesSummary'))`.
+
+### Writing a component renderer
+
+The module default-exports a mount function receiving `host`, `props` and `utilities`. Render inside `host`, then return `update(props)` and `destroy()`. `props.configuration` holds the configuration set with `rendererConfiguration()`, and `props.id` the component's id: its key, or the value of `id()`, or `null`.
+
+With React, create `resources/js/components/sales-summary.jsx` and build it with your bundler:
+
+```jsx
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+
+function SalesSummary(props) {
+    return <p>{props.configuration.message}</p>;
+}
+
+export default function mountSalesSummary({ host, props: initialProps }) {
+    const root = createRoot(host);
+    const update = (props) => root.render(<SalesSummary {...props} />);
+
+    update(initialProps);
+
+    return { update, destroy: () => root.unmount() };
+}
+```
+
+With Vue, create `resources/js/components/SalesSummary.vue`:
+
+```vue
+<script setup>
+defineOptions({ inheritAttrs: false });
+
+const props = defineProps(['id', 'configuration']);
+</script>
+
+<template>
+    <p>{{ props.configuration.message }}</p>
+</template>
+```
+
+Then mount it from the entry `resources/js/components/sales-summary.js`:
+
+```js
+import { createApp, h, shallowRef } from 'vue';
+import SalesSummary from './SalesSummary.vue';
+
+export default function mountSalesSummary({ host, props: initialProps }) {
+    const props = shallowRef(initialProps);
+    const application = createApp({
+        setup: () => () => h(SalesSummary, props.value),
+    });
+
+    application.mount(host);
+
+    return {
+        update(nextProps) {
+            props.value = nextProps;
+        },
+        destroy: () => application.unmount(),
+    };
+}
+```
+
+With Svelte 5, create `resources/js/components/SalesSummary.svelte`:
+
+```svelte
+<script>
+    let { configuration } = $props();
+</script>
+
+<p>{configuration.message}</p>
+```
+
+Then mount it from the entry `resources/js/components/sales-summary.svelte.js` (the `.svelte.js` extension lets the Svelte compiler process `$state`):
+
+```js
+import { mount, unmount } from 'svelte';
+import SalesSummary from './SalesSummary.svelte';
+
+export default function mountSalesSummary({ host, props: initialProps }) {
+    const props = $state({ ...initialProps });
+    const component = mount(SalesSummary, { target: host, props });
+
+    return {
+        update: (nextProps) => Object.assign(props, nextProps),
+        destroy: () => unmount(component),
+    };
+}
+```
+
+Without a framework, the module may be served as is:
+
+```js
+export default function mountSalesSummary({ host, props: initialProps }) {
+    const paragraph = document.createElement('p');
+    const update = (props) => {
+        paragraph.textContent = props.configuration.message ?? '';
+    };
+
+    update(initialProps);
+    host.append(paragraph);
+
+    return { update, destroy: () => paragraph.remove() };
+}
+```
+
+### Configuring the renderer from the server
+
+`rendererConfiguration()` also accepts a function of the component context, for example to display the value of a field:
+
+```ts
+JsComponent.make()
+    .key('sales-summary')
+    .renderer('/js/components/sales-summary.js')
+    .rendererConfiguration(({ get }) => ({
+        message: get('summary'),
+    }))
+```
+
+Each time the component is rendered on the server, the renderer receives the new configuration in `update(props)`, without being remounted. Make the source field `live()` so that its changes trigger a render. Changing the renderer or the id remounts the component. The configuration is written into the page: only pass JSON-serializable data meant for the browser, never secrets.
+
+`utilities` gives the renderer the same [schema utilities](/forms/custom-fields#accessing-schema-utilities) as a field renderer: `$get()`, `$set()`, `$state`, `$statePath` (the path of the surrounding schema, or `null`), `$wire`, and the [exposed methods](#calling-component-methods-from-javascript) of your component class, such as `utilities.$getChartData({ dateRange: 'week' })`. Type the mount function with `JsComponentRenderer<Configuration, Methods>`, imported with `import type` from `@navette-js/schemas`.
+
+Render only inside `host`, whose content is ignored when the page is updated, and keep child schemas and actions outside the renderer. If importing, mounting or `update()` fails, the component shows an accessible error message and the error is logged in the browser console. Clean up subscriptions, listeners and framework roots in `destroy()`.
+
+### Building reusable JavaScript components
+
+To ship a component that renders with JavaScript, extend `JsComponent` and override `getRenderer()`, and `getRendererConfiguration()` for its configuration:
+
+```ts
+import { JsComponent } from '@navette-js/schemas';
+import { configured } from '@navette-js/support';
+
+export class SalesSummary extends JsComponent {
+    static make(): SalesSummary {
+        return configured(new SalesSummary());
+    }
+
+    async getRenderer(): Promise<string> {
+        return '/vendor/reports/sales-summary.js';
+    }
+
+    async getRendererConfiguration(): Promise<Record<string, unknown>> {
+        return { message: 'Sales increased by 12% this quarter.' };
+    }
+}
+```
+
+Use it with `SalesSummary.make().key('sales-summary')`, and expose its settings through [configuration methods](#adding-a-configuration-method-to-a-custom-component-class).
+
 ## Calling component methods from JavaScript
 
 Sometimes you need to call a method on the component class from JavaScript in its HTML. For example, you might want to fetch data asynchronously or perform some server-side computation.
@@ -341,5 +512,5 @@ export class Chart extends Component {
 ```
 
 <Aside variant="warning">
-Rendering components with JavaScript frameworks (`JsComponent`) and inserting a nested Livewire component are not available yet. There is no command that generates a component class, but `npx navette make:component` generates a [view component](/components/creating-components) that your class can render.
+Inserting a nested Livewire component is not available yet. There is no command that generates a component class, but `npx navette make:component` generates a [view component](/components/creating-components) that your class can render.
 </Aside>
