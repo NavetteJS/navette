@@ -2,7 +2,7 @@
 import { Attributes, HtmlString, cls, e, evaluate, icon, icons, isEnum, js, sanitizeHtml, views, type ColorManager, type Enum, type Lazy, configured } from '@navette-js/support';
 import { createHash } from 'node:crypto';
 import { t } from '@navette-js/support/i18n';
-import { Component, Icon as SchemaIcon, Schema, Text, childSchema, debounceMilliseconds, jsFieldHtml, normalizeRendererConfiguration, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem, type JsFieldBindingConfiguration, type JsFieldConfiguration, type JsRenderer } from '@navette-js/schemas';
+import { Component, LayoutComponent, loadSingularRelationshipState, saveSingularRelationship, withStateSource, Icon as SchemaIcon, Schema, Text, childSchema, debounceMilliseconds, jsFieldHtml, normalizeRendererConfiguration, renderInlineItems, renderSlot, slug, type ComponentContext, type ComponentSlot, type InlineItem, type JsFieldBindingConfiguration, type JsFieldConfiguration, type JsRenderer } from '@navette-js/schemas';
 import { Action, ActionHalt } from '@navette-js/actions';
 import { FieldBase } from './field-base.ts';
 export { FieldBase, type FieldSlotName, type StateCallback, type ValidationMessage } from './field-base.ts';
@@ -56,6 +56,10 @@ export abstract class Field extends FieldBase {
     /** `wire:model` directive of the field, with its live modifiers (`wire:model.live.debounce.500`). */
     protected wireModel(): string { return this.applyStateBindingModifiers('wire:model'); }
     /** Second `$entangle()` argument: whether the binding is live (`isOptimisticallyLive: false`: only a plain `live()`). */
+    /** Extra Alpine attributes, as HTML (` name="value"`), for a control rendered by a JavaScript component. */
+    protected extraAlpineHtml(): string { const html = new Attributes(this.getExtraAlpineAttributes()).toHtml(); return html ? ` ${html}` : ''; }
+    /** Extra Alpine and input attributes, as HTML, for a control whose root element is the JavaScript component. */
+    protected extraControlHtml(): string { const html = new Attributes(this.getExtraControlAttributes()).toHtml(); return html ? ` ${html}` : ''; }
     protected entangleLive(isOptimisticallyLive = true): boolean { return this.getStateBindingModifiers({ withBlur: false, withDebounce: false, isOptimisticallyLive }).includes('live'); }
     hasStatePath(): boolean { return true; }
     getName(): string { return this._name!; }
@@ -727,7 +731,8 @@ export class TextInput extends Field {
         const hasSuffix = this._suffix !== null || this._suffixIcon !== null || suffixActions.length > 0;
         const type = revealable ? 'password' : this._mask !== null ? 'text' : (this._type ?? (this._isPassword ? 'password' : this._numeric ? 'number' : 'text'));
         const model = this.wireModel();
-        const input = new Attributes()
+        const alpineAttributes = this.getExtraAlpineAttributes();
+        const input = new Attributes(this.getExtraControlAttributes())
             .merge({
                 'aria-invalid': this.hasError() ? 'true' : null,
                 'aria-describedby': this.getHelperTextId(),
@@ -747,7 +752,7 @@ export class TextInput extends Field {
             .class(['fi-input', { 'fi-input-has-inline-prefix': this._prefixInline && hasPrefix, 'fi-input-has-inline-suffix': this._suffixInline && hasSuffix, 'fi-revealable': revealable }]);
         const wrapper = new Attributes()
             .merge({
-                'x-data': revealable ? 'passwordRevealFormComponent()' : this._mask !== null ? '{}' : null,
+                'x-data': revealable ? 'passwordRevealFormComponent()' : this._mask !== null || Object.keys(alpineAttributes).length ? '{}' : null,
                 'x-load': revealable ? '' : null,
                 'x-load-src': revealable ? views.render('filament-forms::asset', { path: 'text-input/password-reveal' }).trim() : null,
                 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()",
@@ -1128,7 +1133,7 @@ export class Select extends Field {
             const after = isRequired ? `<span id="${e(this.getId())}-required" class="fi-sr-only">${e(t('filament-forms::components.select.required_description'))}</span>` : '';
             return this.wrap(await this.toJsHtml(grouped, isDisabled, suffix, prefix), { wrapperClass: 'fi-fo-select-wrp', after });
         }
-        const select = new Attributes()
+        const select = new Attributes(this.getExtraControlAttributes())
             .merge({ 'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(), required: (await this.isRequired()) && !isDisabled, 'wire:key': typeof this._options === 'function' ? `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify(resolved)).digest('hex')}` : null, [this.wireModel()]: this.getStatePath() })
             .class(['fi-select-input']);
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('select')?.focus()" }).class(['fi-fo-select', 'fi-fo-select-native', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
@@ -1200,7 +1205,7 @@ export class Select extends Field {
  }),
  )
  },
- }"></div><div x-load x-load-src="${e(asset('select'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()" class="fi-select-input"><div x-ref="select"></div></div></div>${suffix}</div>`;
+ }"></div><div x-load x-load-src="${e(asset('select'))}"${this.extraControlHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" x-on:set-select-property="$event.detail.isDisabled ? select.disable() : select.enable()" class="fi-select-input"><div x-ref="select"></div></div></div>${suffix}</div>`;
     }
 }
 
@@ -1859,7 +1864,7 @@ abstract class TemporalField extends Field {
         const model = this.wireModel();
         if (this._native) {
             const limit = (value: string | null) => (value === null ? null : !this.hasTime() ? value.slice(0, 10) : !this.hasDate() ? (value.length > 8 ? value.slice(11) : value) : value.replace(' ', 'T'));
-            const input = new Attributes()
+            const input = new Attributes(this.getExtraControlAttributes())
                 .merge({
                     'aria-invalid': this.hasError() ? 'true' : null, disabled: isDisabled, id: this.getId(),
                     max: limit(max), min: limit(min), placeholder: this._temporalPlaceholder,
@@ -1876,7 +1881,7 @@ abstract class TemporalField extends Field {
         const label = await this.getLabel();
         const tr = (key: string) => t(`filament-forms::components.date_time_picker.${key}`);
         const describedBy = [this.getHelperTextId(), this.hasError() ? `${id}-error` : null].filter(Boolean).join(' ') || null;
-        const trigger = new Attributes().merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['fi-fo-date-time-picker-trigger', 'fi-fo-date-time-picker-display-text-input']);
+        const trigger = new Attributes(this.getExtraInputAttributes()).merge({ 'aria-describedby': describedBy, 'aria-invalid': this.hasError() ? 'true' : null, 'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', disabled: isDisabled, id, placeholder: this._temporalPlaceholder, role: 'combobox', type: 'text' }).class(['fi-fo-date-time-picker-trigger', 'fi-fo-date-time-picker-display-text-input']);
         const config = `dateTimePickerFormComponent({
  defaultFocusedDate: ${js(this._defaultFocusedDate)},
  displayFormat: ${js(phpDateFormatToDayjs(this._displayFormat ?? this.defaultDisplayFormat()))},
@@ -1885,7 +1890,7 @@ abstract class TemporalField extends Field {
  isAutofocused: ${(await this.isAutofocused()) && !isDisabled ? 'true' : 'false'},
  locale: ${js(this._locale ?? 'en')},
  shouldCloseOnDateSelection: ${this._closeOnDateSelection ? 'true' : 'false'},
- state: $wire.$entangle(${js(this.getStatePath())}${this.isLive() ? ', true' : ''}),
+ state: $wire.$entangle(${js(this.getStatePath())}${this.entangleLive() ? ', true' : ''}),
  })`;
         const keyHash = createHash('md5').update(JSON.stringify([disabledDates, isDisabled, max, min, hasDate, hasTime, hasSeconds])).digest('hex');
         const events = hasDate
@@ -1900,7 +1905,7 @@ abstract class TemporalField extends Field {
         const calendar = hasDate ? `<div class="fi-fo-date-time-picker-panel-header"><select aria-label="${e(tr('month_select.label'))}" x-model="focusedMonth" class="fi-fo-date-time-picker-month-select"><template x-for="(month, index) in months"><option x-bind:value="index" x-text="month"></option></template></select><input type="number" inputmode="numeric" aria-label="${e(tr('year_input.label'))}" x-model.debounce="focusedYear" class="fi-fo-date-time-picker-year-input" /></div><div aria-live="polite" aria-atomic="true" x-text="getCalendarLabel()" class="fi-fo-date-time-picker-calendar-description"></div><div x-ref="calendar" role="grid" tabindex="-1" x-bind:aria-label="getCalendarLabel()" x-on:keydown="handleCalendarKeydown($event)" class="fi-fo-date-time-picker-calendar"><div role="row" class="fi-fo-date-time-picker-calendar-header"><template x-for="(day, index) in dayLabels" x-bind:key="index"><div role="columnheader" x-bind:aria-label="fullDayLabels[index]" x-text="day" class="fi-fo-date-time-picker-calendar-header-day"></div></template></div><template x-for="(week, weekIndex) in weeksInFocusedMonth" x-bind:key="weekIndex"><div role="row" class="fi-fo-date-time-picker-calendar-week"><template x-for="(day, dayIndex) in week" x-bind:key="day ?? ('empty-' + dayIndex)"><div role="gridcell" x-text="day" x-bind:data-date="day ? focusedDate.date(day).format('YYYY-MM-DD') : null" x-bind:aria-label="day ? getDayLabel(day) : null" x-bind:aria-selected="day &amp;&amp; dayIsSelected(day) ? 'true' : 'false'" x-bind:aria-current="day &amp;&amp; dayIsToday(day) ? 'date' : null" x-bind:aria-disabled="day &amp;&amp; dayIsDisabled(day) ? 'true' : 'false'" x-bind:tabindex="day ? (focusedDate.date() === day ? 0 : -1) : null" x-on:focus="day &amp;&amp; setFocusedDay(day)" x-on:click="if (day) { $el.focus(); selectDate(day) }" x-bind:class="{ 'fi-fo-date-time-picker-calendar-day': day, 'fi-fo-date-time-picker-calendar-day-today': day &amp;&amp; dayIsToday(day), 'fi-focused': day &amp;&amp; focusedDate.date() === day, 'fi-selected': day &amp;&amp; dayIsSelected(day), 'fi-disabled': day &amp;&amp; dayIsDisabled(day) }"></div></template></div></template></div>` : '';
         const timeInput = (max: number, step: number, label: string, model: string) => `<input max="${max}" min="0" step="${step}" type="number" inputmode="numeric" aria-label="${e(label)}" x-on:blur="checkTimeInputValidity" x-on:invalid="timeInputInvalid" x-model.debounce="${model}" />`;
         const time = hasTime ? `<div class="fi-fo-date-time-picker-time-inputs">${timeInput(23, this._hoursStep, tr('hour_input.label'), 'hour')}<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._minutesStep, tr('minute_input.label'), 'minute')}${hasSeconds ? `<span class="fi-fo-date-time-picker-time-input-separator">:</span>${timeInput(59, this._secondsStep, tr('second_input.label'), 'second')}` : ''}</div>` : '';
-        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}" x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
+        const picker = `<div hidden data-field-accessibility${describedBy ? ` aria-describedby="${e(describedBy)}"` : ''}${this.hasError() ? ' aria-invalid="true"' : ''}></div><div x-load x-load-src="${e(asset('date-time-picker'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(livewireKey)}.${keyHash}"${events}><input x-ref="maxDate" type="hidden" value="${e(jsLimit(max))}" /><input x-ref="minDate" type="hidden" value="${e(jsLimit(min))}" /><input x-ref="disabledDates" type="hidden" value="${e(JSON.stringify(disabledDates))}" /><input x-ref="button"${buttonEvents} readonly wire:key="${e(livewireKey)}.display-text" x-model="displayText" ${trigger.toHtml()} /><div x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(label)}" x-cloak${hasDate ? ' x-show="isPanelOpen"' : ' x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }"'} wire:ignore wire:key="${e(livewireKey)}.panel" class="fi-fo-date-time-picker-panel">${calendar}${time}</div></div>`;
         return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn">${picker}</div></div>`);
     }
 }
@@ -1976,7 +1981,7 @@ export class Radio extends Field {
             .merge({ 'aria-describedby': this.hasError() ? `${id}-error` : null, 'aria-labelledby': `${id}-label`, 'aria-required': isRequired ? 'true' : null, role: 'radiogroup' })
             .class(['fi-fo-radio', this._inline ? 'fi-inline' : null]);
         const items = this._options.map(([value, label]) => {
-            const input = new Attributes()
+            const input = new Attributes(this.getExtraInputAttributes())
                 .merge({ type: 'radio', disabled: isDisabled || this.isOptionDisabled(value, label), id: `${id}-${value}`, name: id, required: isRequired, value, [this.wireModel()]: this.getStatePath() })
                 .class(['fi-radio-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             const description = this._descriptions[value] ? `<p class="fi-fo-radio-label-description">${e(this._descriptions[value])}</p>` : '';
@@ -2017,7 +2022,7 @@ export class Textarea extends Field {
         const isDisabled = await this.isDisabled();
         // Initial height: 1.5rem per row plus padding.
         const height = (this._rows ?? 2) * 1.5 + 0.75;
-        const textarea = new Attributes().merge({
+        const textarea = new Attributes(this.getExtraControlAttributes()).merge({
             'aria-invalid': this.hasError() ? 'true' : null, 'data-gramm': this._grammarly ? null : 'false', 'data-gramm_editor': this._grammarly ? null : 'false', 'data-enable-grammarly': this._grammarly ? null : 'false',
             disabled: isDisabled, id: this.getId(), maxlength: this._maxLength, minlength: this._minLength, placeholder: this._placeholder, readonly: this._readOnly,
             required: (await this.isRequired()) && !isDisabled && !this._readOnly, rows: this._rows, [this.wireModel()]: this.getStatePath(),
@@ -2085,14 +2090,14 @@ export class TagsInput extends Field {
         const wrapper = new Attributes()
             .merge({ 'aria-label': label, role: 'group', 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" })
             .class(['fi-fo-tags-input', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        const input = new Attributes()
+        const input = new Attributes(this.getExtraInputAttributes())
             .merge({ autocomplete: 'off', disabled: isDisabled, id, list: `${id}-suggestions`, placeholder: this._placeholder ?? t('filament-forms::components.tags_input.placeholder'), type: 'text', 'x-bind': 'input' })
             .class(['fi-input']);
         const badge = ['fi-badge', 'fi-size-md', ...colorManager.getComponentClasses('badge', this._tagColor ?? 'primary'), this._reorderable && !isDisabled ? 'fi-reorderable' : null].filter(Boolean).join(' ');
         const reorderable = this._reorderable && !isDisabled;
         const deleteButton = isDisabled ? '' : `<button type="button" x-on:click.stop="deleteTag(tag)" x-bind:aria-label="'${e(t('filament-forms::components.tags_input.actions.delete.label'))}: ' + tag" class="fi-badge-delete-btn"><span aria-hidden="true" class="fi-badge-delete-btn-icon"></span></button>`;
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}" x-data="tagsInputFormComponent({
-                    state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('tags-input'))}"${this.extraAlpineHtml()} x-data="tagsInputFormComponent({
+                    state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}),
                     splitKeys: ${this._splitKeys.length ? e(js(this._splitKeys)) : '[]'},
                     tagAddedMessage: ${e(js(t('filament-forms::components.tags_input.tag_added')))},
                     tagRemovedMessage: ${e(js(t('filament-forms::components.tags_input.tag_removed')))},
@@ -2125,10 +2130,10 @@ export class Toggle extends Field {
         const offColors = this._offColor && this._offColor !== 'gray' ? ` ${colorManager.getComponentClasses('toggle', this._offColor).join(' ')}` : '';
         const onIconHtml = this._onIcon ? icon(this._onIcon, { size: 'xs' }) : '';
         const offIconHtml = this._offIcon ? icon(this._offIcon, { size: 'xs' }) : '';
-        const button = new Attributes().merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
+        const button = new Attributes(this.getExtraAlpineAttributes()).merge({ 'aria-describedby': this.getHelperTextId(), 'aria-checked': on ? 'true' : 'false', disabled: await this.isDisabled(), id: this.getId(), 'wire:target': this.getStatePath() }).class(['fi-fo-toggle', 'fi-toggle']);
         const knob = `<div><div aria-hidden="true">${offIconHtml}</div><div aria-hidden="true">${onIconHtml}</div></div>`;
         const placeholderKnob = `<div><div aria-hidden="true"></div><div aria-hidden="true">${onIconHtml}</div></div>`;
-        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.isLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
+        const control = `<button x-data="{ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}) }" x-bind:aria-checked="state ? 'true' : 'false'" x-on:click="state = ! state" x-bind:class="state ? 'fi-toggle-on ${colors}' : 'fi-toggle-off${offColors}'"${on ? ' x-cloak' : ''} role="switch" type="button" ${button.toHtml()}>${knob}</button>${on ? `<div x-cloak="inline-flex" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.placeholder" class="fi-toggle fi-toggle-on fi-hidden ${colors}">${placeholderKnob}</div>` : ''}`;
         return this._inline ? this.wrap('', { labelPrefix: control }) : this.wrap(control);
     }
 }
@@ -2219,7 +2224,7 @@ export class ToggleButtons extends Field {
         const button = (value: string, disabled: boolean) => ['fi-btn', this._grouped ? 'fi-btn-group-btn' : null, `fi-size-${this._size ?? 'md'}`, disabled ? 'fi-disabled' : null, ...manager.getComponentClasses('button', this._colors[value] ?? 'primary')].filter(Boolean).join(' ');
         const items = this._options.map(([value, label]) => {
             const optionDisabled = this.isOptionDisabled(value, label);
-            const input = new Attributes().merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this.wireModel()]: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
+            const input = new Attributes(this.getExtraInputAttributes()).merge({ id: `${id}-${value}`, name: this._multiple ? null : id, type: this._multiple ? 'checkbox' : 'radio', value, [this.wireModel()]: this.getStatePath(), disabled: isDisabled || optionDisabled, 'aria-label': this._labelsHidden ? label : null, required: isRequired && !this._multiple && !optionDisabled, 'aria-describedby': describedBy }).class(['fi-fo-toggle-buttons-input']);
             const tooltip = this._tooltips[value] ? ` x-tooltip="${e(`{ content: ${js(this._tooltips[value])}, theme: $store.theme, allowHTML: false }`)}"` : '';
             const iconSize = this._size === 'xs' || this._size === 'sm' ? 'sm' : undefined;
             const html = `<input ${input.toHtml()} /><label for="${e(`${id}-${value}`)}"${tooltip}${this._labelsHidden ? ` aria-label="${e(label)}"` : ''} class="${button(value, optionDisabled)}">${this._icons[value] ? icon(this._icons[value], iconSize ? { size: iconSize } : {}) : ''}${this._labelsHidden ? '' : e(label)}</label>`;
@@ -2587,6 +2592,9 @@ export class RichEditor extends Field {
             .replace(/textColors: JSON\.parse\('[^']*'\),/, () => `textColors: ${js(textColorsForJs(this.getTextColors()))},`)
             .replace('placeholder: null,', `placeholder: ${js(this._richPlaceholder)},`)
             .replace('isLiveOnBlur: false,', `isLiveOnBlur: ${this.isLiveOnBlur() ? 'true' : 'false'},`)
+            .replace('isLiveDebounced: false,', `isLiveDebounced: ${this.getLiveDebounce() !== null ? 'true' : 'false'},`)
+            .replace('liveDebounce: null,', () => `liveDebounce: ${js(debounceMilliseconds(this.getLiveDebounce()))},`)
+            .replace('            x-load\n', () => `            x-load${this.extraControlHtml()}\n`)
             .replace(/state: \$wire\.\$entangle\(('[^']*'), false\)/, (_m, path) => `state: $wire.$entangle(${path}, ${this.entangleLive(false) ? 'true' : 'false'})`);
         return this.wrap(html, { labelAsDiv: true });
     }
@@ -2619,19 +2627,19 @@ export class ColorPicker extends Field {
         const key = this.getLivewireKey() ?? '';
         // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
-        const input = new Attributes().merge({
+        const input = new Attributes(this.getExtraInputAttributes()).merge({
             'aria-controls': `${id}-panel`, 'aria-expanded': 'false', 'aria-haspopup': 'dialog', 'aria-invalid': this.hasError() ? 'true' : null, autocomplete: 'off',
             disabled: isDisabled, id, required: (await this.isRequired()) && !isDisabled, role: 'combobox', type: 'text', 'x-model': 'state',
         }).class(['fi-input']);
         const wrapper = new Attributes().merge({ 'x-on:focus-input.stop': "$el.querySelector('input')?.focus()" }).class(['fi-fo-color-picker', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('color-picker'))}" x-data="colorPickerFormComponent({
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('color-picker'))}"${this.extraAlpineHtml()} x-data="colorPickerFormComponent({
  isAutofocused: false,
  isDisabled: ${isDisabled ? 'true' : 'false'},
  isLive: false,
  isLiveDebounced: false,
  isLiveOnBlur: false,
  liveDebounce: null,
- state: $wire.$entangle(${e(js(this.getStatePath()))}),
+ state: $wire.$entangle(${e(js(this.getStatePath()))}${this.entangleLive() ? ', true' : ''}),
  })" x-on:dropdown-escape="if (isOpen()) { closePanelAndRestoreFocus(); $event.preventDefault() }" x-on:keydown.esc="isOpen() &amp;&amp; $event.stopPropagation()" x-on:focusout="if (isOpen() &amp;&amp; ! $el.contains($event.relatedTarget)) $refs.panel.close()" wire:key="${e(key)}.${hash}" class="fi-input-wrp-content"><input x-on:focus="$refs.panel.open($refs.input)" x-on:keydown.enter.prevent.stop="togglePanelVisibility()" x-ref="input" ${input.toHtml()} /><div aria-hidden="true" class="fi-fo-color-picker-preview my-auto me-3 size-5 shrink-0 rounded-full select-none" x-on:click="togglePanelVisibility()" x-bind:class="{
  'fi-empty': ! state,
  }" x-bind:style="{ 'background-color': state }"></div><div wire:ignore.self wire:key="${e(key)}.panel" x-cloak x-float.placement.bottom-start.offset.flip.shift="{ offset: 8 }" x-ref="panel" id="${e(id)}-panel" role="dialog" aria-label="${e(t('filament-forms::components.color_picker.panel_label'))}" class="fi-fo-color-picker-panel"><${({ hex: 'hex', rgb: 'rgb-string', rgba: 'rgba-string', hsl: 'hsl-string' })[this._format]}-color-picker x-ref="picker" color="${e(typeof state === 'string' ? state : '')}" /></div></div></div></div>`);
@@ -2645,7 +2653,7 @@ export class Checkbox extends Field {
     /** `false`: the label goes above the checkbox instead of beside it. */
     inline(condition = true): this { this._inline = condition; return this; }
     async toHtml(): Promise<string> {
-        const input = new Attributes()
+        const input = new Attributes(this.getExtraInputAttributes())
             .merge({ type: 'checkbox', disabled: await this.isDisabled(), id: this.getId(), required: await this.isRequired(), [this.wireModel()]: this.getStatePath() })
             .class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
         return this._inline ? this.wrap('', { labelPrefix: `<input ${input.toHtml()} />` }) : this.wrap(`<input ${input.toHtml()} />`);
@@ -2786,7 +2794,7 @@ export class CheckboxList extends Field {
         const key = this.getLivewireKey() ?? '';
         const { options: resolvedOptions, descriptions } = await this.getResolvedOptions();
         const options = resolvedOptions.map(([value, label]) => {
-            const input = new Attributes().merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
+            const input = new Attributes(this.getExtraInputAttributes()).merge({ disabled: isDisabled || this.isOptionDisabled(value, label), type: 'checkbox', value, [this.wireModel()]: this.getStatePath(), 'x-on:change': this._bulkToggleable ? 'checkIfAllCheckboxesAreChecked()' : null }).class(['fi-checkbox-input', this.hasError() ? 'fi-invalid' : 'fi-valid']);
             const description = descriptions[value] ? `<p class="fi-fo-checkbox-list-option-description">${e(descriptions[value])}</p>` : '';
             return `<div wire:key="${e(`${key}.options.${value}`)}"${this._searchable ? ' x-show="matchesSearch($el)"' : ''} class="fi-fo-checkbox-list-option-ctn"><label class="fi-fo-checkbox-list-option"><input ${input.toHtml()} /><div class="fi-fo-checkbox-list-option-text"><span class="fi-fo-checkbox-list-option-label">${this._allowHtml ? sanitizeHtml(label) : e(label)}</span>${description}</div></label></div>`;
         });
@@ -2800,7 +2808,7 @@ export class CheckboxList extends Field {
         const bulkLinks = (selectAll.visible ? `<span x-show="! areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.select-all">${link(selectAll)}</span>` : '') + (deselectAll.visible ? `<span x-show="areAllCheckboxesChecked" x-on:click="toggleAllCheckboxes()" wire:key="${e(key)}.actions.deselect-all">${link(deselectAll)}</span>` : '');
         const bulk = this._bulkToggleable && !isDisabled && resolvedOptions.length && bulkLinks ? `<div x-cloak class="fi-fo-checkbox-list-actions" wire:key="${e(key)}.actions">${bulkLinks}</div>` : '';
         const noResults = this._searchable ? `<div x-cloak x-show="search && ! visibleCheckboxListOptions.length" role="status" aria-live="polite" class="fi-fo-checkbox-list-no-search-results-message">${e(this._noSearchResultsMessage)}</div>` : '';
-        return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}" x-data="checkboxListFormComponent({
+        return this.wrap(`<div role="group" x-load x-load-src="${e(asset('checkbox-list'))}"${this.extraAlpineHtml()} x-data="checkboxListFormComponent({
  livewireId: ${e(js(this.livewire.id))},
  })" aria-labelledby="${e(this.getId())}-label" class="fi-fo-checkbox-list">${search}${bulk}<div wire:key="${e(key)}.options"${this._searchable ? ' x-show="visibleCheckboxListOptions.length"' : ''} ${grid}>${options.join('')}</div>${noResults}</div>`, { labelAsDiv: true });
     }
@@ -2897,8 +2905,8 @@ export class KeyValue extends Field {
         const deletable = this._deletable && del.visible, addable = this._addable && add.visible, reorderable = this._reorderable && reorder.visible;
         const dangerClasses = ['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', del.color, 'danger', colorManager?.getComponentClasses('icon-button', 'danger') ?? [])].join(' ');
         const reorderCell = reorderable ? `<td class="fi-has-action"><span class="fi-sr-only" data-reorder-description x-bind:id="$id('key-value-row') + '-' + row.id" x-text="rowDescription(row, index)"></span><div x-sortable-handle class="fi-fo-key-value-table-row-sortable-handle"><button title="${e(reorder.label)}" aria-label="${e(reorder.label)}" ${iconButton} class="${cls(['fi-ac-icon-btn-action', 'fi-icon-btn', 'fi-size-sm', ...colorClassesOf(colorManager, 'icon-button', reorder.color, 'gray', [])])}" x-bind:tabindex="rows.length &gt; 1 ? -1 : 0" x-bind:aria-hidden="rows.length &gt; 1 ? 'true' : null">${icon(reorder.icon ?? fieldActionIcon('key-value', 'reorder'))}</button></div><div class="fi-sr-only"><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="up" x-on:click.stop="moveRow(row.id, index - 1)" x-bind:disabled="index === 0" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_up.label'))}</button><button type="button" tabindex="-1" data-reorder-hidden data-reorder-direction="down" x-on:click.stop="moveRow(row.id, index + 1)" x-bind:disabled="index === rows.length - 1" x-bind:aria-describedby="$id('key-value-row') + '-' + row.id">${e(tr('actions.move_down.label'))}</button></div></td>` : '';
-        return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}" x-id="['key-value-row']" x-data="keyValueFormComponent({
- state: $wire.$entangle(${e(js(this.getStatePath()))}, false),
+        return this.wrap(`<div aria-labelledby="${e(id)}-label" role="group" class="fi-fo-key-value fi-input-wrp"><div class="fi-input-wrp-content-ctn"><div x-load x-load-src="${e(asset('key-value'))}"${this.extraAlpineHtml()} x-id="['key-value-row']" x-data="keyValueFormComponent({
+ state: $wire.$entangle(${e(js(this.getStatePath()))}, ${this.entangleLive() ? 'true' : 'false'}),
  reordering: ${e(js(reordering))},
  })" wire:ignore wire:key="${e(key)}" class="fi-fo-key-value-table-ctn"><table aria-labelledby="${e(id)}-label" id="${e(id)}" class="fi-fo-key-value-table"><thead><tr>${reorderable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.reorder.label'))}</span></th>` : ''}<th scope="col">${e(keyLabel)}</th><th scope="col">${e(valueLabel)}</th>${deletable ? `<th scope="col" x-show="rows.length" class="fi-has-action"><span class="fi-sr-only">${e(tr('columns.actions.label'))}</span></th>` : ''}</tr></thead><tbody${reorderable ? ' x-on:end.stop="reorderRows($event)" x-sortable data-sortable-animation-duration="300"' : ''}><template x-bind:key="row.id" x-for="(row, index) in rows"><tr${reorderable ? ' x-bind:x-sortable-item="row.id"' : ''}>${reorderCell}<td><input aria-label="${e(keyLabel)}" placeholder="${e(this._keyPlaceholder ?? '')}" ${this._editableKeys ? '' : 'disabled '}type="text" x-model="row.key" x-on:input.debounce.500ms="updateState" class="fi-input" /></td><td><input aria-label="${e(valueLabel)}" placeholder="${e(this._valuePlaceholder ?? '')}" ${this._editableValues ? '' : 'disabled '}type="text" x-model="row.value" x-on:input.debounce.500ms="updateState" class="fi-input" /></td>${deletable ? `<td class="fi-has-action"><div x-on:click="deleteRow(index)"><button title="${e(del.label)}" aria-label="${e(del.label)}" ${iconButton} class="${dangerClasses}">${icon(del.icon ?? fieldActionIcon('key-value', 'delete'))}</button></div></td>` : ''}</tr></template></tbody></table><span x-ref="reorderStatus" class="fi-sr-only" role="status" aria-live="polite" aria-atomic="true"></span>${addable ? `<div x-on:click="addRow" class="fi-fo-key-value-add-action-ctn"><button ${iconButton} class="${cls(['fi-ac-link-action', 'fi-link', 'fi-size-md', ...colorClassesOf(colorManager, 'link', add.color, 'gray', [])])}">${add.icon ? icon(add.icon, { size: 'sm' }) : ''}<span class="fi-link-label">${e(add.label)}</span></button></div>` : ''}</div></div></div>`, { labelAsDiv: true, wrapperClass: 'fi-fo-key-value-wrp' });
     }
@@ -3029,7 +3037,7 @@ export class MarkdownEditor extends Field {
  },
  })`;
         const wrapper = new Attributes().class(['fi-fo-markdown-editor', 'fi-input-wrp', { 'fi-invalid': this.hasError() }]);
-        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('markdown-editor'))}" x-data="${e(config)}" wire:ignore><textarea x-ref="editor" x-cloak></textarea></div></div></div>`, { labelAsDiv: true });
+        return this.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('markdown-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore><textarea x-ref="editor" x-cloak></textarea></div></div></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3077,7 +3085,7 @@ export class CodeEditor extends Field {
         // Key hash over the serialized `[isDisabled, language]` options.
         const hash = createHash('md5').update(`a:2:{i:0;b:${isDisabled ? 1 : 0};i:1;${this._language === null ? 'N;' : `s:${this._language.length}:"${this._language}";`}}`).digest('hex');
         const wrapper = new Attributes().class(['fi-fo-code-editor', 'fi-input-wrp', { 'fi-disabled': isDisabled, 'fi-invalid': this.hasError() }]);
-        return super.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
+        return super.wrap(`<div ${wrapper.toHtml()}><div class="fi-input-wrp-content-ctn"><div hidden data-field-accessibility ${new Attributes().merge(accessibilityOf(this)).toHtml()}></div><div aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" x-load x-load-src="${e(asset('code-editor'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}"><div x-ref="editor" x-cloak></div></div></div></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3194,7 +3202,7 @@ export class Slider extends Field {
  pipsMode: ${js(this._pipsMode)},
  pipsValues: ${js(this._pipsValues)},
  rangePadding: ${js(this._rangePadding)},
- state: $wire.$entangle(${js(this.getStatePath())}, ${this.isLive() ? 'true' : 'false'}),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  step: ${js(this._step)},
  tooltips: ${Slider.formatters(this._tooltips)},
  })`;
@@ -3203,7 +3211,7 @@ export class Slider extends Field {
             .class(['fi-fo-slider', { 'fi-fo-slider-has-pips': this._pipsMode !== null, 'fi-fo-slider-has-tooltips': hasTooltips, 'fi-fo-slider-vertical': this._vertical }]);
         // Key hash over the serialized `[isDisabled]` options.
         const hash = createHash('md5').update(`a:1:{i:0;b:${isDisabled ? 1 : 0};}`).digest('hex');
-        return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}" x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
+        return this.wrap(`<div hidden data-field-accessibility ${new Attributes().merge(accessibility).toHtml()}></div><div x-load x-load-src="${e(asset('slider'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(this.getLivewireKey() ?? '')}.${hash}" ${attributes.toHtml()}></div>`, { labelAsDiv: true });
     }
 }
 
@@ -3294,12 +3302,12 @@ export class OneTimeCodeInput extends Field {
         const accessibility = accessibilityOf(this);
         const label = await this.getLabel();
         const container = new Attributes().merge({ ...this._extraAttributes, 'aria-describedby': accessibility['aria-describedby'], 'aria-label': label !== '' ? label : null }).class(['fi-one-time-code-input-ctn']);
-        const first = new Attributes().merge({ ...accessibility, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
+        const first = new Attributes(this.getExtraInputAttributes()).merge({ ...accessibility, autofocus: await this.isAutofocused(), disabled: isDisabled, id: this.getId(), readonly: this._readOnly, required: await this.isRequired() }).class(['fi-one-time-code-input-digit']);
         const digit = new Attributes().merge(accessibility);
         const inputs = Array.from({ length: this._length }, (_, index) => (index === 0
             ? `<input autocomplete="one-time-code" inputmode="numeric" type="text" ${first.toHtml()} />`
             : `<input aria-label="${e(t('filament::components/input/one-time-code.aria_label', { position: index + 1, count: this._length }))}" autocomplete="off" inputmode="numeric" type="text" ${digit.toHtml()}${isDisabled ? ' disabled' : ''}${this._readOnly ? ' readonly' : ''} class="fi-one-time-code-input-digit" />`));
-        return this.wrap(`<div x-data="${e(`{ code: $wire.$entangle(${js(this.getStatePath())}, false), }`)}"><div x-data="filamentOneTimeCodeInput({ shouldSubmitOnCompletion: ${this._submitOnCompletion ? 'true' : 'false'} })" x-modelable="state" x-model="code" dir="ltr" role="group" ${container.toHtml()}>${inputs.join('')}</div></div>`);
+        return this.wrap(`<div x-data="${e(`{ code: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}), }`)}"><div x-data="filamentOneTimeCodeInput({ shouldSubmitOnCompletion: ${this._submitOnCompletion ? 'true' : 'false'} })" x-modelable="state" x-model="code" dir="ltr" role="group"${this.extraAlpineHtml()} ${container.toHtml()}>${inputs.join('')}</div></div>`);
     }
 }
 
@@ -3327,7 +3335,7 @@ export class Placeholder extends Component {
 }
 
 // Nested state: a field inside a stateful group (e.g. `address.city`) is read and written at its path relative to the schema.
-function relativePath(schema: Schema, field: Field): string[] {
+function relativePath(schema: Schema, field: Component): string[] {
     const base = schema.getStatePath();
     const full = field.getStatePath();
     return (base && full.startsWith(`${base}.`) ? full.slice(base.length + 1) : full).split('.');
@@ -3339,31 +3347,102 @@ function writePath(target: Record<string, unknown>, segments: string[], value: u
     node[segments[segments.length - 1]] = value;
 }
 
-/** Fills the default state of every field in a schema. */
+/** A layout component saving its fields to a singular relationship (`Group.make().relationship('customer')`). */
+const isRelationshipLayout = (c: Component): c is LayoutComponent => c instanceof LayoutComponent && c.getSingularRelationship() !== null;
+/** Whether a component is inside a relationship layout of the schema (its state is loaded and saved by that layout). */
+function isInsideRelationshipLayout(schema: Schema, c: Component): boolean {
+    let parent = c.container.getParentComponent();
+    while (parent && parent.container) {
+        if (isRelationshipLayout(parent)) return true;
+        if (parent.container === schema) return false;
+        parent = parent.container.getParentComponent();
+    }
+    return false;
+}
+/** Runs the `afterStateHydrated()` callbacks (`formatStateUsing()`…) of the components, reading and writing `target`. */
+function callAfterStateHydrated(schema: Schema, target: Record<string, unknown>, components: Component[]): void {
+    withStateSource(schema, target, () => { for (const c of components) c.callAfterStateHydrated(); });
+}
+/** Fills the default state of every field in a schema, then runs the `afterStateHydrated()` callbacks. */
 export function fillSchema(schema: Schema, target: Record<string, unknown>): void {
     for (const c of schema.getFlatComponents()) if (c instanceof Field) writePath(target, relativePath(schema, c), c.getDefaultState());
+    callAfterStateHydrated(schema, target, schema.getFlatComponents());
 }
-/** Fills the form state from a record, field by field. */
+/**
+ * Fills the form state from a record, field by field, then runs the `afterStateHydrated()` callbacks (those of the fields of a
+ * relationship layout run once `loadSchemaRelationships()` has loaded them).
+ */
 export function fillSchemaFromRecord(schema: Schema, target: Record<string, unknown>, record: Record<string, unknown>): void {
     for (const c of schema.getFlatComponents()) {
         if (!(c instanceof Field)) continue;
         const segments = relativePath(schema, c);
         writePath(target, segments, c.hydrateState(readPath(record, segments) ?? c.getDefaultState()));
     }
+    callAfterStateHydrated(schema, target, schema.getFlatComponents().filter((c) => !isInsideRelationshipLayout(schema, c)));
 }
-/** Fills the fields that load their state from the record's relationships (`loadStateFromRelationshipsUsing()`, `Select::relationship()`…). */
+/**
+ * Fills the fields that load their state from the record's relationships (`loadStateFromRelationshipsUsing()`,
+ * `Select::relationship()`…) and the fields of the layout components saving to a relationship (`Group.relationship()`).
+ */
 export async function loadSchemaRelationships(schema: Schema, target: Record<string, unknown>, record: unknown): Promise<void> {
     if (!record) return;
     for (const c of schema.getFlatComponents()) {
-        if (!(c instanceof Field)) continue;
+        if (isRelationshipLayout(c)) {
+            if (isInsideRelationshipLayout(schema, c)) continue;
+            await loadRelationshipLayout(schema, target, c, record);
+            continue;
+        }
+        if (!(c instanceof Field) || isInsideRelationshipLayout(schema, c)) continue;
         const loaded = await c.loadStateFromRelationships(record);
-        if (loaded) writePath(target, relativePath(schema, c), c.hydrateState(loaded.state));
+        if (loaded) {
+            writePath(target, relativePath(schema, c), c.hydrateState(loaded.state));
+            callAfterStateHydrated(schema, target, [c]);
+        }
     }
 }
-/** Saves the visible fields that write the record's relationships, once the record is created or updated. */
+/** Loads a relationship layout's fields from the related record (then the relationship layouts nested in it). */
+async function loadRelationshipLayout(schema: Schema, target: Record<string, unknown>, layout: LayoutComponent, record: unknown): Promise<void> {
+    const state = await loadSingularRelationshipState(layout, record);
+    const path = relativePath(schema, layout);
+    const current = readPath(target, path);
+    writePath(target, path, current && typeof current === 'object' ? Object.assign(current, state) : state);
+    const child = layout.getChildSchemas()[0];
+    callAfterStateHydrated(schema, target, child.getFlatComponents().filter((c) => !isInsideRelationshipLayout(child, c)));
+    for (const c of child.getFlatComponents()) if (isRelationshipLayout(c) && !isInsideRelationshipLayout(child, c)) await loadRelationshipLayout(schema, target, c, record);
+}
+/** Components of a schema whose relationships are saved: the visible ones, and the hidden ones marked `saveRelationshipsWhenHidden()`. */
+async function componentsSavingRelationships(schema: Schema): Promise<Component[]> {
+    const out: Component[] = [];
+    for (const c of schema.getComponents()) {
+        if (!(await c.isVisible()) && !(await c.shouldSaveRelationshipsWhenHidden())) continue;
+        out.push(c);
+        for (const child of ((c as any).getChildSchemas?.() ?? []) as Schema[]) out.push(...(await componentsSavingRelationships(child)));
+    }
+    return out;
+}
+/**
+ * Saves the fields that write the record's relationships, and the layout components saving to a singular relationship
+ * (several layouts using the same relationship are saved together), once the record is created or updated.
+ */
 export async function saveSchemaRelationships(schema: Schema, record: unknown): Promise<void> {
     if (!record) return;
-    for (const c of await schema.getVisibleFlatComponents()) if (c instanceof Field && (await c.isDehydrated() || (await c.getDehydratedOverride()) === false) && (await c.savesRelationships())) await c.saveRelationships(record);
+    const layouts = new Map<string, LayoutComponent[]>();
+    for (const c of await componentsSavingRelationships(schema)) {
+        if (isInsideRelationshipLayout(schema, c)) continue;
+        if (isRelationshipLayout(c)) {
+            const key = c.getStatePath();
+            layouts.set(key, [...(layouts.get(key) ?? []), c]);
+            continue;
+        }
+        if (c instanceof Field && (await c.isDehydrated() || (await c.getDehydratedOverride()) === false) && (await c.savesRelationships())) await c.saveRelationships(record);
+    }
+    for (const group of layouts.values()) {
+        let data: Record<string, unknown> = {};
+        for (const layout of group) data = { ...data, ...(await getSchemaState(layout.getChildSchemas()[0])) };
+        await saveSingularRelationship(group[0], record, data);
+        // Relationship fields and layouts inside it save to the related record.
+        for (const layout of group) await saveSchemaRelationships(layout.getChildSchemas()[0], record);
+    }
 }
 /** Validates every visible field of a schema; returns errors by state path. */
 export async function validateSchema(schema: Schema): Promise<Record<string, string[]>> {
@@ -3381,7 +3460,11 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     const data: Record<string, unknown> = {};
     const fields: Field[] = [];
     const skipped: string[] = [];
-    for (const c of await schema.getVisibleFlatComponents()) {
+    const visible = await schema.getVisibleFlatComponents();
+    for (const c of visible) if (c instanceof Field) await c.callBeforeStateDehydrated();
+    for (const c of visible) {
+        // A layout component saving to a relationship leaves its fields out: they are saved to the related record.
+        if (isRelationshipLayout(c)) { skipped.push(c.getStatePath()); continue; }
         if (!(c instanceof Field)) continue;
         // Relationship fields (and the fields of their items) save themselves after the record (see saveSchemaRelationships), unless forced with `dehydrated()`.
         if (skipped.some((path) => c.getStatePath().startsWith(`${path}.`))) continue;
@@ -3397,7 +3480,8 @@ export async function getSchemaState(schema: Schema): Promise<Record<string, unk
     for (const c of fields.reverse()) {
         const path = relativePath(schema, c);
         const current = readPath(data, path);
-        const final = c.finalizeDehydratedState(current);
+        // `dehydrateStateUsing()` / `mutateDehydratedStateUsing()` see the field's shaped state (a container's, with its children).
+        const final = await c.applyDehydrationCallbacks(c.finalizeDehydratedState(current));
         if (final !== current) writePath(data, path, final);
     }
     return data;
@@ -4101,7 +4185,7 @@ export class FileUpload extends Field {
  shouldAutomaticallyUpscaleImagesWhenResizing: ${js(Boolean(option('shouldAutomaticallyUpscaleImagesWhenResizing', true)))},
  shouldOrientImageFromExif: ${js(Boolean(option('shouldOrientImageFromExif', true)))},
  shouldTransformImage: ${js(Boolean(cropAspectRatio || option('automaticallyResizeImagesHeight', null) || option('automaticallyResizeImagesWidth', null)))},
- state: $wire.$entangle(${js(this.getStatePath())}, false),
+ state: $wire.$entangle(${js(this.getStatePath())}, ${this.entangleLive() ? 'true' : 'false'}),
  statePath: ${js(this.getStatePath())},
  uploadButtonPosition: ${js(option('uploadButtonPosition', 'right'))},
  uploadingMessage: ${js(option('uploadingMessage', t('filament::components/button.messages.uploading_file')))},
@@ -4110,9 +4194,9 @@ export class FileUpload extends Field {
  uploadProgressIndicatorPosition: ${js(option('uploadProgressIndicatorPosition', 'right'))},
  })`;
         const key = `${this.getLivewireKey()}.${createHash('md5').update(JSON.stringify([acceptedFileTypes, maxFiles, multiple, isDisabled, ui, explicitEditor, cropAspectRatio])).digest('hex')}`;
-        const input = new Attributes().merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: multiple ? 'multiple' : null, type: 'file' });
+        const input = new Attributes(this.getExtraInputAttributes()).merge({ 'x-ref': 'input', 'aria-labelledby': `${id}-label`, disabled: isDisabled, multiple: multiple ? 'multiple' : null, type: 'file' });
         const editor = hasEditor ? this.imageEditorHtml({ explicit: explicitEditor, circleCropper, editorAspectRatios: (await this.value(this._editorAspectRatios)) ?? [], cropAspectRatio }) : '';
-        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}" x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${alignment}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
+        return this.wrap(`<div hidden data-field-accessibility data-preserve-filepond-description></div><div x-load x-load-src="${e(asset('file-upload'))}"${this.extraAlpineHtml()} x-data="${e(config)}" wire:ignore wire:key="${e(key)}" aria-labelledby="${e(id)}-label" id="${e(id)}" role="group" class="${cls(['fi-fo-file-upload', { 'fi-fo-file-upload-avatar': this._avatar }, `fi-align-${alignment}`])}"><div class="fi-fo-file-upload-input-ctn"><input ${input.toHtml()} /></div><div x-show="error" x-text="error" x-cloak role="alert" class="fi-fo-file-upload-error-message"></div>${editor}</div>`, { labelAsDiv: true });
     }
 }
 

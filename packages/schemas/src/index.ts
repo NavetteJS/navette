@@ -464,6 +464,7 @@ export abstract class Component {
  */
 export abstract class LayoutComponent extends Component {
     protected _singularRelationship: SingularRelationshipConfig | null = null;
+    abstract getChildSchemas(): Schema[];
     /**
      * Loads the fields from a has-one or belongs-to relationship of the record (an Objection model), and saves them back once
      * the record is saved: the related record is created if it does not exist. `condition` (a function of the related
