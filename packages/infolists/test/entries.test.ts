@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { e } from '@navette-js/support';
 import { Schema } from '@navette-js/schemas';
-import { CodeEntry, KeyValueEntry, ViewEntry } from '../src/index.ts';
+import { CodeEntry, KeyValueEntry, ViewEntry, setCodeHighlighterLoader } from '../src/index.ts';
 
 const host = () => ({ id: 'lw', _errors: {} as Record<string, string[]>, getSchema() { return null as any; } });
 const render = async (record: Record<string, unknown>, components: any[]) => (await Schema.make(host()).key('infolist').record(record).components(components).toHtml()).replace(/&#039;/g, "'");
@@ -18,7 +18,9 @@ test('KeyValueEntry: table markup, escaped values, placeholder', async () => {
     assert.ok(empty.includes('<tbody><tr><td colspan="2" class="fi-in-placeholder">No entries</td></tr></tbody>'));
 });
 
-test('CodeEntry: unhighlighted phiki markup, indented JSON, copyable', async () => {
+test('CodeEntry: unhighlighted phiki markup, indented JSON, copyable', async (t) => {
+    setCodeHighlighterLoader(null); // Without Shiki.
+    t.after(() => setCodeHighlighterLoader(() => import('shiki')));
     const html = await render({ code: '<?php\n\necho 1;\n' }, [CodeEntry.make('code').grammar('php')]);
     assert.ok(html.includes('<div class="fi-in-code"><pre class="phiki language-php github-light phiki-themes github-dark-high-contrast" data-language="php" style="background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;"><code><span class="line"><span class="token">&lt;?php</span><span class="token">\n</span></span><span class="line"><span class="token">\n</span></span><span class="line"><span class="token">echo 1;</span><span class="token">\n</span></span></code></pre></div>'));
     const json = await render({ data: { url: 'https://x.test/a', 'é': true } }, [CodeEntry.make('data')]);
@@ -30,6 +32,27 @@ test('CodeEntry: unhighlighted phiki markup, indented JSON, copyable', async () 
     const copyable = await render({ code: 'a' }, [CodeEntry.make('code').copyable()]);
     assert.match(copyable, /<div x-data="filamentCopyable" x-bind="bindings" x-id="\['copyable-code'\]" x-bind:aria-label="isStandalone \? 'Copy Code' : null" x-bind:aria-describedby="isStandalone \? \$id\('copyable-code'\) : null" x-on:click="if \(isStandalone\) \{/);
     assert.match(copyable, /class="fi-in-code fi-copyable"><div x-bind:id="\$id\('copyable-code'\)"><pre/);
+});
+
+test('CodeEntry: highlighted with Shiki in a light and a dark theme (Phiki markup)', async () => {
+    const html = await render({ code: '<?php\n// <b>\necho 1;\n' }, [CodeEntry.make('code').grammar('php')]);
+    assert.ok(html.includes('<pre class="phiki language-php github-light phiki-themes github-dark-high-contrast" data-language="php" style="background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;"><code><span class="line">'));
+    // Each token: light color as a property, dark color as a variable read by the dark-mode CSS; text escaped.
+    assert.ok(html.includes('<span class="token" style="color: #6A737D;--phiki-dark-color: #BDC4CC;">// &lt;b&gt;</span><span class="token">\n</span></span>'));
+    assert.ok(html.includes('<span class="token" style="color: #005CC5;--phiki-dark-color: #91CBFF;">echo</span>'));
+    assert.ok(!html.includes('<b>'));
+    // Other themes: their own background and text colors.
+    const themed = await render({ code: 'const a = 1' }, [CodeEntry.make('code').grammar('ts').lightTheme('min-light').darkTheme('nord')]);
+    assert.match(themed, /<pre class="phiki language-ts min-light phiki-themes nord" data-language="ts" style="background-color: #ffffff;color: #24292eff;--phiki-dark-background-color: #2e3440ff;--phiki-dark-color: #d8dee9ff;">/);
+    // Unknown grammar or theme: single-color rendering.
+    const unknown = await render({ code: 'x' }, [CodeEntry.make('code').grammar('no-such-grammar')]);
+    assert.ok(unknown.includes('<code><span class="line"><span class="token">x</span></span></code>'));
+    const unknownTheme = await render({ code: 'x' }, [CodeEntry.make('code').grammar('php').darkTheme('no-such-theme')]);
+    assert.ok(unknownTheme.includes('<pre class="phiki language-php github-light phiki-themes no-such-theme" data-language="php"><code><span class="line"><span class="token">x</span></span></code></pre>'));
+    // An array: highlighted JSON.
+    const json = await render({ data: { a: [1, true] } }, [CodeEntry.make('data')]);
+    assert.match(json, /data-language="json"/);
+    assert.match(json, /<span class="token" style="color: #[0-9A-F]{6};--phiki-dark-color: #[0-9A-F]{6};">true<\/span>/);
 });
 
 test('ViewEntry: developer-supplied rendering inside the entry wrapper', async () => {

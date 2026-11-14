@@ -2,6 +2,9 @@
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
 import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, isSafeUrl, js, markdownToHtml, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
+import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
+
+export { setCodeHighlighterLoader } from './code-highlighter.ts';
 
 const headline = (s: string) => s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
 /** Default label: "Department" for `department.name`. */
@@ -866,8 +869,9 @@ const phpPrettyJson = (value: unknown): string => (JSON.stringify(value, null, 4
 /** Background and text colors of the default themes (github-light / github-dark-high-contrast). */
 const PHIKI_DEFAULT_STYLE = 'background-color: #fff;color: #24292e;--phiki-dark-background-color: #0a0c10;--phiki-dark-color: #f0f3f6;';
 /**
- * Read-only code, rendered as `<pre class="phiki …">` but WITHOUT syntax highlighting:
- * each line is a single escaped text token. An array or object is shown as indented JSON.
+ * Read-only code, rendered as `<pre class="phiki …">` like Filament's (Phiki) markup. With Shiki installed
+ * (optional peer dependency), it is highlighted on the server in a light and a dark theme; without it, each line
+ * is a single escaped text token. An array or object is shown as indented JSON.
  */
 export class CodeEntry extends Entry {
     private _grammar: string | null = null;
@@ -877,9 +881,9 @@ export class CodeEntry extends Entry {
     private _copyMessage: string | null = null;
     private _copyMessageDuration = 2000;
     static make(name: string): CodeEntry { return configured(new CodeEntry(name)); }
-    /** Language (`php`, `json`, `javascript`…) used in the `language-…` class; `html` by default, `json` for an array. */
+    /** Shiki grammar (`php`, `json`, `javascript`, `ts`…), also used in the `language-…` class; `html` by default, `json` for an array. */
     grammar(grammar: string | null): this { this._grammar = grammar; return this; }
-    /** Theme class names only: without a highlighter, colors stay those of the default themes. */
+    /** Shiki theme of the light mode (`github-light` by default) and of the dark mode (`github-dark-high-contrast`). */
     lightTheme(theme: string | null): this { this._lightTheme = theme; return this; }
     darkTheme(theme: string | null): this { this._darkTheme = theme; return this; }
     /** Clicking copies the code to the clipboard. */
@@ -896,10 +900,11 @@ export class CodeEntry extends Entry {
         const code = String(state);
         const language = (grammar ?? 'html').replace(/[^a-zA-Z0-9_+#-]/g, '');
         const light = (this._lightTheme ?? 'github-light').replace(/[^a-zA-Z0-9_-]/g, ''), dark = (this._darkTheme ?? 'github-dark-high-contrast').replace(/[^a-zA-Z0-9_-]/g, '');
-        const style = this._lightTheme === null && this._darkTheme === null ? ` style="${PHIKI_DEFAULT_STYLE}"` : '';
+        const highlighted = await highlightCode(code, language, light, dark);
+        const style = highlighted ? ` style="${e(highlighted.preStyle)}"` : this._lightTheme === null && this._darkTheme === null ? ` style="${PHIKI_DEFAULT_STYLE}"` : '';
         // One `<span class="line">` per line, the newline being the last token of each line.
         const lines = code.split('\n');
-        const linesHtml = lines.map((line, index) => `<span class="line">${line === '' ? '' : `<span class="token">${e(line)}</span>`}${index < lines.length - 1 ? '<span class="token">\n</span>' : ''}</span>`).filter((html, index) => !(index === lines.length - 1 && lines[index] === '' && lines.length > 1)).join('');
+        const linesHtml = highlighted ? highlightedLinesHtml(highlighted) : lines.map((line, index) => `<span class="line">${line === '' ? '' : `<span class="token">${e(line)}</span>`}${index < lines.length - 1 ? '<span class="token">\n</span>' : ''}</span>`).filter((html, index) => !(index === lines.length - 1 && lines[index] === '' && lines.length > 1)).join('');
         const pre = `<pre class="phiki language-${language} ${light} phiki-themes ${dark}" data-language="${language}"${style}><code>${linesHtml}</code></pre>`;
         if (!this._copyable) return this.wrapEmbeddedHtml(`<div ${renderAttrs(withClass(this.getExtraAttributesMap(), ['fi-in-code']))}>${pre}</div>`);
         const tr = (key: string, params?: Record<string, string>) => t(`filament::components/copyable.${key}`, params);

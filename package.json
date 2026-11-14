@@ -20,6 +20,7 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.5",
     "playwright": "^1.65.0",
+    "shiki": "4.5.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3"
   },
