@@ -1,5 +1,5 @@
 // @navette-js/actions — actions: buttons, links, menu items and modal actions.
-import { Attributes, type HtmlString, cls, e, evaluate, icon, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
+import { Attributes, type HtmlString, cls, e, evaluate, icon, icons, js, loadingIndicator, renderHook, views, type ColorManager, type Lazy, configured, configureUsing } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import type { ComponentContext, Renderable } from '@navette-js/schemas';
 import { fileURLToPath } from 'node:url';
@@ -398,7 +398,7 @@ export class Action implements Renderable {
             livewireId: ctx.livewire.id, id: `fi-${ctx.livewire.id}-action-${index}`, index, name: this.name,
             heading: (await evaluate(this._modalHeading, ctx)) ?? label,
             description: (await evaluate(this._modalDescription, ctx)) ?? (this._requiresConfirmation ? t('filament-actions::modal.confirmation') : null),
-            iconName: this._modalIcon ?? (this._requiresConfirmation ? 'o-exclamation-triangle' : null), color,
+            iconName: this._modalIcon ?? (this._requiresConfirmation ? icons.resolve('actions::modal.confirmation') ?? 'o-exclamation-triangle' : null), color,
             cancel: await Action.make('cancel').label(this._cancelLabel ?? t('filament-actions::modal.actions.cancel.label')).color('gray').alpineClickHandler('close()').toHtml(schemaCtx),
             // The submit button of a gray action uses the primary color.
             submit: !this._hasSubmit ? '' : (await Action.make('submit').label(submitLabel).color(color === 'gray' ? 'primary' : color).submit('callMountedAction').toHtml(schemaCtx)) + footerActions.join(''),
@@ -523,7 +523,7 @@ export class Action implements Renderable {
 export class ActionGroup {
     private actions: (Action | ActionGroup)[];
     private _label: string | null = null;
-    private _icon = 'm-ellipsis-vertical';
+    private _icon: string | null = null;
     private _color = 'primary';
     private _size = 'md';
     private _tooltip: string | null = null;
@@ -576,9 +576,9 @@ export class ActionGroup {
         const label = this._label ?? t('filament-actions::group.trigger.label');
         const tooltip = this._tooltip ? ` x-tooltip="${e(`{ content: ${js(this._tooltip)}, theme: $store.theme, allowHTML: false }`)}"` : '';
         const colors = (component: 'icon-button' | 'button' | 'link') => (this._color !== 'gray' || component === 'icon-button' ? colorManager!.getComponentClasses(component, this._color) : []);
-        if (this._view === 'button') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-group', 'fi-btn', `fi-size-${this._size}`, ...colors('button')])}">${icon(this._icon)}${e(label)}</button>`;
-        if (this._view === 'link') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-link-group', 'fi-link', `fi-size-${this._size}`, ...colors('link')])}">${icon(this._icon)}<span class="fi-link-label">${e(label)}</span></button>`;
-        return `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-icon-btn-group', 'fi-icon-btn', `fi-size-${this._size}`, ...colors('icon-button')].join(' ')}">${icon(this._icon)}</button>`;
+        if (this._view === 'button') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-btn-group', 'fi-btn', `fi-size-${this._size}`, ...colors('button')])}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}${e(label)}</button>`;
+        if (this._view === 'link') return `<button${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${cls(['fi-ac-link-group', 'fi-link', `fi-size-${this._size}`, ...colors('link')])}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}<span class="fi-link-label">${e(label)}</span></button>`;
+        return `<button title="${e(label)}" aria-label="${e(label)}"${tooltip} type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="${['fi-ac-icon-btn-group', 'fi-icon-btn', `fi-size-${this._size}`, ...colors('icon-button')].join(' ')}">${icon(this._icon ?? icons.resolve('actions::action-group') ?? 'm-ellipsis-vertical')}</button>`;
     }
     /** Menu items of the visible actions, one list per section (nested groups without dropdown). */
     private async itemLists(ctx: ComponentContext, context: Record<string, unknown>, keyOf: (action: Action) => string): Promise<string[][]> {

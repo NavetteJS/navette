@@ -10,10 +10,12 @@ import { pagination } from '@navette-js/support/ui';
 export const notificationBodyHtml = (body: string): string => (/<[a-z][\s\S]*>/i.test(body) ? (richDocumentToHtml(richHtmlToDocument(body)) ?? '') : e(body));
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const safeIcon = (name: string | null, size: string, classes: string[]): string => {
-    if (!name || !/^[a-z0-9-]+$/.test(name)) return '';
-    try { return icon(name, { size, attributes: new Attributes().class(classes) }); } catch { return ''; }
+// Icon names stored in the database are untrusted: only a Heroicons-like name or `prefix:name` (an icon of a registered set).
+const safeIcon = (name: string | null, size: string, classes: string[], alias?: string): string => {
+    if (!name || !/^[a-z0-9-]+(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/.test(name)) return '';
+    try { return icon(name, { size, alias, attributes: new Attributes().class(classes) }); } catch { return ''; }
 };
+const STATUS_ICONS: Record<string, string> = { danger: 'o-x-circle', info: 'o-information-circle', success: 'o-check-circle', warning: 'o-exclamation-circle' };
 /** Only a same-site path (`/…`) or an http(s) URL can become a link (no `javascript:` or protocol-relative URLs). */
 const safeUrl = (url: unknown): string | null => (typeof url === 'string' && /^(\/(?!\/)|https?:\/\/)/.test(url) ? url : null);
 
@@ -52,7 +54,7 @@ export class GlobalSearch extends Component {
             ...(bindings.length ? { [`x-mousetrap.global.${bindings.map((binding) => binding.replace(/\+/g, '-')).join('.')}`]: '$refs.input?.focus()' } : {}),
         }).class(['fi-input', 'fi-input-has-inline-prefix']).toHtml()} />`;
         const focus = "if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')";
-        const field = `<div class="fi-input-wrp"><div x-on:click="${e(focus)}" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass', { attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'search' }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': 'search' }))}</div><div class="fi-input-wrp-content-ctn">${input}</div>${suffix ? `<div x-on:click="${e(focus)}" class="fi-input-wrp-suffix fi-inline fi-input-wrp-suffix-has-label"><span class="fi-input-wrp-label">${e(suffix)}</span></div>` : ''}</div>`;
+        const field = `<div class="fi-input-wrp"><div x-on:click="${e(focus)}" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">${icon('m-magnifying-glass', { alias: 'panels::global-search.field', attributes: new Attributes({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'search' }) })}${loadingIndicator(new Attributes({ 'wire:loading.delay.default': '', 'wire:target': 'search' }))}</div><div class="fi-input-wrp-content-ctn">${input}</div>${suffix ? `<div x-on:click="${e(focus)}" class="fi-input-wrp-suffix fi-inline fi-input-wrp-suffix-has-label"><span class="fi-input-wrp-label">${e(suffix)}</span></div>` : ''}</div>`;
 
         // Actions of each result: rendered first (async), then placed under the result's link.
         const actionsHtml = new Map<GlobalSearchResult, string[]>();
@@ -167,7 +169,8 @@ export function timeAgo(date: Date, now = new Date()): string {
 /** A notification rendered inline in the panel. Title and body are escaped. */
 function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
     const color = n.iconColor ?? n.status;
-    const iconHtml = safeIcon(n.icon ?? (n.status ? ({ danger: 'o-x-circle', info: 'o-information-circle', success: 'o-check-circle', warning: 'o-exclamation-circle' } as Record<string, string>)[n.status] ?? null : null), 'md', [...(color && color !== 'gray' && /^[a-z]+$/.test(color) ? ['fi-color', `fi-color-${color}`] : []), 'fi-no-notification-icon']);
+    const status = n.status && Object.hasOwn(STATUS_ICONS, n.status) ? n.status : null;
+    const iconHtml = safeIcon(n.icon ?? (status ? STATUS_ICONS[status] : null), 'md', [...(color && color !== 'gray' && /^[a-z]+$/.test(color) ? ['fi-color', `fi-color-${color}`] : []), 'fi-no-notification-icon'], !n.icon && status ? `notifications::notification.${status}` : undefined);
     const actions = n.actions.filter((action) => action.label !== '').map((action) => {
         const url = safeUrl(action.url);
         return `<a ${new Attributes({ href: url, ...(action.openUrlInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : url?.startsWith('/') ? { 'wire:navigate': true } : {}) }).class(['fi-ac-link-action', 'fi-link', 'fi-size-sm', 'fi-color', 'fi-color-primary', 'fi-text-color-600', 'dark:fi-text-color-300']).toHtml()}><span class="fi-link-label">${e(action.label)}</span></a>`;
@@ -178,7 +181,7 @@ function renderDatabaseNotification(n: DatabaseNotificationRecord): string {
         'x-transition:enter-start': 'fi-transition-enter-start', 'x-transition:enter-end': 'fi-transition-enter-end', 'x-transition:leave-start': 'fi-transition-leave-start', 'x-transition:leave-end': 'fi-transition-leave-end',
         'wire:key': `${n.id}.notifications.${n.id}`, 'x-on:close-notification.window': `if ($event.detail.id == ${js(n.id)}) close()`,
     }).class(['fi-no-notification', n.status && /^[a-z]+$/.test(n.status) ? `fi-status-${n.status}` : null, 'fi-inline']);
-    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${actions.length ? `<div class="fi-ac fi-no-notification-actions">${actions.join('')}</div>` : ''}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark')}</button></div>`;
+    return `<div ${attributes.toHtml()}>${iconHtml}<div class="fi-no-notification-main"><div class="fi-no-notification-text">${n.title ? `<h3 class="fi-no-notification-title">${e(n.title)}</h3>` : ''}${n.createdAt ? `<time class="fi-no-notification-date">${e(timeAgo(n.createdAt))}</time>` : ''}${n.body ? `<div class="fi-no-notification-body">${notificationBodyHtml(n.body)}</div>` : ''}</div>${actions.length ? `<div class="fi-ac fi-no-notification-actions">${actions.join('')}</div>` : ''}</div><button type="button" x-on:click="close" aria-label="${e(closeLabel)}" title="${e(closeLabel)}" class="fi-icon-btn fi-no-notification-close-btn">${icon('m-x-mark', { alias: 'notifications::notification.close-button' })}</button></div>`;
 }
 
 const BADGE = 'fi-color fi-color-primary fi-text-color-600 dark:fi-text-color-200 fi-badge';
@@ -213,7 +216,7 @@ export class DatabaseNotifications extends Component {
     async markAllNotificationsAsRead(): Promise<void> { await this.scope.store.markAllAsRead(this.scope.user); }
 
     private trigger(unread: number): string {
-        return `<button class="fi-sidebar-database-notifications-btn">${icon('o-bell', { size: 'lg' })}<span class="fi-sidebar-database-notifications-btn-label">${e(t('filament-panels::layout.actions.open_database_notifications.label'))}</span>${unread ? `<span class="fi-sidebar-database-notifications-btn-badge-ctn"><span class="${BADGE} fi-size-md"><span class="fi-badge-label-ctn"><span class="fi-badge-label">${unread}</span></span></span></span>` : ''}</button>`;
+        return `<button class="fi-sidebar-database-notifications-btn">${icon('o-bell', { size: 'lg', alias: 'panels::sidebar.open-database-notifications-button' })}<span class="fi-sidebar-database-notifications-btn-label">${e(t('filament-panels::layout.actions.open_database_notifications.label'))}</span>${unread ? `<span class="fi-sidebar-database-notifications-btn-badge-ctn"><span class="${BADGE} fi-size-md"><span class="fi-badge-label-ctn"><span class="fi-badge-label">${unread}</span></span></span></span>` : ''}</button>`;
     }
     async placeholder(): Promise<string> {
         const { panel, user } = (this._ctx ?? {}) as any;
@@ -235,7 +238,7 @@ export class DatabaseNotifications extends Component {
         const close = `$dispatch('close-modal', { id: ${js(id)} })`;
         const key = (part: string) => `${this.id}.modal.${id}.${part}`;
         const closeLabel = t('filament::components/modal.actions.close.label');
-        const closeButton = `<button class="fi-icon-btn fi-size-md fi-modal-close-btn" title="${e(closeLabel)}" aria-label="${e(closeLabel)}" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="${e(close)}">${icon('o-x-mark', { size: 'lg' })}</button>`;
+        const closeButton = `<button class="fi-icon-btn fi-size-md fi-modal-close-btn" title="${e(closeLabel)}" aria-label="${e(closeLabel)}" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" x-on:click="${e(close)}">${icon('o-x-mark', { size: 'lg', alias: 'modal.close-button' })}</button>`;
         const heading = t('filament-notifications::database.modal.heading');
 
         let header: string;
@@ -248,7 +251,7 @@ export class DatabaseNotifications extends Component {
             content = `<div wire:key="${e(key('content'))}" class="fi-modal-content">${body}</div>`;
             if (notifications && (page > 1 || hasMore)) content += `<div wire:key="${e(key('footer'))}" class="fi-modal-footer fi-align-start">${pagination({ id: this.id, page, perPage: limit, hasMore })}</div>`;
         } else {
-            header = `<div wire:key="${e(key('header'))}" class="fi-modal-header">${closeButton}<div class="fi-modal-icon-ctn"><div class="fi-modal-icon-bg">${icon('o-bell-slash', { size: 'lg' })}</div></div><div><h2 id="${id}.heading" class="fi-modal-heading">${e(t('filament-notifications::database.modal.empty.heading'))}</h2><p id="${id}.description" class="fi-modal-description">${e(t('filament-notifications::database.modal.empty.description'))}</p></div></div>`;
+            header = `<div wire:key="${e(key('header'))}" class="fi-modal-header">${closeButton}<div class="fi-modal-icon-ctn"><div class="fi-modal-icon-bg">${icon('o-bell-slash', { size: 'lg', alias: 'notifications::database.modal.empty-state' })}</div></div><div><h2 id="${id}.heading" class="fi-modal-heading">${e(t('filament-notifications::database.modal.empty.heading'))}</h2><p id="${id}.description" class="fi-modal-description">${e(t('filament-notifications::database.modal.empty.description'))}</p></div></div>`;
         }
 
         const modal = new Attributes({

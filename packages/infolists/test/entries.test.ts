@@ -62,3 +62,18 @@ test('ViewEntry: developer-supplied rendering inside the entry wrapper', async (
     assert.ok(bare.includes('<div class="fi-sc-component"><b>ok</b></div>'));
     await assert.rejects(() => render({}, [ViewEntry.make('status')]));
 });
+
+test('IconEntry: icons of registered sets and aliases of the boolean icons', async (t) => {
+    const { IconEntry } = await import('../src/index.ts');
+    const { icon, icons } = await import('@navette-js/support');
+    t.after(() => icons.alias({ 'infolists::components.icon-entry.true': null }));
+    icons.registerSet('entry-test', (name) => (name === 'star' ? '<svg data-star></svg>' : null));
+    const html = await render({ rating: 5 }, [IconEntry.make('rating').icon('entry-test:star')]);
+    assert.ok(html.includes('data-star'));
+    const paths = (name: string) => icon(name).replace(/^<svg[^>]*>/, '');
+    assert.ok((await render({ active: true }, [IconEntry.make('active').boolean()])).includes(paths('o-check-circle')));
+    icons.alias({ 'infolists::components.icon-entry.true': 'm-hand-thumb-up' });
+    assert.ok((await render({ active: true }, [IconEntry.make('active').boolean()])).includes(paths('m-hand-thumb-up')));
+    // A state value that is not an icon name is not rendered.
+    assert.ok(!(await render({ rating: '<svg onload=x>' }, [IconEntry.make('rating').icon((state: any) => state)])).includes('<svg onload'));
+});

@@ -4,6 +4,7 @@ import { camel, compileComponentTags, isHtmlAttribute } from './components.ts';
 // namespaced EJS views.
 import ejs from 'ejs';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -370,19 +371,174 @@ export class ColorManager {
 }
 
 // ------------------------------------------------------------------ icons
+/** An icon: a name (`m-eye`, `lucide:house`, a name given to `registerIcon()`), or HTML rendered inside a `fi-icon` span. */
+export type IconValue = string | HtmlString;
+/** Resolves the name of an icon of a set (`house` for `lucide:house`) to a full `<svg>`; `null` or `undefined`: unknown icon. */
+export type IconSetResolver = (name: string) => string | null | undefined;
+/** Icon of an Iconify JSON set (`@iconify-json/*` packages). */
+export type IconifyIcon = { body: string; width?: number; height?: number; left?: number; top?: number; rotate?: number; hFlip?: boolean; vFlip?: boolean };
+/** Iconify JSON set: the `icons.json` file of an `@iconify-json/*` package. */
+export type IconifyJson = {
+    prefix: string; icons: Record<string, IconifyIcon>; width?: number; height?: number; left?: number; top?: number;
+    aliases?: Record<string, Partial<IconifyIcon> & { parent: string }>;
+};
+
 const iconCache = new Map<string, string>();
-/** Heroicons icon (`m-eye`, `o-user`, `s-…`, `c-…`) with the `fi-icon fi-size-<size>` classes. */
-export function icon(name: string, options: { size?: string; attributes?: Attributes } = {}): string {
+const iconAliases = new Map<string, string>();
+const iconAliasHtml = new Map<string, string>();
+const iconSets = new Map<string, IconSetResolver>();
+const ICON_SET_PREFIX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ICON_SET_NAME = /^[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*$/;
+
+// Alternative spellings of Filament's aliases (Filament's `IconManager::ALIASES`): both resolve to the same icon.
+const RICH_EDITOR_TOOLS = 'align-center align-end align-justify align-start attach-files blockquote bold bullet-list clear_formatting code code-block custom-blocks details grid grid_add_column_after grid_add_column_before grid_delete grid_delete_column h1 h2 h3 h4 h5 h6 highlight horizontal-rule italic lead link merge-tags ordered-list paragraph redo small strike subscript superscript table table_add_column_after table_add_column_before table_add_row_after table_add_row_before table_delete table_delete_column table_delete_row table_merge_cells table_split_cell table_toggle_header_cell table_toggle_header_row text-color underline undo'.split(' ');
+const ALIAS_SPELLINGS: Record<string, string> = {
+    ...Object.fromEntries(RICH_EDITOR_TOOLS.map((tool) => [`forms::components.rich-editor.toolbar.${tool.replace(/_/g, '-')}`, `forms:components.rich-editor.toolbar.${tool}`])),
+    ...Object.fromEntries(['callout.danger', 'callout.info', 'callout.success', 'callout.warning', 'tabs.dropdown-trigger-button', 'tabs.more-tabs-button', 'wizard.completed-step'].map((key) => [`schemas::components.${key}`, `schema::components.${key}`])),
+    ...Object.fromEntries(['boolean', 'date', 'number', 'relationship', 'select', 'text'].map((key) => [`tables::filters.query-builder.constraints.${key}`, `query-builder::constraints.${key}`])),
+};
+const normalizeIconAlias = (alias: string) => ALIAS_SPELLINGS[alias] ?? alias;
+
+/**
+ * `<svg>` of an Iconify icon, aliases and their flips and rotations included. The transformations are adapted from
+ * `iconToSVG()` of `@iconify/utils`, © Vjacheslav Trushkin, MIT license (`icons/ICONIFY-UTILS-LICENSE.md`).
+ */
+export function iconifyToSvg(set: IconifyJson, name: string): string | null {
+    let current = name;
+    let hFlip = false, vFlip = false, rotate = 0;
+    let size: Partial<IconifyIcon> = {};
+    for (let depth = 0; !Object.prototype.hasOwnProperty.call(set.icons, current); depth++) {
+        const alias = set.aliases && Object.prototype.hasOwnProperty.call(set.aliases, current) ? set.aliases[current] : null;
+        if (!alias || depth > 32) return null;
+        if (alias.hFlip) hFlip = !hFlip;
+        if (alias.vFlip) vFlip = !vFlip;
+        rotate += alias.rotate ?? 0;
+        size = { width: alias.width, height: alias.height, left: alias.left, top: alias.top, ...Object.fromEntries(Object.entries(size).filter(([, v]) => v !== undefined)) };
+        current = alias.parent;
+    }
+    const data = set.icons[current];
+    if (!data || typeof data.body !== 'string') return null;
+    const number = (...values: unknown[]) => values.find((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    let left = number(size.left, data.left, set.left) ?? 0, top = number(size.top, data.top, set.top) ?? 0;
+    let width = number(size.width, data.width, set.width) ?? 16, height = number(size.height, data.height, set.height) ?? 16;
+    if (data.hFlip) hFlip = !hFlip;
+    if (data.vFlip) vFlip = !vFlip;
+    rotate += data.rotate ?? 0;
+    const transforms: string[] = [];
+    if (hFlip) {
+        if (vFlip) rotate += 2;
+        else { transforms.push(`translate(${width + left} ${-top})`, 'scale(-1 1)'); top = left = 0; }
+    } else if (vFlip) {
+        transforms.push(`translate(${-left} ${height + top})`, 'scale(1 -1)'); top = left = 0;
+    }
+    rotate = ((rotate % 4) + 4) % 4;
+    if (rotate === 1) transforms.unshift(`rotate(90 ${height / 2 + top} ${height / 2 + top})`);
+    else if (rotate === 2) transforms.unshift(`rotate(180 ${width / 2 + left} ${height / 2 + top})`);
+    else if (rotate === 3) transforms.unshift(`rotate(-90 ${width / 2 + left} ${width / 2 + left})`);
+    if (rotate % 2 === 1) { [left, top] = [top, left]; [width, height] = [height, width]; }
+    const body = transforms.length ? `<g transform="${transforms.join(' ')}">${data.body}</g>` : data.body;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${left} ${top} ${width} ${height}" aria-hidden="true" data-slot="icon">${body}</svg>`;
+}
+
+/** Reads the `icons.json` of an installed Iconify package: `@iconify-json/lucide`, or `lucide` for short. */
+function loadIconifyPackage(name: string): IconifyJson {
+    const pkg = name.includes('/') ? name : `@iconify-json/${name}`;
+    if (!/^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/.test(pkg)) throw new Error(`Invalid Iconify package name: ${name}`);
+    const require = createRequire(path.join(process.cwd(), 'package.json'));
+    return JSON.parse(readFileSync(require.resolve(`${pkg}/icons.json`), 'utf8'));
+}
+
+/**
+ * Icon registry, like Filament's `FilamentIcon` facade and the Blade Icons sets:
+ * - `alias()` replaces an icon of the interface by its alias (`panels::sidebar.collapse-button`),
+ * - `registerSet()` and `registerIconify()` add other icon sets, used as `prefix:name` (`lucide:house`),
+ * - `register()` adds a single icon.
+ * The SVG of registered icons and sets is inserted as is: it is trusted application input, never user input.
+ */
+export const icons = {
+    /**
+     * Replaces interface icons: `{ alias: icon }`, the icon being a name (`o-chevron-left`, `lucide:panel-left-close`)
+     * or HTML (`new HtmlString('<svg…>')`); `null` removes the replacement.
+     */
+    alias(map: Record<string, IconValue | null>): void {
+        for (const [key, value] of Object.entries(map)) {
+            const alias = normalizeIconAlias(key);
+            iconAliasHtml.delete(`@${alias}`);
+            if (value === null || value === undefined) { iconAliases.delete(alias); continue; }
+            if (value instanceof HtmlString) {
+                iconAliasHtml.set(`@${alias}`, value.html);
+                iconAliases.set(alias, `@${alias}`);
+            } else if (typeof value === 'string' && value !== '') iconAliases.set(alias, value);
+            else throw new Error(`icons.alias(${key}) expects an icon name or an HtmlString.`);
+        }
+    },
+    /** Icon registered for the first alias that has one (Filament's `FilamentIcon::resolve()`), or `null`. */
+    resolve(alias: string | string[]): string | null {
+        for (const key of Array.isArray(alias) ? alias : [alias]) {
+            const name = iconAliases.get(normalizeIconAlias(key));
+            if (name !== undefined) return name;
+        }
+        return null;
+    },
+    /** Registers a set of icons used as `prefix:name`: the resolver returns the `<svg>` of a name, or `null`. Names are validated first. */
+    registerSet(prefix: string, resolver: IconSetResolver): void {
+        if (!ICON_SET_PREFIX.test(prefix)) throw new Error(`Invalid icon set prefix: ${prefix}`);
+        if (typeof resolver !== 'function') throw new Error(`icons.registerSet(${prefix}) expects a resolver function.`);
+        iconSets.set(prefix, resolver);
+        for (const name of iconCache.keys()) if (name.startsWith(`${prefix}:`)) iconCache.delete(name);
+    },
+    /**
+     * Registers an Iconify set: an installed `@iconify-json/*` package (`'lucide'` or `'@iconify-json/lucide'`) or its
+     * JSON. Its icons are used as `prefix:name` (`lucide:house`); the prefix is the set's own unless another is given.
+     */
+    registerIconify(source: string | IconifyJson, options: { prefix?: string } = {}): void {
+        const set = typeof source === 'string' ? loadIconifyPackage(source) : source;
+        if (!set || typeof set !== 'object' || typeof set.icons !== 'object') throw new Error('icons.registerIconify() expects an Iconify JSON set.');
+        const prefix = options.prefix ?? set.prefix;
+        this.registerSet(prefix, (name) => iconifyToSvg(set, name));
+    },
+    /** Registers a single icon (same as `registerIcon()`). */
+    register(name: string, svg: string): void { registerIcon(name, svg); },
+    /** Whether the name designates an icon that can be rendered (Heroicons, Filament icons, registered icons and sets). */
+    has(name: string): boolean {
+        try { iconSvg(name); return true; } catch { return false; }
+    },
+};
+
+function iconSvg(name: string): string {
     let svg = iconCache.get(name);
-    if (svg === undefined) {
+    if (svg !== undefined) return svg;
+    if (name.startsWith('@')) throw new Error(`Icon not found: ${name}`);
+    const colon = name.indexOf(':');
+    if (colon > 0) {
+        const prefix = name.slice(0, colon), local = name.slice(colon + 1);
+        const resolver = iconSets.get(prefix);
+        if (!resolver) throw new Error(`Icon not found: ${name} (no icon set registered for the "${prefix}" prefix)`);
+        if (!ICON_SET_NAME.test(local)) throw new Error(`Invalid icon name: ${name}`);
+        const resolved = resolver(local);
+        if (typeof resolved !== 'string' || !/^<svg[\s>]/.test(resolved.trim())) throw new Error(`Icon not found: ${name}`);
+        svg = resolved.trim();
+    } else {
         // `fi-o-crop`: Filament's own icons (MIT), shipped next to Heroicons.
         const file = name.startsWith('fi-') ? here(`../icons/filament/${name.slice(3).replace(/[^a-z0-9-]/g, '')}.svg`) : here(`../icons/heroicons/${name.replace(/^heroicon-/, '').replace(/[^a-z0-9-]/g, '')}.svg`);
         if (!existsSync(file)) throw new Error(`Icon not found: ${name}`);
         svg = readFileSync(file, 'utf8').trim();
-        iconCache.set(name, svg);
     }
+    iconCache.set(name, svg);
+    return svg;
+}
+
+/**
+ * Icon markup with the `fi-icon fi-size-<size>` classes: a Heroicons name (`m-eye`, `o-user`, `s-…`, `c-…`), a Filament
+ * icon (`fi-o-crop`), a registered icon, an icon of a registered set (`lucide:house`) or HTML. With `alias`, the icon
+ * registered for that alias (`icons.alias()`) replaces the given one, like Filament's `generate_icon_html()`.
+ */
+export function icon(name: IconValue, options: { size?: string; attributes?: Attributes; alias?: string | string[] } = {}): string {
+    if (options.alias) name = icons.resolve(options.alias) ?? name;
     const a = (options.attributes ?? new Attributes()).class(['fi-icon', `fi-size-${options.size ?? 'md'}`]);
-    return svg.replace(/^<svg/, `<svg ${a.toHtml()}`);
+    const html = name instanceof HtmlString ? name.html : iconAliasHtml.get(name);
+    if (html !== undefined) return `<span ${a.toHtml()}>${html}</span>`;
+    return iconSvg(name as string).replace(/^<svg/, `<svg ${a.toHtml()}`);
 }
 /** Registers a non-Heroicons icon (brand logo, custom glyph): a full `<svg>` supplied by the application, never by end users (it is not sanitized). */
 export function registerIcon(name: string, svg: string): void {

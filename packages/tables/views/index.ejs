@@ -32,7 +32,7 @@
 <% }; %>
 <%
     // Filters trigger button (funnel icon and active filter count) and filters panel, shared by every filters layout.
-    const filtersTriggerDefault = () => `<button title="${e(t('filament-tables::table.actions.filter.label'))}" aria-label="${e(t('filament-tables::table.actions.filter.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">${icon('m-funnel')}<div class="fi-icon-btn-badge-ctn"><span class="${cls([...badgeClasses, 'fi-badge', 'fi-size-xs'])}">${activeFiltersCount}</span></div></button>`;
+    const filtersTriggerDefault = () => `<button title="${e(t('filament-tables::table.actions.filter.label'))}" aria-label="${e(t('filament-tables::table.actions.filter.label'))}" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">${icon('m-funnel', { alias: 'tables::actions.filter' })}<div class="fi-icon-btn-badge-ctn"><span class="${cls([...badgeClasses, 'fi-badge', 'fi-size-xs'])}">${activeFiltersCount}</span></div></button>`;
     const filtersTrigger = () => filterActions.trigger.customized
         ? filterActionHtml(filterActions.trigger, 'type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled"', `<span class="${cls([...badgeClasses, 'fi-badge', 'fi-size-xs'])}">${activeFiltersCount}</span>`)
         : filtersTriggerDefault();
@@ -115,7 +115,7 @@
                         <% if (reorder) { %>
                             <% const reorderLabel = t(reorder.active ? 'filament-tables::table.actions.disable_reordering.label' : 'filament-tables::table.actions.enable_reordering.label') %>
                             <button title="<%= reorderLabel %>" aria-label="<%= reorderLabel %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="toggleTableReordering" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
-                                <%- icon(reorder.active ? 'm-check' : 'm-arrows-up-down', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'toggleTableReordering' }) }) %>
+                                <%- icon(reorder.active ? 'm-check' : 'm-arrows-up-down', { alias: reorder.active ? 'tables::actions.disable-reordering' : 'tables::actions.enable-reordering', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'toggleTableReordering' }) }) %>
                                 <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'toggleTableReordering' })) %>
                             </button>
                         <% } %>
@@ -125,10 +125,10 @@
                             <div x-data="filamentDropdown" x-cloak="x-cloak" x-show="getSelectedRecordsCount()" class="fi-dropdown">
                                 <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
                                     <button title="<%= t('filament-tables::table.actions.open_bulk_actions.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-group fi-icon-btn fi-size-md">
-                                        <%- icon('m-ellipsis-vertical') %>
+                                        <%- icon('m-ellipsis-vertical', { alias: 'tables::actions.open-bulk-actions' }) %>
                                     </button>
                                     <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-group fi-btn fi-size-md fi-labeled-from-sm">
-                                        <%- icon('m-ellipsis-vertical') %>
+                                        <%- icon('m-ellipsis-vertical', { alias: 'tables::actions.open-bulk-actions' }) %>
                                         <%= t('filament-tables::table.actions.open_bulk_actions.label') %>
                                     </button>
                                 </div>
@@ -190,7 +190,7 @@
                                 <div x-data="filamentDropdown({ isMenu: false })" class="<%- cls(['fi-dropdown', { 'sm:fi-hidden': !grouping.inDropdownOnDesktop }]) %>" wire:key="<%= id %>.table.grouping">
                                     <div x-on:mousedown="if ($event.button === 0) toggle($event)" class="fi-dropdown-trigger">
                                         <button title="<%= t('filament-tables::table.actions.group.label') %>" aria-label="<%= t('filament-tables::table.actions.group.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-force-enabled fi-ac-icon-btn-action fi-icon-btn fi-size-md">
-                                            <%- icon('m-rectangle-stack') %>
+                                            <%- icon('m-rectangle-stack', { alias: 'tables::actions.group' }) %>
                                         </button>
                                     </div>
                                     <div x-cloak x-float.placement.bottom-start.flip.shift.offset="{ offset: 8, }" x-ref="panel" x-transition:enter-start="fi-opacity-0" x-transition:leave-end="fi-opacity-0" wire:ignore.self wire:key="<%= id %>.table.grouping.panel" class="fi-dropdown-panel fi-width-xs" style="">
@@ -235,7 +235,7 @@
 
                             <div class="fi-input-wrp">
                                 <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">
-                                    <%- icon('m-magnifying-glass', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'tableSearch' }) }) %>
+                                    <%- icon('m-magnifying-glass', { alias: 'tables::search-field', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'tableSearch' }) }) %>
                                     <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'tableSearch' })) %>
                                 </div>
 
@@ -357,7 +357,7 @@
                             theme: $store.theme,
                             allowHTML: false,
                         }" aria-label="<%= t('filament-tables::table.filters.actions.remove_all.label') %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="removeTableFilters,removeTableFilter" class="fi-ac-icon-btn-action fi-icon-btn fi-size-sm" wire:click="removeTableFilters">
-                        <%- icon('m-x-mark', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'removeTableFilters' }) }) %>
+                        <%- icon('m-x-mark', { alias: 'tables::filters.remove-all-button', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'removeTableFilters' }) }) %>
                         <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'removeTableFilters' })) %>
                     </button>
                     <% } %>
@@ -490,7 +490,7 @@
                                 <% } %>
                             </div>
                             <% if (row.collapsibleHtml !== null) { %>
-                            <button aria-label="<%= t('filament-tables::table.actions.toggle_record_content.label', { key: row.key }) %>" x-bind:aria-expanded="! isCollapsed" type="button" x-on:click="isCollapsed = ! isCollapsed" class="fi-ta-record-collapse-btn fi-icon-btn"><%- icon('m-chevron-down') %></button>
+                            <button aria-label="<%= t('filament-tables::table.actions.toggle_record_content.label', { key: row.key }) %>" x-bind:aria-expanded="! isCollapsed" type="button" x-on:click="isCollapsed = ! isCollapsed" class="fi-ta-record-collapse-btn fi-icon-btn"><%- icon('m-chevron-down', { alias: 'tables::columns.collapse-button' }) %></button>
                             <% } %>
                         </div>
                         <% } %>
@@ -615,7 +615,7 @@
                                     <% if (column.sortable) { %>
                                         <button type="button" data-prevent-disabled-clicks wire:click="sortTable(<%= js(column.name) %>)" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:target="<%- targets %>" class="fi-ta-header-cell-sort-btn">
                                             <%= column.label %>
-                                            <%- icon(column.sort === 'ascending' ? 'm-chevron-up' : 'm-chevron-down', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'sortTable(' + js(column.name) + ')' }) }) %>
+                                            <%- icon(column.sort === 'ascending' ? 'm-chevron-up' : 'm-chevron-down', { alias: column.sort === 'ascending' ? 'tables::header-cell.sort-asc-button' : column.sort === 'descending' ? 'tables::header-cell.sort-desc-button' : 'tables::header-cell.sort-button', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'sortTable(' + js(column.name) + ')' }) }) %>
                                             <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'sortTable(' + js(column.name) + ')' })) %>
                                         </button>
                                     <% } else { %>
@@ -642,7 +642,7 @@
 
                                                 <div class="fi-input-wrp">
                                                     <div x-on:click="if (! $event.target.closest('.fi-input-wrp-actions')) $dispatch('focus-input')" class="fi-input-wrp-prefix fi-input-wrp-prefix-has-content fi-inline">
-                                                        <%- icon('m-magnifying-glass', { attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'tableColumnSearches.' + column.name }) }) %>
+                                                        <%- icon('m-magnifying-glass', { alias: 'tables::search-field', attributes: attrs({ 'wire:loading.remove.delay.default': '1', 'wire:target': 'tableColumnSearches.' + column.name }) }) %>
                                                         <%- loadingIndicator(attrs({ 'wire:loading.delay.default': '', 'wire:target': 'tableColumnSearches.' + column.name })) %>
                                                     </div>
 
@@ -693,7 +693,7 @@
                                             <% if (group.description) { %><p class="fi-ta-group-description"><%= group.description %></p><% } %>
                                         </div>
                                         <% if (group.collapsible) { %>
-                                            <button aria-label="<%= (group.label ? group.label + ': ' : '') + (group.title ?? '') %>" x-bind:aria-expanded="! isGroupCollapsed(<%= js(group.title) %>)" type="button" class="fi-icon-btn fi-size-sm"><%- icon('m-chevron-up', { size: 'sm' }) %></button>
+                                            <button aria-label="<%= (group.label ? group.label + ': ' : '') + (group.title ?? '') %>" x-bind:aria-expanded="! isGroupCollapsed(<%= js(group.title) %>)" type="button" class="fi-icon-btn fi-size-sm"><%- icon('m-chevron-up', { size: 'sm', alias: 'tables::grouping.collapse-button' }) %></button>
                                         <% } %>
                                     </div>
                                 </td>
@@ -705,7 +705,7 @@
                                 }"<% if (reorder?.active) { %> x-sortable-item="<%= row.key %>" x-sortable-handle<% } %> class="<%- cls(['fi-ta-row', { 'fi-clickable': row.url || row.mountExpression || row.wasClickable }, row.classes]) %>">
                                 <% if (reorder?.active) { %>
                                 <td class="fi-ta-cell">
-                                    <button aria-hidden="true" tabindex="-1" type="button" class="fi-ta-reorder-handle fi-icon-btn"><%- icon('m-bars-2') %></button>
+                                    <button aria-hidden="true" tabindex="-1" type="button" class="fi-ta-reorder-handle fi-icon-btn"><%- icon('m-bars-2', { alias: 'tables::reorder.handle' }) %></button>
                                     <span id="<%= row.reorder.id %>" data-table-reorder-label="<%= row.reorder.label %>" class="fi-sr-only"><%= t('filament-tables::table.reordering.position', { label: row.reorder.label, position: row.reorder.position, count: rows.length }) %></span>
                                     <div class="fi-sr-only">
                                         <% for (const direction of ['up', 'down']) { %>

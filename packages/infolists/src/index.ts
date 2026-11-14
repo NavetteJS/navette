@@ -1,6 +1,6 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, isSafeUrl, js, markdownToHtml, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Lazy, configured } from '@navette-js/support';
+import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeUrl, js, markdownToHtml, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type Lazy, configured } from '@navette-js/support';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { highlightCode, highlightedLinesHtml } from './code-highlighter.ts';
 
@@ -48,8 +48,9 @@ const isBlank = (value: unknown) => value === null || value === undefined || (ty
 const ALIGNMENTS = new Set(['start', 'center', 'end', 'left', 'right', 'justify', 'between']);
 const alignmentClass = (alignment: string | null | undefined) => (alignment && ALIGNMENTS.has(alignment) ? `fi-align-${alignment}` : null);
 const safeName = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '');
-const ICON_NAME = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
-const renderIcon = (name: unknown, options: { size?: string; attributes?: Attributes } = {}) => (typeof name === 'string' && ICON_NAME.test(name) ? icon(name, options) : '');
+// A Heroicons or registered name, an icon of a set (`lucide:house`), or an icon registered for an alias (`@…`, from `icons.resolve()`).
+const ICON_NAME = /^[a-zA-Z0-9][a-zA-Z0-9-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
+const renderIcon = (name: unknown, options: { size?: string; attributes?: Attributes } = {}) => (typeof name === 'string' && (ICON_NAME.test(name) || name.startsWith('@')) ? icon(name, options) : '');
 const tooltipJs = (text: unknown): string | null => (text === null || text === undefined || text === '' ? null : `{ content: ${js(String(text))}, theme: $store.theme, allowHTML: false }`);
 const decodeEntities = (html: string) => html.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, '&');
 const stripTags = (html: string) => decodeEntities(html.replace(/<[^>]*>/g, ''));
@@ -828,7 +829,7 @@ export class IconEntry extends Entry {
         const items = (Array.isArray(state) ? state : [state]).map((item) => {
             const on = item === true || item === 1 || item === '1';
             let name = resolveMap(this._icon, record, item);
-            if (!name && this._boolean && item !== null && item !== undefined) name = on ? (this._trueIcon === false ? null : this._trueIcon ?? 'o-check-circle') : (this._falseIcon === false ? null : this._falseIcon ?? 'o-x-circle');
+            if (!name && this._boolean && item !== null && item !== undefined) name = on ? (this._trueIcon === false ? null : this._trueIcon ?? icons.resolve('infolists::components.icon-entry.true') ?? 'o-check-circle') : (this._falseIcon === false ? null : this._falseIcon ?? icons.resolve('infolists::components.icon-entry.false') ?? 'o-x-circle');
             if (!name) return '';
             let color = resolveMap(this._color, record, item);
             if (!color && this._boolean && item !== null && item !== undefined) color = on ? this._trueColor ?? 'success' : this._falseColor ?? 'danger';

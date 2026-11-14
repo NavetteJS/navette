@@ -122,7 +122,7 @@ export function renderCalendar(model: CalendarModel): string {
     const dayNumber = (day: string, text: string) => (model.datesClickable
         ? `<button type="button" wire:click="${call('selectDate', day)}" class="nv-cal-day-number">${e(text)}</button>`
         : `<span class="nv-cal-day-number">${e(text)}</span>`);
-    const iconButton = (name: string, label: string, method: string) => `<button type="button" wire:click="${method}" title="${e(label)}" aria-label="${e(label)}" class="fi-icon-btn fi-size-md nv-cal-nav">${icon(name)}</button>`;
+    const iconButton = (name: string, label: string, method: string) => `<button type="button" wire:click="${method}" title="${e(label)}" aria-label="${e(label)}" class="fi-icon-btn fi-size-md nv-cal-nav">${icon(name, { alias: `panels::calendar.${method === 'previousPeriod' ? 'previous' : 'next'}-button` })}</button>`;
     const switcher = model.views.length > 1
         ? `<div class="nv-cal-views" role="group">${model.views.map((name) => `<button type="button" wire:click="${call('setView', name)}" aria-pressed="${name === view}" class="nv-cal-view${name === view ? ' nv-cal-view-active' : ''}">${e(labels[name])}</button>`).join('')}</div>`
         : '';

@@ -13,7 +13,7 @@
         <form<% if (closeByEscaping) { %> x-on:keydown.window.escape="if (isTopmost()) <%= close %>"<% } %><% if (trapOnWindow) { %> x-trap.noreturn="isTrapActive" tabindex="0"<% } %> x-show="isWindowVisible" x-transition:enter="fi-transition-enter" x-transition:leave="fi-transition-leave" x-transition:enter-start="fi-transition-enter-start" x-transition:enter-end="fi-transition-enter-end" x-transition:leave-start="fi-transition-leave-start" x-transition:leave-end="fi-transition-leave-end" wire:submit.prevent="callMountedAction" wire:key="<%= livewireId %>.modal.<%= id %>.window" class="<%- cls(['fi-modal-window', { 'fi-modal-window-has-close-btn': closeButton }, { 'fi-modal-window-has-content': content !== null }, { 'fi-modal-window-has-footer': locals.hasFooter !== false }, { 'fi-modal-window-has-icon': iconName }, 'fi-align-' + alignment, 'fi-width-' + width]) %>">
             <div wire:key="<%= livewireId %>.modal.<%= id %>.header" class="fi-modal-header">
                 <% if (closeButton) { %><%- view('filament::components.icon-button', {
-                    iconName: 'o-x-mark', iconSize: 'lg', label: t('filament::components/modal.actions.close.label'), className: 'fi-modal-close-btn',
+                    iconName: 'o-x-mark', iconAlias: 'modal.close-button', iconSize: 'lg', label: t('filament::components/modal.actions.close.label'), className: 'fi-modal-close-btn',
                     extra: attrs({ tabindex: closeByEscaping ? '-1' : null }), after: attrs({ 'x-on:click': "$dispatch('close-modal', { id: " + js(id) + ' })' }),
                 }) %><% } %>
 
