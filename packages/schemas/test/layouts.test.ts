@@ -133,3 +133,11 @@ test('Callout controls and Text js()', async () => {
     const text = await render([Text.make("$get('name') ? `Hello, ${$get('name')}` : \"Please enter your name.\"").js()]);
     assert.ok(text.includes(`<span class="nv-sc-text"><span x-text="() => eval('$get(\\u0027name\\u0027) ? \`Hello, \${$get(\\u0027name\\u0027)}\` : \\u0022Please enter your name.\\u0022')"></span></span>`));
 });
+
+test('collapsed section: the class binding can remove the server-rendered nv-collapsed class', async () => {
+    const { Section } = await import('../src/index.ts');
+    const html = await render([Section.make('Details').collapsed().schema([])]);
+    assert.match(html, /x-bind:class="\{ 'nv-collapsed': isCollapsed \}"/);
+    assert.doesNotMatch(html, /isCollapsed &amp;&amp; 'nv-collapsed'/);
+    assert.match(html, /aria-expanded="false"/);
+});

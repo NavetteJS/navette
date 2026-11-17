@@ -239,7 +239,7 @@ export function section(props: SectionProps = {}, slot = ''): string {
                 'x-on:expand-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = false`,
                 'x-on:open-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = false`,
                 'x-on:toggle-section.window': `if ($event.detail.id == (${collapseId} ?? $el.id)) isCollapsed = ! isCollapsed`,
-                'x-bind:class': "isCollapsed && 'nv-collapsed'",
+                'x-bind:class': "{ 'nv-collapsed': isCollapsed }",
             } : {}),
         })
         .class(['nv-section', {
