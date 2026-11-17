@@ -154,6 +154,49 @@
 <% } %>
         <%# Rendered after the sidebar footer, not inside it. %>
         <%- renderHook('panels::sidebar.footer') %>
+        <script<%- cspNonceAttribute() %>>
+            // Keep the navigation's scroll position across page loads and SPA navigations: the new sidebar starts where the old one was.
+            (() => {
+                const nav = document.currentScript.parentElement.querySelector('.nv-sidebar-nav')
+                const key = 'navette:sidebar:scroll'
+
+                let top = null
+
+                try {
+                    top = sessionStorage.getItem(key)
+                } catch {}
+
+                if (top !== null) {
+                    // Applied again once styles and Alpine have settled: before that, the navigation may not be at its full height yet.
+                    const restore = () => nav.scrollTop = Number(top)
+
+                    restore()
+                    requestAnimationFrame(restore)
+
+                    if (document.readyState !== 'complete') {
+                        window.addEventListener('load', restore, { once: true })
+                    }
+                }
+
+                // Saved when leaving the page only: a scroll clamped while the page loads must not overwrite the stored position.
+                if (! window.navetteSidebarScrollSaver) {
+                    window.navetteSidebarScrollSaver = () => {
+                        const current = document.querySelector('#nv-main-sidebar .nv-sidebar-nav')
+
+                        if (! current) {
+                            return
+                        }
+
+                        try {
+                            sessionStorage.setItem(key, String(current.scrollTop))
+                        } catch {}
+                    }
+
+                    document.addEventListener('livewire:navigating', window.navetteSidebarScrollSaver)
+                    window.addEventListener('pagehide', window.navetteSidebarScrollSaver)
+                }
+            })()
+        </script>
     </div>
 
     <%- actionModals %>
