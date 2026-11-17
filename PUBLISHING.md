@@ -26,7 +26,7 @@ Publish in dependency order (a package must exist before the ones that depend on
 & .\scripts\publish.ps1 1.0.0-beta.1
 ```
 
-Pre-releases of `@navette-js/*` go to the `beta` tag. `create-navette` always goes to `latest`, so that `npm create navette@latest` gets the newest version. npm asks you to confirm the publication with two-factor authentication.
+Pre-releases of `@navette-js/*` go to the `beta` tag, and the script then moves `latest` to the same version (`scripts/npm-latest.ps1`): until 1.0.0, `npm install @navette-js/panels` must get the newest beta. `create-navette` always goes to `latest`, so that `npm create navette@latest` gets the newest version. npm asks you to confirm the publication with two-factor authentication.
 
 Then tag the repository: `git tag v1.0.0-beta.1 && git push origin v1.0.0-beta.1`.
 

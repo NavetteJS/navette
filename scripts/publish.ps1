@@ -13,3 +13,5 @@ foreach ($package in 'support', 'schemas', 'actions', 'database', 'forms', 'info
     if ($LASTEXITCODE -ne 0) { Write-Error "Publishing $archive failed: stopping."; exit 1 }
 }
 Write-Host "`nAll packages are published."
+# No stable release yet: `latest` follows the newest beta too, so a plain `npm install` gets it.
+if ($tag -eq 'beta') { & "$PSScriptRoot\npm-latest.ps1" $Version }
