@@ -77,4 +77,59 @@
     /* --- content being reloaded: it fades slightly during the request */
     .nv-ta-content-ctn { transition: opacity 0.2s var(--nv-out); }
     html[data-nv-busy] .nv-ta-content-ctn { opacity: 0.6; }
+
+    /* --- beta.10: a livelier interface */
+    /* the page header arrives first, then the content, then each widget in turn */
+    .nv-header { animation: nv-rise 0.4s var(--nv-spring) backwards; }
+    .nv-page-content { animation: nv-fade-in 0.45s var(--nv-out) 0.06s backwards; }
+    .nv-wi-widget:nth-child(2) { animation-delay: 0.05s; }
+    .nv-wi-widget:nth-child(3) { animation-delay: 0.1s; }
+    .nv-wi-widget:nth-child(4) { animation-delay: 0.15s; }
+    .nv-wi-widget:nth-child(5) { animation-delay: 0.2s; }
+    .nv-wi-widget:nth-child(n + 6) { animation-delay: 0.25s; }
+    /* stat cards: they rise one after the other; a card with a link lifts under the pointer */
+    .nv-wi-stats-overview-stat { animation: nv-rise 0.45s var(--nv-spring) backwards; transition: transform 0.25s var(--nv-spring), box-shadow 0.25s var(--nv-out); }
+    .nv-grid-col:nth-child(2) > * > .nv-wi-stats-overview-stat { animation-delay: 0.06s; }
+    .nv-grid-col:nth-child(3) > * > .nv-wi-stats-overview-stat { animation-delay: 0.12s; }
+    .nv-grid-col:nth-child(n + 4) > * > .nv-wi-stats-overview-stat { animation-delay: 0.18s; }
+    a.nv-wi-stats-overview-stat:hover { transform: translateY(-2px); box-shadow: 0 8px 24px -12px rgb(0 0 0 / 0.25); }
+    @keyframes nv-count { from { opacity: 0; transform: translateY(6px) scale(0.96); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
+    .nv-wi-stats-overview-stat-value { animation: nv-count 0.6s var(--nv-spring) 0.1s backwards; }
+
+    /* table rows: a light cascade when the page opens */
+    .nv-ta-row { animation: nv-fade-in 0.35s var(--nv-out) backwards; }
+    .nv-ta-row:nth-child(2) { animation-delay: 0.02s; } .nv-ta-row:nth-child(3) { animation-delay: 0.04s; }
+    .nv-ta-row:nth-child(4) { animation-delay: 0.06s; } .nv-ta-row:nth-child(5) { animation-delay: 0.08s; }
+    .nv-ta-row:nth-child(6) { animation-delay: 0.1s; } .nv-ta-row:nth-child(7) { animation-delay: 0.12s; }
+    .nv-ta-row:nth-child(8) { animation-delay: 0.14s; } .nv-ta-row:nth-child(n + 9) { animation-delay: 0.16s; }
+    /* empty states: the icon floats in */
+    @keyframes nv-float-in { from { opacity: 0; transform: translateY(6px) scale(0.85); } to { opacity: 1; transform: none; } }
+    .nv-ta-empty-state-icon-bg, .nv-empty-state-icon-bg { animation: nv-float-in 0.55s var(--nv-bounce) backwards; }
+
+    /* chevrons turn instead of flipping; a section that is opened unfolds its content */
+    .nv-section-collapse-btn, .nv-sidebar-group-collapse-btn { transition: transform 0.3s var(--nv-spring), background-color 0.2s var(--nv-out), color 0.2s var(--nv-out); }
+    .nv-section.nv-collapsible:not(.nv-collapsed) > .nv-section-content-ctn { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
+
+    /* sidebar: the icon of the hovered item nudges, the active item settles in */
+    .nv-sidebar-item-btn > .nv-icon { transition: transform 0.25s var(--nv-bounce), color 0.2s var(--nv-out); }
+    .nv-sidebar-item-btn:hover > .nv-icon { transform: translateX(2px); }
+    @keyframes nv-settle { from { opacity: 0.4; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+    .nv-sidebar-item.nv-active > .nv-sidebar-item-btn { animation: nv-settle 0.35s var(--nv-spring); }
+
+    /* checkboxes and radios: a small pop when checked */
+    @keyframes nv-check { 0% { transform: scale(0.85); } 60% { transform: scale(1.08); } 100% { transform: none; } }
+    .nv-checkbox-input:checked, .nv-radio-input:checked { animation: nv-check 0.28s var(--nv-bounce); }
+
+    /* wizard: the next step slides in; the step header colors change smoothly */
+    @keyframes nv-slide-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+    .nv-sc-wizard-step.nv-active { animation: nv-slide-in 0.38s var(--nv-spring) backwards; }
+    .nv-sc-wizard-header-step-icon-ctn, .nv-sc-wizard-header-step-label { transition: background-color 0.3s var(--nv-out), color 0.3s var(--nv-out), border-color 0.3s var(--nv-out); }
+
+    /* tabs: the active panel fades in */
+    .nv-sc-tabs-tab.nv-active { animation: nv-fade-in 0.3s var(--nv-out); }
+
+    /* avatars and Repeater items */
+    .nv-avatar { transition: transform 0.25s var(--nv-bounce); }
+    .nv-user-menu-trigger:hover .nv-avatar { transform: scale(1.06); }
+    .nv-fo-repeater-item { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
 }
