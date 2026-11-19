@@ -37,7 +37,7 @@ test('in production, a panel on the development key or a short one refuses to bo
     } finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
 });
 
-test('a component update mixing snapshots of two tenants runs under one of them (persistent topbar after a tenant switch)', async () => {
+test('a component update mixing snapshots of two tenants is refused', async () => {
     const teams = [{ id: 1, name: 'Red' }, { id: 2, name: 'Blue' }];
     const ada = { id: 1, name: 'Ada', email: 'ada@example.com' };
     const panel = Panel.make().id('mixed').path('app').key('mixed-secret-key-0123').authGuard('mixed').auth({ attempt: async () => null, find: async () => ada }).pages([Dashboard])
@@ -56,7 +56,7 @@ test('a component update mixing snapshots of two tenants runs under one of them 
         const token = first.match(/<meta name="csrf-token" content="([^"]+)"/)![1];
         const jar = [cookie, ...pages[0].headers.getSetCookie().map((value) => value.split(';')[0])].join('; ');
         const post = (snapshots: string[]) => fetch(`${base}/app/livewire/update`, { method: 'POST', headers: { cookie: jar, 'content-type': 'application/json' }, body: JSON.stringify({ _token: token, components: snapshots.map((snapshot) => ({ snapshot, updates: {}, calls: [] })) }) });
-        assert.equal((await post([pick(first), pick(second)])).status, 200);
+        assert.equal((await post([pick(first), pick(second)])).status, 403);
         assert.equal((await post([pick(first)])).status, 200);
     } finally { server.close(); }
 });
@@ -148,5 +148,26 @@ test('sessions renew themselves once half of their life has passed', async () =>
         assert.equal(cookies.length, 1);
         const renewed = JSON.parse(Buffer.from(cookies[0].split('=')[1].split('.')[0], 'base64url').toString());
         assert.ok(renewed.exp > Math.floor((issued + 24 * 3600_000) / 1000));
+        assert.equal(renewed.sid, Math.floor(issued / 1000), 'the start of the sign-in is kept');
+    } finally { Date.now = realNow; }
+});
+
+test('a renewed session stops renewing 90 days after the sign-in', async () => {
+    const ada = { id: 1, name: 'Ada', email: 'ada@example.com' };
+    const panel = Panel.make().id('capped').path('capped').key('capped-secret-key-0123').authGuard('capped').auth({ attempt: async () => null, find: async () => ada });
+    const realNow = Date.now;
+    try {
+        const start = realNow();
+        let cookie = '';
+        const issue = (at: number, startedAt?: number) => { Date.now = () => at; panel.logIn({ cookie: (name: string, value: string) => { cookie = `${name}=${value}`; }, req: {} } as any, ada, true, startedAt); };
+        issue(start);
+        // A cookie renewed at day 80 (30 days valid), asked again at day 100 and half its life gone: no new cookie.
+        issue(start + 80 * 86400_000, Math.floor(start / 1000));
+        Date.now = () => start + 100 * 86400_000;
+        const req = { headers: { cookie } } as any;
+        assert.ok(await panel.user(req));
+        const issued: string[] = [];
+        panel.renewSession(req, { cookie: (_n: string, value: string) => { issued.push(value); }, req: {}, headersSent: false } as any, ada);
+        assert.equal(issued.length, 0);
     } finally { Date.now = realNow; }
 });

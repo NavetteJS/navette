@@ -1134,10 +1134,11 @@ export class Panel {
 
     // --- session: an HMAC-signed cookie holding the user id
     private sign(value: string): string { return createHmac('sha256', this._key).update(value).digest('base64url'); }
-    logIn(res: Response, user: User, remember: boolean): void {
+    /** `startedAt`: when the sign-in began (a renewal keeps it, so sliding sessions still end after `MAX_SESSION_AGE`). */
+    logIn(res: Response, user: User, remember: boolean, startedAt?: number): void {
         // The signature is not enough on its own: a stolen cookie stops working at `exp` (a day, or 30 days with "remember me").
         const now = Math.floor(Date.now() / 1000);
-        const value = Buffer.from(JSON.stringify({ uid: user.id, iat: now, exp: now + (remember ? 30 * 86400 : 86400), rem: remember ? 1 : 0 })).toString('base64url');
+        const value = Buffer.from(JSON.stringify({ uid: user.id, iat: now, sid: startedAt ?? now, exp: now + (remember ? 30 * 86400 : 86400), rem: remember ? 1 : 0 })).toString('base64url');
         res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}), ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
     }
     logOut(res: Response): void { res.clearCookie(this.getSessionCookieName(), this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}); }
@@ -1155,13 +1156,16 @@ export class Panel {
             return user;
         } catch { return null; }
     }
-    private _sessions = new WeakMap<object, { iat?: number; exp: number; rem?: number }>();
+    private _sessions = new WeakMap<object, { iat?: number; sid?: number; exp: number; rem?: number }>();
     /** Sliding expiry: once half of the session's life has passed, an active user gets a fresh cookie. */
     renewSession(req: Request, res: Response, user: User): void {
         const session = this._sessions.get(req);
         if (!session || typeof session.iat !== 'number' || typeof res?.cookie !== 'function' || res.headersSent) return;
         const now = Date.now() / 1000;
-        if (now - session.iat > (session.exp - session.iat) / 2) this.logIn(res, user, session.rem === 1);
+        const startedAt = session.sid ?? session.iat;
+        // A sliding session still ends after 90 days: a stolen cookie cannot be kept alive forever.
+        if (now - startedAt > MAX_SESSION_AGE) return;
+        if (now - session.iat > (session.exp - session.iat) / 2) this.logIn(res, user, session.rem === 1, startedAt);
     }
 }
 
@@ -6050,9 +6054,11 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         }
         if (paths.size === 0) paths.add('');
         const tenants = await Promise.all([...paths].map((path) => tenantFromPath(path, ctx.user, req.hostname)));
-        // The whole request runs under one tenant the user belongs to (each path was checked). Persistent components such as the topbar
-        // keep the path of the page they were first shown on, so a batch may mix paths: the first resolved tenant wins, never "no tenant".
-        ctx.tenant = tenants.find((tenant) => tenant) ?? null;
+        // One tenant for the whole request: every component of the batch must come from a page of the same tenant (the topbar persists
+        // across pages only within a tenant: its `x-persist` key contains the tenant). Comparing keys, as `find()` may return new objects.
+        const tenantKeys = tenants.map((tenant) => (tenant ? String(panel.getTenantUrlKey(tenant as any)) : null));
+        if (panel.hasTenancy() && tenantKeys.some((key) => key !== tenantKeys[0])) throw new WireError(403, 'Components of several tenants.');
+        ctx.tenant = tenants[0] ?? null;
         // Persistent middleware (`middleware([...], true)`, `authMiddleware([...], true)`…) run on component updates too.
         res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };
         if (!(await applyPanelMiddleware(middlewareFor(panel.getMiddleware(), 'component'), req, res)) || !(await runAccessMiddleware(req, res, ctx, 'component'))) throw new WireError(499, 'Answered by a panel middleware.');
@@ -6375,6 +6381,8 @@ export function panelNotFound(panel: Panel): (req: Request, res: Response) => vo
 }
 
 /** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
+/** Longest life of a session that keeps being renewed, in seconds. */
+const MAX_SESSION_AGE = 90 * 86400;
 /** Public placeholder key: fine locally, refused in production. */
 const DEVELOPMENT_KEY = 'development-key-replace-me';
 function assertAuthCapabilities(panel: Panel): void {

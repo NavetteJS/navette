@@ -21,7 +21,7 @@ A Navette application is a Node.js process serving an Express application. Deplo
 
 ## Sessions and framing
 
-A session cookie is signed and expires after a day, or after 30 days when the user ticks "remember me". An active user gets a fresh cookie once half of that time has passed, so working sessions are not cut. Cookies issued by earlier versions carry no expiry and are refused: every user signs in again once after the upgrade. Failed logins are limited per IP address (five attempts per minute), per email address and IP address (10 per 15 minutes) and per email address alone (200 per 15 minutes, so that nobody can lock an account out cheaply). Both limits are kept in memory: use a shared store when you run several instances.
+A session cookie is signed and expires after a day, or after 30 days when the user ticks "remember me". An active user gets a fresh cookie once half of that time has passed, so working sessions are not cut, up to 90 days after the sign-in. Cookies issued by earlier versions carry no expiry and are refused: every user signs in again once after the upgrade. Failed logins are limited per IP address (five attempts per minute), per email address and IP address (10 per 15 minutes) and per email address alone (200 per 15 minutes, so that nobody can lock an account out cheaply). Both limits are kept in memory: use a shared store when you run several instances.
 
 Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff` on their own URLs, so another site cannot show them in a frame. If your application embeds the panel on purpose, call `panel.allowFraming()`.
 
