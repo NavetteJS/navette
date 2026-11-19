@@ -3150,6 +3150,13 @@ function filterActionHtml(view: FiltersActionView, attributes: string, badge: st
     return `<button ${attributes} class="${cls([...force, 'nv-ac-btn-action', 'nv-btn', sizeClass, ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="nv-btn-badge-ctn">${badge}</div>` : ''}</button>`;
 }
 
+/** Smallest or largest of the values of a page: numbers are compared as numbers (9 < 10), anything else as text. */
+export function extreme(values: unknown[], which: 'min' | 'max'): string | null {
+    if (!values.length) return null;
+    const numeric = values.every((value) => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && Number.isFinite(Number(value)));
+    const sorted = numeric ? [...values].sort((a, b) => Number(a) - Number(b)).map(String) : values.map(String).sort();
+    return (which === 'min' ? sorted[0] : sorted[sorted.length - 1]) ?? null;
+}
 /** Keys sent to the browser for the "select all" checkbox of a group: the first ones, unless `maxSelectableRecords()` is lower. */
 const GROUP_SELECT_LIMIT = 5000;
 /** Above this many records, the "select all" count is the query's total: checking each record on every render would cost more than it tells (the check still runs when the action does). */
@@ -3333,8 +3340,8 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
         count: page.records.length,
         sum: Object.fromEntries(names('sum').map((name) => [name, present(name).reduce((total, v) => total + Number(v), 0)])),
         avg: Object.fromEntries(names('avg').map((name) => { const values = present(name); return [name, values.length ? values.reduce((total, v) => total + Number(v), 0) / values.length : 0]; })),
-        min: Object.fromEntries(names('range').map((name) => [name, present(name).map(String).sort()[0] ?? null])),
-        max: Object.fromEntries(names('range').map((name) => [name, present(name).map(String).sort().pop() ?? null])),
+        min: Object.fromEntries(names('range').map((name) => [name, extreme(present(name), 'min')])),
+        max: Object.fromEntries(names('range').map((name) => [name, extreme(present(name), 'max')])),
     };
     // `using()` summarizers get the records of the summarized dataset, loaded once per row.
     const loader = (dataset: Omit<ListQuery, 'page' | 'perPage'> | R[]) => { let cache: Promise<R[]> | null = null; return () => (cache ??= Array.isArray(dataset) ? Promise.resolve(dataset) : adapter.paginate({ ...dataset, page: 1, perPage: MAX_UNPAGINATED_RECORDS }).then((result) => result.records)); };

@@ -29,7 +29,7 @@ Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`, so an
 
 - Enable HTTP compression on the reverse proxy (or with the `compression` middleware): `app.css` weighs about 700 KB uncompressed.
 - With `NODE_ENV=production`, the panel serves the minified `livewire.min.js`, keeps template and asset lookups for a few seconds, and compiles views without debug information.
-- On large tables, set `maxSelectableRecords()`: "select all" otherwise reads every key of the query, and a bulk action loads the records chunk by chunk. `DeleteBulkAction` with `fetchSelectedRecords(false)` deletes in one query.
+- On large tables, set `maxSelectableRecords()`: "select all" otherwise reads every key of the query, and a bulk action loads the records chunk by chunk. Deleting, restoring and force-deleting more than 100 selected records (without `authorizeIndividualRecords()`) run one query per 1,000 keys instead of one per record; `fetchSelectedRecords(false)` does it for any selection size.
 - Add database indexes on the columns your tables search and filter on. Searches use `lower(column) like '%term%'`, which no ordinary index can serve: for large tables, use a full-text or trigram index.
 - Widgets refresh every 30 seconds by default; lower `pollingInterval` only where it matters.
 

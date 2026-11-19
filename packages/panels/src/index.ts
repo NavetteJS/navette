@@ -4497,8 +4497,8 @@ export class ListRecords extends Page implements TableHost {
         const notification = Notification.make().title(title);
         (success ? notification.warning() : notification.danger()).body(body || null).send();
     }
-    async processSelectedRecords(action: Action, process: (record: any) => unknown | Promise<unknown>): Promise<{ total: number; success: number; unauthorized: number; failed: number }> {
-        const keys = await this.getSelectedRecordKeys();
+    async processSelectedRecords(action: Action, process: (record: any) => unknown | Promise<unknown>, selectedKeys?: string[]): Promise<{ total: number; success: number; unauthorized: number; failed: number }> {
+        const keys = selectedKeys ?? await this.getSelectedRecordKeys();
         // `reportBulkProcessingFailure()` calls made by `process` count as failures with their own message.
         action.startSelectedRecordsRun(keys.length);
         const adapter = this.getDataAdapterForTable();

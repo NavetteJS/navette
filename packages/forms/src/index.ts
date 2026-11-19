@@ -462,6 +462,7 @@ export abstract class TableSelectField extends Field {
         const current = (await this.loadStateFromRelationships(record))!.state as string[];
         const removed = current.filter((value) => !desired.has(value));
         if (removed.length) await model.relatedQuery(this._relationship!.name).for(key).unrelate().whereIn(`${related.tableName}.${related.idColumn}`, removed);
+        // One query per link: SQLite cannot batch-insert them.
         for (const value of desired) if (!current.includes(value)) await model.relatedQuery(this._relationship!.name).for(key).relate(related.idColumn === 'id' && /^\d+$/.test(value) ? Number(value) : value);
         await super.saveRelationships(record);
     }

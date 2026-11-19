@@ -12,3 +12,12 @@ test('findRecords(): findMany() when the adapter has it, otherwise one find() pe
     assert.equal(manys, 1);
     assert.equal(finds, 2);
 });
+
+test('extreme(): numbers compare as numbers, text as text', async () => {
+    const { extreme } = await import('../src/index.ts');
+    assert.equal(extreme([9, 10, 100], 'min'), '9');
+    assert.equal(extreme(['9', '10', 2], 'max'), '10');
+    assert.equal(extreme(['b', 'a', 'c'], 'min'), 'a');
+    assert.equal(extreme(['2026-01-02', '2026-01-10'], 'max'), '2026-01-10');
+    assert.equal(extreme([], 'max'), null);
+});

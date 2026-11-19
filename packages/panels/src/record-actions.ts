@@ -395,7 +395,20 @@ export class ForceDeleteAction extends CustomizableAction {
  * `fetchSelectedRecords(false)`, the selected keys go to `many` at once, which returns how many were processed. `using()`
  * replaces both, receiving `records` (or only `keys`).
  */
-async function runBulk(action: CustomizableAction, ctx: Context, each: (record: any) => unknown, many: (keys: string[]) => Promise<number>): Promise<void> {
+const BATCH_THRESHOLD = 100;
+const BATCH_SIZE = 1000;
+/** Processes a selection above `BATCH_THRESHOLD` records with `many()` by chunks; `false` (nothing done) for a small one. */
+async function runBulkInChunks(action: CustomizableAction, ctx: Context, keys: string[], many: (keys: string[]) => Promise<number>): Promise<boolean> {
+    if (keys.length <= BATCH_THRESHOLD) return false;
+    let processed = 0;
+    try {
+        for (let index = 0; index < keys.length; index += BATCH_SIZE) processed += await many(keys.slice(index, index + BATCH_SIZE));
+    } catch (error) { console.error(error); }
+    const success = Math.max(0, Math.min(processed, keys.length));
+    await sendBulkActionOutcome(action, ctx, { total: keys.length, success, unauthorized: 0, failed: keys.length - success });
+    return true;
+}
+async function runBulk(action: CustomizableAction, ctx: Context, each: (record: any) => unknown, many: (keys: string[]) => Promise<number>, batchable = false): Promise<void> {
     const livewire = ctx.livewire;
     if (action.shouldFetchSelectedRecords()) {
         if (action.hasCustomProcess()) {
@@ -405,6 +418,13 @@ async function runBulk(action: CustomizableAction, ctx: Context, each: (record: 
             for (let index = 0; index < keys.length; index += 500) records.push(...(await findRecords(adapter, keys.slice(index, index + 500))).filter(Boolean));
             const result = await action.process(() => null, { ...ctx, keys, records } as Context);
             await sendBulkActionOutcome(action, ctx, { total: keys.length, success: result === false ? 0 : keys.length, unauthorized: 0, failed: result === false ? keys.length : 0 });
+            return;
+        }
+        // A large selection with nothing to check per record is handled by chunks of keys: one query per chunk, not one per record.
+        if (batchable && action.getIndividualRecordsAuthorization() === null && !action.hasCustomProcess()) {
+            const keys: string[] = await livewire.getSelectedRecordKeys();
+            if (await runBulkInChunks(action, ctx, keys, many)) return;
+            await livewire.processSelectedRecords(action, each, keys);
             return;
         }
         await livewire.processSelectedRecords(action, each);
@@ -445,7 +465,7 @@ export class DeleteBulkAction extends CustomizableAction {
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const adapter = ctx.livewire.getDataAdapterForTable();
-                await runBulk(action, ctx as Context, (record) => adapter.delete(adapter.getKey(record)), (keys) => adapter.deleteMany(keys));
+                await runBulk(action, ctx as Context, (record) => adapter.delete(adapter.getKey(record)), (keys) => adapter.deleteMany(keys), true);
             });
         // `configureUsing()` setups run after the default setup.
         return configured(action);
@@ -474,7 +494,7 @@ export class RestoreBulkAction extends CustomizableAction {
                 const adapter: DataAdapter = ctx.livewire.getDataAdapterForTable();
                 // Only deleted records are restored; the others count as failures.
                 await runBulk(action, ctx as Context, (record) => adapter.isTrashed(record) && adapter.restore(adapter.getKey(record)),
-                    async (keys) => (adapter.restoreMany ? adapter.restoreMany(keys) : (await Promise.all(keys.map((key) => adapter.restore(key)))).filter(Boolean).length));
+                    async (keys) => (adapter.restoreMany ? adapter.restoreMany(keys) : (await Promise.all(keys.map((key) => adapter.restore(key)))).filter(Boolean).length), true);
             });
         // `configureUsing()` setups run after the default setup.
         return configured(action);
@@ -502,7 +522,7 @@ export class ForceDeleteBulkAction extends CustomizableAction {
             .action(async (ctx) => {
                 const adapter: DataAdapter = ctx.livewire.getDataAdapterForTable();
                 await runBulk(action, ctx as Context, (record) => adapter.forceDelete(adapter.getKey(record)),
-                    async (keys) => (adapter.forceDeleteMany ? adapter.forceDeleteMany(keys) : (await Promise.all(keys.map((key) => adapter.forceDelete(key)))).filter(Boolean).length));
+                    async (keys) => (adapter.forceDeleteMany ? adapter.forceDeleteMany(keys) : (await Promise.all(keys.map((key) => adapter.forceDelete(key)))).filter(Boolean).length), true);
             });
         // `configureUsing()` setups run after the default setup.
         return configured(action);
