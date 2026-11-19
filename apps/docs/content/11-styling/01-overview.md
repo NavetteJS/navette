@@ -139,7 +139,7 @@ By default, the brand name is displayed as the logo. To use an image, see [setti
 
 ## Motion
 
-Navette adds light animations to the interface: the arrival of pages and of lazy-loaded content, a pressed state on buttons, the opening of modals and menus, and a fade of the table content while it reloads. They follow the "reduce motion" setting of the operating system.
+Navette adds light animations to the interface: the arrival of pages and of lazy-loaded content, a pressed state on buttons, the opening of modals and menus, a fade of the table content while it reloads, the bar of selected records, callouts and search results unfolding, the chevron of a sorted column, a sweep over areas that load on demand, and the fade-out of a Repeater item that is removed. They follow the "reduce motion" setting of the operating system.
 
 To render the interface without them:
 

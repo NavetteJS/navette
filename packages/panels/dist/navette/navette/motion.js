@@ -29,6 +29,21 @@
             fail(finish);
         });
     });
+    // Exits: a removed Repeater item fades out in place, then goes. Table rows are left out on purpose: a page, sort or filter change
+    // replaces every row, and the old ones would stay next to the new ones while they fade.
+    const LEAVING = '.nv-fo-repeater-item, .nv-fo-table-repeater tbody tr';
+    document.addEventListener('livewire:init', () => {
+        window.Livewire.hook('morph.removing', ({ el, skip }) => {
+            if (!(el instanceof HTMLElement) || el.classList.contains('nv-leaving') || !el.matches(LEAVING)) return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            skip();
+            el.classList.add('nv-leaving');
+            let removed = false;
+            const remove = () => { if (!removed) { removed = true; el.remove(); } };
+            el.addEventListener('animationend', remove, { once: true });
+            setTimeout(remove, 400);
+        });
+    });
     // Navigation between pages.
     document.addEventListener('livewire:navigate', begin);
     document.addEventListener('livewire:navigated', () => { pending = 0; update(); });

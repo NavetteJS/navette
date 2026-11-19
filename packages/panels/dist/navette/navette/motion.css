@@ -132,4 +132,28 @@
     .nv-avatar { transition: transform 0.25s var(--nv-bounce); }
     .nv-user-menu-trigger:hover .nv-avatar { transform: scale(1.06); }
     .nv-fo-repeater-item { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
+
+    /* --- exits: a removed Repeater item stays in place while it fades out (motion.js delays its removal) */
+    @keyframes nv-leave { to { opacity: 0; transform: translateX(-8px) scale(0.98); } }
+    .nv-leaving { animation: nv-leave 0.22s var(--nv-out) forwards; pointer-events: none; }
+
+    /* --- selection: the bar of the selected records unfolds when the first record is ticked */
+    .nv-ta-selection-indicator:not([style*="display: none"]) { animation: nv-unfold 0.28s var(--nv-spring) backwards; }
+    /* the chevron of the sorted column turns into place */
+    @keyframes nv-turn { from { opacity: 0; transform: rotate(-90deg) scale(0.7); } to { opacity: 1; transform: none; } }
+    .nv-ta-header-cell-sorted .nv-ta-header-cell-sort-btn > .nv-icon { animation: nv-turn 0.3s var(--nv-spring) backwards; }
+
+    /* --- callouts, search results and uploads arrive instead of appearing */
+    .nv-callout { animation: nv-unfold 0.35s var(--nv-spring) backwards; }
+    .nv-global-search-results { animation: nv-unfold 0.25s var(--nv-spring) backwards; }
+    .filepond--item { animation: nv-unfold 0.3s var(--nv-spring) backwards; }
+    .filepond--progress-indicator { transition: opacity 0.2s var(--nv-out); }
+
+    /* --- loading areas: a light sweep over the breathing frame (the spinner stays) */
+    @keyframes nv-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .nv-loading-section {
+        background-image: linear-gradient(100deg, transparent 30%, color-mix(in oklab, currentColor 7%, transparent) 50%, transparent 70%);
+        background-size: 200% 100%;
+        animation: nv-breathe 1.6s ease-in-out infinite, nv-shimmer 1.8s linear infinite;
+    }
 }

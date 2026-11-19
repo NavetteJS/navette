@@ -39,7 +39,7 @@ import { Model } from '@navette-js/database';
 const file = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // Demo accounts, from a local fixture.
 const users: (User & { password: string })[] = JSON.parse(readFileSync(file('./fixtures/users.json'), 'utf8'));
-const key = (process.env.APP_KEY ?? (process.env.NODE_ENV === 'production' ? (() => { throw new Error('APP_KEY is not set.'); })() : 'development-key-replace-me'));
+const key = (process.env.APP_KEY ?? (process.env.NODE_ENV === 'production' ? (() => { throw new Error('APP_KEY is not set.'); })() : 'development-key-replace-me-in-production'));
 // NAVETTE_DB points to another database (end-to-end runs use a disposable copy).
 // On first run, the working database is copied from seed.sqlite, which is never modified.
 if (!process.env.NAVETTE_DB && !existsSync(file('./database/database.sqlite'))) copyFileSync(file('./database/seed.sqlite'), file('./database/database.sqlite'));

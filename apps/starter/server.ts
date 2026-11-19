@@ -192,7 +192,7 @@ class StatusPage extends Page {
 }
 
 // ------------------------------------------------------------------ 5. the panel and its authentication
-const key = (process.env.APP_KEY ?? (process.env.NODE_ENV === 'production' ? (() => { throw new Error('APP_KEY is not set.'); })() : 'development-key-replace-me'));
+const key = (process.env.APP_KEY ?? (process.env.NODE_ENV === 'production' ? (() => { throw new Error('APP_KEY is not set.'); })() : 'development-key-replace-me-in-production'));
 const adminPassword = process.env.ADMIN_PASSWORD;
 if (!adminPassword) throw new Error('Set ADMIN_PASSWORD to run the starter app.');
 // Only a password hash is kept, and it is compared in constant time.

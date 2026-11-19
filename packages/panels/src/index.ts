@@ -6384,7 +6384,7 @@ export function panelNotFound(panel: Panel): (req: Request, res: Response) => vo
 /** Longest life of a session that keeps being renewed, in seconds. */
 const MAX_SESSION_AGE = 90 * 86400;
 /** Public placeholder key: fine locally, refused in production. */
-const DEVELOPMENT_KEY = 'development-key-replace-me';
+const DEVELOPMENT_KEY = 'development-key-replace-me-in-production';
 function assertAuthCapabilities(panel: Panel): void {
     // A known or short key lets anyone forge sessions, reset tokens and component snapshots.
     // Links sent by email must not be built from the Host header (see `absoluteUrl()`): refuse to boot rather than fail when a user asks for one.
