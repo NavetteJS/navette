@@ -839,6 +839,15 @@ export class Panel {
     }
     getProfileUrl(): string | null { return this._profile ? this.getBaseUrl('profile') : null; }
     /** Whether the user must still verify their email before using the panel. */
+    private _requirementsChecked = new WeakMap<object, Promise<boolean>>();
+    /** Whether the user's email is verified and their required MFA is set up, computed once per request (`req`): widgets and the global search check it on every update. */
+    meetsAccountRequirements(user: User, req: object | null | undefined): Promise<boolean> {
+        const compute = async () => !(await this.mustVerifyEmail(user)) && !(await this.mustSetUpMultiFactorAuthentication(user));
+        if (!req || typeof req !== 'object') return compute();
+        let known = this._requirementsChecked.get(req);
+        if (!known) { known = compute(); this._requirementsChecked.set(req, known); }
+        return known;
+    }
     async mustVerifyEmail(user: User | null): Promise<boolean> {
         if (!user || !this.isEmailVerificationRequired()) return false;
         const auth = this.getAuth();
@@ -3135,7 +3144,7 @@ export abstract class Widget extends BasePage {
         if (!ctx?.user && !ctx?.panel?.allowsGuests()) throw new WireError(401, 'Unauthenticated.');
         const WidgetClass = this.constructor as typeof Widget;
         if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
-        if (ctx.user && ((await ctx.panel.mustVerifyEmail(ctx.user)) || (await ctx.panel.mustSetUpMultiFactorAuthentication(ctx.user)))) throw new WireError(403, 'Account requirements not met.');
+        if (ctx.user && !(await ctx.panel.meetsAccountRequirements(ctx.user, ctx.req))) throw new WireError(403, 'Account requirements not met.');
         if (!(await ctx.panel.authorize(ctx.user, 'view', { widget: WidgetClass, rule: () => WidgetClass.canView(ctx.user!) }))) throw new WireError(403, 'Forbidden.');
     }
     /** Grid column classes and style: at the `lg` breakpoint, or per breakpoint. */
@@ -6359,6 +6368,8 @@ export function panelNotFound(panel: Panel): (req: Request, res: Response) => vo
 const DEVELOPMENT_KEY = 'development-key-replace-me';
 function assertAuthCapabilities(panel: Panel): void {
     // A known or short key lets anyone forge sessions, reset tokens and component snapshots.
+    // Links sent by email must not be built from the Host header (see `absoluteUrl()`): refuse to boot rather than fail when a user asks for one.
+    if (process.env.NODE_ENV === 'production' && !panel.getAppUrl() && (panel.hasPasswordReset() || panel.hasEmailVerification())) throw new Error(`Panel "${panel.getId()}": set appUrl() to send password reset or email verification links in production.`);
     if (process.env.NODE_ENV === 'production' && (panel.getAuthKey() === DEVELOPMENT_KEY || panel.getAuthKey().length < 16)) throw new Error(`Panel "${panel.getId()}": set a secret key of at least 16 characters with key() (for example from APP_KEY) before running in production.`);
     if (panel.allowsGuests() && panel.hasTenancy()) throw new Error('guestAccess() is not available in a multi-tenant panel: tenants belong to signed-in users.');
     for (const provider of panel.getMultiFactorAuthenticationProviders()) provider.checkConfiguration?.(panel);

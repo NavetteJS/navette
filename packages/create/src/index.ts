@@ -73,8 +73,8 @@ const database = await choose('Database', [['sqlite', 'SQLite — a file, nothin
 const locale = await choose('Language of the interface', [['en', 'English'], ['fr', 'Français']], 'en', flag('locale'));
 const install = await confirm('Install the dependencies now?', true, flags['no-install'] ? 'no' : flags.install);
 const adminEmail = install && database === 'sqlite' ? await text('Admin email address', 'admin@example.com', flag('admin-email')) : null;
-// Passed to a shell on Windows: only characters that are safe there.
-if (adminEmail !== null && !/^[\w.+-]+@[\w-]+(\.[\w-]+)+$/.test(adminEmail)) fail('The admin email address is not valid.');
+// Passed to a shell on Windows: only characters that are safe there. Elsewhere any address with an @ is fine.
+if (adminEmail !== null && !(process.platform === 'win32' ? /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/ : /^[^\s@]+@[^\s@]+$/).test(adminEmail)) fail('The admin email address is not valid.');
 // The admin's password: `--admin-password`, typed twice, or generated (and then shown at the end).
 const givenPassword = flag('admin-password');
 if (givenPassword !== undefined && givenPassword.length < 8) fail('--admin-password must be at least 8 characters.');

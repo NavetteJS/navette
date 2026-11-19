@@ -81,3 +81,44 @@ test('tenant scope: nothing leaks in a request without tenant, scripts outside a
         assert.deepEqual(red.records.map((record: any) => record.title), ['Red doc']);
     } finally { await db.destroy(); }
 });
+
+test('in production, password reset without appUrl() refuses to boot instead of failing for existing accounts only', () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const mailAuth: AuthProvider = { ...auth, findByEmail: async () => null, update: async (user) => user, getPasswordFingerprint: async () => 'x' };
+    try {
+        const make = (id: string) => Panel.make().id(id).path(id).authGuard(id).key('a-secret-of-sufficient-length').auth(mailAuth).passwordReset().pages([Dashboard]);
+        assert.throws(() => panelRouter(make('mail-a'), new WireRuntime({ key: 'k' })), /appUrl\(\)/);
+        assert.doesNotThrow(() => panelRouter(make('mail-b').appUrl('https://admin.example.test'), new WireRuntime({ key: 'k' })));
+    } finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
+});
+
+test('widgets and the global search need a tenant, a verified email and the required MFA', async () => {
+    const { Widget } = await import('../src/index.ts');
+    const { GlobalSearch } = await import('../src/topbar.ts');
+    const user = { id: 1, name: 'Ada', email: 'ada@example.com' };
+    const tenantProvider = { getTenants: () => [], find: () => null, canAccess: () => true, getKey: () => '1', getName: () => 'T' } as any;
+    const tenantPanel = Panel.make().id('guarded').path('guarded').key('guarded-secret-key-0123').authGuard('guarded').auth(auth).tenant(tenantProvider);
+    class Plain extends Widget { async render(): Promise<string> { return '<p>widget</p>'; } }
+    const widget = new Plain();
+    widget._ctx = { panel: tenantPanel, user, tenant: null, req: {} } as any;
+    await assert.rejects(() => widget.boot(), /Tenant not found/);
+    widget._ctx = { panel: tenantPanel, user, tenant: { id: 1 }, req: {} } as any;
+    await assert.doesNotReject(() => widget.boot());
+
+    // Unverified email: refused, and the check runs once per request.
+    let checks = 0;
+    const strict = Panel.make().id('unverified').path('unverified').key('unverified-secret-key-0123').authGuard('unverified')
+        .auth({ ...auth, hasVerifiedEmail: async () => { checks++; return false; }, markEmailAsVerified: async () => {} }).emailVerification();
+    const request = {};
+    const second = new Plain();
+    second._ctx = { panel: strict, user, req: request } as any;
+    await assert.rejects(() => second.boot(), /requirements/);
+    await assert.rejects(() => second.boot(), /requirements/);
+    assert.equal(checks, 1);
+
+    const search = new GlobalSearch();
+    search.search = 'anything';
+    search._ctx = { panel: tenantPanel, user, tenant: null, req: {} } as any;
+    assert.equal(await search.render(), '<div class="nv-global-search-ctn"></div>');
+});

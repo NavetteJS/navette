@@ -1536,8 +1536,10 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         if (this._optionLabelUsing) { const label = await this._optionLabelUsing(key, record); return label === null || label === undefined || label === '' ? null : String(label); }
         if (this._optionsRelationship) {
             // Rows of a page often share a value: one lookup per key and request (the column lives for one request).
-            let label = this._relationshipLabels.get(key);
-            if (!label) { label = this.loadRelationshipOptionsFor(record, { keys: [key] }).then((found) => found[0]?.[1] ?? null); this._relationshipLabels.set(key, label); }
+            // The relationship query only depends on the record's model, not on the record itself.
+            const memoKey = `${(record as any)?.constructor?.name ?? ''}:${key}`;
+            let label = this._relationshipLabels.get(memoKey);
+            if (!label) { label = this.loadRelationshipOptionsFor(record, { keys: [key] }).then((found) => found[0]?.[1] ?? null); this._relationshipLabels.set(memoKey, label); }
             return label;
         }
         return (await this.getOptionsFor(record)).find(([option]) => option === key)?.[1] ?? null;
@@ -3570,6 +3572,8 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         // The key changes on every render to force the checkbox to be replaced.
         randomKey: () => Array.from(randomBytes(16), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join(''),
         // "Select all" covers every record of the current query.
+        // Above the limit, the count is the query's total: the records that cannot be selected are not subtracted.
+        allCountApproximate: loaded && table.getPaginationMode() === 'default' && !table.selectsCurrentPageOnly() && table.hasRecordSelectabilityCheck() && selectable && page.total > SELECTABILITY_COUNT_LIMIT,
         allCount: !loaded || table.getPaginationMode() !== 'default' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (page.total > SELECTABILITY_COUNT_LIMIT ? page.total : (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length) : page.total,
         selection: selectionOnly ? { property: options.selection!.property, disabled: options.selection!.disabled === true } : null,
         maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() !== 'default' ? rows.length : page.total,

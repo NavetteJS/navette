@@ -38,7 +38,7 @@ export class GlobalSearch extends Component {
         if (!user || !panel) return '<div class="nv-global-search-ctn"></div>';
         // Same requirements as a page: a request without tenant, with an unverified email or without the required MFA gets nothing.
         const { tenant } = (this._ctx ?? {}) as any;
-        if ((panel.hasTenancy() && !tenant) || (await panel.mustVerifyEmail(user)) || (await panel.mustSetUpMultiFactorAuthentication(user))) return '<div class="nv-global-search-ctn"></div>';
+        if ((panel.hasTenancy() && !tenant) || !(await panel.meetsAccountRequirements(user, req))) return '<div class="nv-global-search-ctn"></div>';
         const search = (typeof this.search === 'string' ? this.search : '').slice(0, 1000).trim();
         this.search = typeof this.search === 'string' ? this.search.slice(0, 1000) : '';
         const categories: GlobalSearchCategory[] | null = search === '' ? null : await panel.getGlobalSearchResults(search, user);

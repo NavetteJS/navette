@@ -319,7 +319,7 @@
                             <div class="nv-ta-selection-indicator-actions-ctn">
                                 <% if (!selectsGroupsOnly) { %><button class="<%- cls([...linkClasses, 'nv-link', 'nv-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" x-on:click="selectAllRecords" x-show="canSelectAllRecords()" wire:key="<%= id %>table.selection.indicator.actions.select-all.<%- allCount %>.<%- page.page %>">
                                     <span class="nv-link-label">
-                                        <%= t('navette-tables::table.selection_indicator.actions.select_all.label', { count: number(allCount) }) %>
+                                        <%= t(locals.allCountApproximate ? 'navette-tables::table.selection_indicator.actions.select_all_approximate.label' : 'navette-tables::table.selection_indicator.actions.select_all.label', { count: number(allCount) }) %>
                                     </span>
                                 </button><% } %>
                                 <button class="<%- cls([...dangerLinkClasses, 'nv-link', 'nv-size-md']) %>" type="button" wire:loading.attr="aria-disabled" wire:loading.class="nv-disabled" x-on:click="deselectAllRecords">

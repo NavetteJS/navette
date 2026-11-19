@@ -108,3 +108,13 @@ test('listKeys(): `limit` reads only the first keys; exists() stays correct', as
     assert.equal(await adapter.exists('email', 'p1@example.test'), true);
     assert.equal(await adapter.exists('email', 'nobody@example.test'), false);
 });
+
+test('delete(), restore() and forceDelete() refuse records hidden by `modify`, like update()', async () => {
+    const [{ id: visible }, { id: hidden }] = await db('people').orderBy('id').limit(2);
+    const scoped = new ObjectionAdapter(Person, { modify: (query) => { query.whereNot('people.id', hidden); } });
+    assert.equal(await scoped.delete(hidden), false);
+    assert.equal(await scoped.forceDelete(hidden), false);
+    assert.ok(await db('people').where('id', hidden).first());
+    assert.equal(await scoped.update(hidden, { name: 'Changed' }), null);
+    assert.notEqual((await db('people').where('id', visible).first()).name, 'Changed');
+});
