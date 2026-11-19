@@ -1,6 +1,6 @@
 // @navette-js/infolists — read-only entries (TextEntry, IconEntry…).
 import { Component, Schema, Text, renderInlineItems, type ComponentContext, type InlineItem, type Renderable } from '@navette-js/schemas';
-import { Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl, NavetteTimezone, getRegisteredRichContent } from '@navette-js/support';
+import { dateTimeFormat, Attributes, HtmlString, cls, e, evaluate, findShade, icon, icons, isSafeStorageKey, isSafeUrl, js, resolveStoredFileUrl, markdownToHtml, resolveEnumCase, sanitizeHtml, type AttrValue, type ClassList, type ColorManager, type FileUrlStorage, type Enum, type EnumCase, type Lazy, configured, isLocalOrHttpUrl, NavetteTimezone, getRegisteredRichContent } from '@navette-js/support';
 import { encodeJson, JsonFlags } from './json-flags.ts';
 import { diffForHumans, t, tc } from '@navette-js/support/i18n';
 import { loadMissingRelationships, loadRelationshipAggregates, normalizeRelationshipAggregates, readRecordPath, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregateFunction } from '@navette-js/support';
@@ -123,11 +123,11 @@ function parseDate(value: unknown): Date | null {
     const date = new Date(text);
     return Number.isNaN(date.getTime()) ? null : date;
 }
-const isTimeZone = (zone: string) => { try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); return true; } catch { return false; } };
+const isTimeZone = (zone: string) => { try { dateTimeFormat('en-US', { timeZone: zone }); return true; } catch { return false; } };
 type DateParts = { year: number; month: number; day: number; hour: number; minute: number; second: number; ms: number; weekday: number; offset: number; zone: string; timestamp: number };
 function dateParts(date: Date, timeZone: string): DateParts {
     const zone = isTimeZone(timeZone) ? timeZone : 'UTC';
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZoneName: 'short' }).formatToParts(date).map((part) => [part.type, part.value]));
+    const parts = Object.fromEntries(dateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZoneName: 'short' }).formatToParts(date).map((part) => [part.type, part.value]));
     const year = Number(parts.year), month = Number(parts.month), day = Number(parts.day), hour = Number(parts.hour) % 24, minute = Number(parts.minute), second = Number(parts.second);
     const offset = Math.round((Date.UTC(year, month - 1, day, hour, minute, second) - Math.floor(date.getTime() / 1000) * 1000) / 60000);
     return { year, month, day, hour, minute, second, ms: date.getUTCMilliseconds(), weekday: new Date(Date.UTC(year, month - 1, day)).getUTCDay(), offset, zone: parts.timeZoneName ?? zone, timestamp: Math.floor(date.getTime() / 1000) };

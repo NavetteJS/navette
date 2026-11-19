@@ -10,7 +10,7 @@ import { Field, Select, TableSelect, saveSchemaRelationships, type TableConfigur
 import type { Schema } from '@navette-js/schemas';
 import { configured, icons, js, isLocalOrHttpUrl } from '@navette-js/support';
 import { t, tc } from '@navette-js/support/i18n';
-import { TrashedFilter } from '@navette-js/tables';
+import { TrashedFilter, findRecords } from '@navette-js/tables';
 import type { DataAdapter } from '@navette-js/database';
 import { Notification } from './notifications.ts';
 import { can, type RelationManager, type Resource } from './index.ts';
@@ -401,7 +401,8 @@ async function runBulk(action: CustomizableAction, ctx: Context, each: (record: 
         if (action.hasCustomProcess()) {
             const keys: string[] = await livewire.getSelectedRecordKeys();
             const adapter = livewire.getDataAdapterForTable();
-            const records = (await Promise.all(keys.map((key) => adapter.find(key)))).filter(Boolean);
+            const records: any[] = [];
+            for (let index = 0; index < keys.length; index += 500) records.push(...(await findRecords(adapter, keys.slice(index, index + 500))).filter(Boolean));
             const result = await action.process(() => null, { ...ctx, keys, records } as Context);
             await sendBulkActionOutcome(action, ctx, { total: keys.length, success: result === false ? 0 : keys.length, unauthorized: 0, failed: result === false ? keys.length : 0 });
             return;

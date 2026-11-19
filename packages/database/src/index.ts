@@ -56,6 +56,8 @@ export type ListQuery = {
      * `sum()`, `min()` and `max()`. Only adapters whose `supportsRelationships()` returns true receive them.
      */
     aggregates?: RelationshipAggregate[];
+    /** Total already known (the one of a previous page of the same query): the adapter skips its `COUNT`. */
+    knownTotal?: number;
     page: number;
     perPage: number;
 };
@@ -71,6 +73,8 @@ export type Page<T> = {
 /** What the framework needs to list, read and write records, independently of the ORM. */
 export interface DataAdapter<T = any> {
     getKey(record: T): string;
+    /** The records of some keys in one query, in the order of the keys (`null` for a missing one). Optional: `find()` is used without it. */
+    findMany?(keys: string[]): Promise<(T | null)[]>;
     /** Filters keys received from the browser: only those within the adapter's scope are returned. */
     keysInScope(keys: (string | number)[]): Promise<string[]>;
     sum(query: Omit<ListQuery, 'page' | 'perPage'>, columns: string[]): Promise<Record<string, number>>;
@@ -425,7 +429,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     }
 
     private async finishPagination(q: QueryBuilder<M, M[]>, query: ListQuery): Promise<Page<M>> {
-        const total = await q.clone().resultSize();
+        const total = query.knownTotal !== undefined && Number.isInteger(query.knownTotal) && query.knownTotal >= 0 ? query.knownTotal : await q.clone().resultSize();
         this.applySorts(q, query);
         if (query.with?.length) applyEagerLoading(q, this.model, query.with);
         const perPage = Math.max(1, query.perPage);
@@ -477,6 +481,12 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         return { records, total: records.length, page: 1, perPage, lastPage: 1, from: records.length ? 1 : null, to: records.length || null, cursor: { previous, next } };
     }
 
+    async findMany(keys: string[]): Promise<(M | null)[]> {
+        if (!keys.length) return [];
+        const rows = await this.base(this.findsTrashed ? 'with' : 'without').whereIn(`${this.model.tableName}.${this.keyColumn}`, keys.map(String));
+        const byKey = new Map(rows.map((row) => [this.getKey(row), row as M]));
+        return keys.map((key) => byKey.get(String(key)) ?? null);
+    }
     async find(key: string | number): Promise<M | null> { return ((await this.base(this.findsTrashed ? 'with' : 'without').findById(key)) as M | undefined) ?? null; }
     async findWithTrashed(key: string | number): Promise<M | null> { return ((await this.base('with').findById(key)) as M | undefined) ?? null; }
     async create(data: Record<string, unknown>): Promise<M> {

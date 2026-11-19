@@ -416,7 +416,7 @@ function makeExportAction(name: string, bulk: boolean): ExportActionInstance {
                 const values: unknown[][] = [];
                 for (let page = 1; page <= first.lastPage; page++) {
                     if (page > 1) await new Promise((resolve) => setImmediate(resolve));
-                    const { records: chunk } = page === 1 ? first : await adapter.paginate({ ...selection, page, perPage });
+                    const { records: chunk } = page === 1 ? first : await adapter.paginate({ ...selection, page, perPage, knownTotal: first.total });
                     for (const record of chunk) values.push(columns.map((column) => column.getFormattedState(record, ctx)));
                 }
                 run.successfulRows = values.length;

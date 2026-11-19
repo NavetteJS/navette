@@ -6,7 +6,7 @@ import type { ListQuery } from '@navette-js/database';
 import { DatePicker, DateTimePicker, Field, Select, TextInput } from '@navette-js/forms';
 import { Block, Builder, colorsOf, iconActionButton, isItemKey, shortKey, writeState } from '@navette-js/forms/builder';
 import { Component, Group, Schema } from '@navette-js/schemas';
-import { Attributes, e, icons, isEnum, js, views, configured, configureUsing, type Enum } from '@navette-js/support';
+import { dateTimeFormat, Attributes, e, icons, isEnum, js, views, configured, configureUsing, type Enum } from '@navette-js/support';
 import { t } from '@navette-js/support/i18n';
 import { createHash } from 'node:crypto';
 import type { FilterIndicator, FilterState, TableFilter, TableHost } from './index.ts';
@@ -134,10 +134,10 @@ function parseDateTime(value: unknown): string | null {
     const [hours, minutes, seconds] = [time[1] ?? '00', time[2] ?? '00', time[3] ?? '00'];
     return Number(hours) < 24 && Number(minutes) < 60 && Number(seconds) < 60 ? `${date} ${hours}:${minutes}:${seconds}` : null;
 }
-const formatDate = (date: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date.slice(0, 10)}T00:00:00Z`));
+const formatDate = (date: string) => dateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date.slice(0, 10)}T00:00:00Z`));
 /** Formats a date-time as "Mon, Jun 1, 2026 14:30:00". */
-const formatDayDateTime = (dateTime: string) => `${new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${dateTime.slice(0, 10)}T00:00:00Z`))}, ${formatDate(dateTime)} ${dateTime.length > 10 ? dateTime.slice(11, 19) : '00:00:00'}`;
-const MONTHS = Array.from({ length: 12 }, (_, i) => new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, i, 1))));
+const formatDayDateTime = (dateTime: string) => `${dateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${dateTime.slice(0, 10)}T00:00:00Z`))}, ${formatDate(dateTime)} ${dateTime.length > 10 ? dateTime.slice(11, 19) : '00:00:00'}`;
+const MONTHS = Array.from({ length: 12 }, (_, i) => dateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, i, 1))));
 const UNITS = ['day', 'week', 'month', 'quarter', 'year'] as const;
 const TIME_UNITS = ['second', 'minute', 'hour'] as const;
 const shift = (now: Date, unit: string, amount: number): Date => {

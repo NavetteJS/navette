@@ -38,11 +38,26 @@ export function takeSentNotifications(): NotificationData[] { return requestStor
 // In-memory mailbox, keyed by browser (the CSRF token) then by batch.
 const mailboxes = new Map<string, Map<string, { at: number; notifications: NotificationData[] }>>();
 const TTL = 5 * 60 * 1000;
+const MAX_MAILBOXES = 10_000;
+let lastSweep = 0;
+/** Mailboxes are keyed by a cookie the client chooses: expired batches and empty mailboxes are dropped, and their number is capped. */
+function sweep(now: number): void {
+    if (now - lastSweep < 30_000 && mailboxes.size < MAX_MAILBOXES) return;
+    lastSweep = now;
+    for (const [mailbox, box] of mailboxes) {
+        for (const [key, entry] of box) if (now - entry.at > TTL) box.delete(key);
+        if (box.size === 0) mailboxes.delete(mailbox);
+    }
+    // Still too many (all recent): the oldest mailboxes go first.
+    for (const mailbox of mailboxes.keys()) { if (mailboxes.size < MAX_MAILBOXES) break; mailboxes.delete(mailbox); }
+}
 export function publish(mailbox: string, notifications: NotificationData[]): string {
     const batch = randomBytes(20).toString('hex');
+    const now = Date.now();
+    sweep(now);
     const box = mailboxes.get(mailbox) ?? new Map();
-    for (const [key, entry] of box) if (Date.now() - entry.at > TTL) box.delete(key);
-    box.set(batch, { at: Date.now(), notifications });
+    for (const [key, entry] of box) if (now - entry.at > TTL) box.delete(key);
+    box.set(batch, { at: now, notifications });
     mailboxes.set(mailbox, box);
     return batch;
 }
@@ -55,6 +70,7 @@ export function pull(mailbox: string, batches: string[] | null): NotificationDat
         const entry = box.get(key);
         if (entry) { out.push(...entry.notifications); box.delete(key); }
     }
+    if (box.size === 0) mailboxes.delete(mailbox);
     return out;
 }
 

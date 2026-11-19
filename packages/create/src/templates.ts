@@ -162,6 +162,9 @@ export async function up(db: Knex): Promise<void> {
         table.integer('team_id').references('id').inTable('teams').onDelete('cascade');
         table.integer('user_id').references('id').inTable('users').onDelete('cascade');
         table.timestamps();
+        // Read on every request to find a user's teams; a user joins a team once.
+        table.unique(['team_id', 'user_id']);
+        table.index(['user_id']);
     });
 }
 `;
@@ -189,6 +192,8 @@ export async function up(db: Knex): Promise<void> {
         table.string('title');
         table.text('body').nullable();
         table.timestamps();
+        // Every query of the panel filters on it.
+        table.index(['team_id']);
     });
 }
 `;

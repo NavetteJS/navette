@@ -52,3 +52,10 @@ test('`markdownToHtml()`: a link title never lets a bare URL open a new attribut
     const html = markdownToHtml('[click](https://ok.example "a https://x/onmouseover=alert(1)//")');
     assert.equal(html, '<p><a href="https://ok.example" title="a https://x/onmouseover=alert(1)//" rel="noopener noreferrer nofollow">click</a></p>');
 });
+
+test('`dateTimeFormat()` reuses formatters and still rejects invalid zones', async () => {
+    const { dateTimeFormat } = await import('../src/index.ts');
+    assert.equal(dateTimeFormat('en-US', { timeZone: 'UTC' }), dateTimeFormat('en-US', { timeZone: 'UTC' }));
+    assert.notEqual(dateTimeFormat('en-US', { timeZone: 'UTC' }), dateTimeFormat('en-US', { timeZone: 'Europe/Paris' }));
+    assert.throws(() => dateTimeFormat('en-US', { timeZone: 'Not/AZone' }), RangeError);
+});

@@ -1,6 +1,6 @@
 // @navette-js/tables — tables: columns, filters, state (search, sort, pagination, columns) and rendering.
 import type { DataAdapter, ListQuery, Page as RecordPage, SortDirection } from '@navette-js/database';
-import { readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregate, isLocalOrHttpUrl } from '@navette-js/support';
+import { dateTimeFormat, readRecordPath, RelationshipAggregates, type AggregatedRelationship, type AggregatedRelationships, type RelationshipAggregate, isLocalOrHttpUrl } from '@navette-js/support';
 import { addRelationshipsToQuery, ensureRelationshipSupport, groupScopeThroughRelationship, relationshipWriteTarget } from './relationships.ts';
 export { addRelationshipsToQuery, ensureRelationshipSupport } from './relationships.ts';
 import { Attributes, cls, e, enumCast, hasRenderHook, icon, icons, isEnum, js, markdownToHtml, renderHook, resolveEnumCase, sanitizeHtml, views, type ColorManager, type Enum, type EnumCase, configured, configureUsing } from '@navette-js/support';
@@ -21,6 +21,8 @@ export * from './query-builder.ts';
 export * from './table-features.ts';
 export { makeTableSelectTable } from './table-select.ts';
 export * from './formatting.ts';
+export { findRecords } from './find-records.ts';
+import { findRecords } from './find-records.ts';
 export * from './column-attributes.ts';
 export { callTableColumnMethod, TABLE_COLUMN_METHODS } from './column-methods.ts';
 
@@ -309,11 +311,11 @@ const isBlankState = (value: unknown) => value === null || value === undefined |
 export function formatDate(value: unknown, format: string, timeZone: string | null = null): string {
     const raw = value instanceof Date ? value : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(String(value)) ? String(value) : `${String(value).replace(' ', 'T').slice(0, 19)}Z`);
     if (Number.isNaN(raw.getTime())) return String(value);
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: timeZone ?? 'UTC', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', weekday: 'long' }).formatToParts(raw).map((p) => [p.type, p.value]));
+    const parts = Object.fromEntries(dateTimeFormat('en-US', { timeZone: timeZone ?? 'UTC', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', weekday: 'long' }).formatToParts(raw).map((p) => [p.type, p.value]));
     const year = Number(parts.year), month = Number(parts.month), day = Number(parts.day), hour = Number(parts.hour), minute = Number(parts.minute), second = Number(parts.second);
-    const monthName = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2000, month - 1, 1)));
+    const monthName = dateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2000, month - 1, 1)));
     const pad = (n: number) => String(n).padStart(2, '0');
-    const zone = timeZone ? (new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(raw).find((p) => p.type === 'timeZoneName')?.value ?? timeZone) : 'UTC';
+    const zone = timeZone ? (dateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(raw).find((p) => p.type === 'timeZoneName')?.value ?? timeZone) : 'UTC';
     const tokens: Record<string, () => string> = {
         d: () => pad(day), j: () => String(day), D: () => parts.weekday.slice(0, 3), l: () => parts.weekday,
         S: () => (day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th'),
@@ -817,7 +819,7 @@ export class Range extends Summarizer {
         if (this._minimalText && bounds.length === 2) bounds = Range.minimalTextualBounds(bounds[0], bounds[1]);
         if (this._limit) bounds = bounds.map((bound) => limitText(bound, this._limit!.length, this._limit!.end));
         if (this._minimalDateTime && bounds.length === 2) {
-            const date = (value: string) => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
+            const date = (value: string) => dateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
             const dateTime = (value: string) => `${date(value)} ${value.length > 10 ? value.slice(11, 19) : '00:00:00'}`;
             const days = bounds.map(date);
             if (days[0] !== days[1]) bounds = days;
@@ -911,7 +913,7 @@ export class Group<R = any> {
         const key = this.getStringKey(record);
         const enumeration = this._keyUsing ? null : enumCast(record, this.getColumn());
         if (key !== null && enumeration) return enumeration.getLabel(key);
-        if (key !== null && this._date) return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${key}T00:00:00Z`));
+        if (key !== null && this._date) return dateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${key}T00:00:00Z`));
         return key;
     }
     getDescription(record: R): string | null { return this._description ? this._description(record) : null; }
@@ -3143,12 +3145,12 @@ function filterActionHtml(view: FiltersActionView, attributes: string, badge: st
 }
 
 /** Keys whose record passes `checkIfRecordIsSelectableUsing()`, loaded in chunks. Without a check, the keys are returned as they are. */
-export async function filterSelectableKeys<R>(table: Table<R>, adapter: Pick<DataAdapter<R>, 'find'>, keys: string[], chunkSize = 100): Promise<string[]> {
+export async function filterSelectableKeys<R>(table: Table<R>, adapter: Pick<DataAdapter<R>, 'find' | 'findMany'>, keys: string[], chunkSize = 100): Promise<string[]> {
     if (!table.hasRecordSelectabilityCheck()) return keys;
     const kept: string[] = [];
     for (let index = 0; index < keys.length; index += chunkSize) {
         const chunk = keys.slice(index, index + chunkSize);
-        const records = await Promise.all(chunk.map((key) => adapter.find(key)));
+        const records = await findRecords(adapter, chunk);
         for (let position = 0; position < chunk.length; position++) if (records[position] && (await table.isRecordSelectable(records[position]!))) kept.push(chunk[position]);
     }
     return kept;

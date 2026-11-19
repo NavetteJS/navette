@@ -90,7 +90,7 @@ import { normalizePageLoadingIndicator, PAGE_LOADING_DELAY, renderPageLoadingInd
 import { ERROR_PAGE_CSS, errorIllustration, errorPageScene } from './error-pages.ts';
 import { badge as uiBadge, button as uiButton, emptyState, useColorManager as useUiColorManager } from '@navette-js/support/ui';
 import { Model as DatabaseModel, transaction as databaseTransaction, type DataAdapter } from '@navette-js/database';
-import { REORDER_LIMIT, Table, TrashedFilter, callTableColumnMethod, filterSelectableKeys, recordMatchesTableFilters, getTableRecords, getTableRecordsPerPage, hasReorderedColumns, moveTableRecordOrder, saveTableOrder, setTablePage, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
+import { REORDER_LIMIT, findRecords, Table, TrashedFilter, callTableColumnMethod, filterSelectableKeys, recordMatchesTableFilters, getTableRecords, getTableRecordsPerPage, hasReorderedColumns, moveTableRecordOrder, saveTableOrder, setTablePage, initializeTableGrouping, isTableFilterRemovable, updateTableColumnState as updateEditableColumnState, getTableQuery, getVisibleColumns, renderTable, sanitizeColumnState, sortTable, useColorManager as useTableColorManager, type ColumnState, type FilterState, type TableHost } from '@navette-js/tables';
 import { Component, type WireRuntime } from '@navette-js/wire';
 import { csrfToken, verifyCsrf, wireRouter, wireScripts, wireStyles } from '@navette-js/wire/express';
 
@@ -611,11 +611,12 @@ export class Panel {
         const categories: GlobalSearchCategory[] = [];
         if (!this._globalSearch) return categories;
         const ranked = this._resources.map((resource, index) => ({ resource, index })).sort((a, b) => (a.resource.globalSearchSort ?? Infinity) - (b.resource.globalSearchSort ?? Infinity) || a.index - b.index);
-        for (const { resource } of ranked) {
-            if (!resource.canGloballySearch() || !(await resource.can('viewAny', user))) continue;
-            const results = await resource.getGlobalSearchResults(search, user);
-            if (results.length) categories.push({ label: resource.getPluralModelLabel(), results });
-        }
+        // Resources are searched together: the categories keep the ranking.
+        const searched = await Promise.all(ranked.map(async ({ resource }) => {
+            if (!resource.canGloballySearch() || !(await resource.can('viewAny', user))) return null;
+            return { resource, results: await resource.getGlobalSearchResults(search, user) };
+        }));
+        for (const entry of searched) if (entry?.results.length) categories.push({ label: entry.resource.getPluralModelLabel(), results: entry.results });
         return categories;
     }
 
@@ -3000,7 +3001,7 @@ export abstract class Resource {
     static async getGlobalSearchResults(search: string, user: User | null): Promise<GlobalSearchResult[]> {
         // Dot-notation attributes (`author.name`) search through the relationship, which is loaded for the result details.
         const with_ = this.getGloballySearchableAttributes().map((name) => relationshipPathOf(name)).filter((path): path is string => path !== null);
-        const page = await this.adapter.paginate({ search, searchColumns: this.getGloballySearchableAttributes(), ...(with_.length ? { with: with_ } : {}), splitSearchTerms: this.shouldSplitGlobalSearchTerms, page: 1, perPage: Math.min(Math.max(this.globalSearchResultsLimit, 1), 200) });
+        const page = await this.adapter.paginate({ search, searchColumns: this.getGloballySearchableAttributes(), ...(with_.length ? { with: with_ } : {}), splitSearchTerms: this.shouldSplitGlobalSearchTerms, knownTotal: 1 /* only the first page is read: no COUNT */, page: 1, perPage: Math.min(Math.max(this.globalSearchResultsLimit, 1), 200) });
         const results: GlobalSearchResult[] = [];
         for (const record of page.records) {
             const url = await this.getGlobalSearchResultUrl(record, user);
@@ -4464,7 +4465,7 @@ export class ListRecords extends Page implements TableHost {
         const adapter = this.getDataAdapterForTable();
         const records: any[] = [];
         const size = Math.max(1, Math.floor(chunkSize) || 100);
-        for (let index = 0; index < keys.length; index += size) records.push(...(await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)))).filter((record) => record !== null));
+        for (let index = 0; index < keys.length; index += size) records.push(...(await findRecords(adapter, keys.slice(index, index + size))).filter((record) => record !== null));
         return records;
     }
     /**
@@ -4505,7 +4506,7 @@ export class ListRecords extends Page implements TableHost {
         let success = 0, unauthorized = 0, failed = 0;
         const size = action.getSelectedRecordsChunkSize();
         for (let index = 0; index < keys.length; index += size) {
-            const records = await Promise.all(keys.slice(index, index + size).map((key) => adapter.find(key)));
+            const records = await findRecords(adapter, keys.slice(index, index + size));
             for (const record of records) {
                 if (!record) { failed++; continue; }
                 // A denial may be a `DenyResponse`: its message is grouped by key in the failure notification.

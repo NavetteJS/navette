@@ -1,3 +1,4 @@
+import { dateTimeFormat } from '@navette-js/support';
 // Formatting helpers of table columns and summarizers: Carbon `isoFormat()` dates, PHP-style numbers, money, and Laravel's
 // `Str::limit()` / `Str::words()`.
 
@@ -5,7 +6,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const pad = (value: number, length = 2) => String(value).padStart(length, '0');
 const ordinal = (n: number) => { const tens = n % 100; if (tens >= 11 && tens <= 13) return 'th'; return ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'; };
-const isTimeZone = (zone: string) => { try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); return true; } catch { return false; } };
+const isTimeZone = (zone: string) => { try { dateTimeFormat('en-US', { timeZone: zone }); return true; } catch { return false; } };
 
 /** Date of a state: a `Date`, or a database value (read as UTC when it has no zone). `null` when it is not a date. */
 export function parseDateState(value: unknown): Date | null {
@@ -23,7 +24,7 @@ export function parseDateState(value: unknown): Date | null {
 type DateParts = { year: number; month: number; day: number; hour: number; minute: number; second: number; ms: number; weekday: number; offset: number; zone: string; timestamp: number };
 function dateParts(date: Date, timeZone: string): DateParts {
     const zone = isTimeZone(timeZone) ? timeZone : 'UTC';
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZoneName: 'short' }).formatToParts(date).map((part) => [part.type, part.value]));
+    const parts = Object.fromEntries(dateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23', timeZoneName: 'short' }).formatToParts(date).map((part) => [part.type, part.value]));
     const year = Number(parts.year), month = Number(parts.month), day = Number(parts.day), hour = Number(parts.hour) % 24, minute = Number(parts.minute), second = Number(parts.second);
     const offset = Math.round((Date.UTC(year, month - 1, day, hour, minute, second) - Math.floor(date.getTime() / 1000) * 1000) / 60000);
     return { year, month, day, hour, minute, second, ms: date.getUTCMilliseconds(), weekday: new Date(Date.UTC(year, month - 1, day)).getUTCDay(), offset, zone: parts.timeZoneName ?? zone, timestamp: Math.floor(date.getTime() / 1000) };

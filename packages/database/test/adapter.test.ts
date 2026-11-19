@@ -73,3 +73,29 @@ test('search: splitSearchTerms(false) matches the term as a whole', async () => 
     assert.equal((await adapter.paginate({ page: 1, perPage: 50, search: 'person p7@', searchColumns: cols, splitSearchTerms: false })).total, 0);
     assert.equal((await adapter.paginate({ page: 1, perPage: 50, search: 'p7@', searchColumns: cols, splitSearchTerms: false })).total, 1);
 });
+
+test('findMany(): one query, in the order of the keys, null for missing ones', async () => {
+    const queries: string[] = [];
+    db.on('query', (query: { sql: string }) => queries.push(query.sql));
+    const [first, second] = (await db('people').orderBy('id').limit(2)).map((row: any) => row.id);
+    queries.length = 0;
+    const found = await adapter.findMany([String(second), '999999', String(first)]);
+    db.removeAllListeners('query');
+    assert.deepEqual(found.map((record) => record?.id ?? null), [second, null, first]);
+    assert.equal(queries.length, 1);
+    assert.deepEqual(await adapter.findMany([]), []);
+});
+
+test('paginate(): a known total skips the COUNT query', async () => {
+    const queries: string[] = [];
+    db.on('query', (query: { sql: string }) => queries.push(query.sql));
+    const counted = await adapter.paginate({ page: 1, perPage: 5 });
+    const withCount = queries.filter((sql) => /count\(/i.test(sql)).length;
+    queries.length = 0;
+    const skipped = await adapter.paginate({ page: 2, perPage: 5, knownTotal: counted.total });
+    db.removeAllListeners('query');
+    assert.ok(withCount >= 1);
+    assert.equal(queries.filter((sql) => /count\(/i.test(sql)).length, 0);
+    assert.equal(skipped.total, counted.total);
+    assert.equal(skipped.records.length, 5);
+});
