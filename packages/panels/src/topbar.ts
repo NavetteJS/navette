@@ -232,7 +232,8 @@ export class DatabaseNotifications extends Component {
         const hasMore = fetched !== null && fetched.length > limit;
         const notifications = fetched ? fetched.slice(0, limit) : null;
         const unread = await store.unreadCount(user);
-        const has = notifications ? notifications.length > 0 : (await store.count(user)) > 0;
+        // An unread notification means there is something to list: the second COUNT is only needed when nothing is unread.
+        const has = notifications ? notifications.length > 0 : unread > 0 || (await store.count(user)) > 0;
         const id = 'database-notifications';
         const close = `$dispatch('close-modal', { id: ${js(id)} })`;
         const key = (part: string) => `${this.id}.modal.${id}.${part}`;

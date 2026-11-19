@@ -1492,6 +1492,7 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         const resolve = async () => normalizeSelectOptions(await (this._options as (record: R) => SelectColumnOptions | Promise<SelectColumnOptions>)(record));
         return this.areOptionsRemembered() ? (this._rememberedOptions ??= resolve()) : resolve();
     }
+    private _relationshipLabels = new Map<string, Promise<string | null>>();
     private _rememberedOptions: Promise<[string, string][]> | null = null;
     private _rememberOptions: boolean | null = null;
     /** Computes the options once per request (every row of the page then gets the first record's options). */
@@ -1533,7 +1534,12 @@ export class SelectColumn<R = any> extends EditableColumn<R> {
         if (value === null || value === undefined || value === '' || (typeof value !== 'string' && typeof value !== 'number')) return null;
         const key = String(value);
         if (this._optionLabelUsing) { const label = await this._optionLabelUsing(key, record); return label === null || label === undefined || label === '' ? null : String(label); }
-        if (this._optionsRelationship) return (await this.loadRelationshipOptionsFor(record, { keys: [key] }))[0]?.[1] ?? null;
+        if (this._optionsRelationship) {
+            // Rows of a page often share a value: one lookup per key and request (the column lives for one request).
+            let label = this._relationshipLabels.get(key);
+            if (!label) { label = this.loadRelationshipOptionsFor(record, { keys: [key] }).then((found) => found[0]?.[1] ?? null); this._relationshipLabels.set(key, label); }
+            return label;
+        }
         return (await this.getOptionsFor(record)).find(([option]) => option === key)?.[1] ?? null;
     }
     /** Option shape of the JavaScript select. */
@@ -3096,7 +3102,7 @@ export async function recordMatchesTableFilters<R>(table: Table<R>, host: TableH
     applyTableFilters(table, host, query, { resolvingRecord: true });
     if (!query.modifiers?.length && query.trashed === undefined) return true;
     // Without a trashed filter, soft-deleted records are left to the caller's own lookup.
-    return (await adapter.listKeys({ ...query, trashed: query.trashed ?? 'with' })).length > 0;
+    return (await adapter.listKeys({ ...query, trashed: query.trashed ?? 'with', limit: 1 })).length > 0;
 }
 /** Current grouping: only a group declared by the table is accepted, whatever state the browser sends. */
 export function getTableGrouping<R>(table: Table<R>, host: TableHost): { group: Group<R>; direction: SortDirection } | null {
@@ -3144,6 +3150,10 @@ function filterActionHtml(view: FiltersActionView, attributes: string, badge: st
     return `<button ${attributes} class="${cls([...force, 'nv-ac-btn-action', 'nv-btn', sizeClass, ...colors('button')])}">${iconHtml}${e(view.label)}${badge !== null ? `<div class="nv-btn-badge-ctn">${badge}</div>` : ''}</button>`;
 }
 
+/** Keys sent to the browser for the "select all" checkbox of a group: the first ones, unless `maxSelectableRecords()` is lower. */
+const GROUP_SELECT_LIMIT = 5000;
+/** Above this many records, the "select all" count is the query's total: checking each record on every render would cost more than it tells (the check still runs when the action does). */
+const SELECTABILITY_COUNT_LIMIT = 1000;
 /** Keys whose record passes `checkIfRecordIsSelectableUsing()`, loaded in chunks. Without a check, the keys are returned as they are. */
 export async function filterSelectableKeys<R>(table: Table<R>, adapter: Pick<DataAdapter<R>, 'find' | 'findMany'>, keys: string[], chunkSize = 100): Promise<string[]> {
     if (!table.hasRecordSelectabilityCheck()) return keys;
@@ -3318,7 +3328,6 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     const aggregateColumns = () => ({ sum: names('sum'), avg: names('avg'), min: names('range'), max: names('range') });
     const aggregate = (query: Omit<ListQuery, 'page' | 'perPage'>): Promise<SummaryValues> => adapter.aggregate(query, aggregateColumns());
     const query = getTableQuery(table, host);
-    const all = await aggregate(query);
     const present = (name: string) => page.records.flatMap((record) => [readRecordPath(record, name)].flat()).filter((v) => v !== null && v !== undefined && v !== '');
     const onPage: SummaryValues = {
         count: page.records.length,
@@ -3375,6 +3384,8 @@ async function summarize<R>(table: Table<R>, host: TableHost, adapter: DataAdapt
     const isMultiPage = !options.groupsOnly && page.lastPage > 1;
     // Several pages: "this page" and "all" rows under a heading row; a single page: one "Summary" row.
     const hasPageSummary = isMultiPage && (showPage || showAll);
+    // The aggregate over the whole query is only run when a row shows it.
+    const all = (hasPageSummary ? showAll : !isMultiPage && (showPage || showAll)) ? await aggregate(query) : (null as unknown as SummaryValues);
     const rowHtml = (row: SummaryRow) => summaryRowHtml(row, span, options.groupsOnly, options.placeholders);
     const header = hasPageSummary
         ? `<tr class="nv-ta-row nv-ta-summary-header-row nv-striped">${options.placeholders.selection ? '<td></td>' : ''}${options.placeholders.actionsBefore ? '<td></td>' : ''}${columns.map((c, i) => {
@@ -3461,7 +3472,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             if (!groupsOnly) groupHeader = {
                 key: groupKey, title: groupTitle, label, description, collapsible: grouping.group.isCollapsible(),
                 // Keys of the whole group (not only the page), for its "select all" checkbox.
-                keys: hasBulk ? await adapter.listKeys({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => grouping.group.scope(q, groupKey)] }) : [],
+                keys: hasBulk ? await adapter.listKeys({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => grouping.group.scope(q, groupKey)], limit: table.getMaxSelectableRecords() ?? GROUP_SELECT_LIMIT }) : [],
                 // Header with nothing to announce: hidden from assistive technologies.
                 ariaHidden: !(filled(groupTitle) || filled(label) || filled(description) || grouping.group.isCollapsible() || selectable),
             };
@@ -3512,7 +3523,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         // Last group on the page: summarized only if it does not continue on the next page.
         let trailing = filled(previousGroup.title);
         if (trailing && !groupsOnly && page.page < page.lastPage) {
-            const nextRecord = (await adapter.paginate({ ...getTableQuery(table, host), page: page.page * page.perPage + 1, perPage: 1 })).records[0];
+            const nextRecord = (await adapter.paginate({ ...getTableQuery(table, host), page: page.page * page.perPage + 1, perPage: 1, knownTotal: page.total })).records[0];
             trailing = !nextRecord || grouping.group.getStringKey(nextRecord) !== previousGroup.key;
         }
         if (trailing) trailingGroupSummary = await summary.group(grouping.group, previousGroup.key, previousGroup.title);
@@ -3549,7 +3560,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
         // The key changes on every render to force the checkbox to be replaced.
         randomKey: () => Array.from(randomBytes(16), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join(''),
         // "Select all" covers every record of the current query.
-        allCount: !loaded || table.getPaginationMode() !== 'default' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length : page.total,
+        allCount: !loaded || table.getPaginationMode() !== 'default' ? '' : table.selectsCurrentPageOnly() ? page.records.length : table.hasRecordSelectabilityCheck() && selectable ? (page.total > SELECTABILITY_COUNT_LIMIT ? page.total : (await filterSelectableKeys(table, adapter, await adapter.listKeys(getTableQuery(table, host)))).length) : page.total,
         selection: selectionOnly ? { property: options.selection!.property, disabled: options.selection!.disabled === true } : null,
         maxSelectableRecords: table.getMaxSelectableRecords(), selectsCurrentPageOnly: table.selectsCurrentPageOnly(), resultsCount: table.getPaginationMode() !== 'default' ? rows.length : page.total,
         columns: visible.map((c) => {

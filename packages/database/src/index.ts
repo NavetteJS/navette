@@ -106,7 +106,8 @@ export interface DataAdapter<T = any> {
     restore(key: string | number): Promise<boolean>;
     forceDelete(key: string | number): Promise<boolean>;
     /** Keys of every record matching the query (unpaginated), for "select all". */
-    listKeys(query: Omit<ListQuery, 'page' | 'perPage'>): Promise<string[]>;
+    /** Keys of every record of a query (`limit`: only the first ones, in the query's order). */
+    listKeys(query: Omit<ListQuery, 'page' | 'perPage'> & { limit?: number }): Promise<string[]>;
     /** Query builder of the ORM for a list query (`getSelectedRecordsQuery()`); optional. */
     newQuery?(query: Omit<ListQuery, 'page' | 'perPage'>): any;
     deleteMany(keys: (string | number)[]): Promise<number>;
@@ -256,8 +257,10 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
 
     /** The adapter's query builder for a list query (scope, search, filters and keys applied), e.g. for a bulk `update()`. */
     newQuery(query: Omit<ListQuery, 'page' | 'perPage'>): QueryBuilder<M, M[]> { return this.filtered(query); }
-    async listKeys(query: Omit<ListQuery, 'page' | 'perPage'>): Promise<string[]> {
-        const rows = await this.filtered(query).select(this.keyColumn);
+    async listKeys(query: Omit<ListQuery, 'page' | 'perPage'> & { limit?: number }): Promise<string[]> {
+        const q = this.filtered(query).select(this.keyColumn);
+        if (query.limit !== undefined && Number.isInteger(query.limit) && query.limit >= 0) q.limit(query.limit);
+        const rows = await q;
         return rows.map((r) => this.getKey(r));
     }
     /**
@@ -266,7 +269,8 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
      */
     async keysInScope(keys: (string | number)[]): Promise<string[]> {
         if (!keys.length) return [];
-        const rows = await this.base('with').whereIn(`${this.model.tableName}.${this.keyColumn}`, keys.map(String).slice(0, 10000));
+        const column = `${this.model.tableName}.${this.keyColumn}`;
+        const rows = await this.base('with').select(column).whereIn(column, keys.map(String).slice(0, 10000));
         return rows.map((r) => this.getKey(r));
     }
     /** Count and column aggregates over every record of the query (for summary rows). */
@@ -520,11 +524,11 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async exists(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
         const q = this.query().where(column, value as any);
         if (exceptKey !== null) q.whereNot(this.keyColumn, exceptKey);
-        return (await q.resultSize()) > 0;
+        return (await q.select(this.keyColumn).limit(1)).length > 0;
     }
     async existsInScope(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
         const q = this.base('without').where(`${this.model.tableName}.${column}`, value as any);
         if (exceptKey !== null) q.whereNot(`${this.model.tableName}.${this.keyColumn}`, exceptKey);
-        return (await q.resultSize()) > 0;
+        return (await q.select(`${this.model.tableName}.${this.keyColumn}`).limit(1)).length > 0;
     }
 }

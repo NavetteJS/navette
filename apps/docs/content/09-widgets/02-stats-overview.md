@@ -254,7 +254,7 @@ The cards keep their background, border and rounded corners.
 
 ## Live updating stats (polling)
 
-By default, stats overview widgets refresh their data every 5 seconds.
+By default, stats overview widgets refresh their data every 30 seconds.
 
 To customize this, you may override the static `pollingInterval` property on the class to a new interval, in seconds (`'10s'`) or milliseconds (`'500ms'`):
 

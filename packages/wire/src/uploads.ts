@@ -142,8 +142,13 @@ export class UploadStore {
         for (const suffix of ['', '.json']) rmSync(path.join(this.dir, id + suffix), { force: true });
     }
     /** Deletes temporary files older than the retention time (`ttl`). */
+    private lastSweep = 0;
     private sweep(): void {
-        const limit = Date.now() - this.ttl;
+        const now = Date.now();
+        // Walking the folder on every upload is costly: at most once a minute.
+        if (now - this.lastSweep < Math.min(60_000, this.ttl)) return;
+        this.lastSweep = now;
+        const limit = now - this.ttl;
         try { for (const name of readdirSync(this.dir)) { const file = path.join(this.dir, name); if (statSync(file).mtimeMs < limit) rmSync(file, { force: true }); } } catch { /* directory unreadable: nothing to sweep */ }
     }
 }

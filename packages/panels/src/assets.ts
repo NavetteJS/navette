@@ -1,7 +1,7 @@
 // Asset registration: stylesheets, scripts and asynchronous Alpine components of the application and its plugins,
 // served by the panel router with versioned URLs and rendered in the panel layout (or loaded on request).
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, type Stats } from 'node:fs';
 import type { Request, Response, NextFunction } from 'express';
 import { cspNonce, cspNonceAttribute, e } from '@navette-js/support';
 
@@ -51,12 +51,25 @@ export abstract class Asset {
     getUrl(): string { return this.isUrl() ? this.path! : `/${this.getRelativePublicPath()}?v=${this.getVersion()}`; }
 }
 
-const fileExists = (path: string): boolean => { try { return statSync(path).isFile(); } catch { return false; } };
-const directoryExists = (path: string): boolean => { try { return statSync(path).isDirectory(); } catch { return false; } };
+// Registered assets are looked at on every page: in production the result of a `stat` is kept for a few seconds
+// (a redeployed file is still noticed, through its version).
+const statCache = new Map<string, { at: number; stat: Stats | null }>();
+const STAT_TTL = 5000;
+function statOf(path: string): Stats | null {
+    const production = process.env.NODE_ENV === 'production';
+    const cached = production ? statCache.get(path) : undefined;
+    if (cached && Date.now() - cached.at < STAT_TTL) return cached.stat;
+    let stat: Stats | null = null;
+    try { stat = statSync(path); } catch { stat = null; }
+    if (production) { if (statCache.size > 1000) statCache.clear(); statCache.set(path, { at: Date.now(), stat }); }
+    return stat;
+}
+const fileExists = (path: string): boolean => statOf(path)?.isFile() === true;
+const directoryExists = (path: string): boolean => statOf(path)?.isDirectory() === true;
 const versions = new Map<string, { key: string; version: string }>();
 function fileVersion(path: string): string {
-    let stat;
-    try { stat = statSync(path); } catch { throw new Error(`Asset file not found: ${path}`); }
+    const stat = statOf(path);
+    if (!stat) throw new Error(`Asset file not found: ${path}`);
     const key = `${stat.mtimeMs}:${stat.size}`;
     const cached = versions.get(path);
     if (cached?.key === key) return cached.version;

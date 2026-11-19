@@ -25,6 +25,14 @@ A session cookie is signed and expires after a day, or after 30 days when the us
 
 Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`, so another site cannot show them in a frame. If your application embeds the panel on purpose, call `panel.allowFraming()`.
 
+## Performance
+
+- Enable HTTP compression on the reverse proxy (or with the `compression` middleware): `app.css` weighs about 700 KB uncompressed.
+- With `NODE_ENV=production`, the panel serves the minified `livewire.min.js`, keeps template and asset lookups for a few seconds, and compiles views without debug information.
+- On large tables, set `maxSelectableRecords()`: "select all" otherwise reads every key of the query, and a bulk action loads the records chunk by chunk. `DeleteBulkAction` with `fetchSelectedRecords(false)` deletes in one query.
+- Add database indexes on the columns your tables search and filter on. Searches use `lower(column) like '%term%'`, which no ordinary index can serve: for large tables, use a full-text or trigram index.
+- Widgets refresh every 30 seconds by default; lower `pollingInterval` only where it matters.
+
 ## Ensuring that users are authorized to access panels
 
 In development, it is common to log in with a test account. In production, the [user provider](/panels/users) decides who may log in, and its `find()` method runs on every request: return `null` for accounts that must not use the panel. Then check the [authorization rules](/resources/authorization) of your resources, pages and widgets: without them, every logged-in user can do everything.

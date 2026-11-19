@@ -1158,9 +1158,11 @@ export class Select extends Field {
         const needle = String(search ?? '').toLowerCase();
         return this.withDisabled(Select.forJs((await this.resolveOptions()).filter(([, label]) => label.toLowerCase().includes(needle))));
     }
-    async getOptionLabel(): Promise<string | null> {
+    /** `known`: options already loaded for this render; a value found there needs no query. */
+    async getOptionLabel(known: [string, string][] = []): Promise<string | null> {
         const state = this.context().state;
         if (state === null || state === undefined || state === '') return null;
+        if (this._relationship) { const loaded = known.find(([value]) => value === String(state)); if (loaded) return loaded[1]; }
         if (this._relationship) return (await this.relationshipOptions(null, [String(state)], 1000, true))[0]?.[1] ?? null;
         if (this._optionLabelUsing) return this._optionLabelUsing(String(state), this.context());
         return (await this.resolveOptions()).find(([value]) => value === String(state))?.[1] ?? null;
@@ -1312,7 +1314,7 @@ export class Select extends Field {
  hasDynamicSearchResults: ${this._searchResultsUsing || (this._relationship && this._searchable) || (this._searchOnServer ?? hasDynamicOptions) ? 'true' : 'false'},
  hasInitialNoOptionsMessage: ${this._searchResultsUsing || (this._relationship && this._searchable && !this._preload) || this._hasNoInitialOptions ? 'false' : 'true'},
  id: ${js(this.getId())},
- initialOptionLabel: ${js(hasState ? await this.getOptionLabel() : null)},
+ initialOptionLabel: ${js(hasState ? await this.getOptionLabel(flattenOptions(grouped)) : null)},
  initialOptionLabels: ${selected.length ? js(selected.map(([value, label]) => ({ label, value, isDisabled: false }))) : '[]'},
  initialState: ${this._multiple ? (selected.length ? js(selected.map(([value]) => value)) : '[]') : js(hasState ? String(state) : null)},
  isAutofocused: ${(await this.isAutofocused()) ? 'true' : 'false'},

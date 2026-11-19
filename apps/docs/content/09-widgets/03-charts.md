@@ -336,7 +336,7 @@ export class RevenueChart extends ChartWidget {
 
 ## Live updating chart data (polling)
 
-By default, chart widgets refresh their data every 5 seconds. The new data is only sent to the browser when it has changed.
+By default, chart widgets refresh their data every 30 seconds. The new data is only sent to the browser when it has changed.
 
 To customize this, you may override the static `pollingInterval` property on the class to a new interval, in seconds (`'10s'`) or milliseconds (`'500ms'`):
 

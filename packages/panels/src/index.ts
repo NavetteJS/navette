@@ -1063,15 +1063,16 @@ export class Panel {
 
     /** Computed navigation badges: page URL → value. */
     async resolveNavigationBadges(): Promise<Map<string, string | number | null>> {
-        const badges = new Map<string, string | number | null>();
-        for (const page of this._pages) if (page.shouldRegisterNavigation && typeof (page as any).getNavigationBadge === 'function') badges.set(page.slug, await (page as any).getNavigationBadge());
-        return badges;
+        // The badges (often a COUNT each) are computed together.
+        const pages = this._pages.filter((page) => page.shouldRegisterNavigation && typeof (page as any).getNavigationBadge === 'function');
+        const values = await Promise.all(pages.map((page) => (page as any).getNavigationBadge()));
+        return new Map(pages.map((page, index) => [page.slug, values[index]] as [string, string | number | null]));
     }
     /** URLs of menu pages this user cannot open. */
     async resolveInaccessiblePages(user: User | null): Promise<Set<string>> {
-        const hidden = new Set<string>();
-        for (const page of this._pages) if (page.shouldRegisterNavigation && !(await this.canAccessPage(page, user))) hidden.add(page.slug);
-        return hidden;
+        const pages = this._pages.filter((page) => page.shouldRegisterNavigation);
+        const allowed = await Promise.all(pages.map((page) => this.canAccessPage(page, user)));
+        return new Set(pages.filter((_page, index) => !allowed[index]).map((page) => page.slug));
     }
     /** URLs of the menu items of the panel's pages (not those in a cluster), to know which item a nested URL belongs to. */
     private navigationMenuUrls(hidden: Set<string> = new Set()): string[] {
@@ -3485,7 +3486,7 @@ export class Stat {
 export abstract class StatsOverviewWidget extends Widget {
     static columnSpan: ColumnSpan = 'full';
     /** Polling interval, or `null` to disable polling. */
-    static pollingInterval: string | null = '5s';
+    static pollingInterval: string | null = '30s';
     /** `false`: the stat cards have no padding (`nv-wi-stats-overview-not-padded`), for stats that lay out their own content. */
     static isPadded = true;
     abstract getStats(): Stat[] | Promise<Stat[]>;
@@ -3596,7 +3597,7 @@ export abstract class ChartWidget extends Widget {
         return typeof context.schemaComponent === 'string' ? super.getMountableActions(context) : flattenActions(this.getEmptyStateActions());
     }
     /** Polling interval, or `null` to disable polling. */
-    static pollingInterval: string | null = '5s';
+    static pollingInterval: string | null = '30s';
     static heading: string | null = null;
     static description: string | null = null;
     /** Color of datasets that do not set one. */
@@ -4442,7 +4443,7 @@ export class ListRecords extends Page implements TableHost {
         } else {
             const excluded = new Set(clean(this.deselectedTableRecords));
             // "Select all" covers the whole query, or only the current page with `selectCurrentPageOnly()`.
-            const all = table.selectsCurrentPageOnly() ? (await getTableRecords(table, this, adapter)).records.map((record) => adapter.getKey(record)) : await adapter.listKeys(getTableQuery(table, this));
+            const all = table.selectsCurrentPageOnly() ? (await getTableRecords(table, this, adapter)).records.map((record) => adapter.getKey(record)) : await adapter.listKeys({ ...getTableQuery(table, this), ...(table.getMaxSelectableRecords() !== null && !table.hasRecordSelectabilityCheck() ? { limit: table.getMaxSelectableRecords()! + excluded.size } : {}) });
             keys = all.filter((k) => !excluded.has(k));
         }
         // Records that cannot be selected, and anything beyond `maxSelectableRecords()`, are dropped whatever the browser sent.
@@ -4710,7 +4711,7 @@ export class TableSelectComponent extends ListRecords {
         const table = this.getTable(), adapter = this.resource.adapter;
         const keys = table.selectsCurrentPageOnly()
             ? (await getTableRecords(table, this, adapter)).records.map((record: any) => adapter.getKey(record))
-            : (await adapter.listKeys(getTableQuery(table, this))).slice(0, MAX_UNPAGINATED_RECORDS);
+            : await adapter.listKeys({ ...getTableQuery(table, this), limit: MAX_UNPAGINATED_RECORDS });
         const selectable = await filterSelectableKeys(table, adapter, keys);
         const max = table.getMaxSelectableRecords();
         return max !== null ? selectable.slice(0, max) : selectable;

@@ -99,3 +99,12 @@ test('paginate(): a known total skips the COUNT query', async () => {
     assert.equal(skipped.total, counted.total);
     assert.equal(skipped.records.length, 5);
 });
+
+test('listKeys(): `limit` reads only the first keys; exists() stays correct', async () => {
+    const all = await adapter.listKeys({});
+    const limited = await adapter.listKeys({ limit: 3 });
+    assert.deepEqual(limited, all.slice(0, 3));
+    assert.equal((await adapter.listKeys({ limit: 0 })).length, 0);
+    assert.equal(await adapter.exists('email', 'p1@example.test'), true);
+    assert.equal(await adapter.exists('email', 'nobody@example.test'), false);
+});

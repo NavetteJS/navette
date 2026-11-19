@@ -604,7 +604,12 @@ export class RecordSelectAction extends CustomizableAction {
     async getRelatableKeys(livewire: any, value: unknown): Promise<string[]> {
         const keys = [...new Set((Array.isArray(value) ? value : [value]).filter(isKey).map(String))].slice(0, 1000);
         const allowed: string[] = [];
-        for (const key of keys) if ((await this.getRelatableLabel(livewire, key)) !== null) allowed.push(key);
+        // Checked a few at a time, in the order received.
+        for (let index = 0; index < keys.length; index += 20) {
+            const chunk = keys.slice(index, index + 20);
+            const labels = await Promise.all(chunk.map((key) => this.getRelatableLabel(livewire, key)));
+            chunk.forEach((key, position) => { if (labels[position] !== null) allowed.push(key); });
+        }
         return allowed;
     }
 
@@ -862,7 +867,7 @@ export async function relatedRecordLabel(manager: RelatedRecordsManager, ownerKe
     if (!isKey(recordKey)) return null;
     const adapter = requireRelatedAdapter(manager, ownerKey);
     const modifiers = options.modifyQuery ? [(query: any) => { options.modifyQuery!(query, null); }] : [];
-    const [record] = (await adapter.paginate({ keys: [String(recordKey)], modifiers, page: 1, perPage: 1 })).records;
+    const [record] = (await adapter.paginate({ keys: [String(recordKey)], modifiers, knownTotal: 1, page: 1, perPage: 1 })).records;
     if (!record) return null;
     const key = adapter.getKey(record);
     if (!options.allowsDuplicates && (await manager.adapterFor(ownerKey).keysInScope([key])).length) return null;

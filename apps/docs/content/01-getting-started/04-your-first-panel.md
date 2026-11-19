@@ -313,7 +313,7 @@ export class CustomerStats extends StatsOverviewWidget {
 ]
 ```
 
-By default, stats are refreshed every 5 seconds; `pollingInterval = null` turns this off. There is nothing to register: the panel discovers the widgets of `src/admin/widgets`, and its dashboard displays them. Widgets are loaded after the page, so a slow query never delays the rest of the dashboard.
+By default, stats are refreshed every 30 seconds; `pollingInterval = null` turns this off. There is nothing to register: the panel discovers the widgets of `src/admin/widgets`, and its dashboard displays them. Widgets are loaded after the page, so a slow query never delays the rest of the dashboard.
 
 ## Customizing the panel
 

@@ -58,7 +58,13 @@ const definitions = new Map<string, TableSelectDefinition>();
  */
 export function getTableSelectDefinition(id: string): TableSelectDefinition | null { return definitions.get(id) ?? null; }
 /** @internal Registers a field's table definition (see `getTableSelectDefinition()`). */
-export function registerTableSelectDefinition(definition: TableSelectDefinition): void { definitions.set(definition.id, definition); }
+export function registerTableSelectDefinition(definition: TableSelectDefinition): void {
+    // A definition is rebuilt on every render of its field: the most recent ones stay, the map does not grow with the owners visited.
+    definitions.delete(definition.id);
+    definitions.set(definition.id, definition);
+    if (definitions.size > MAX_DEFINITIONS) for (const id of definitions.keys()) { if (definitions.size <= MAX_DEFINITIONS) break; definitions.delete(id); }
+}
+const MAX_DEFINITIONS = 2000;
 /** Data adapter of the table: the configuration's own, or one for the relationship's related model. */
 export function getTableSelectDataAdapter(definition: TableSelectDefinition): any {
     const configuration = definition.configuration as any;

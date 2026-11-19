@@ -44,7 +44,7 @@ export function wireRouter(runtime: WireRuntime, prefix = '/livewire', makeConte
     canUpload: (ctx: any) => boolean | Promise<boolean> = () => true): Router {
     const router = express.Router();
     router.get(`${prefix}/livewire.js`, (_req, res) => {
-        res.type('application/javascript').set('Cache-Control', 'public, max-age=31536000, immutable').sendFile(vendor('livewire.js'));
+        res.type('application/javascript').set('Cache-Control', 'public, max-age=31536000, immutable').sendFile(vendor(process.env.NODE_ENV === 'production' ? 'livewire.min.js' : 'livewire.js'));
     });
     router.post(`${prefix}/update`, express.json({ limit: '2mb' }), async (req, res) => {
         try {
