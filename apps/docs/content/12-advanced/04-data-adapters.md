@@ -91,7 +91,7 @@ Searches are case-insensitive, every word must match one of the searchable colum
 
 ### Customizing the query
 
-`modify` receives the Objection query builder of every read: lists, record pages, bulk selections, global search, aggregates. It is the most important option of the adapter. Writes respect it too: `update()`, `delete()`, `restore()` and `forceDelete()` return `null` or `false` for a record that `modify` (or the tenant) hides, so a custom action cannot change records the table cannot show.
+`modify` receives the Objection query builder of every read: lists, record pages, bulk selections, global search, aggregates. It is the most important option of the adapter. Writes do not go through `modify`, but `update()`, `delete()`, `restore()` and `forceDelete()` refuse a record outside the tenant or the `scopedTo()` column scopes.
 
 **To restrict what is visible** (permissions, multi-tenancy):
 

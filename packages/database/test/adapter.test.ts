@@ -109,19 +109,20 @@ test('listKeys(): `limit` reads only the first keys; exists() stays correct', as
     assert.equal(await adapter.exists('email', 'nobody@example.test'), false);
 });
 
-test('delete(), restore() and forceDelete() refuse records hidden by `modify`, like update()', async () => {
-    const [{ id: visible }, { id: hidden }] = await db('people').orderBy('id').limit(2);
-    const scoped = new ObjectionAdapter(Person, { modify: (query) => { query.whereNot('people.id', hidden); } });
-    assert.equal(await scoped.delete(hidden), false);
-    assert.equal(await scoped.forceDelete(hidden), false);
-    assert.ok(await db('people').where('id', hidden).first());
-    assert.equal(await scoped.update(hidden, { name: 'Changed' }), null);
-    assert.notEqual((await db('people').where('id', visible).first()).name, 'Changed');
+test('delete(), restore() and forceDelete() refuse records of another tenant; modify does not block them', async () => {
+    const [{ id: first }, { id: second }] = await db('people').orderBy('id').limit(2);
+    const scoped = new ObjectionAdapter(Person).scopeToTenant('id', () => first);
+    assert.equal(await scoped.delete(second), false);
+    assert.equal(await scoped.forceDelete(second), false);
+    assert.ok(await db('people').where('id', second).first());
+    // `modify` only shapes reads: an adapter may change what it selects on, then call `delete()`.
+    const hiding = new ObjectionAdapter(Person, { modify: (query) => { query.whereNot('people.id', second); } });
+    assert.equal(await hiding.delete(second), true);
 });
 
 test('`verified: true` skips the scope lookup for a record just read through the adapter', async () => {
     const [{ id }] = await db('people').orderBy('id').limit(1);
-    const scoped = new ObjectionAdapter(Person, { modify: (query) => { query.whereNot('people.id', -1); } });
+    const scoped = new ObjectionAdapter(Person).scopeToTenant('id', () => id);
     const queries: string[] = [];
     db.on('query', (query: { sql: string }) => queries.push(query.sql));
     await scoped.forceDelete(id, { verified: true });

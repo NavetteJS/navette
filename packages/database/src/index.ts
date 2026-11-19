@@ -225,9 +225,10 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         return copy;
     }
     /** `verified: true` (on `delete()`, `restore()`, `forceDelete()`): the record was just read through this adapter, so the scope check is skipped. */
-    /** Whether a record is outside the tenant, the column scopes (`scopedTo()`) or `modify`: writes to it are refused. */
+    /** Whether a record is outside the tenant or the column scopes (`scopedTo()`): writes to it are refused. */
     private async isOutOfScope(key: string | number): Promise<boolean> {
-        const scoped = this.columnScopes.length > 0 || this.modify !== null || (this.tenantScope?.key() ?? null) !== null;
+        // `modify` is not checked: an adapter may change the data it selects on before calling `delete()` (an unlink, then the delete).
+        const scoped = this.columnScopes.length > 0 || (this.tenantScope?.key() ?? null) !== null;
         return scoped && !(await this.base('with').findById(key));
     }
     /** A query of the model, in the open transaction if any. */
@@ -503,7 +504,6 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     async update(key: string | number, data: Record<string, unknown>): Promise<M | null> {
         // Records outside the current tenant (or the column scopes) cannot be updated, and the scope columns never change.
         const guarded = [...(this.tenantScope && this.tenantScope.key() !== null ? [this.tenantScope.column] : []), ...this.columnScopes.map((scope) => scope.column)];
-        if (this.modify !== null && !guarded.length && (await this.isOutOfScope(key))) return null;
         if (guarded.length) {
             if (!(await this.base('with').findById(key))) return null;
             data = Object.fromEntries(Object.entries(data).filter(([column]) => !guarded.includes(column)));
