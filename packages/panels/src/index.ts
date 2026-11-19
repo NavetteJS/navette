@@ -324,7 +324,7 @@ export class Panel {
     auth(provider: AuthProvider): this { this._auth = provider; return this; }
     key(key: string): this { this._key = key; return this; }
     private _allowFraming = false;
-    /** The panel refuses to be shown in a frame of another site (`X-Frame-Options: DENY`, `frame-ancestors 'none'`) unless this is called. */
+    /** The panel refuses to be shown in a frame of another site (`X-Frame-Options: DENY`) unless this is called. */
     allowFraming(allow = true): this { this._allowFraming = allow; return this; }
     isFramingAllowed(): boolean { return this._allowFraming; }
     private _authGuard: string | null = 'web';
@@ -1138,7 +1138,10 @@ export class Panel {
     logIn(res: Response, user: User, remember: boolean, startedAt?: number): void {
         // The signature is not enough on its own: a stolen cookie stops working at `exp` (a day, or 30 days with "remember me").
         const now = Math.floor(Date.now() / 1000);
-        const value = Buffer.from(JSON.stringify({ uid: user.id, iat: now, sid: startedAt ?? now, exp: now + (remember ? 30 * 86400 : 86400), rem: remember ? 1 : 0 })).toString('base64url');
+        const sid = startedAt ?? now;
+        // Never beyond `MAX_SESSION_AGE` after the sign-in, whatever the renewals.
+        const exp = Math.min(now + (remember ? 30 * 86400 : 86400), sid + MAX_SESSION_AGE);
+        const value = Buffer.from(JSON.stringify({ uid: user.id, iat: now, sid, exp, rem: remember ? 1 : 0 })).toString('base64url');
         res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}), ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
     }
     logOut(res: Response): void { res.clearCookie(this.getSessionCookieName(), this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}); }
@@ -1151,6 +1154,7 @@ export class Panel {
         try {
             const session = JSON.parse(Buffer.from(value, 'base64url').toString());
             if (typeof session?.exp !== 'number' || session.exp < Date.now() / 1000) return null;
+            if (typeof session.sid === 'number' && session.sid + MAX_SESSION_AGE < Date.now() / 1000) return null;
             const user = await this.getAuth().find(session.uid);
             if (user) this._sessions.set(req, session);
             return user;
@@ -2207,7 +2211,7 @@ export class Dashboard extends Page {
 const loginThrottle = new Throttle();
 /** Failed logins per email address and IP address. */
 const accountThrottle = new Throttle(10, 15 * 60_000);
-/** The same per email address alone, for attacks spread over many addresses: high enough that nobody can lock an account out cheaply. */
+/** The same per email address alone, for attacks spread over many addresses. It can keep the real owner out for the window by someone sending that many failures, which is why it is high. */
 const accountGlobalThrottle = new Throttle(200, 15 * 60_000);
 
 /** Page with the simple layout (login, registration…). */
@@ -6380,11 +6384,11 @@ export function panelNotFound(panel: Panel): (req: Request, res: Response) => vo
     return (req, res) => renderErrorPage(panel, req, res, 404);
 }
 
-/** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
 /** Longest life of a session that keeps being renewed, in seconds. */
 const MAX_SESSION_AGE = 90 * 86400;
 /** Public placeholder key: fine locally, refused in production. */
 const DEVELOPMENT_KEY = 'development-key-replace-me-in-production';
+/** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
 function assertAuthCapabilities(panel: Panel): void {
     // A known or short key lets anyone forge sessions, reset tokens and component snapshots.
     // Links sent by email must not be built from the Host header (see `absoluteUrl()`): refuse to boot rather than fail when a user asks for one.

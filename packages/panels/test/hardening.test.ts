@@ -152,22 +152,18 @@ test('sessions renew themselves once half of their life has passed', async () =>
     } finally { Date.now = realNow; }
 });
 
-test('a renewed session stops renewing 90 days after the sign-in', async () => {
+test('a renewed session never outlives 90 days after the sign-in', async () => {
     const ada = { id: 1, name: 'Ada', email: 'ada@example.com' };
-    const panel = Panel.make().id('capped').path('capped').key('capped-secret-key-0123').authGuard('capped').auth({ attempt: async () => null, find: async () => ada });
+    const panel = Panel.make().id('clamped').path('clamped').key('clamped-secret-key-0123').authGuard('clamped').auth({ attempt: async () => null, find: async () => ada });
     const realNow = Date.now;
     try {
         const start = realNow();
         let cookie = '';
-        const issue = (at: number, startedAt?: number) => { Date.now = () => at; panel.logIn({ cookie: (name: string, value: string) => { cookie = `${name}=${value}`; }, req: {} } as any, ada, true, startedAt); };
-        issue(start);
-        // A cookie renewed at day 80 (30 days valid), asked again at day 100 and half its life gone: no new cookie.
-        issue(start + 80 * 86400_000, Math.floor(start / 1000));
-        Date.now = () => start + 100 * 86400_000;
-        const req = { headers: { cookie } } as any;
-        assert.ok(await panel.user(req));
-        const issued: string[] = [];
-        panel.renewSession(req, { cookie: (_n: string, value: string) => { issued.push(value); }, req: {}, headersSent: false } as any, ada);
-        assert.equal(issued.length, 0);
+        Date.now = () => start + 89 * 86400_000;
+        panel.logIn({ cookie: (name: string, value: string) => { cookie = `${name}=${value}`; }, req: {} } as any, ada, true, Math.floor(start / 1000));
+        const session = JSON.parse(Buffer.from(cookie.split('=')[1].split('.')[0], 'base64url').toString());
+        assert.equal(session.exp, Math.floor(start / 1000) + 90 * 86400, 'clamped to the cap, not 30 days later');
+        Date.now = () => start + 91 * 86400_000;
+        assert.equal(await panel.user({ headers: { cookie } } as any), null);
     } finally { Date.now = realNow; }
 });

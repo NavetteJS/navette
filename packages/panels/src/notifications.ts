@@ -40,21 +40,21 @@ const mailboxes = new Map<string, Map<string, { at: number; notifications: Notif
 const TTL = 5 * 60 * 1000;
 const MAX_MAILBOXES = 10_000;
 let lastSweep = 0;
-/** Mailboxes are keyed by a cookie the client chooses: expired batches and empty mailboxes are dropped, and their number is capped. */
+/** Mailboxes are keyed by a cookie the client chooses: expired batches and empty mailboxes are dropped (at most every 30 seconds), and their number is capped. */
 function sweep(now: number): void {
-    if (now - lastSweep < 30_000 && mailboxes.size < MAX_MAILBOXES) return;
+    if (now - lastSweep < 30_000) return;
     lastSweep = now;
     for (const [mailbox, box] of mailboxes) {
         for (const [key, entry] of box) if (now - entry.at > TTL) box.delete(key);
         if (box.size === 0) mailboxes.delete(mailbox);
     }
-    // Still too many (all recent): the oldest mailboxes go first.
-    for (const mailbox of mailboxes.keys()) { if (mailboxes.size < MAX_MAILBOXES) break; mailboxes.delete(mailbox); }
 }
 export function publish(mailbox: string, notifications: NotificationData[]): string {
     const batch = randomBytes(20).toString('hex');
     const now = Date.now();
     sweep(now);
+    // Full of recent mailboxes (someone opening many sessions): a new one is not kept, rather than dropping other people's toasts.
+    if (!mailboxes.has(mailbox) && mailboxes.size >= MAX_MAILBOXES) return batch;
     const box = mailboxes.get(mailbox) ?? new Map();
     for (const [key, entry] of box) if (now - entry.at > TTL) box.delete(key);
     box.set(batch, { at: now, notifications });

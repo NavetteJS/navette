@@ -99,12 +99,13 @@ export interface DataAdapter<T = any> {
     findWithTrashed?(key: string | number): Promise<T | null>;
     create(data: Record<string, unknown>): Promise<T>;
     update(key: string | number, data: Record<string, unknown>): Promise<T | null>;
-    delete(key: string | number): Promise<boolean>;
+    /** `options.verified`: the record was just read through this adapter, so scope checks can be skipped (adapters may ignore it). */
+    delete(key: string | number, options?: { verified?: boolean }): Promise<boolean>;
     /** Soft deletes: support, record state, restore, permanent delete. */
     supportsSoftDeletes(): boolean;
     isTrashed(record: T): boolean;
-    restore(key: string | number): Promise<boolean>;
-    forceDelete(key: string | number): Promise<boolean>;
+    restore(key: string | number, options?: { verified?: boolean }): Promise<boolean>;
+    forceDelete(key: string | number, options?: { verified?: boolean }): Promise<boolean>;
     /** Keys of every record matching the query (unpaginated), for "select all". */
     /** Keys of every record of a query (`limit`: only the first ones, in the query's order). */
     listKeys(query: Omit<ListQuery, 'page' | 'perPage'> & { limit?: number }): Promise<string[]>;
@@ -224,7 +225,6 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         copy.columnScopes = [...this.columnScopes, { column, value }];
         return copy;
     }
-    /** `verified: true` (on `delete()`, `restore()`, `forceDelete()`): the record was just read through this adapter, so the scope check is skipped. */
     /** Whether a record is outside the tenant or the column scopes (`scopedTo()`): writes to it are refused. */
     private async isOutOfScope(key: string | number): Promise<boolean> {
         // `modify` is not checked: an adapter may change the data it selects on before calling `delete()` (an unlink, then the delete).
@@ -261,7 +261,11 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
     newQuery(query: Omit<ListQuery, 'page' | 'perPage'>): QueryBuilder<M, M[]> { return this.filtered(query); }
     async listKeys(query: Omit<ListQuery, 'page' | 'perPage'> & { limit?: number }): Promise<string[]> {
         const q = this.filtered(query).select(this.keyColumn);
-        if (query.limit !== undefined && Number.isInteger(query.limit) && query.limit >= 0) q.limit(query.limit);
+        if (query.limit !== undefined && Number.isInteger(query.limit) && query.limit >= 0) {
+            // The first keys in the order the user sees (the query's sorts, then the key).
+            this.applySorts(q, { ...query, keySort: true });
+            q.limit(query.limit);
+        }
         const rows = await q;
         return rows.map((r) => this.getKey(r));
     }

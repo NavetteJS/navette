@@ -130,3 +130,9 @@ test('`verified: true` skips the scope lookup for a record just read through the
     assert.equal(queries.filter((sql) => /^select/i.test(sql)).length, 0);
     assert.equal(await db('people').where('id', id).first(), undefined);
 });
+
+test('listKeys({ limit }) returns the first keys in the order of the query', async () => {
+    const shown = (await adapter.paginate({ page: 1, perPage: 3, sort: { column: 'name', direction: 'desc' } })).records.map((record) => adapter.getKey(record));
+    const limited = await adapter.listKeys({ sort: { column: 'name', direction: 'desc' }, limit: 3 });
+    assert.deepEqual(limited, shown);
+});

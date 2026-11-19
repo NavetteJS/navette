@@ -31,6 +31,8 @@ With `ownershipColumn`, the adapter of every resource of the panel is scoped to 
 The adapter must support this scoping: `ObjectionAdapter` does. A [custom adapter](/advanced/data-adapters#writing-your-own-adapter) must implement `scopeToTenant()`, otherwise `panelRouter()` throws an error at startup.
 
 <Aside variant="danger">
+In a request of the panel that has no tenant (a page outside the tenant routes, a `canAccess()` callback run before the tenant is known), a scoped adapter returns no record and refuses to create one; outside a request (seeders, scripts, queued jobs) it is not filtered. Use `panel.withTenant(tenant, () => ...)` when you need a tenant's records there.
+
 Without `ownershipColumn`, nothing is scoped automatically: every resource sees the records of every tenant. Either set it, or scope each adapter yourself with `panel.getTenant()`.
 </Aside>
 

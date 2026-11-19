@@ -123,3 +123,14 @@ test('session cookies expire and unsigned or expiry-less ones are refused', asyn
     assert.equal(await panel.user(cookieOf({ uid: user.id, exp: now - 1 })), null);
     assert.equal(await panel.user(cookieOf({ uid: user.id })), null);
 });
+
+test('notification mailboxes: a full store keeps the existing mailboxes and drops the new one', async () => {
+    const { publish, pull } = await import('../src/notifications.ts');
+    const note = { id: 'n', title: 'Saved' } as any;
+    const batch = publish('mailbox-kept', [note]);
+    for (let index = 0; index < 10_000; index++) publish(`flood-${index}`, [note]);
+    // The store is full: a new visitor's toast is not kept, the earlier ones are.
+    const lost = publish('mailbox-new', [note]);
+    assert.equal(pull('mailbox-new', [lost]).length, 0);
+    assert.equal(pull('mailbox-kept', [batch]).length, 1);
+});

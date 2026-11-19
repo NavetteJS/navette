@@ -444,7 +444,8 @@ async function runBulk(action: CustomizableAction, ctx: Context, each: (record: 
 
 /**
  * Deletes the records selected in a table, one by one (adapter hooks and `authorizeIndividualRecords()` apply), or in one
- * query with `fetchSelectedRecords(false)`; the notification reports the records that could not be deleted.
+ * query with `fetchSelectedRecords(false)`. A selection of more than 100 records, without `authorizeIndividualRecords()`, is deleted
+ * through the adapter's `deleteMany()` by chunks of 1,000 keys, so `delete()` overrides do not run for it; the notification reports the records that could not be deleted.
  */
 export class DeleteBulkAction extends CustomizableAction {
     /** Name of `DeleteBulkAction.make()` without a name. */
