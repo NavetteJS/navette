@@ -3467,7 +3467,7 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
     // Each row renders with its loop variable (`rowLoop` in column state callbacks, `getRowLoop()` elsewhere).
     for (const [rowIndex, record] of page.records.entries()) await withRowLoop(makeRowLoop(rowIndex, page.records.length), async () => {
         const key = adapter.getKey(record);
-        let groupHeader: { key: string | null; title: string | null; label: string | null; description: string | null; collapsible: boolean; keys: string[]; ariaHidden: boolean } | null = null;
+        let groupHeader: { key: string | null; title: string | null; label: string | null; description: string | null; collapsible: boolean; keys: string[]; keysTruncated: boolean; ariaHidden: boolean } | null = null;
         let summaryBefore: { key: string | null; title: string | null } | null = null;
         const groupKey = grouping ? grouping.group.getStringKey(record) : null;
         const groupTitle = grouping ? grouping.group.getTitle(record) : null;
@@ -3476,10 +3476,13 @@ export async function renderTable<R>(table: Table<R>, host: TableHost, adapter: 
             const query = getTableQuery(table, host);
             const label = grouping.group.isTitlePrefixedWithLabel() ? grouping.group.getLabel() : null;
             const description = grouping.group.getDescription(record);
+            // One key more than the limit tells that the group is too large for its checkbox to select it whole.
+            const groupLimit = table.getMaxSelectableRecords() ?? GROUP_SELECT_LIMIT;
+            const groupKeys: string[] = !groupsOnly && hasBulk ? await adapter.listKeys({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => grouping.group.scope(q, groupKey)], limit: groupLimit + 1 }) : [];
             if (!groupsOnly) groupHeader = {
                 key: groupKey, title: groupTitle, label, description, collapsible: grouping.group.isCollapsible(),
                 // Keys of the whole group (not only the page), for its "select all" checkbox.
-                keys: hasBulk ? await adapter.listKeys({ ...query, modifiers: [...(query.modifiers ?? []), (q: any) => grouping.group.scope(q, groupKey)], limit: table.getMaxSelectableRecords() ?? GROUP_SELECT_LIMIT }) : [],
+                keys: groupKeys.slice(0, groupLimit), keysTruncated: table.getMaxSelectableRecords() === null && groupKeys.length > groupLimit,
                 // Header with nothing to announce: hidden from assistive technologies.
                 ariaHidden: !(filled(groupTitle) || filled(label) || filled(description) || grouping.group.isCollapsible() || selectable),
             };

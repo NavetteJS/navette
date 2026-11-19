@@ -694,7 +694,7 @@
                             <tr<% if (group.ariaHidden) { %> aria-hidden="true"<% } %> class="<%- cls(['nv-ta-row nv-ta-group-header-row', { 'nv-ta-group-header-row-with-selection': selectable }]) %>">
                                 <% if (selectable) { %>
                                 <td class="nv-ta-cell nv-ta-group-selection-cell">
-                                    <% if (maxSelectableRecords !== 1) { %><input aria-label="<%= t('navette-tables::table.fields.bulk_select_group.label', { title: group.title ?? '' }) %>" type="checkbox" data-group-selectable-record-keys="<%= JSON.stringify(group.keys) %>" x-on:click="toggleSelectRecords(JSON.parse($el.dataset.groupSelectableRecordKeys))" x-bind:checked="
+                                    <% if (maxSelectableRecords !== 1 && !group.keysTruncated) { %><input aria-label="<%= t('navette-tables::table.fields.bulk_select_group.label', { title: group.title ?? '' }) %>" type="checkbox" data-group-selectable-record-keys="<%= JSON.stringify(group.keys) %>" x-on:click="toggleSelectRecords(JSON.parse($el.dataset.groupSelectableRecordKeys))" x-bind:checked="
                                         const recordsInGroup = JSON.parse($el.dataset.groupSelectableRecordKeys)
 
                                         if (recordsInGroup.length && areRecordsSelected(recordsInGroup)) {

@@ -21,9 +21,9 @@ A Navette application is a Node.js process serving an Express application. Deplo
 
 ## Sessions and framing
 
-A session cookie is signed and expires after a day, or after 30 days when the user ticks "remember me". Failed logins are limited per IP address (five attempts per minute) and per email address (20 per 15 minutes). Both limits are kept in memory: use a shared store when you run several instances.
+A session cookie is signed and expires after a day, or after 30 days when the user ticks "remember me". Cookies issued by earlier versions carry no expiry and are refused: every user signs in again once after the upgrade. Failed logins are limited per IP address (five attempts per minute), per email address and IP address (10 per 15 minutes) and per email address alone (200 per 15 minutes, so that nobody can lock an account out cheaply). Both limits are kept in memory: use a shared store when you run several instances.
 
-Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`, so another site cannot show them in a frame. If your application embeds the panel on purpose, call `panel.allowFraming()`.
+Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff` on their own URLs, so another site cannot show them in a frame. If your application embeds the panel on purpose, call `panel.allowFraming()`.
 
 ## Performance
 
@@ -31,7 +31,7 @@ Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`, so an
 - With `NODE_ENV=production`, the panel serves the minified `livewire.min.js`, keeps template and asset lookups for a few seconds, and compiles views without debug information.
 - On large tables, set `maxSelectableRecords()`: "select all" otherwise reads every key of the query, and a bulk action loads the records chunk by chunk. Deleting, restoring and force-deleting more than 100 selected records (without `authorizeIndividualRecords()`) run one query per 1,000 keys instead of one per record; `fetchSelectedRecords(false)` does it for any selection size.
 - Add database indexes on the columns your tables search and filter on. Searches use `lower(column) like '%term%'`, which no ordinary index can serve: for large tables, use a full-text or trigram index.
-- Widgets refresh every 30 seconds by default; lower `pollingInterval` only where it matters.
+- Widgets refresh every 30 seconds by default (it was 5 seconds): set `pollingInterval = '5s'` on a widget that must stay close to real time.
 
 ## Ensuring that users are authorized to access panels
 

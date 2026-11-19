@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import express from 'express';
 import { WireRuntime } from '@navette-js/wire';
-import { Dashboard, Panel, panelRouter, type AuthProvider } from '../src/index.ts';
+import { Model, ObjectionAdapter, sqlite } from '@navette-js/database';
+import { Dashboard, Panel, Resource, panelRouter, type AuthProvider } from '../src/index.ts';
 
 const auth: AuthProvider = { attempt: async () => null, find: async () => null };
 
@@ -16,6 +17,8 @@ const request = async (panel: Panel, path = '/hardening/login') => {
 test('panel responses refuse framing and sniffing, unless framing is allowed', async () => {
     const make = () => Panel.make().id('hardening').path('hardening').key('hardening-secret-key').authGuard('hardening').auth(auth).login().pages([Dashboard]);
     const strict = await request(make());
+    const outside = await request(make(), '/elsewhere');
+    assert.equal(outside.headers.get('x-frame-options'), null, 'only the panel\'s own URLs are covered');
     assert.equal(strict.headers.get('x-frame-options'), 'DENY');
     assert.equal(strict.headers.get('x-content-type-options'), 'nosniff');
     const framed = await request(make().allowFraming());
@@ -38,7 +41,7 @@ test('a component update mixing snapshots of two tenants is refused', async () =
     const teams = [{ id: 1, name: 'Red' }, { id: 2, name: 'Blue' }];
     const ada = { id: 1, name: 'Ada', email: 'ada@example.com' };
     const panel = Panel.make().id('mixed').path('app').key('mixed-secret-key-0123').authGuard('mixed').auth({ attempt: async () => null, find: async () => ada }).pages([Dashboard])
-        .tenant({ getTenants: () => teams, find: (key: string) => teams.find((team) => String(team.id) === key) ?? null, canAccess: () => true, getKey: (team: any) => String(team.id), getName: (team: any) => team.name } as any);
+        .tenant({ getTenants: () => teams, find: (key: string) => { const team = teams.find((entry) => String(entry.id) === key); return team ? { ...team } : null; }, canAccess: () => true, getKey: (team: any) => String(team.id), getName: (team: any) => team.name } as any);
     const app = express();
     app.use(panelRouter(panel, new WireRuntime({ key: 'k' })));
     const server = app.listen(0);
@@ -56,4 +59,25 @@ test('a component update mixing snapshots of two tenants is refused', async () =
         assert.equal((await post([pick(first), pick(second)])).status, 403);
         assert.equal((await post([pick(first)])).status, 200);
     } finally { server.close(); }
+});
+
+test('tenant scope: nothing leaks in a request without tenant, scripts outside a request are not filtered', async () => {
+    class Doc extends Model { static tableName = 'docs'; }
+    const db = sqlite(':memory:');
+    await db.schema.createTable('docs', (table) => { table.increments('id'); table.string('title'); table.integer('team_id'); });
+    await db('docs').insert([{ title: 'Red doc', team_id: 1 }, { title: 'Blue doc', team_id: 2 }]);
+    Doc.knex(db);
+    class Docs extends Resource { static slug = 'docs'; static adapter = new ObjectionAdapter(Doc); }
+    const teams = [{ id: 1, name: 'Red' }, { id: 2, name: 'Blue' }];
+    const panel = Panel.make().id('scoped').path('scoped').key('scoped-secret-key-0123').authGuard('scoped').auth(auth).resources([Docs])
+        .tenant({ getTenants: () => teams, find: (key: string) => teams.find((team) => String(team.id) === key) ?? null, canAccess: () => true, getKey: (team: any) => String(team.id), getName: (team: any) => team.name } as any, { ownershipColumn: 'team_id' });
+    panelRouter(panel, new WireRuntime({ key: 'k' }));
+    try {
+        assert.equal((await Docs.adapter.paginate({ page: 1, perPage: 10 })).records.length, 2, 'outside a request: unfiltered, like a seeder');
+        const { runWithPanel } = await import('../src/plugins.ts');
+        const inRequest = await runWithPanel(panel, () => Docs.adapter.paginate({ page: 1, perPage: 10 }));
+        assert.equal(inRequest.records.length, 0, 'in a request without tenant: nothing');
+        const red = await runWithPanel(panel, () => panel.withTenant(teams[0], () => Docs.adapter.paginate({ page: 1, perPage: 10 })));
+        assert.deepEqual(red.records.map((record: any) => record.title), ['Red doc']);
+    } finally { await db.destroy(); }
 });

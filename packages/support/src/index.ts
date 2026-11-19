@@ -574,7 +574,7 @@ export type ComponentRenderer = (props: Record<string, any> & { attributes: Reco
  * `component()`, and EJS files of the directories given to `components()`.
  */
 /** Production processes keep file lookups and compile templates without debug information. */
-const PRODUCTION = process.env.NODE_ENV === 'production';
+const isProduction = () => process.env.NODE_ENV === 'production';
 export class ViewRegistry {
     private namespaces = new Map<string, string>();
     private overrides: string[] = [];
@@ -606,10 +606,10 @@ export class ViewRegistry {
     private componentFile(name: string): string | null {
         if (!/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/.test(name)) return null;
         // Files do not appear while a production process runs: lookups are kept.
-        if (PRODUCTION && this.componentFiles.has(name)) return this.componentFiles.get(name)!;
+        if (isProduction() && this.componentFiles.has(name)) return this.componentFiles.get(name)!;
         let found: string | null = null;
         for (const dir of this.componentDirectories) { const file = path.join(dir, ...name.split('.')) + '.ejs'; if (existsSync(file)) { found = file; break; } }
-        if (PRODUCTION) this.componentFiles.set(name, found);
+        if (isProduction()) this.componentFiles.set(name, found);
         return found;
     }
     /** Renders a component tag. HTML, Alpine and Livewire attributes go to the attribute bag; the others become camelCased props. */
@@ -638,7 +638,7 @@ export class ViewRegistry {
     share(data: Record<string, unknown>): this { Object.assign(this.shared, data); return this; }
 
     resolve(view: string): string {
-        const known = PRODUCTION ? this.resolved.get(view) : undefined;
+        const known = isProduction() ? this.resolved.get(view) : undefined;
         if (known) return known;
         const [ns, name] = view.split('::');
         const rel = name.replace(/\./g, '/') + '.ejs';
@@ -649,7 +649,7 @@ export class ViewRegistry {
             if (!base) throw new Error(`Unknown view namespace: ${ns}`);
             file = path.join(base, rel);
         }
-        if (PRODUCTION) this.resolved.set(view, file);
+        if (isProduction()) this.resolved.set(view, file);
         return file;
     }
     render(view: string, data: Record<string, unknown> = {}): string { return this.renderFile(this.resolve(view), data, view); }
@@ -657,7 +657,7 @@ export class ViewRegistry {
     renderFile(file: string, data: Record<string, unknown> = {}, cacheKey = file): string {
         let fn = this.compiled.get(cacheKey);
         if (!fn) {
-            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, compileDebug: !PRODUCTION });
+            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, compileDebug: !isProduction() });
             this.compiled.set(cacheKey, fn);
         }
         return fn(this.templateData(data));
@@ -671,7 +671,7 @@ export class ViewRegistry {
     async renderFileAsync(file: string, data: Record<string, unknown> = {}, cacheKey = file): Promise<string> {
         let fn = this.compiledAsync.get(cacheKey);
         if (!fn) {
-            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, async: true, compileDebug: !PRODUCTION });
+            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, async: true, compileDebug: !isProduction() });
             this.compiledAsync.set(cacheKey, fn);
         }
         return fn(this.templateData(data));

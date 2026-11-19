@@ -2181,8 +2181,10 @@ export class Dashboard extends Page {
 }
 
 const loginThrottle = new Throttle();
-/** Failed logins per email address, whatever the IP address: slows down attacks spread over many addresses. */
-const accountThrottle = new Throttle(20, 15 * 60_000);
+/** Failed logins per email address and IP address. */
+const accountThrottle = new Throttle(10, 15 * 60_000);
+/** The same per email address alone, for attacks spread over many addresses: high enough that nobody can lock an account out cheaply. */
+const accountGlobalThrottle = new Throttle(200, 15 * 60_000);
 
 /** Page with the simple layout (login, registration…). */
 export abstract class SimplePage extends BasePage {
@@ -2694,8 +2696,9 @@ export class Login extends SimplePage {
             Notification.make().danger().title(t('navette-actions::notifications.throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('navette-actions::notifications.throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
             return;
         }
-        const accountKey = `${panel.getId()}:${String(this.data.email).trim().toLowerCase()}`;
-        const accountWait = accountThrottle.availableIn(accountKey);
+        const email = `${panel.getId()}:${String(this.data.email).trim().toLowerCase()}`;
+        const accountKey = `${email}|${req.ip ?? ''}`;
+        const accountWait = Math.max(accountThrottle.availableIn(accountKey), accountGlobalThrottle.availableIn(email));
         if (accountWait > 0) {
             Notification.make().danger().title(t('navette-actions::notifications.throttled.title', { seconds: accountWait, minutes: Math.ceil(accountWait / 60) })).body(t('navette-actions::notifications.throttled.body', { seconds: accountWait, minutes: Math.ceil(accountWait / 60) })).send();
             return;
@@ -2703,7 +2706,7 @@ export class Login extends SimplePage {
         // The password is checked on every submission, the challenge's included: a password changed meanwhile ends it.
         const user = await panel.getAuth().attempt(String(this.data.email), String(this.data.password));
         // A valid account that may not use this panel gets the same message as wrong credentials.
-        if (!user || !(await panel.userCanAccess(user))) { accountThrottle.hit(accountKey); this.cancelMultiFactorChallenge(); this.addError('data.email', t('navette-panels::auth/pages/login.messages.failed')); return; }
+        if (!user || !(await panel.userCanAccess(user))) { accountThrottle.hit(accountKey); accountGlobalThrottle.hit(email); this.cancelMultiFactorChallenge(); this.addError('data.email', t('navette-panels::auth/pages/login.messages.failed')); return; }
         if (this.isUndertakingMultiFactorAuthentication() && String(this._multiFactorUser!.id) === String(user.id)) {
             const challenge = panel.getMultiFactorChallenge();
             const challengeWait = challenge.hitRateLimiter(user);
@@ -5891,7 +5894,14 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             const adapter = resource.adapter as any;
             if (typeof adapter?.scopeToTenant !== 'function') throw new Error(`Resource ${resource.name}: its adapter does not support tenant scoping (scopeToTenant).`);
             // A resource registered in several panels: the tenant is the one of the panel serving the request.
-            adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => { const current = getCurrentPanel() ?? panel; const tenant = current.hasTenancy() ? current.getTenant() : null; return tenant ? current.getTenantUrlKey(tenant) : current.hasTenancy() ? false : null; });
+            adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => {
+                // Outside a request (seeders, scripts, queued jobs) nothing is filtered; in one, no tenant means no record.
+                const requestPanel = getCurrentPanel();
+                const current = requestPanel ?? panel;
+                const tenant = current.hasTenancy() ? current.getTenant() : null;
+                if (tenant) return current.getTenantUrlKey(tenant);
+                return requestPanel && requestPanel.hasTenancy() ? false : null;
+            });
         }
     }
     const router = express.Router();
@@ -5965,12 +5975,6 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // A panel on its own domains: other hosts go to the next routes (another panel, the application).
     const domains = panel.getDomains();
     if (domains.length) router.use((req, _res, next) => next(domains.includes(req.hostname) ? undefined : 'router'));
-    // Clickjacking and content sniffing protections, unless the application already set them or allowed framing.
-    router.use((_req, res, next) => {
-        if (!panel.isFramingAllowed() && !res.getHeader('X-Frame-Options')) res.setHeader('X-Frame-Options', 'DENY');
-        if (!res.getHeader('X-Content-Type-Options')) res.setHeader('X-Content-Type-Options', 'nosniff');
-        next();
-    });
     // CSP nonce set before the panel (`useCspNonce(res, nonce)`): every inline script and style of the panel carries it.
     router.use((_req, res, next) => { let nonce: string | null; try { nonce = getResponseCspNonce(res); } catch (error) { return next(error); } runWithCspNonce(nonce, () => next()); });
     // Front-end files: the compiled CSS and JavaScript (versioned URLs, cached for a year) and, under `navette/`, the optional
@@ -5987,6 +5991,13 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // Everything the panel serves runs as part of this panel (`getCurrentPanel()`): a resource or page registered in several
     // panels takes its URLs and authorization from it.
     router.use((req, _res, next) => (belongsToPanel(req.path) ? runWithPanel(panel, () => next()) : next()));
+    // Clickjacking and content sniffing protections, unless the application already set them or allowed framing.
+    router.use((req, res, next) => {
+        if (!belongsToPanel(req.path)) return next();
+        if (!panel.isFramingAllowed() && !res.getHeader('X-Frame-Options')) res.setHeader('X-Frame-Options', 'DENY');
+        if (!res.getHeader('X-Content-Type-Options')) res.setHeader('X-Content-Type-Options', 'nosniff');
+        next();
+    });
     // `panel.middleware()`: every request of the panel but component updates (only the persistent ones run there). A
     // nonce they set with `useCspNonce()` applies to the rest of the request.
     router.use((req, res, next) => {
@@ -6019,7 +6030,8 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
         }
         if (paths.size === 0) paths.add('');
         const tenants = await Promise.all([...paths].map((path) => tenantFromPath(path, ctx.user, req.hostname)));
-        if (panel.hasTenancy() && tenants.some((tenant) => tenant !== tenants[0])) throw new WireError(403, 'Components of several tenants.');
+        const tenantKeys = tenants.map((tenant) => (tenant ? String(panel.getTenantUrlKey(tenant as any)) : null));
+        if (panel.hasTenancy() && tenantKeys.some((key) => key !== tenantKeys[0])) throw new WireError(403, 'Components of several tenants.');
         ctx.tenant = tenants[0] ?? null;
         // Persistent middleware (`middleware([...], true)`, `authMiddleware([...], true)`…) run on component updates too.
         res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };

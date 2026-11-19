@@ -66,3 +66,25 @@ test('diffForHumans() is localized, keeps the rounding rules and handles the fut
     assert.equal(localeDirection('fr'), 'ltr');
     assert.equal(localeDirection('not a locale'), 'ltr');
 });
+
+test('production keeps view lookups until an override or namespace changes', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const { ViewRegistry } = await import('../src/index.ts');
+    const base = mkdtempSync(path.join(tmpdir(), 'nv-views-'));
+    const original = path.join(base, 'base');
+    const override = path.join(base, 'override');
+    mkdirSync(path.join(original), { recursive: true });
+    mkdirSync(path.join(override, 'app'), { recursive: true });
+    writeFileSync(path.join(original, 'page.ejs'), 'base');
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+        const views = new ViewRegistry().namespace('app', original);
+        assert.equal(views.resolve('app::page'), path.join(original, 'page.ejs'));
+        writeFileSync(path.join(override, 'app', 'page.ejs'), 'override');
+        views.overrideFrom(override);
+        assert.equal(views.resolve('app::page'), path.join(override, 'app', 'page.ejs'), 'overrideFrom() clears the kept lookups');
+    } finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
+});

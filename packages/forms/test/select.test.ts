@@ -101,3 +101,10 @@ test('Select: many-to-many relationship is loaded and synced after save', async 
     await saveSchemaRelationships(schema, post);
     assert.deepEqual((await db('post_tag').where('post_id', 1).orderBy('tag_id')).map((row: any) => row.tag_id), [2, 3]);
 });
+
+test('table-select definitions: the registry keeps the most recent ones', async () => {
+    const { registerTableSelectDefinition, getTableSelectDefinition } = await import('../src/table-select.ts');
+    for (let index = 0; index < 2100; index++) registerTableSelectDefinition({ id: `cap-${index}` } as any);
+    assert.equal(getTableSelectDefinition('cap-0'), null);
+    assert.ok(getTableSelectDefinition('cap-2099'));
+});
