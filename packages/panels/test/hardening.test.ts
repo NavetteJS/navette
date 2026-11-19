@@ -37,7 +37,7 @@ test('in production, a panel on the development key or a short one refuses to bo
     } finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous; }
 });
 
-test('a component update mixing snapshots of two tenants is refused', async () => {
+test('a component update mixing snapshots of two tenants runs under one of them (persistent topbar after a tenant switch)', async () => {
     const teams = [{ id: 1, name: 'Red' }, { id: 2, name: 'Blue' }];
     const ada = { id: 1, name: 'Ada', email: 'ada@example.com' };
     const panel = Panel.make().id('mixed').path('app').key('mixed-secret-key-0123').authGuard('mixed').auth({ attempt: async () => null, find: async () => ada }).pages([Dashboard])
@@ -56,7 +56,7 @@ test('a component update mixing snapshots of two tenants is refused', async () =
         const token = first.match(/<meta name="csrf-token" content="([^"]+)"/)![1];
         const jar = [cookie, ...pages[0].headers.getSetCookie().map((value) => value.split(';')[0])].join('; ');
         const post = (snapshots: string[]) => fetch(`${base}/app/livewire/update`, { method: 'POST', headers: { cookie: jar, 'content-type': 'application/json' }, body: JSON.stringify({ _token: token, components: snapshots.map((snapshot) => ({ snapshot, updates: {}, calls: [] })) }) });
-        assert.equal((await post([pick(first), pick(second)])).status, 403);
+        assert.equal((await post([pick(first), pick(second)])).status, 200);
         assert.equal((await post([pick(first)])).status, 200);
     } finally { server.close(); }
 });
@@ -121,4 +121,32 @@ test('widgets and the global search need a tenant, a verified email and the requ
     search.search = 'anything';
     search._ctx = { panel: tenantPanel, user, tenant: null, req: {} } as any;
     assert.equal(await search.render(), '<div class="nv-global-search-ctn"></div>');
+});
+
+test('sessions renew themselves once half of their life has passed', async () => {
+    const ada = { id: 1, name: 'Ada', email: 'ada@example.com' };
+    const panel = Panel.make().id('sliding').path('sliding').key('sliding-secret-key-0123').authGuard('sliding').auth({ attempt: async () => null, find: async () => ada });
+    const cookies: string[] = [];
+    const response = (): any => ({ cookie: (name: string, value: string) => { cookies.push(`${name}=${value}`); }, req: {}, headersSent: false });
+    const realNow = Date.now;
+    try {
+        const issued = realNow();
+        Date.now = () => issued;
+        let cookie = '';
+        panel.logIn({ cookie: (name: string, value: string) => { cookie = `${name}=${value}`; }, req: {} } as any, ada, false);
+        const request = () => ({ headers: { cookie } }) as any;
+        // Fresh: nothing to renew.
+        let req = request();
+        await panel.user(req);
+        panel.renewSession(req, response(), ada);
+        assert.equal(cookies.length, 0);
+        // More than half of the day later: a new cookie with a later expiry.
+        Date.now = () => issued + 13 * 3600_000;
+        req = request();
+        assert.ok(await panel.user(req));
+        panel.renewSession(req, response(), ada);
+        assert.equal(cookies.length, 1);
+        const renewed = JSON.parse(Buffer.from(cookies[0].split('=')[1].split('.')[0], 'base64url').toString());
+        assert.ok(renewed.exp > Math.floor((issued + 24 * 3600_000) / 1000));
+    } finally { Date.now = realNow; }
 });

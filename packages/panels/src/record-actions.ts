@@ -465,7 +465,7 @@ export class DeleteBulkAction extends CustomizableAction {
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const adapter = ctx.livewire.getDataAdapterForTable();
-                await runBulk(action, ctx as Context, (record) => adapter.delete(adapter.getKey(record)), (keys) => adapter.deleteMany(keys), true);
+                await runBulk(action, ctx as Context, (record) => adapter.delete(adapter.getKey(record), { verified: true }), (keys) => adapter.deleteMany(keys), true);
             });
         // `configureUsing()` setups run after the default setup.
         return configured(action);
@@ -493,7 +493,7 @@ export class RestoreBulkAction extends CustomizableAction {
             .action(async (ctx) => {
                 const adapter: DataAdapter = ctx.livewire.getDataAdapterForTable();
                 // Only deleted records are restored; the others count as failures.
-                await runBulk(action, ctx as Context, (record) => adapter.isTrashed(record) && adapter.restore(adapter.getKey(record)),
+                await runBulk(action, ctx as Context, (record) => adapter.isTrashed(record) && adapter.restore(adapter.getKey(record), { verified: true }),
                     async (keys) => (adapter.restoreMany ? adapter.restoreMany(keys) : (await Promise.all(keys.map((key) => adapter.restore(key)))).filter(Boolean).length), true);
             });
         // `configureUsing()` setups run after the default setup.
@@ -521,7 +521,7 @@ export class ForceDeleteBulkAction extends CustomizableAction {
             .deselectRecordsAfterCompletion()
             .action(async (ctx) => {
                 const adapter: DataAdapter = ctx.livewire.getDataAdapterForTable();
-                await runBulk(action, ctx as Context, (record) => adapter.forceDelete(adapter.getKey(record)),
+                await runBulk(action, ctx as Context, (record) => adapter.forceDelete(adapter.getKey(record), { verified: true }),
                     async (keys) => (adapter.forceDeleteMany ? adapter.forceDeleteMany(keys) : (await Promise.all(keys.map((key) => adapter.forceDelete(key)))).filter(Boolean).length), true);
             });
         // `configureUsing()` setups run after the default setup.

@@ -118,3 +118,14 @@ test('delete(), restore() and forceDelete() refuse records hidden by `modify`, l
     assert.equal(await scoped.update(hidden, { name: 'Changed' }), null);
     assert.notEqual((await db('people').where('id', visible).first()).name, 'Changed');
 });
+
+test('`verified: true` skips the scope lookup for a record just read through the adapter', async () => {
+    const [{ id }] = await db('people').orderBy('id').limit(1);
+    const scoped = new ObjectionAdapter(Person, { modify: (query) => { query.whereNot('people.id', -1); } });
+    const queries: string[] = [];
+    db.on('query', (query: { sql: string }) => queries.push(query.sql));
+    await scoped.forceDelete(id, { verified: true });
+    db.removeAllListeners('query');
+    assert.equal(queries.filter((sql) => /^select/i.test(sql)).length, 0);
+    assert.equal(await db('people').where('id', id).first(), undefined);
+});

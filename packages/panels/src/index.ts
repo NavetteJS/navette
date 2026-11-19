@@ -1136,7 +1136,8 @@ export class Panel {
     private sign(value: string): string { return createHmac('sha256', this._key).update(value).digest('base64url'); }
     logIn(res: Response, user: User, remember: boolean): void {
         // The signature is not enough on its own: a stolen cookie stops working at `exp` (a day, or 30 days with "remember me").
-        const value = Buffer.from(JSON.stringify({ uid: user.id, exp: Math.floor(Date.now() / 1000) + (remember ? 30 * 86400 : 86400) })).toString('base64url');
+        const now = Math.floor(Date.now() / 1000);
+        const value = Buffer.from(JSON.stringify({ uid: user.id, iat: now, exp: now + (remember ? 30 * 86400 : 86400), rem: remember ? 1 : 0 })).toString('base64url');
         res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}), ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
     }
     logOut(res: Response): void { res.clearCookie(this.getSessionCookieName(), this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}); }
@@ -1149,8 +1150,18 @@ export class Panel {
         try {
             const session = JSON.parse(Buffer.from(value, 'base64url').toString());
             if (typeof session?.exp !== 'number' || session.exp < Date.now() / 1000) return null;
-            return await this.getAuth().find(session.uid);
+            const user = await this.getAuth().find(session.uid);
+            if (user) this._sessions.set(req, session);
+            return user;
         } catch { return null; }
+    }
+    private _sessions = new WeakMap<object, { iat?: number; exp: number; rem?: number }>();
+    /** Sliding expiry: once half of the session's life has passed, an active user gets a fresh cookie. */
+    renewSession(req: Request, res: Response, user: User): void {
+        const session = this._sessions.get(req);
+        if (!session || typeof session.iat !== 'number' || typeof res?.cookie !== 'function' || res.headersSent) return;
+        const now = Date.now() / 1000;
+        if (now - session.iat > (session.exp - session.iat) / 2) this.logIn(res, user, session.rem === 1);
     }
 }
 
@@ -5919,6 +5930,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // The notifications mailbox is per browser: it is keyed by the CSRF token.
     const context = async (req: Request, res: Response): Promise<PanelContext> => {
         const user = await panel.user(req);
+        if (user) panel.renewSession(req, res, user);
         // Signed in through a shared session, but not allowed into this panel: treated as a guest that gets 403 pages.
         const denied = user !== null && !(await panel.userCanAccess(user));
         return { req, res, panel, user: denied ? null : user, denied, mailbox: csrfToken(req, res), tenant: null };
@@ -6032,16 +6044,15 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // An update's tenant is the one of the page sending it (from the signed snapshot URL), if the user is a member.
     const wireContext = async (req: Request, res: Response): Promise<PanelContext> => {
         const ctx = await context(req, res);
-        // One tenant for the whole request: every component of the batch must come from a page of the same tenant.
         const paths = new Set<string>();
         for (const component of Array.isArray(req.body?.components) ? req.body.components : []) {
             try { paths.add(String(JSON.parse(component?.snapshot ?? '{}')?.memo?.path ?? '')); } catch { paths.add(''); }
         }
         if (paths.size === 0) paths.add('');
         const tenants = await Promise.all([...paths].map((path) => tenantFromPath(path, ctx.user, req.hostname)));
-        const tenantKeys = tenants.map((tenant) => (tenant ? String(panel.getTenantUrlKey(tenant as any)) : null));
-        if (panel.hasTenancy() && tenantKeys.some((key) => key !== tenantKeys[0])) throw new WireError(403, 'Components of several tenants.');
-        ctx.tenant = tenants[0] ?? null;
+        // The whole request runs under one tenant the user belongs to (each path was checked). Persistent components such as the topbar
+        // keep the path of the page they were first shown on, so a batch may mix paths: the first resolved tenant wins, never "no tenant".
+        ctx.tenant = tenants.find((tenant) => tenant) ?? null;
         // Persistent middleware (`middleware([...], true)`, `authMiddleware([...], true)`…) run on component updates too.
         res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };
         if (!(await applyPanelMiddleware(middlewareFor(panel.getMiddleware(), 'component'), req, res)) || !(await runAccessMiddleware(req, res, ctx, 'component'))) throw new WireError(499, 'Answered by a panel middleware.');
@@ -6369,7 +6380,7 @@ const DEVELOPMENT_KEY = 'development-key-replace-me';
 function assertAuthCapabilities(panel: Panel): void {
     // A known or short key lets anyone forge sessions, reset tokens and component snapshots.
     // Links sent by email must not be built from the Host header (see `absoluteUrl()`): refuse to boot rather than fail when a user asks for one.
-    if (process.env.NODE_ENV === 'production' && !panel.getAppUrl() && (panel.hasPasswordReset() || panel.hasEmailVerification())) throw new Error(`Panel "${panel.getId()}": set appUrl() to send password reset or email verification links in production.`);
+    if (process.env.NODE_ENV === 'production' && !panel.getAppUrl() && (panel.hasPasswordReset() || panel.hasEmailVerification() || panel.hasEmailChangeVerification())) throw new Error(`Panel "${panel.getId()}": set appUrl() to send password reset, email verification or email change links in production.`);
     if (process.env.NODE_ENV === 'production' && (panel.getAuthKey() === DEVELOPMENT_KEY || panel.getAuthKey().length < 16)) throw new Error(`Panel "${panel.getId()}": set a secret key of at least 16 characters with key() (for example from APP_KEY) before running in production.`);
     if (panel.allowsGuests() && panel.hasTenancy()) throw new Error('guestAccess() is not available in a multi-tenant panel: tenants belong to signed-in users.');
     for (const provider of panel.getMultiFactorAuthenticationProviders()) provider.checkConfiguration?.(panel);

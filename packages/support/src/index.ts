@@ -573,7 +573,7 @@ export type ComponentRenderer = (props: Record<string, any> & { attributes: Reco
  * Views may use component tags (`<x-section heading="Orders">…</x-section>`): built-in components, components registered with
  * `component()`, and EJS files of the directories given to `components()`.
  */
-/** Production processes keep file lookups and compile templates without debug information. */
+/** Production processes keep file lookups. */
 const isProduction = () => process.env.NODE_ENV === 'production';
 export class ViewRegistry {
     private namespaces = new Map<string, string>();
@@ -657,7 +657,7 @@ export class ViewRegistry {
     renderFile(file: string, data: Record<string, unknown> = {}, cacheKey = file): string {
         let fn = this.compiled.get(cacheKey);
         if (!fn) {
-            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, compileDebug: !isProduction() });
+            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file });
             this.compiled.set(cacheKey, fn);
         }
         return fn(this.templateData(data));
@@ -671,7 +671,7 @@ export class ViewRegistry {
     async renderFileAsync(file: string, data: Record<string, unknown> = {}, cacheKey = file): Promise<string> {
         let fn = this.compiledAsync.get(cacheKey);
         if (!fn) {
-            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, async: true, compileDebug: !isProduction() });
+            fn = ejs.compile(compileComponentTags(readFileSync(file, 'utf8'), file), { filename: file, async: true });
             this.compiledAsync.set(cacheKey, fn);
         }
         return fn(this.templateData(data));

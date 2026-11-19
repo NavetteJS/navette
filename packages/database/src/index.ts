@@ -224,6 +224,7 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         copy.columnScopes = [...this.columnScopes, { column, value }];
         return copy;
     }
+    /** `verified: true` (on `delete()`, `restore()`, `forceDelete()`): the record was just read through this adapter, so the scope check is skipped. */
     /** Whether a record is outside the tenant, the column scopes (`scopedTo()`) or `modify`: writes to it are refused. */
     private async isOutOfScope(key: string | number): Promise<boolean> {
         const scoped = this.columnScopes.length > 0 || this.modify !== null || (this.tenantScope?.key() ?? null) !== null;
@@ -510,18 +511,18 @@ export class ObjectionAdapter<M extends Model> implements DataAdapter<M> {
         return ((await this.query().patchAndFetchById(key, data as any)) as unknown as M | undefined) ?? null;
     }
     /** With soft deletes, the record is timestamped instead of removed. */
-    async delete(key: string | number): Promise<boolean> {
-        if (await this.isOutOfScope(key)) return false;
+    async delete(key: string | number, options: { verified?: boolean } = {}): Promise<boolean> {
+        if (!options.verified && (await this.isOutOfScope(key))) return false;
         if (this.softDeletes) return (await this.query().findById(key).whereNull(this.softDeletes).patch({ [this.softDeletes]: this.now() } as any)) > 0;
         return (await this.query().deleteById(key)) > 0;
     }
     supportsSoftDeletes(): boolean { return this.softDeletes !== null; }
     isTrashed(record: M): boolean { return this.softDeletes !== null && (record as any)?.[this.softDeletes] != null; }
-    async restore(key: string | number): Promise<boolean> {
-        if (!this.softDeletes || (await this.isOutOfScope(key))) return false;
+    async restore(key: string | number, options: { verified?: boolean } = {}): Promise<boolean> {
+        if (!this.softDeletes || (!options.verified && (await this.isOutOfScope(key)))) return false;
         return (await this.query().findById(key).whereNotNull(this.softDeletes).patch({ [this.softDeletes]: null } as any)) > 0;
     }
-    async forceDelete(key: string | number): Promise<boolean> { return !(await this.isOutOfScope(key)) && (await this.query().deleteById(key)) > 0; }
+    async forceDelete(key: string | number, options: { verified?: boolean } = {}): Promise<boolean> { return (options.verified || !(await this.isOutOfScope(key))) && (await this.query().deleteById(key)) > 0; }
     async exists(column: string, value: unknown, exceptKey: string | number | null = null): Promise<boolean> {
         const q = this.query().where(column, value as any);
         if (exceptKey !== null) q.whereNot(this.keyColumn, exceptKey);
