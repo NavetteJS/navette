@@ -14,7 +14,7 @@ useColorManager(new ColorManager());
 views.namespace('scenes', fileURLToPath(new URL('./views/scenes', import.meta.url)));
 views.share({ ui });
 
-const runtime = new WireRuntime({ key: process.env.APP_KEY ?? 'cle-de-developpement-a-remplacer' })
+const runtime = new WireRuntime({ key: (process.env.APP_KEY ?? (process.env.NODE_ENV === 'production' ? (() => { throw new Error('APP_KEY is not set.'); })() : 'development-key-replace-me')) })
     .register('counter', Counter)
     .register('live-field', LiveField);
 

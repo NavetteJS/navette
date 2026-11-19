@@ -217,7 +217,7 @@ export class Panel {
     private _font = { family: 'Inter Variable', url: null as string | null, preconnect: null as string | null };
     private _login: typeof Login | null = null;
     private _auth: AuthProvider | null = null;
-    private _key = 'cle-de-developpement-a-remplacer';
+    private _key = DEVELOPMENT_KEY;
     private _sessionStore: SessionStore | null = null;
     /** Where per-browser data is kept (persisted table filters, search and sort): in memory by default. */
     sessionStore(store: SessionStore): this { this._sessionStore = store; return this; }
@@ -323,6 +323,10 @@ export class Panel {
     login(page: typeof Login = Login): this { this._login = page; return this; }
     auth(provider: AuthProvider): this { this._auth = provider; return this; }
     key(key: string): this { this._key = key; return this; }
+    private _allowFraming = false;
+    /** The panel refuses to be shown in a frame of another site (`X-Frame-Options: DENY`, `frame-ancestors 'none'`) unless this is called. */
+    allowFraming(allow = true): this { this._allowFraming = allow; return this; }
+    isFramingAllowed(): boolean { return this._allowFraming; }
     private _authGuard: string | null = 'web';
     private _canAccess: ((user: User, panel: Panel) => MaybePromise<boolean>) | null = null;
     /**
@@ -1120,7 +1124,8 @@ export class Panel {
     // --- session: an HMAC-signed cookie holding the user id
     private sign(value: string): string { return createHmac('sha256', this._key).update(value).digest('base64url'); }
     logIn(res: Response, user: User, remember: boolean): void {
-        const value = Buffer.from(JSON.stringify({ uid: user.id })).toString('base64url');
+        // The signature is not enough on its own: a stolen cookie stops working at `exp` (a day, or 30 days with "remember me").
+        const value = Buffer.from(JSON.stringify({ uid: user.id, exp: Math.floor(Date.now() / 1000) + (remember ? 30 * 86400 : 86400) })).toString('base64url');
         res.cookie(this.getSessionCookieName(), `${value}.${this.sign(value)}`, { httpOnly: true, sameSite: 'lax', secure: res.req?.secure === true, ...(this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}), ...(remember ? { maxAge: 1000 * 60 * 60 * 24 * 30 } : {}) });
     }
     logOut(res: Response): void { res.clearCookie(this.getSessionCookieName(), this._sessionCookieDomain ? { domain: this._sessionCookieDomain } : {}); }
@@ -1130,7 +1135,11 @@ export class Panel {
         const [value, mac] = raw.split('.');
         const a = Buffer.from(mac ?? ''), b = Buffer.from(this.sign(value));
         if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-        try { return await this.getAuth().find(JSON.parse(Buffer.from(value, 'base64url').toString()).uid); } catch { return null; }
+        try {
+            const session = JSON.parse(Buffer.from(value, 'base64url').toString());
+            if (typeof session?.exp !== 'number' || session.exp < Date.now() / 1000) return null;
+            return await this.getAuth().find(session.uid);
+        } catch { return null; }
     }
 }
 
@@ -2170,6 +2179,8 @@ export class Dashboard extends Page {
 }
 
 const loginThrottle = new Throttle();
+/** Failed logins per email address, whatever the IP address: slows down attacks spread over many addresses. */
+const accountThrottle = new Throttle(20, 15 * 60_000);
 
 /** Page with the simple layout (login, registration…). */
 export abstract class SimplePage extends BasePage {
@@ -2192,7 +2203,12 @@ function authLink(url: string, label: string, options: { iconName?: string | nul
     return `<a href="${e(url)}" class="${classes.join(' ')}" >${options.iconName ? icon(options.iconName) : ''}<span class="nv-link-label"> ${e(label)} </span></a>`;
 }
 /** Absolute URL for an email: based on `panel.appUrl()`, otherwise the request origin. */
-function absoluteUrl(panel: Panel, req: Request, path: string): string { return `${panel.getAppUrl() ?? `${req.protocol}://${req.get('host')}`}${path}`; }
+function absoluteUrl(panel: Panel, req: Request, path: string): string {
+    const appUrl = panel.getAppUrl();
+    // The Host header is chosen by the sender of the request: in production, a link to it could be pointed at an attacker's site.
+    if (!appUrl && process.env.NODE_ENV === 'production') throw new Error(`Panel "${panel.getId()}": set appUrl() to send links by email in production.`);
+    return `${appUrl ?? `${req.protocol}://${req.get('host')}`}${path}`;
+}
 const registerThrottle = new Throttle(2);
 const passwordResetThrottle = new Throttle(2);
 const verificationThrottle = new Throttle(2);
@@ -2676,10 +2692,16 @@ export class Login extends SimplePage {
             Notification.make().danger().title(t('navette-actions::notifications.throttled.title', { seconds: wait, minutes: Math.ceil(wait / 60) })).body(t('navette-actions::notifications.throttled.body', { seconds: wait, minutes: Math.ceil(wait / 60) })).send();
             return;
         }
+        const accountKey = `${panel.getId()}:${String(this.data.email).trim().toLowerCase()}`;
+        const accountWait = accountThrottle.availableIn(accountKey);
+        if (accountWait > 0) {
+            Notification.make().danger().title(t('navette-actions::notifications.throttled.title', { seconds: accountWait, minutes: Math.ceil(accountWait / 60) })).body(t('navette-actions::notifications.throttled.body', { seconds: accountWait, minutes: Math.ceil(accountWait / 60) })).send();
+            return;
+        }
         // The password is checked on every submission, the challenge's included: a password changed meanwhile ends it.
         const user = await panel.getAuth().attempt(String(this.data.email), String(this.data.password));
         // A valid account that may not use this panel gets the same message as wrong credentials.
-        if (!user || !(await panel.userCanAccess(user))) { this.cancelMultiFactorChallenge(); this.addError('data.email', t('navette-panels::auth/pages/login.messages.failed')); return; }
+        if (!user || !(await panel.userCanAccess(user))) { accountThrottle.hit(accountKey); this.cancelMultiFactorChallenge(); this.addError('data.email', t('navette-panels::auth/pages/login.messages.failed')); return; }
         if (this.isUndertakingMultiFactorAuthentication() && String(this._multiFactorUser!.id) === String(user.id)) {
             const challenge = panel.getMultiFactorChallenge();
             const challengeWait = challenge.hitRateLimiter(user);
@@ -2701,6 +2723,7 @@ export class Login extends SimplePage {
             return;
         }
         loginThrottle.clear(`${panel.getId()}:${req.ip ?? ''}`);
+        accountThrottle.clear(accountKey);
         panel.logIn(res, user, Boolean(this.data.remember));
         this.userUndertakingMultiFactorAuthentication = null;
         this.redirect(panel.getUrl());
@@ -3106,6 +3129,8 @@ export abstract class Widget extends BasePage {
         // A guest only sees widgets in a panel that allows guests (and outside a panel, see `@navette-js/panels/livewire`).
         if (!ctx?.user && !ctx?.panel?.allowsGuests()) throw new WireError(401, 'Unauthenticated.');
         const WidgetClass = this.constructor as typeof Widget;
+        if (ctx.panel.hasTenancy() && !ctx.tenant) throw new WireError(404, 'Tenant not found.');
+        if (ctx.user && ((await ctx.panel.mustVerifyEmail(ctx.user)) || (await ctx.panel.mustSetUpMultiFactorAuthentication(ctx.user)))) throw new WireError(403, 'Account requirements not met.');
         if (!(await ctx.panel.authorize(ctx.user, 'view', { widget: WidgetClass, rule: () => WidgetClass.canView(ctx.user!) }))) throw new WireError(403, 'Forbidden.');
     }
     /** Grid column classes and style: at the `lg` breakpoint, or per breakpoint. */
@@ -5864,7 +5889,7 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
             const adapter = resource.adapter as any;
             if (typeof adapter?.scopeToTenant !== 'function') throw new Error(`Resource ${resource.name}: its adapter does not support tenant scoping (scopeToTenant).`);
             // A resource registered in several panels: the tenant is the one of the panel serving the request.
-            adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => { const current = getCurrentPanel() ?? panel; const tenant = current.hasTenancy() ? current.getTenant() : null; return tenant ? current.getTenantUrlKey(tenant) : null; });
+            adapter.scopeToTenant(resource.tenantOwnershipColumn ?? ownership, () => { const current = getCurrentPanel() ?? panel; const tenant = current.hasTenancy() ? current.getTenant() : null; return tenant ? current.getTenantUrlKey(tenant) : current.hasTenancy() ? false : null; });
         }
     }
     const router = express.Router();
@@ -5938,6 +5963,12 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // A panel on its own domains: other hosts go to the next routes (another panel, the application).
     const domains = panel.getDomains();
     if (domains.length) router.use((req, _res, next) => next(domains.includes(req.hostname) ? undefined : 'router'));
+    // Clickjacking and content sniffing protections, unless the application already set them or allowed framing.
+    router.use((_req, res, next) => {
+        if (!panel.isFramingAllowed() && !res.getHeader('X-Frame-Options')) res.setHeader('X-Frame-Options', 'DENY');
+        if (!res.getHeader('X-Content-Type-Options')) res.setHeader('X-Content-Type-Options', 'nosniff');
+        next();
+    });
     // CSP nonce set before the panel (`useCspNonce(res, nonce)`): every inline script and style of the panel carries it.
     router.use((_req, res, next) => { let nonce: string | null; try { nonce = getResponseCspNonce(res); } catch (error) { return next(error); } runWithCspNonce(nonce, () => next()); });
     // Front-end files: the compiled CSS and JavaScript (versioned URLs, cached for a year) and, under `navette/`, the optional
@@ -5979,9 +6010,15 @@ export function panelRouter(panel: Panel, runtime: WireRuntime): Router {
     // An update's tenant is the one of the page sending it (from the signed snapshot URL), if the user is a member.
     const wireContext = async (req: Request, res: Response): Promise<PanelContext> => {
         const ctx = await context(req, res);
-        let path = '';
-        try { path = String(JSON.parse(req.body?.components?.[0]?.snapshot ?? '{}')?.memo?.path ?? ''); } catch { path = ''; }
-        ctx.tenant = await tenantFromPath(path, ctx.user, req.hostname);
+        // One tenant for the whole request: every component of the batch must come from a page of the same tenant.
+        const paths = new Set<string>();
+        for (const component of Array.isArray(req.body?.components) ? req.body.components : []) {
+            try { paths.add(String(JSON.parse(component?.snapshot ?? '{}')?.memo?.path ?? '')); } catch { paths.add(''); }
+        }
+        if (paths.size === 0) paths.add('');
+        const tenants = await Promise.all([...paths].map((path) => tenantFromPath(path, ctx.user, req.hostname)));
+        if (panel.hasTenancy() && tenants.some((tenant) => tenant !== tenants[0])) throw new WireError(403, 'Components of several tenants.');
+        ctx.tenant = tenants[0] ?? null;
         // Persistent middleware (`middleware([...], true)`, `authMiddleware([...], true)`…) run on component updates too.
         res.locals.navette = { panel, user: ctx.user, tenant: ctx.tenant ?? null };
         if (!(await applyPanelMiddleware(middlewareFor(panel.getMiddleware(), 'component'), req, res)) || !(await runAccessMiddleware(req, res, ctx, 'component'))) throw new WireError(499, 'Answered by a panel middleware.');
@@ -6304,7 +6341,11 @@ export function panelNotFound(panel: Panel): (req: Request, res: Response) => vo
 }
 
 /** Each auth feature requires some auth provider methods: fail at startup rather than on first click. */
+/** Public placeholder key: fine locally, refused in production. */
+const DEVELOPMENT_KEY = 'development-key-replace-me';
 function assertAuthCapabilities(panel: Panel): void {
+    // A known or short key lets anyone forge sessions, reset tokens and component snapshots.
+    if (process.env.NODE_ENV === 'production' && (panel.getAuthKey() === DEVELOPMENT_KEY || panel.getAuthKey().length < 16)) throw new Error(`Panel "${panel.getId()}": set a secret key of at least 16 characters with key() (for example from APP_KEY) before running in production.`);
     if (panel.allowsGuests() && panel.hasTenancy()) throw new Error('guestAccess() is not available in a multi-tenant panel: tenants belong to signed-in users.');
     for (const provider of panel.getMultiFactorAuthenticationProviders()) provider.checkConfiguration?.(panel);
     if (!panel.hasRegistration() && !panel.hasPasswordReset() && !panel.hasEmailVerification() && !panel.hasProfile()) return;

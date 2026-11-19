@@ -332,19 +332,22 @@ const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g,
 /** Inline Markdown: code spans, links, bold, italic, strikethrough and hard line breaks. The text is escaped first. */
 function inlineMarkdown(source: string): string {
     const codes: string[] = [];
+    // Opening tags of explicit links are kept aside so that the later passes (bare URLs, emphasis) never run inside an attribute.
+    const tags: string[] = [];
+    source = source.replace(/[\u0000\u0001]/g, '');
     let text = source.replace(/`([^`]+)`/g, (_, code) => `\u0000${codes.push(`<code>${escapeHtml(code)}</code>`) - 1}\u0000`);
     text = escapeHtml(text);
     text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g, (_, label, href, title) => {
         const url = href.replace(/&amp;/g, '&');
         if (!isSafeUrl(url)) return label;
-        return `<a href="${escapeHtml(url)}"${title ? ` title="${title}"` : ''} rel="noopener noreferrer nofollow">${label}</a>`;
+        return `\u0001${tags.push(`<a href="${escapeHtml(url)}"${title ? ` title="${title}"` : ''} rel="noopener noreferrer nofollow">`) - 1}\u0001${label}</a>`;
     });
     // Bare URLs become links; they stop before an escaped quote or angle bracket.
     text = text.replace(/(^|[\s(])(https?:\/\/(?:(?!&quot;|&lt;|&gt;)[^\s<])*(?:(?!&quot;|&lt;|&gt;)[^\s<.,;:!?)]))/g, (_, before, url) => `${before}<a href="${url}" rel="noopener noreferrer nofollow">${url}</a>`);
     text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/__([^_]+)__/g, '<strong>$1</strong>')
         .replace(/(^|[^\w*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>').replace(/(^|[^\w])_([^_\s][^_]*)_(?=[^\w]|$)/g, '$1<em>$2</em>')
         .replace(/~~([^~]+)~~/g, '<del>$1</del>').replace(/(?: {2,}|\\)\n/g, '<br>\n');
-    return text.replace(/\u0000(\d+)\u0000/g, (_, index) => codes[Number(index)]);
+    return text.replace(/\u0001(\d+)\u0001/g, (_, index) => tags[Number(index)]).replace(/\u0000(\d+)\u0000/g, (_, index) => codes[Number(index)]);
 }
 
 /**

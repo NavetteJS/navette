@@ -19,6 +19,12 @@ A Navette application is a Node.js process serving an Express application. Deplo
 - [ ] No unescaped data in your own HTML
 - [ ] `NODE_ENV=production`
 
+## Sessions and framing
+
+A session cookie is signed and expires after a day, or after 30 days when the user ticks "remember me". Failed logins are limited per IP address (five attempts per minute) and per email address (20 per 15 minutes). Both limits are kept in memory: use a shared store when you run several instances.
+
+Panels send `X-Frame-Options: DENY` and `X-Content-Type-Options: nosniff`, so another site cannot show them in a frame. If your application embeds the panel on purpose, call `panel.allowFraming()`.
+
 ## Ensuring that users are authorized to access panels
 
 In development, it is common to log in with a test account. In production, the [user provider](/panels/users) decides who may log in, and its `find()` method runs on every request: return `null` for accounts that must not use the panel. Then check the [authorization rules](/resources/authorization) of your resources, pages and widgets: without them, every logged-in user can do everything.
@@ -27,7 +33,7 @@ In development, it is common to log in with a test account. In production, the [
 
 The key signs the sessions, the password reset and email verification links (`panel.key()`), the state of the components (`new WireRuntime({ key })`) and the upload URLs (`new UploadStore(dir, key)`). Anyone who knows it can impersonate any user.
 
-The examples fall back to a development key when `APP_KEY` is not set, and so does `Panel` when `key()` is not called. In production, generate a random key, pass it through the environment, never commit it, and refuse to start without it:
+The examples fall back to a development key when `APP_KEY` is not set outside production, and so does `Panel` when `key()` is not called. With `NODE_ENV=production`, a panel left on the development key, or with a key shorter than 16 characters, refuses to boot. In production, generate a random key, pass it through the environment, never commit it, and refuse to start without it:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
@@ -45,7 +51,7 @@ Changing the key logs every user out, and invalidates the links already sent by 
 
 ## Setting the application URL
 
-The links sent by email are built from `appUrl()`. Without it, they use the `Host` header of the request, which a client can forge to send password reset links to its own site. Set it on every panel that sends emails:
+The links sent by email are built from `appUrl()`. Without it, they use the `Host` header of the request, which a client can forge to send password reset links to its own site: with `NODE_ENV=production`, sending such a link without `appUrl()` throws an error. Set it on every panel that sends emails:
 
 ```ts
 panel.appUrl(process.env.APP_URL!); // https://admin.example.com

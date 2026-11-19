@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { Model, ObjectionAdapter, sqlite, type Knex } from '@navette-js/database';
 import { hashPassword, knexAuthProvider, knexTenantProvider, Panel, verifyPassword } from '../src/index.ts';
@@ -90,4 +91,35 @@ test('authentication route slugs can be changed; they are reserved and validated
     assert.equal(panel.getRequestPasswordResetUrl(), '/app/forgot/ask');
     assert.ok(panel.getReservedSegments().has('sign-in') && panel.getReservedSegments().has('forgot') && panel.getReservedSegments().has('logout'));
     assert.throws(() => Panel.make().loginRouteSlug('../admin'), /Invalid route slug/);
+});
+
+test('tenant scope fails closed: without a tenant a multi-tenant resource shows and changes nothing', async () => {
+    const panel = Panel.make().id('closed').path('app').tenant(knexTenantProvider((table) => db(table)), { ownershipColumn: 'team_id' });
+    const red = { id: 7, name: 'Red' };
+    const adapter = new ObjectionAdapter(Project).scopeToTenant('team_id', () => { const tenant = panel.getTenant(); return tenant ? panel.getTenantUrlKey(tenant) : panel.hasTenancy() ? false : null; });
+    const created = await panel.withTenant(red, () => adapter.create({ name: 'Rocket' }));
+    assert.deepEqual((await adapter.paginate({ page: 1, perPage: 10 })).records, []);
+    assert.equal(await adapter.find((created as any).id), null);
+    await assert.rejects(() => adapter.create({ name: 'Orphan' }));
+    // Deletions are scoped to the tenant like updates.
+    const blue = { id: 8, name: 'Blue' };
+    assert.equal(await panel.withTenant(blue, () => adapter.delete((created as any).id)), false);
+    assert.equal(await panel.withTenant(blue, () => adapter.forceDelete((created as any).id)), false);
+    assert.ok(await db('projects').where('id', (created as any).id).first());
+    assert.equal(await panel.withTenant(red, () => adapter.delete((created as any).id)), true);
+});
+
+test('session cookies expire and unsigned or expiry-less ones are refused', async () => {
+    const panel = Panel.make().id('sessions').key('a-long-enough-secret-key');
+    const auth = knexAuthProvider((table) => db(table));
+    panel.auth(auth);
+    const user = await auth.create!({ name: 'Eve', email: 'eve@example.test', password: 'secret-password' } as any);
+    const cookieOf = (payload: object) => {
+        const value = Buffer.from(JSON.stringify(payload)).toString('base64url');
+        return { headers: { cookie: `${panel.getSessionCookieName()}=${value}.${createHmac('sha256', 'a-long-enough-secret-key').update(value).digest('base64url')}` } } as any;
+    };
+    const now = Math.floor(Date.now() / 1000);
+    assert.equal((await panel.user(cookieOf({ uid: user.id, exp: now + 60 })))?.id, user.id);
+    assert.equal(await panel.user(cookieOf({ uid: user.id, exp: now - 1 })), null);
+    assert.equal(await panel.user(cookieOf({ uid: user.id })), null);
 });

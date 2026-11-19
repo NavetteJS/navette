@@ -47,3 +47,8 @@ test('`markdownToHtml()`: blocks, inline formatting, escaped HTML, safe links', 
     assert.equal(markdownToHtml('[site](https://a.test) [bad](javascript:alert(1))'), '<p><a href="https://a.test" rel="noopener noreferrer nofollow">site</a> bad)</p>');
     assert.equal(markdownToHtml('[x](https://a.test" onclick="y)'), '<p>[x](<a href="https://a.test" rel="noopener noreferrer nofollow">https://a.test</a>&quot; onclick=&quot;y)</p>', 'the quote stays text');
 });
+
+test('`markdownToHtml()`: a link title never lets a bare URL open a new attribute', () => {
+    const html = markdownToHtml('[click](https://ok.example "a https://x/onmouseover=alert(1)//")');
+    assert.equal(html, '<p><a href="https://ok.example" title="a https://x/onmouseover=alert(1)//" rel="noopener noreferrer nofollow">click</a></p>');
+});
