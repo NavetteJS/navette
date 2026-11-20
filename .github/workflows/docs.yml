@@ -3,6 +3,8 @@ name: docs
 on:
   push:
     branches: [main]
+    # The version shown on the site is the latest tag: rebuild when one is pushed after main.
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
